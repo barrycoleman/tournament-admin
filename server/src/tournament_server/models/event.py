@@ -1,0 +1,21 @@
+from __future__ import annotations
+
+import datetime as dt
+
+from sqlalchemy import DateTime, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from tournament_server.db import Base
+
+
+class Event(Base):
+    __tablename__ = "events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    active_session_id: Mapped[int | None] = mapped_column(
+        Integer, default=None
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, default=dt.datetime.utcnow
+    )
