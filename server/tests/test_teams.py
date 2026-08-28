@@ -1,15 +1,27 @@
 def test_create_team_assigns_tiebreaker_seed(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
 
-    response = client.post(
+    response1 = client.post(
         "/api/teams",
         json={"number": "1234A", "name": "Robo Raiders", "organization": "Example School"},
     )
-    assert response.status_code == 201
-    body = response.json()
-    assert body["number"] == "1234A"
-    assert body["organization"] == "Example School"
-    assert isinstance(body["tiebreaker_seed"], int)
+    assert response1.status_code == 201
+    body1 = response1.json()
+    assert body1["number"] == "1234A"
+    assert body1["organization"] == "Example School"
+    assert isinstance(body1["tiebreaker_seed"], int)
+
+    response2 = client.post(
+        "/api/teams",
+        json={"number": "5678B", "name": "Circuit Breakers", "organization": "Another School"},
+    )
+    assert response2.status_code == 201
+    body2 = response2.json()
+    assert isinstance(body2["tiebreaker_seed"], int)
+
+    # Verify randomness by confirming two teams have different seeds
+    # With random.randint(1, 1_000_000_000), collision probability is vanishingly small
+    assert body1["tiebreaker_seed"] != body2["tiebreaker_seed"]
 
 
 def test_create_team_requires_event(client):
