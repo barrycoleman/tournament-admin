@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from tournament_server import models  # noqa: F401  (registers all tables)
 from tournament_server.db import init_db, make_engine, make_session_factory
-from tournament_server.routers import event, sessions
+from tournament_server.routers import divisions, event, sessions
 from tournament_server.settings import Settings
 
 
@@ -19,6 +19,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     app.include_router(event.router)
     app.include_router(sessions.router)
+    app.include_router(divisions.router)
 
     @app.get("/health")
     def health() -> dict[str, str]:
