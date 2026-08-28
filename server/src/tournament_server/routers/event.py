@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from tournament_server.deps import get_db
 from tournament_server.models.event import Event
+from tournament_server.models.session import TournamentSession
 from tournament_server.schemas.event import ActiveSessionUpdate, EventCreate, EventRead
 
 router = APIRouter(prefix="/api/event", tags=["event"])
@@ -38,8 +39,6 @@ def read_event(db: Session = Depends(get_db)) -> Event:
 def set_active_session(
     payload: ActiveSessionUpdate, db: Session = Depends(get_db)
 ) -> Event:
-    from tournament_server.models.session import TournamentSession
-
     event = get_the_event(db)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not initialized")
