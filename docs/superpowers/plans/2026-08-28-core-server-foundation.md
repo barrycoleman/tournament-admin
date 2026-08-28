@@ -456,7 +456,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tournament_server.db import Base
@@ -467,9 +467,15 @@ class Event(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
-    active_session_id: Mapped[int | None] = mapped_column(
-        ForeignKey("sessions.id"), default=None
-    )
+    # No ForeignKey to sessions.id: at this point in the plan the sessions
+    # table doesn't exist yet in Base.metadata, and Base.metadata.create_all()
+    # raises NoReferencedTableError for a FK targeting a table absent from
+    # the same metadata (verified empirically during Task 2's review) — this
+    # is not a limitation to lift once Task 3 lands, it's the permanent
+    # design. Referential integrity is enforced in application code instead
+    # (see set_active_session in routers/event.py, which validates the
+    # session exists and belongs to this event before assigning it).
+    active_session_id: Mapped[int | None] = mapped_column(Integer, default=None)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime, default=dt.datetime.utcnow
     )
