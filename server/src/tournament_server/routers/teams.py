@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server.deps import get_db
+from tournament_server.models.division import Division
 from tournament_server.models.team import Team
 from tournament_server.routers.event import get_the_event
 from tournament_server.schemas.team import TeamCreate, TeamRead, TeamUpdate
@@ -17,6 +18,9 @@ def create_team(payload: TeamCreate, db: Session = Depends(get_db)) -> Team:
     event = get_the_event(db)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not initialized")
+    if payload.division_id is not None:
+        if db.get(Division, payload.division_id) is None:
+            raise HTTPException(status_code=404, detail="Division not found")
     team = Team(event_id=event.id, **payload.model_dump())
     db.add(team)
     db.commit()
@@ -44,7 +48,16 @@ def update_team(
     team = db.get(Team, team_id)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    for required_field in ("number", "name"):
+        if required_field in updates and updates[required_field] is None:
+            raise HTTPException(
+                status_code=422, detail=f"{required_field} cannot be null"
+            )
+    if "division_id" in updates and updates["division_id"] is not None:
+        if db.get(Division, updates["division_id"]) is None:
+            raise HTTPException(status_code=404, detail="Division not found")
+    for key, value in updates.items():
         setattr(team, key, value)
     db.commit()
     db.refresh(team)

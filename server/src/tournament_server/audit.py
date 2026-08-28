@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import datetime as dt
 import json
@@ -14,6 +15,16 @@ from tournament_server.db import Base
 current_actor: contextvars.ContextVar[str] = contextvars.ContextVar(
     "current_actor", default="system"
 )
+
+
+@contextlib.contextmanager
+def actor_scope(name: str):
+    token = current_actor.set(name)
+    try:
+        yield
+    finally:
+        current_actor.reset(token)
+
 
 # Guards against ever recursively auditing the audit table itself. In
 # practice audit rows are only ever written via the raw `connection.execute`
@@ -65,8 +76,8 @@ def _write_audit_row(
             row_pk=row_pk,
             action=action,
             actor=current_actor.get(),
-            before_json=json.dumps(before) if before is not None else None,
-            after_json=json.dumps(after) if after is not None else None,
+            before_json=json.dumps(before, default=str) if before is not None else None,
+            after_json=json.dumps(after, default=str) if after is not None else None,
         )
     )
 

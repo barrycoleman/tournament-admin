@@ -66,3 +66,66 @@ def test_update_team(client):
     assert response.status_code == 200
     assert response.json()["name"] == "Robo Raiders Renamed"
     assert response.json()["number"] == "1234A"
+
+
+def test_create_team_with_nonexistent_division_returns_404(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+
+    response = client.post(
+        "/api/teams",
+        json={"number": "1234A", "name": "Robo Raiders", "division_id": 999},
+    )
+    assert response.status_code == 404
+
+
+def test_create_team_with_valid_division_succeeds(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    division_id = client.post("/api/divisions", json={"name": "Elementary"}).json()["id"]
+
+    response = client.post(
+        "/api/teams",
+        json={"number": "1234A", "name": "Robo Raiders", "division_id": division_id},
+    )
+    assert response.status_code == 201
+    assert response.json()["division_id"] == division_id
+
+
+def test_update_team_with_nonexistent_division_returns_404(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    team_id = client.post(
+        "/api/teams", json={"number": "1234A", "name": "Robo Raiders"}
+    ).json()["id"]
+
+    response = client.patch(f"/api/teams/{team_id}", json={"division_id": 999})
+    assert response.status_code == 404
+
+
+def test_update_team_with_null_name_returns_422(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    team_id = client.post(
+        "/api/teams", json={"number": "1234A", "name": "Robo Raiders"}
+    ).json()["id"]
+
+    response = client.patch(f"/api/teams/{team_id}", json={"name": None})
+    assert response.status_code == 422
+
+
+def test_update_team_with_null_number_returns_422(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    team_id = client.post(
+        "/api/teams", json={"number": "1234A", "name": "Robo Raiders"}
+    ).json()["id"]
+
+    response = client.patch(f"/api/teams/{team_id}", json={"number": None})
+    assert response.status_code == 422
+
+
+def test_update_team_with_valid_name_still_returns_200(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    team_id = client.post(
+        "/api/teams", json={"number": "1234A", "name": "Robo Raiders"}
+    ).json()["id"]
+
+    response = client.patch(f"/api/teams/{team_id}", json={"name": "New Name"})
+    assert response.status_code == 200
+    assert response.json()["name"] == "New Name"

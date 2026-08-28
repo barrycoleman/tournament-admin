@@ -20,11 +20,8 @@ def create_app(db_path: str | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def actor_middleware(request: Request, call_next):
-        token = audit.current_actor.set(request.headers.get("x-actor-name", "admin"))
-        try:
+        with audit.actor_scope(request.headers.get("x-actor-name", "admin")):
             return await call_next(request)
-        finally:
-            audit.current_actor.reset(token)
 
     app.include_router(event.router)
     app.include_router(sessions.router)
