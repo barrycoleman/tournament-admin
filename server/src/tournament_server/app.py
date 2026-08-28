@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
+from tournament_server import audit  # noqa: F401  (registers AuditLog + hooks)
 from tournament_server import models  # noqa: F401  (registers all tables)
 from tournament_server.db import init_db, make_engine, make_session_factory
-from tournament_server.routers import divisions, event, participation, sessions, teams
+from tournament_server.routers import audit_log, divisions, event, participation, sessions, teams
 from tournament_server.settings import Settings
 
 
@@ -17,11 +18,20 @@ def create_app(db_path: str | None = None) -> FastAPI:
     app = FastAPI(title="Tournament Server")
     app.state.session_factory = session_factory
 
+    @app.middleware("http")
+    async def actor_middleware(request: Request, call_next):
+        token = audit.current_actor.set(request.headers.get("x-actor-name", "admin"))
+        try:
+            return await call_next(request)
+        finally:
+            audit.current_actor.reset(token)
+
     app.include_router(event.router)
     app.include_router(sessions.router)
     app.include_router(divisions.router)
     app.include_router(teams.router)
     app.include_router(participation.router)
+    app.include_router(audit_log.router)
 
     @app.get("/health")
     def health() -> dict[str, str]:
