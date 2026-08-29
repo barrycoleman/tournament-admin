@@ -9,9 +9,12 @@ from tournament_server.app import create_app
 FIXTURE_EXAMPLE_PLUGIN = (
     Path(__file__).parent / "fixtures" / "plugins" / "games" / "example-game"
 )
+FIXTURE_SECOND_GAME_PLUGIN = (
+    Path(__file__).parent / "fixtures" / "plugins" / "games" / "second-game"
+)
 
 
-def test_list_game_plugins_empty(client):
+def test_list_game_plugins_shows_preseeded_plugin(client):
     response = client.get("/api/plugins/games")
     assert response.status_code == 200
     assert len(response.json()) == 1
@@ -38,19 +41,19 @@ def test_list_game_plugins_discovers_at_startup(tmp_path):
 
 
 def test_upload_game_plugin_installs_and_lists_immediately(client):
-    zip_bytes = zip_fixture_plugin(FIXTURE_EXAMPLE_PLUGIN)
+    zip_bytes = zip_fixture_plugin(FIXTURE_SECOND_GAME_PLUGIN)
 
     response = client.post(
         "/api/plugins/games",
-        files={"file": ("example-game.zip", zip_bytes, "application/zip")},
+        files={"file": ("second-game.zip", zip_bytes, "application/zip")},
     )
-    # The fixture already includes example-game, so we expect a conflict
-    assert response.status_code == 409
+    assert response.status_code == 201
+    assert response.json()["name"] == "second-game"
 
-    # Verify the plugin is still in the list
     listed = client.get("/api/plugins/games").json()
-    assert len(listed) == 1
-    assert listed[0]["name"] == "example-game"
+    names = {p["name"] for p in listed}
+    assert "second-game" in names
+    assert "example-game" in names  # the pre-seeded one is still there too
 
 
 def test_upload_duplicate_plugin_name_returns_409(client):
