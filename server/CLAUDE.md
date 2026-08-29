@@ -131,16 +131,30 @@ never passed into the plugin's `calculate_score()`.
   the plan's Global Constraints for why.
 - No Alembic/migrations yet — schema changes go through
   `Base.metadata.create_all()`, which only adds new tables, never alters
-  existing ones. Introduce real migrations before the schema needs to
-  change on a database that already has real event data in it.
+  existing ones. **This line has already been crossed**: Phase 3 added
+  `Event.game_plugin_name` to the pre-existing `events` table, so a
+  database created before Phase 3 will fail with `no such column:
+  events.game_plugin_name` on first read. No real events have been
+  created against this schema yet, so recreating the database is the
+  correct fix today — delete the `.db` file and let `create_all()` build
+  it fresh. Introduce real migrations before this project has any real
+  deployed event data that can't simply be recreated.
 
 ## Testing
 
 Most tests use the `client` fixture from `conftest.py`, which builds a
 fresh `FastAPI` app against a fresh temp-file SQLite database (and an
 isolated temp `plugins_root`) per test — never a shared or mocked
-database. Follow that pattern for anything exercising the HTTP API: real
-calls through `TestClient`, real temporary files underneath.
+database. The fixture also pre-seeds the `example-game` fixture plugin
+into that `plugins_root` before the app starts, so it's discoverable at
+startup like a real installed plugin — tests that need a *different*
+starting registry state (e.g. an empty one, or one containing a
+specific other plugin) should build their own `create_app()`/`TestClient`
+instance directly rather than relying on `client`, the way
+`test_list_game_plugins_discovers_at_startup` in
+`test_plugins_router.py` already does. Follow the `client` pattern for
+anything else exercising the HTTP API: real calls through `TestClient`,
+real temporary files underneath.
 
 The `plugin_registry` subpackage also has plain unit tests (e.g.
 `test_plugin_manifest.py`, `test_plugin_loader.py`,

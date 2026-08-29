@@ -52,9 +52,27 @@ def submit_score(
 
     plugin = get_game_plugin_for_event(request, db)
 
-    violations = plugin.module.validate(payload.data)
+    try:
+        violations = plugin.module.validate(payload.data)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Plugin could not validate this scoresheet: {exc}",
+        )
     if violations and not payload.force:
         raise HTTPException(status_code=422, detail={"violations": violations})
+
+    try:
+        computed_score = (
+            0
+            if (payload.no_show or payload.dq)
+            else plugin.module.calculate_score(payload.data)
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Plugin could not score this scoresheet: {exc}",
+        )
 
     now = utc_now()
     existing = db.execute(
@@ -105,9 +123,4 @@ def submit_score(
 
     recompute_rankings(db, plugin, match.session_id, match.division_id)
 
-    computed_score = (
-        0
-        if (record.no_show or record.dq)
-        else plugin.module.calculate_score(payload.data)
-    )
     return _to_score_record_read(record, computed_score)

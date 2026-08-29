@@ -93,6 +93,27 @@ def test_create_match_rejects_unknown_team(client):
     assert response.status_code == 404
 
 
+def test_create_match_rejects_unknown_division(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    session_id, t1, t2, t3, t4 = _setup_two_teams(client)
+
+    response = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "division_id": 999,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": "Field 1",
+            "alliances": [
+                {"station": "red", "team_ids": [t1, t2]},
+                {"station": "blue", "team_ids": [t3, t4]},
+            ],
+        },
+    )
+    assert response.status_code == 404
+
+
 def test_list_matches_defaults_to_active_session(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     session_id, t1, t2, t3, t4 = _setup_two_teams(client)

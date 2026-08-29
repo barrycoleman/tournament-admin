@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from tournament_server.deps import get_db, get_session_id, get_the_event
 from tournament_server.models.alliance import Alliance, AllianceTeam
+from tournament_server.models.division import Division
 from tournament_server.models.match import Match
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
@@ -64,6 +65,8 @@ def create_match(payload: MatchCreate, db: Session = Depends(get_db)) -> MatchRe
         raise HTTPException(
             status_code=422, detail="A match must have exactly 2 alliances"
         )
+    if payload.division_id is not None and db.get(Division, payload.division_id) is None:
+        raise HTTPException(status_code=404, detail="Division not found")
     for alliance_payload in payload.alliances:
         for team_id in alliance_payload.team_ids:
             if db.get(Team, team_id) is None:

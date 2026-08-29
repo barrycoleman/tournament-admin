@@ -109,6 +109,29 @@ def test_match_marked_completed_once_both_alliances_scored(client):
     assert match["status"] == "completed"
 
 
+def test_submit_score_rejects_scoresheet_plugin_cannot_validate(client):
+    match_id, red_id, blue_id = _setup_match(client)
+
+    response = client.post(
+        f"/api/matches/{match_id}/alliances/{red_id}/score",
+        json={"data": {"high_balls": "not-a-number", "low_balls": 0}},
+    )
+    assert response.status_code == 422
+
+
+def test_submit_score_with_force_still_rejects_unscoreable_data(client):
+    match_id, red_id, blue_id = _setup_match(client)
+
+    response = client.post(
+        f"/api/matches/{match_id}/alliances/{red_id}/score",
+        json={
+            "data": {"high_balls": "not-a-number", "low_balls": 0},
+            "force": True,
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_submit_score_requires_game_plugin_selected(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
