@@ -13,6 +13,7 @@ from tournament_server.models.alliance import Alliance
 from tournament_server.models.match import Match
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.schemas.score_record import ScoreRecordRead, ScoreSubmit
+from tournament_server.services.ranking import recompute_rankings
 
 router = APIRouter(prefix="/api/matches", tags=["scores"])
 
@@ -101,6 +102,8 @@ def submit_score(
     if len(scored_alliance_ids) == len(all_alliances):
         match.status = "completed"
         db.commit()
+
+    recompute_rankings(db, plugin, match.session_id, match.division_id)
 
     computed_score = (
         0
