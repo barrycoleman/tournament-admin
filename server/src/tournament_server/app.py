@@ -1,22 +1,42 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 
 from tournament_server import audit  # noqa: F401  (registers AuditLog + hooks)
 from tournament_server import models  # noqa: F401  (registers all tables)
 from tournament_server.db import init_db, make_engine, make_session_factory
-from tournament_server.routers import audit_log, divisions, event, participation, sessions, teams
+from tournament_server.plugin_registry.discovery import discover_game_plugins
+from tournament_server.routers import (
+    audit_log,
+    divisions,
+    event,
+    participation,
+    plugins,
+    sessions,
+    teams,
+)
 from tournament_server.settings import Settings
 
 
-def create_app(db_path: str | None = None) -> FastAPI:
-    settings = Settings(db_path=db_path) if db_path else Settings.from_env()
+def create_app(
+    db_path: str | None = None, plugins_root: str | None = None
+) -> FastAPI:
+    settings = Settings.from_env()
+    if db_path is not None:
+        settings.db_path = db_path
+    if plugins_root is not None:
+        settings.plugins_root = plugins_root
+
     engine = make_engine(settings.db_path)
     session_factory = make_session_factory(engine)
     init_db(engine)
 
     app = FastAPI(title="Tournament Server")
     app.state.session_factory = session_factory
+    app.state.plugins_root = Path(settings.plugins_root)
+    app.state.game_plugins = discover_game_plugins(app.state.plugins_root)
 
     @app.middleware("http")
     async def actor_middleware(request: Request, call_next):
@@ -29,6 +49,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
     app.include_router(teams.router)
     app.include_router(participation.router)
     app.include_router(audit_log.router)
+    app.include_router(plugins.router)
 
     @app.get("/health")
     def health() -> dict[str, str]:
