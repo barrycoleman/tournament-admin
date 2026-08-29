@@ -16,8 +16,12 @@ restart required. A separate `tm` CLI lets a plugin author run the same
 conformance checks locally before distributing a zip.
 
 **Tech Stack:** Same as Phase 1 (Python >= 3.11, FastAPI, SQLAlchemy 2.0
-sync, Pydantic v2, pytest, httpx). No new third-party dependencies —
-`zipfile`, `importlib`, and `argparse` are all standard library.
+sync, Pydantic v2, pytest, httpx), plus one addition: `python-multipart`,
+which FastAPI's `UploadFile`/multipart form handling requires at runtime
+(it raises a `RuntimeError` otherwise) — this was missed when the plan
+was first written and corrected during Task 5's review; see that task's
+ledger entry. Everything else — `zipfile`, `importlib`, `argparse` — is
+standard library.
 
 **Spec:** `docs/superpowers/specs/2026-08-28-core-server-plugin-architecture-design.md`
 (§5.1 game plugin contract, §7 zip packaging/installation, and the
