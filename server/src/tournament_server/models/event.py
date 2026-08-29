@@ -5,11 +5,7 @@ import datetime as dt
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from tournament_server.db import Base, UTCDateTime
-
-
-def _utc_now() -> dt.datetime:
-    return dt.datetime.now(dt.UTC)
+from tournament_server.db import Base, UTCDateTime, utc_now
 
 
 class Event(Base):
@@ -22,5 +18,5 @@ class Event(Base):
     )
     game_plugin_name: Mapped[str | None] = mapped_column(String(200), default=None)
     created_at: Mapped[dt.datetime] = mapped_column(
-        UTCDateTime, default=_utc_now
+        UTCDateTime, default=utc_now
     )

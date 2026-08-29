@@ -43,6 +43,10 @@ class UTCDateTime(TypeDecorator):
         return value.replace(tzinfo=dt.UTC)
 
 
+def utc_now() -> dt.datetime:
+    return dt.datetime.now(dt.UTC)
+
+
 def make_engine(db_path: str) -> Engine:
     engine = create_engine(
         f"sqlite:///{db_path}",

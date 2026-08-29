@@ -10,15 +10,11 @@ from sqlalchemy import Integer, String, Text, event, insert
 from sqlalchemy.orm import Mapped, Mapper, mapped_column
 from sqlalchemy.orm.attributes import get_history
 
-from tournament_server.db import Base, UTCDateTime
+from tournament_server.db import Base, UTCDateTime, utc_now
 
 current_actor: contextvars.ContextVar[str] = contextvars.ContextVar(
     "current_actor", default="system"
 )
-
-
-def _utc_now() -> dt.datetime:
-    return dt.datetime.now(dt.UTC)
 
 
 @contextlib.contextmanager
@@ -43,7 +39,7 @@ class AuditLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     timestamp: Mapped[dt.datetime] = mapped_column(
-        UTCDateTime, default=_utc_now
+        UTCDateTime, default=utc_now
     )
     table_name: Mapped[str] = mapped_column(String(100))
     row_pk: Mapped[int | None] = mapped_column(Integer, default=None)
@@ -75,7 +71,7 @@ def _write_audit_row(
 ) -> None:
     connection.execute(
         insert(AuditLog.__table__).values(
-            timestamp=_utc_now(),
+            timestamp=utc_now(),
             table_name=table_name,
             row_pk=row_pk,
             action=action,
