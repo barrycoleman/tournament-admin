@@ -15,8 +15,13 @@ class EventRead(BaseModel):
     id: int
     name: str
     active_session_id: int | None
+    game_plugin_name: str | None
     created_at: dt.datetime
 
 
 class ActiveSessionUpdate(BaseModel):
     session_id: int
+
+
+class GamePluginSelect(BaseModel):
+    name: str

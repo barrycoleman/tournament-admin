@@ -20,6 +20,7 @@ class Event(Base):
     active_session_id: Mapped[int | None] = mapped_column(
         Integer, default=None
     )
+    game_plugin_name: Mapped[str | None] = mapped_column(String(200), default=None)
     created_at: Mapped[dt.datetime] = mapped_column(
         UTCDateTime, default=_utc_now
     )

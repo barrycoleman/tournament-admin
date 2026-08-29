@@ -31,3 +31,31 @@ def test_created_at_is_timezone_aware(client):
     response = client.get("/api/event")
     created_at = dt.datetime.fromisoformat(response.json()["created_at"])
     assert created_at.tzinfo is not None
+
+
+def test_select_game_plugin(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+
+    response = client.post("/api/event/game-plugin", json={"name": "example-game"})
+    assert response.status_code == 200
+    assert response.json()["game_plugin_name"] == "example-game"
+
+
+def test_select_game_plugin_requires_event(client):
+    response = client.post("/api/event/game-plugin", json={"name": "example-game"})
+    assert response.status_code == 404
+
+
+def test_select_game_plugin_rejects_unknown_plugin(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+
+    response = client.post("/api/event/game-plugin", json={"name": "no-such-plugin"})
+    assert response.status_code == 404
+
+
+def test_select_game_plugin_is_immutable(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "example-game"})
+
+    response = client.post("/api/event/game-plugin", json={"name": "example-game"})
+    assert response.status_code == 409
