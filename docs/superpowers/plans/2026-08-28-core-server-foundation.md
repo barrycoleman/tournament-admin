@@ -138,14 +138,14 @@ logging works; every other file is oblivious to it.
 - [ ] **Step 1: Create the project skeleton**
 
 ```bash
-mkdir -p /home/barry/src/barrycoleman/tournament-manager/server/src/tournament_server/models
-mkdir -p /home/barry/src/barrycoleman/tournament-manager/server/src/tournament_server/schemas
-mkdir -p /home/barry/src/barrycoleman/tournament-manager/server/src/tournament_server/routers
-mkdir -p /home/barry/src/barrycoleman/tournament-manager/server/tests
-touch /home/barry/src/barrycoleman/tournament-manager/server/src/tournament_server/__init__.py
-touch /home/barry/src/barrycoleman/tournament-manager/server/src/tournament_server/models/__init__.py
-touch /home/barry/src/barrycoleman/tournament-manager/server/src/tournament_server/schemas/__init__.py
-touch /home/barry/src/barrycoleman/tournament-manager/server/src/tournament_server/routers/__init__.py
+mkdir -p /home/barry/src/barrycoleman/tournament-admin/server/src/tournament_server/models
+mkdir -p /home/barry/src/barrycoleman/tournament-admin/server/src/tournament_server/schemas
+mkdir -p /home/barry/src/barrycoleman/tournament-admin/server/src/tournament_server/routers
+mkdir -p /home/barry/src/barrycoleman/tournament-admin/server/tests
+touch /home/barry/src/barrycoleman/tournament-admin/server/src/tournament_server/__init__.py
+touch /home/barry/src/barrycoleman/tournament-admin/server/src/tournament_server/models/__init__.py
+touch /home/barry/src/barrycoleman/tournament-admin/server/src/tournament_server/schemas/__init__.py
+touch /home/barry/src/barrycoleman/tournament-admin/server/src/tournament_server/routers/__init__.py
 ```
 
 Create `server/pyproject.toml`:
@@ -194,7 +194,7 @@ __pycache__/
 - [ ] **Step 2: Create a virtualenv and install the package in editable mode**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
@@ -235,7 +235,7 @@ def test_health_check(client):
 - [ ] **Step 4: Run the test to verify it fails**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/test_health.py -v
 ```
@@ -361,7 +361,7 @@ if __name__ == "__main__":
 - [ ] **Step 6: Run the test to verify it passes**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/test_health.py -v
 ```
@@ -371,7 +371,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager
+cd /home/barry/src/barrycoleman/tournament-admin
 git add server/pyproject.toml server/.gitignore server/src server/tests
 git commit -m "$(cat <<'EOF'
 Scaffold core server: app factory, DB wiring, health check
@@ -438,7 +438,7 @@ def test_get_event_after_creation(client):
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/test_event.py -v
 ```
@@ -614,7 +614,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/test_event.py tests/test_health.py -v
 ```
@@ -624,7 +624,7 @@ Expected: PASS (all tests in both files).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager
+cd /home/barry/src/barrycoleman/tournament-admin
 git add server/src server/tests/test_event.py
 git commit -m "$(cat <<'EOF'
 Add Event model and endpoints
@@ -701,7 +701,7 @@ def test_set_active_session_rejects_unknown_session(client):
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/test_sessions.py -v
 ```
@@ -879,7 +879,7 @@ and
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/ -v
 ```
@@ -889,7 +889,7 @@ Expected: PASS (all tests across every file so far).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager
+cd /home/barry/src/barrycoleman/tournament-admin
 git add server/src server/tests/test_sessions.py
 git commit -m "$(cat <<'EOF'
 Add Session model, endpoints, and active-session wiring
@@ -945,7 +945,7 @@ def test_create_division_requires_event(client):
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/test_divisions.py -v
 ```
@@ -1056,7 +1056,7 @@ and
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/ -v
 ```
@@ -1066,7 +1066,7 @@ Expected: PASS (all tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager
+cd /home/barry/src/barrycoleman/tournament-admin
 git add server/src server/tests/test_divisions.py
 git commit -m "$(cat <<'EOF'
 Add Division model and endpoints
@@ -1171,7 +1171,7 @@ def test_update_team(client):
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/test_teams.py -v
 ```
@@ -1343,7 +1343,7 @@ and
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/ -v
 ```
@@ -1353,7 +1353,7 @@ Expected: PASS (all tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager
+cd /home/barry/src/barrycoleman/tournament-admin
 git add server/src server/tests/test_teams.py
 git commit -m "$(cat <<'EOF'
 Add Team model and endpoints
@@ -1449,7 +1449,7 @@ def test_check_in_requires_existing_team(client):
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/test_participation.py -v
 ```
@@ -1600,7 +1600,7 @@ and
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/ -v
 ```
@@ -1610,7 +1610,7 @@ Expected: PASS (all tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager
+cd /home/barry/src/barrycoleman/tournament-admin
 git add server/src server/tests/test_participation.py
 git commit -m "$(cat <<'EOF'
 Add SessionParticipation model and endpoints
@@ -1725,7 +1725,7 @@ def test_patch_with_no_changes_logs_nothing(client):
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/test_audit_log.py -v
 ```
@@ -1965,7 +1965,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/ -v
 ```
@@ -1975,7 +1975,7 @@ Expected: PASS (all tests across every file).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager
+cd /home/barry/src/barrycoleman/tournament-admin
 git add server/src server/tests/test_audit_log.py
 git commit -m "$(cat <<'EOF'
 Add comprehensive audit log via SQLAlchemy mapper events
@@ -2109,7 +2109,7 @@ TOURNAMENT_DB_PATH=/path/to/my-event.db python -m tournament_server.main
 - [ ] **Step 3: Run the full test suite one final time**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager/server
+cd /home/barry/src/barrycoleman/tournament-admin/server
 source .venv/bin/activate
 pytest tests/ -v
 ```
@@ -2119,7 +2119,7 @@ Expected: PASS — every test from every task in this plan, all green.
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /home/barry/src/barrycoleman/tournament-manager
+cd /home/barry/src/barrycoleman/tournament-admin
 git add server/CLAUDE.md server/README.md
 git commit -m "$(cat <<'EOF'
 Add server-scoped CLAUDE.md and README
