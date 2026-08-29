@@ -430,6 +430,13 @@ third parties — deliberately deferred, not accidentally omitted.
     stranding every other device. Needs sane filtering/detection, and
     probably a way for the admin to pick manually if more than one
     plausible LAN address is found.
+  - Same family of problem, found during Phase 2's review: `plugins_root`
+    (like the database path) defaults to a relative path (`./plugins`),
+    resolved against whatever directory the process happened to be
+    launched from — harmless today since discovery is fail-soft on a
+    missing directory, but a real wart for the standalone-executable
+    story, where "launched from" won't be an obvious, stable location
+    a non-technical user controls.
 - **Role-based passwords + token-based admin authentication** (a real
   design for the "auth is a known gap" item already called out
   repeatedly in this spec and in `server/CLAUDE.md`). Captured now from
