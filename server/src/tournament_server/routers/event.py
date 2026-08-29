@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from tournament_server.deps import get_db
+from tournament_server.deps import get_db, get_the_event
 from tournament_server.models.event import Event
 from tournament_server.models.session import TournamentSession
 from tournament_server.schemas.event import (
@@ -15,10 +14,6 @@ from tournament_server.schemas.event import (
 )
 
 router = APIRouter(prefix="/api/event", tags=["event"])
-
-
-def get_the_event(db: Session) -> Event | None:
-    return db.execute(select(Event)).scalars().first()
 
 
 @router.post("", response_model=EventRead, status_code=201)

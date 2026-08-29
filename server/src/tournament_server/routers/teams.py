@@ -4,10 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from tournament_server.deps import get_db
+from tournament_server.deps import get_db, get_the_event
 from tournament_server.models.division import Division
 from tournament_server.models.team import Team
-from tournament_server.routers.event import get_the_event
 from tournament_server.schemas.team import TeamCreate, TeamRead, TeamUpdate
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
