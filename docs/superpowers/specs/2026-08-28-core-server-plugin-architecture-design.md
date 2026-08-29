@@ -430,3 +430,39 @@ third parties — deliberately deferred, not accidentally omitted.
     stranding every other device. Needs sane filtering/detection, and
     probably a way for the admin to pick manually if more than one
     plausible LAN address is found.
+- **Role-based passwords + token-based admin authentication** (a real
+  design for the "auth is a known gap" item already called out
+  repeatedly in this spec and in `server/CLAUDE.md`). Captured now from
+  a concrete direction the project owner gave, to be fully designed
+  when its turn comes:
+  - Different passwords for different roles (at minimum Admin; likely
+    also a Scorer-type role, possibly others) — set via event
+    configuration, not baked into the software.
+  - **No password is required or enforced until one is explicitly
+    set.** A freshly created event has no auth barrier at all, matching
+    the zero-friction "download and try it" experience this project
+    prioritizes — but setting the Admin password (and any other role
+    passwords) should be one of the first prompts in event setup, so a
+    real event doesn't stay wide open by accident.
+  - Only an already-authenticated Admin can set or change any role's
+    password, including the Admin's own.
+  - The Admin's own session should work via a token (the project
+    owner's direction: a JWT) issued after presenting the Admin
+    password, rather than resending the password on every request;
+    admin-privileged endpoints — the plugin-install endpoint being the
+    motivating example (§7, §9) — check that token instead.
+  - This is a distinct, complementary concern from the Device/
+    ScoringDevice admission flow already designed in §4, not a
+    replacement for it: role passwords gate *whether you can access a
+    given surface at all* (e.g. "do you know the Scorer password"),
+    while device admission (friendly names, explicit admit) handles
+    *attribution* once inside (e.g. "which specific tablet submitted
+    this score") — a future spec should design how the two layer
+    together, e.g. whether reaching the scoring UI at all requires the
+    Scorer password before a device even gets to the friendly-name/
+    admit flow.
+  - Open question for that future spec: does a role password also
+    gate the admin UI's own web pages (session-cookie-based), or only
+    the API layer (bearer-token-based), or both — and how a JWT's
+    signing key gets managed for a single-instance local server with
+    no separate secrets infrastructure.
