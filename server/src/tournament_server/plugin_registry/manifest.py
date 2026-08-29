@@ -20,6 +20,10 @@ class PluginManifest:
 
 
 def parse_manifest(data: dict[str, Any]) -> PluginManifest:
+    if not isinstance(data, dict):
+        raise PluginLoadError(
+            f"manifest must be a JSON object, got {type(data).__name__}"
+        )
     name = data.get("name")
     if not isinstance(name, str) or not _VALID_NAME_RE.match(name):
         raise PluginLoadError(
@@ -54,5 +58,5 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
     try:
         data = json.loads(manifest_path.read_text())
     except json.JSONDecodeError as exc:
-        raise PluginLoadError(f"{manifest_path} is not valid JSON: {exc}")
+        raise PluginLoadError(f"{manifest_path} is not valid JSON: {exc}") from exc
     return parse_manifest(data)

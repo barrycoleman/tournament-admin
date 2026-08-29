@@ -38,3 +38,8 @@ def test_parse_manifest_rejects_unsafe_name():
 def test_parse_manifest_rejects_missing_version():
     with pytest.raises(PluginLoadError, match="version"):
         parse_manifest({"name": "ok-name", "kind": "game", "display_name": "OK"})
+
+
+def test_parse_manifest_rejects_non_dict():
+    with pytest.raises(PluginLoadError, match="JSON object"):
+        parse_manifest([1, 2, 3])
