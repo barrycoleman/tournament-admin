@@ -394,3 +394,16 @@ third parties — deliberately deferred, not accidentally omitted.
     purpose-built relay-facing API), and event-code security (e.g.
     guessability, whether a still-open event's code should ever expire
     from inactivity even though the event itself hasn't ended).
+- **Port selection is currently hardcoded** (`main.py` binds
+  `127.0.0.1:8000`) — fine for local development, but fragile for
+  "download and run" software aimed at non-technical users: if 8000 is
+  already taken by something else on the organizer's machine, the
+  server fails to start with a raw `OSError`/traceback, not a friendly
+  message. Needs a real design pass in the packaging phase (spec §7),
+  covering: a configurable port (env var, matching the
+  `TOURNAMENT_DB_PATH`/`TOURNAMENT_PLUGINS_ROOT` pattern already
+  established), whether to auto-probe for a free port if the configured
+  one is busy, and how the chosen port gets communicated back to the
+  admin (e.g. printed clearly at startup, or the executable opening the
+  browser itself so the organizer never needs to know the number at
+  all).
