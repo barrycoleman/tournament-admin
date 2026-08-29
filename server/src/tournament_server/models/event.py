@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from tournament_server.db import Base
+from tournament_server.db import Base, UTCDateTime
+
+
+def _utc_now() -> dt.datetime:
+    return dt.datetime.now(dt.UTC)
 
 
 class Event(Base):
@@ -17,5 +21,5 @@ class Event(Base):
         Integer, default=None
     )
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime, default=dt.datetime.utcnow
+        UTCDateTime, default=_utc_now
     )

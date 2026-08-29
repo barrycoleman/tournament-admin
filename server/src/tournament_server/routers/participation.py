@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from tournament_server.deps import get_db
@@ -32,7 +33,13 @@ def add_participant(
         session_id=session_id, team_id=payload.team_id, checked_in=payload.checked_in
     )
     db.add(participation)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="Team already checked in for this session"
+        )
     db.refresh(participation)
     return participation
 

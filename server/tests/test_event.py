@@ -22,3 +22,12 @@ def test_get_event_after_creation(client):
     response = client.get("/api/event")
     assert response.status_code == 200
     assert response.json()["name"] == "Regional Qualifier"
+
+
+def test_created_at_is_timezone_aware(client):
+    import datetime as dt
+
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.get("/api/event")
+    created_at = dt.datetime.fromisoformat(response.json()["created_at"])
+    assert created_at.tzinfo is not None

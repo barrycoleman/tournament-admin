@@ -1,12 +1,46 @@
 from __future__ import annotations
 
-from sqlalchemy import create_engine, event
+import datetime as dt
+
+from sqlalchemy import DateTime, create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.types import TypeDecorator
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class UTCDateTime(TypeDecorator):
+    """A DateTime that round-trips as UTC-aware, even through SQLite.
+
+    SQLite has no native timezone-aware datetime storage, and SQLAlchemy's
+    SQLite dialect silently drops tzinfo on read even when the column is
+    declared `DateTime(timezone=True)`. This type stores a naive UTC value
+    (converting first if a tz-aware datetime is given) and re-attaches
+    `tzinfo=UTC` on the way back out, so application code always sees an
+    unambiguous, timezone-aware value.
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(
+        self, value: dt.datetime | None, dialect: object
+    ) -> dt.datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is not None:
+            value = value.astimezone(dt.UTC).replace(tzinfo=None)
+        return value
+
+    def process_result_value(
+        self, value: dt.datetime | None, dialect: object
+    ) -> dt.datetime | None:
+        if value is None:
+            return None
+        return value.replace(tzinfo=dt.UTC)
 
 
 def make_engine(db_path: str) -> Engine:
