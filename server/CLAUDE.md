@@ -61,6 +61,22 @@ tool does not yet check for anything beyond the contract itself
 (no checksums, no capability scanning — that hardening is a separate,
 later phase per the design spec's §9).
 
+The plugin folder root is configurable via the `TOURNAMENT_PLUGINS_ROOT`
+environment variable (default `./plugins`, resolved relative to wherever
+the process was launched — a known packaging-phase gap, see the design
+spec's §10). The registry holds at most one active version per plugin
+`name`; installing a zip whose `name` is already installed is rejected
+(409), and there is currently no uninstall/replace endpoint — swapping
+or removing an installed plugin is a manual filesystem operation on the
+plugins directory today.
+
+Every key in a `scoresheet_schema()`/`skills_scoresheet_schema()` field
+dict must be *present*, even when its value is `None` — e.g. a
+non-enum field still needs `"options": None`, not an omitted `options`
+key. This is what the conformance tool and the loader both check for;
+see `tests/fixtures/plugins/games/example-game/plugin.py` for the
+pattern every field in that fixture follows.
+
 ## Known, deliberate gaps in this phase
 
 - There's no real authentication yet. Requests can pass an
@@ -69,6 +85,15 @@ later phase per the design spec's §9).
   security boundary — anyone can claim to be anyone. A real
   identity/admission system is a later phase (Device/ScoringDevice
   admission is designed in the spec but not implemented in this plan).
+- The plugin-install endpoint (`POST /api/plugins/games`) dynamically
+  imports and executes arbitrary uploaded Python code, with the same
+  "no real authentication" gap as everything above — but this one is
+  qualitatively more dangerous than a CRUD endpoint, since it's a
+  code-execution primitive. This was raised explicitly with the project
+  owner, who accepted the risk for now (local-LAN, single-admin-in-the-
+  room threat model) rather than bolt on a one-off check ahead of a real
+  auth system. See the design spec's §10 for the role-based-passwords +
+  JWT direction planned for that future phase.
 - A Team belongs to at most one Division (nullable `division_id`), not a
   many-to-many relationship, as a deliberate YAGNI simplification — see
   the plan's Global Constraints for why.
@@ -79,8 +104,15 @@ later phase per the design spec's §9).
 
 ## Testing
 
-Every test in `tests/` uses the `client` fixture from `conftest.py`,
-which builds a fresh `FastAPI` app against a fresh temp-file SQLite
-database per test — never a shared or mocked database. Follow that
-pattern for new tests: real HTTP calls through `TestClient`, a real
-(temporary) SQLite file underneath.
+Most tests use the `client` fixture from `conftest.py`, which builds a
+fresh `FastAPI` app against a fresh temp-file SQLite database (and an
+isolated temp `plugins_root`) per test — never a shared or mocked
+database. Follow that pattern for anything exercising the HTTP API: real
+calls through `TestClient`, real temporary files underneath.
+
+The `plugin_registry` subpackage also has plain unit tests (e.g.
+`test_plugin_manifest.py`, `test_plugin_loader.py`,
+`test_plugin_conformance.py`) that call its functions directly against
+fixture plugin folders in `tests/fixtures/plugins/games/`, with no
+`client`/`TestClient` involved — appropriate for logic that doesn't
+touch the HTTP layer at all.

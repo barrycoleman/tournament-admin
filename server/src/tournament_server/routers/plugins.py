@@ -21,8 +21,8 @@ def list_game_plugins(request: Request) -> list[dict[str, str]]:
 
 
 @router.post("", status_code=201)
-async def upload_game_plugin(request: Request, file: UploadFile) -> dict[str, str]:
-    zip_bytes = await file.read()
+def upload_game_plugin(request: Request, file: UploadFile) -> dict[str, str]:
+    zip_bytes = file.file.read()
     plugins_root = request.app.state.plugins_root
     try:
         plugin = install_plugin_zip(zip_bytes, plugins_root)

@@ -57,6 +57,8 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
         raise PluginLoadError(f"{plugin_dir} has no manifest.json")
     try:
         data = json.loads(manifest_path.read_text())
-    except json.JSONDecodeError as exc:
-        raise PluginLoadError(f"{manifest_path} is not valid JSON: {exc}") from exc
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise PluginLoadError(
+            f"{manifest_path} could not be read as JSON: {exc}"
+        ) from exc
     return parse_manifest(data)

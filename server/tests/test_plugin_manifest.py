@@ -43,3 +43,9 @@ def test_parse_manifest_rejects_missing_version():
 def test_parse_manifest_rejects_non_dict():
     with pytest.raises(PluginLoadError, match="JSON object"):
         parse_manifest([1, 2, 3])
+
+
+def test_load_manifest_rejects_non_utf8_bytes(tmp_path):
+    (tmp_path / "manifest.json").write_bytes(b"\xff\xfe\xfd\xfc")
+    with pytest.raises(PluginLoadError, match="manifest.json"):
+        load_manifest(tmp_path)

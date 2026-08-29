@@ -19,24 +19,29 @@ def install_plugin_zip(zip_bytes: bytes, plugins_root: Path) -> LoadedGamePlugin
     try:
         zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
     except zipfile.BadZipFile as exc:
-        raise PluginInstallError(f"not a valid zip file: {exc}")
+        raise PluginInstallError(f"not a valid zip file: {exc}") from exc
 
     with zf:
         try:
             manifest_raw = zf.read("manifest.json")
-        except KeyError:
+        except KeyError as exc:
             raise PluginInstallError(
                 "zip does not contain a manifest.json at its root"
-            )
+            ) from exc
+        except Exception as exc:
+            raise PluginInstallError(
+                f"could not read manifest.json from zip: {exc}"
+            ) from exc
+
         try:
             manifest_data = json.loads(manifest_raw)
         except json.JSONDecodeError as exc:
-            raise PluginInstallError(f"manifest.json is not valid JSON: {exc}")
+            raise PluginInstallError(f"manifest.json is not valid JSON: {exc}") from exc
 
         try:
             manifest = parse_manifest(manifest_data)
         except PluginLoadError as exc:
-            raise PluginInstallError(str(exc))
+            raise PluginInstallError(str(exc)) from exc
 
         if manifest.kind != "game":
             raise PluginInstallError(
@@ -50,10 +55,14 @@ def install_plugin_zip(zip_bytes: bytes, plugins_root: Path) -> LoadedGamePlugin
             )
 
         target_dir.mkdir(parents=True)
-        zf.extractall(target_dir)
+        try:
+            zf.extractall(target_dir)
+        except Exception as exc:
+            shutil.rmtree(target_dir, ignore_errors=True)
+            raise PluginInstallError(f"could not extract zip contents: {exc}") from exc
 
     try:
         return load_game_plugin(target_dir)
     except PluginLoadError as exc:
         shutil.rmtree(target_dir, ignore_errors=True)
-        raise PluginInstallError(f"installed plugin failed to load: {exc}")
+        raise PluginInstallError(f"installed plugin failed to load: {exc}") from exc

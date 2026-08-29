@@ -60,3 +60,17 @@ def test_install_plugin_zip_rolls_back_on_load_failure(tmp_path):
         install_plugin_zip(zip_bytes, plugins_root)
 
     assert not (plugins_root / "games" / "broken-plugin").exists()
+
+
+def test_install_plugin_zip_cleans_up_on_extraction_failure(tmp_path):
+    good_zip = zip_fixture_plugin(FIXTURE_EXAMPLE_PLUGIN)
+    corrupted = bytearray(good_zip)
+    mid = len(corrupted) // 2
+    for i in range(mid, mid + 20):
+        corrupted[i] ^= 0xFF
+
+    plugins_root = tmp_path / "plugins"
+    with pytest.raises(PluginInstallError):
+        install_plugin_zip(bytes(corrupted), plugins_root)
+
+    assert not (plugins_root / "games" / "example-game").exists()

@@ -42,6 +42,13 @@ class ConformanceReport:
         return all(c.passed for c in self.checks)
 
 
+def _safe_check(name: str, fn) -> CheckResult:
+    try:
+        return fn()
+    except Exception as exc:
+        return CheckResult(name, False, f"raised {type(exc).__name__}: {exc}")
+
+
 def run_conformance_checks(plugin_dir: Path) -> ConformanceReport:
     try:
         plugin = load_game_plugin(plugin_dir)
@@ -52,13 +59,66 @@ def run_conformance_checks(plugin_dir: Path) -> ConformanceReport:
         )
 
     checks: list[CheckResult] = [CheckResult("plugin loads", True)]
-    checks.append(_check_match_format(plugin.module))
-    checks.append(_check_scoresheet_schema(plugin.module, "scoresheet_schema"))
-    checks.append(_check_scoresheet_schema(plugin.module, "skills_scoresheet_schema"))
-    checks.append(_check_calculate_score(plugin.module, "calculate_score"))
-    checks.append(_check_calculate_score(plugin.module, "calculate_skills_score"))
-    checks.append(_check_validate(plugin.module))
-    checks.append(_check_rank_teams(plugin.module))
+
+    checks.append(
+        _safe_check("match_format() shape", lambda: _check_match_format(plugin.module))
+    )
+
+    schema_result = _safe_check(
+        "scoresheet_schema() shape",
+        lambda: _check_scoresheet_schema(plugin.module, "scoresheet_schema"),
+    )
+    checks.append(schema_result)
+
+    skills_schema_result = _safe_check(
+        "skills_scoresheet_schema() shape",
+        lambda: _check_scoresheet_schema(plugin.module, "skills_scoresheet_schema"),
+    )
+    checks.append(skills_schema_result)
+
+    if schema_result.passed:
+        checks.append(
+            _safe_check(
+                "calculate_score() determinism",
+                lambda: _check_calculate_score(plugin.module, "calculate_score"),
+            )
+        )
+        checks.append(
+            _safe_check("validate() shape", lambda: _check_validate(plugin.module))
+        )
+    else:
+        checks.append(
+            CheckResult(
+                "calculate_score() determinism",
+                False,
+                "skipped: scoresheet_schema() is invalid",
+            )
+        )
+        checks.append(
+            CheckResult(
+                "validate() shape", False, "skipped: scoresheet_schema() is invalid"
+            )
+        )
+
+    if skills_schema_result.passed:
+        checks.append(
+            _safe_check(
+                "calculate_skills_score() determinism",
+                lambda: _check_calculate_score(plugin.module, "calculate_skills_score"),
+            )
+        )
+    else:
+        checks.append(
+            CheckResult(
+                "calculate_skills_score() determinism",
+                False,
+                "skipped: skills_scoresheet_schema() is invalid",
+            )
+        )
+
+    checks.append(
+        _safe_check("rank_teams() structure", lambda: _check_rank_teams(plugin.module))
+    )
 
     return ConformanceReport(plugin_name=plugin.name, checks=checks)
 

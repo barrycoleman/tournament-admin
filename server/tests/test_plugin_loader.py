@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -32,3 +33,20 @@ def test_load_game_plugin_computes_real_score():
 def test_load_game_plugin_missing_function_raises():
     with pytest.raises(PluginLoadError, match="validate"):
         load_game_plugin(FIXTURE_BROKEN_PLUGIN)
+
+
+def test_load_game_plugin_handles_plugin_that_exits_at_import(tmp_path):
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "name": "exits-on-import",
+                "version": "1.0.0",
+                "kind": "game",
+                "display_name": "Exits On Import",
+            }
+        )
+    )
+    (tmp_path / "plugin.py").write_text("import sys\nsys.exit(1)\n")
+
+    with pytest.raises(PluginLoadError, match="error executing"):
+        load_game_plugin(tmp_path)

@@ -29,11 +29,10 @@ class LoadedGamePlugin:
     module: ModuleType
 
 
-def _import_plugin_module(plugin_dir: Path, plugin_name: str) -> ModuleType:
+def _import_plugin_module(plugin_dir: Path, module_key: str) -> ModuleType:
     module_path = plugin_dir / "plugin.py"
     if not module_path.exists():
         raise PluginLoadError(f"{plugin_dir} has no plugin.py")
-    module_key = f"tournament_server_plugin_{plugin_name}"
     spec = importlib.util.spec_from_file_location(module_key, module_path)
     if spec is None or spec.loader is None:
         raise PluginLoadError(f"could not load plugin module at {module_path}")
@@ -41,19 +40,20 @@ def _import_plugin_module(plugin_dir: Path, plugin_name: str) -> ModuleType:
     sys.modules[module_key] = module
     try:
         spec.loader.exec_module(module)
-    except Exception as exc:
+    except BaseException as exc:
         del sys.modules[module_key]
         raise PluginLoadError(f"error executing {module_path}: {exc}") from exc
     return module
 
 
-def _check_required_functions(module: ModuleType) -> None:
+def _check_required_functions(module: ModuleType, module_key: str) -> None:
     missing = [
         name
         for name in REQUIRED_GAME_PLUGIN_FUNCTIONS
         if not callable(getattr(module, name, None))
     ]
     if missing:
+        sys.modules.pop(module_key, None)
         raise PluginLoadError(
             f"plugin module is missing required functions: {', '.join(missing)}"
         )
@@ -65,8 +65,9 @@ def load_game_plugin(plugin_dir: Path) -> LoadedGamePlugin:
         raise PluginLoadError(
             f"{plugin_dir} declares kind={manifest.kind!r}, expected 'game'"
         )
-    module = _import_plugin_module(plugin_dir, manifest.name)
-    _check_required_functions(module)
+    module_key = f"tournament_server_plugin_{manifest.name}"
+    module = _import_plugin_module(plugin_dir, module_key)
+    _check_required_functions(module, module_key)
     return LoadedGamePlugin(
         name=manifest.name,
         version=manifest.version,
