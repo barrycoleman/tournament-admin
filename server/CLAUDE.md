@@ -77,6 +77,38 @@ key. This is what the conformance tool and the loader both check for;
 see `tests/fixtures/plugins/games/example-game/plugin.py` for the
 pattern every field in that fixture follows.
 
+## Match & scoring
+
+An Event selects exactly one game plugin via `POST /api/event/game-plugin`
+— immutable once set. A Match always has exactly two Alliances (created
+together via `POST /api/matches`), each holding one or more Teams through
+the `alliance_teams` join table. `POST /api/matches/{id}/alliances/{id}/score`
+runs the event's plugin's `validate()` (blocking on violations unless
+`force: true` is passed) and stores the raw scoresheet as JSON — an
+alliance's actual score is always *derived* via `calculate_score()`, never
+stored redundantly, so it can never go stale relative to the plugin's
+logic. A Match becomes `"completed"` once every Alliance has a saved
+`ScoreRecord`, which triggers a ranking recompute for its session/division.
+
+Win-point allocation (2/1/0 for win/tie/loss) and strength-of-schedule
+(sum of opponents' current win points) are computed by the core server,
+not the plugin — see `services/ranking.py`. The plugin's `rank_teams()`
+only receives those pre-computed numbers plus each team's
+`tiebreaker_seed` and handles the final sort/tiebreak. This is narrower
+than the design spec's §5.1 prose ("win-point allocation" as something
+`rank_teams` does), but matches the plugin interface actually built and
+tested in Phase 2 — see that phase's plan for the reasoning.
+
+Every list/read endpoint that's scoped to a session (`GET /api/matches`,
+`GET /api/rankings`) takes an explicit `session_id` query parameter,
+defaulting to `Event.active_session_id` via the shared
+`deps.get_session_id` dependency when omitted.
+
+No-show/DQ handling: an alliance's effective score is `0` wherever it
+matters (the score-submission response, ranking computation) when its
+`ScoreRecord.no_show` or `.dq` is set — this zeroing is core-server logic,
+never passed into the plugin's `calculate_score()`.
+
 ## Known, deliberate gaps in this phase
 
 - There's no real authentication yet. Requests can pass an
