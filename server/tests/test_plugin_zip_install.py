@@ -14,6 +14,9 @@ from tournament_server.plugin_registry.zip_install import install_plugin_zip
 FIXTURE_EXAMPLE_PLUGIN = (
     Path(__file__).parent / "fixtures" / "plugins" / "games" / "example-game"
 )
+FIXTURE_BROKEN_PLUGIN = (
+    Path(__file__).parent / "fixtures" / "plugins" / "games" / "broken-plugin"
+)
 
 
 def test_install_plugin_zip_extracts_and_loads(tmp_path):
@@ -47,3 +50,13 @@ def test_install_plugin_zip_rejects_missing_manifest(tmp_path):
 def test_install_plugin_zip_rejects_bad_zip_bytes(tmp_path):
     with pytest.raises(PluginInstallError):
         install_plugin_zip(b"not a zip", tmp_path / "plugins")
+
+
+def test_install_plugin_zip_rolls_back_on_load_failure(tmp_path):
+    zip_bytes = zip_fixture_plugin(FIXTURE_BROKEN_PLUGIN)
+    plugins_root = tmp_path / "plugins"
+
+    with pytest.raises(PluginInstallError):
+        install_plugin_zip(zip_bytes, plugins_root)
+
+    assert not (plugins_root / "games" / "broken-plugin").exists()
