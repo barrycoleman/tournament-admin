@@ -394,16 +394,39 @@ third parties — deliberately deferred, not accidentally omitted.
     purpose-built relay-facing API), and event-code security (e.g.
     guessability, whether a still-open event's code should ever expire
     from inactivity even though the event itself hasn't ended).
-- **Port selection is currently hardcoded** (`main.py` binds
-  `127.0.0.1:8000`) — fine for local development, but fragile for
-  "download and run" software aimed at non-technical users: if 8000 is
-  already taken by something else on the organizer's machine, the
-  server fails to start with a raw `OSError`/traceback, not a friendly
-  message. Needs a real design pass in the packaging phase (spec §7),
-  covering: a configurable port (env var, matching the
-  `TOURNAMENT_DB_PATH`/`TOURNAMENT_PLUGINS_ROOT` pattern already
-  established), whether to auto-probe for a free port if the configured
-  one is busy, and how the chosen port gets communicated back to the
-  admin (e.g. printed clearly at startup, or the executable opening the
-  browser itself so the organizer never needs to know the number at
-  all).
+- **Port/host binding and discoverability is currently hardcoded and,
+  as written, actually broken for this project's own architecture**
+  (`main.py` binds `127.0.0.1:8000`) — loopback-only, so no other
+  device (scorer tablet, Pi display) could ever reach it regardless of
+  port, directly contradicting the LAN-connected-devices design this
+  whole project is built around. Also fragile even for the admin's own
+  machine: if 8000 is taken by something else, the server fails to
+  start with a raw `OSError`/traceback, not a friendly message. Needs a
+  real design pass in the packaging phase (spec §7), covering:
+  - Bind to `0.0.0.0` (or the detected LAN interface address) rather
+    than `127.0.0.1`, so other devices on the venue network can
+    actually connect at all.
+  - Auto-probe for a free port if the configured default (e.g. 8000)
+    is taken — try 8001, 8002, etc. — rather than crashing.
+  - The apparent chicken-and-egg problem ("you need the Admin UI to
+    learn the address, but need the address to open the Admin UI")
+    only exists for *other* devices, not the admin: the executable can
+    auto-open the system's default browser to `localhost:<port>` (or
+    `127.0.0.1:<port>`) at startup, since the admin is always on the
+    same machine as the server — no IP or port needs to be typed or
+    even known by them for their own access.
+  - The real discoverability problem is *other* devices (scorer
+    tablets, spectators) finding the address to connect to. The Admin
+    UI should prominently display its own LAN-reachable IP address(es)
+    and port — ideally as a QR code, since typing an IP:port on a
+    phone is painful — for the admin to relay verbally or project on a
+    shared screen. This is the same underlying need as the event-code
+    idea above (§10, participant SPA) and the "audience display shows
+    the code" requirement — worth designing these together rather than
+    as separate mechanisms.
+  - A machine can have multiple network interfaces (WiFi, Ethernet, a
+    VPN adapter) with different IPs — naive detection could show the
+    wrong one (e.g. a VPN's address instead of the venue WiFi's),
+    stranding every other device. Needs sane filtering/detection, and
+    probably a way for the admin to pick manually if more than one
+    plausible LAN address is found.
