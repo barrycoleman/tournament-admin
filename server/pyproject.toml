@@ -11,6 +11,9 @@ dependencies = [
     "python-multipart>=0.0.9,<1.0",
 ]
 
+[project.scripts]
+tm = "tournament_server.cli:run"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3,<9.0",
