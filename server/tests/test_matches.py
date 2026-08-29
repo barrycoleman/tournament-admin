@@ -28,8 +28,11 @@ def test_create_match_with_two_alliances(client):
     body = response.json()
     assert body["status"] == "scheduled"
     assert len(body["alliances"]) == 2
-    stations = {a["station"] for a in body["alliances"]}
-    assert stations == {"red", "blue"}
+
+    alliances_by_station = {a["station"]: a for a in body["alliances"]}
+    assert set(alliances_by_station) == {"red", "blue"}
+    assert set(alliances_by_station["red"]["team_ids"]) == {t1, t2}
+    assert set(alliances_by_station["blue"]["team_ids"]) == {t3, t4}
 
 
 def test_create_match_uses_active_session_when_omitted(client):
