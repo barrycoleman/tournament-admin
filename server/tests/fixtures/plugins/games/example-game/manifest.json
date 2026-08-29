@@ -1,0 +1,6 @@
+{
+  "name": "example-game",
+  "version": "1.0.0",
+  "kind": "game",
+  "display_name": "Example Scoring Game"
+}
