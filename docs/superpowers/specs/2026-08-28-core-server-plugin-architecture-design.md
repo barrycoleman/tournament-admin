@@ -354,3 +354,43 @@ third parties — deliberately deferred, not accidentally omitted.
 - Whether/when to build the deferred live-score-preview feature (§6).
 - Whether to eventually add cryptographic plugin signing or OS-level
   sandboxing (§9) if a third-party plugin ecosystem emerges.
+- **A new subsystem, not decomposed here yet: a read-only
+  participant/attendee SPA plus a small hosted publishing relay.**
+  Captured now, to be fully brainstormed and speced when its turn comes:
+  - Purpose: parents/students/spectators need to see a team's schedule,
+    check-in status, match and skills scores, and rankings without being
+    on the venue's local network (the venue WiFi shouldn't have to carry
+    spectator traffic alongside scoring/field devices). Read-only, no
+    write path.
+  - Shape: a small hosted relay service (separate from, and much
+    simpler than, the core server) holds a *live* copy of one event's
+    published data only while that event's local server is up and
+    actively pushing to it. The local server is the one that connects
+    outbound to the relay and publishes updates — the relay never needs
+    an inbound path into the venue's LAN, which fits a server that's
+    likely behind NAT with no port-forwarding. When the local server
+    stops publishing (event's over, admin closes it), the relay
+    discards that event's data — it's explicitly an ephemeral cache,
+    not a permanent hosted database per event.
+  - Event codes: when a local server first starts publishing an event,
+    the relay issues a short, human-shareable code (e.g. `TJDR-DKEL`
+    style). A code is never reused for a *different* event once
+    retired. A multi-session league — one Event, many Sessions, per
+    this spec's data model (§2–§3) — keeps the *same* code across every
+    session, since it's the same underlying Event the whole time; the
+    code is tied to the Event, not to any one Session.
+  - Participant site: a public site (domain already secured:
+    `tournamentadmin.net`, e.g. a `scores.tournamentadmin.net`
+    subdomain) where a visitor enters the event code, picks their team
+    from a list, and sees that team's read-only data.
+  - The Audience Display (part of the later display-client spec) should
+    be able to show the event's current code on-screen, so spectators
+    can read it off the projector/monitor and visit the site from their
+    own phones.
+  - Open questions for that future spec: the relay's own hosting/
+    architecture, the exact publish protocol between the local server
+    and the relay (what gets pushed, how often, how much of it reuses
+    the core server's existing REST/WebSocket shapes vs. needing a
+    purpose-built relay-facing API), and event-code security (e.g.
+    guessability, whether a still-open event's code should ever expire
+    from inactivity even though the event itself hasn't ended).
