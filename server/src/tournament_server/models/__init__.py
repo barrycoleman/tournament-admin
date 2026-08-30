@@ -1,6 +1,8 @@
 from tournament_server.models.alliance import Alliance, AllianceTeam
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
+from tournament_server.models.field import Field
+from tournament_server.models.field_set import FieldSet
 from tournament_server.models.match import Match
 from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.ranking import Ranking
@@ -13,6 +15,8 @@ __all__ = [
     "AllianceTeam",
     "Division",
     "Event",
+    "Field",
+    "FieldSet",
     "Match",
     "Ranking",
     "ScoreRecord",

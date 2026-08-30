@@ -15,6 +15,8 @@ from tournament_server.routers import (
     audit_log,
     divisions,
     event,
+    field_sets,
+    fields,
     matches,
     participation,
     plugins,
@@ -53,6 +55,8 @@ def create_app(
     app.include_router(event.router)
     app.include_router(sessions.router)
     app.include_router(divisions.router)
+    app.include_router(field_sets.router)
+    app.include_router(fields.router)
     app.include_router(teams.router)
     app.include_router(participation.router)
     app.include_router(audit_log.router)
