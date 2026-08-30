@@ -6,6 +6,7 @@ from tournament_server.plugin_registry.errors import (
     PluginAlreadyExistsError,
     PluginInstallError,
 )
+from tournament_server.plugin_registry.loader import SCHEDULER_PLUGIN_KIND
 from tournament_server.plugin_registry.zip_install import install_plugin_zip
 
 router = APIRouter(prefix="/api/plugins/games", tags=["plugins"])
@@ -32,6 +33,37 @@ def upload_game_plugin(request: Request, file: UploadFile) -> dict[str, str]:
         raise HTTPException(status_code=422, detail=str(exc))
 
     request.app.state.game_plugins[plugin.name] = plugin
+    return {
+        "name": plugin.name,
+        "version": plugin.version,
+        "display_name": plugin.display_name,
+    }
+
+
+scheduler_router = APIRouter(prefix="/api/plugins/schedulers", tags=["plugins"])
+
+
+@scheduler_router.get("")
+def list_scheduler_plugins(request: Request) -> list[dict[str, str]]:
+    registry = request.app.state.scheduler_plugins
+    return [
+        {"name": p.name, "version": p.version, "display_name": p.display_name}
+        for p in registry.values()
+    ]
+
+
+@scheduler_router.post("", status_code=201)
+def upload_scheduler_plugin(request: Request, file: UploadFile) -> dict[str, str]:
+    zip_bytes = file.file.read()
+    plugins_root = request.app.state.plugins_root
+    try:
+        plugin = install_plugin_zip(zip_bytes, plugins_root, SCHEDULER_PLUGIN_KIND)
+    except PluginAlreadyExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except PluginInstallError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    request.app.state.scheduler_plugins[plugin.name] = plugin
     return {
         "name": plugin.name,
         "version": plugin.version,

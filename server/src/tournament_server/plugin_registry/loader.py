@@ -19,9 +19,28 @@ REQUIRED_GAME_PLUGIN_FUNCTIONS = (
     "calculate_skills_score",
 )
 
+REQUIRED_SCHEDULER_PLUGIN_FUNCTIONS = ("generate_schedule",)
+
+
+@dataclass(frozen=True)
+class PluginKind:
+    kind: str
+    folder_name: str
+    required_functions: tuple[str, ...]
+
+
+GAME_PLUGIN_KIND = PluginKind(
+    kind="game", folder_name="games", required_functions=REQUIRED_GAME_PLUGIN_FUNCTIONS
+)
+SCHEDULER_PLUGIN_KIND = PluginKind(
+    kind="scheduler",
+    folder_name="schedulers",
+    required_functions=REQUIRED_SCHEDULER_PLUGIN_FUNCTIONS,
+)
+
 
 @dataclass
-class LoadedGamePlugin:
+class LoadedPlugin:
     name: str
     version: str
     display_name: str
@@ -46,10 +65,12 @@ def _import_plugin_module(plugin_dir: Path, module_key: str) -> ModuleType:
     return module
 
 
-def _check_required_functions(module: ModuleType, module_key: str) -> None:
+def _check_required_functions(
+    module: ModuleType, module_key: str, required_functions: tuple[str, ...]
+) -> None:
     missing = [
         name
-        for name in REQUIRED_GAME_PLUGIN_FUNCTIONS
+        for name in required_functions
         if not callable(getattr(module, name, None))
     ]
     if missing:
@@ -59,19 +80,27 @@ def _check_required_functions(module: ModuleType, module_key: str) -> None:
         )
 
 
-def load_game_plugin(plugin_dir: Path) -> LoadedGamePlugin:
+def load_plugin(plugin_dir: Path, kind: PluginKind) -> LoadedPlugin:
     manifest = load_manifest(plugin_dir)
-    if manifest.kind != "game":
+    if manifest.kind != kind.kind:
         raise PluginLoadError(
-            f"{plugin_dir} declares kind={manifest.kind!r}, expected 'game'"
+            f"{plugin_dir} declares kind={manifest.kind!r}, expected {kind.kind!r}"
         )
     module_key = f"tournament_server_plugin_{manifest.name}"
     module = _import_plugin_module(plugin_dir, module_key)
-    _check_required_functions(module, module_key)
-    return LoadedGamePlugin(
+    _check_required_functions(module, module_key, kind.required_functions)
+    return LoadedPlugin(
         name=manifest.name,
         version=manifest.version,
         display_name=manifest.display_name,
         folder=plugin_dir,
         module=module,
     )
+
+
+def load_game_plugin(plugin_dir: Path) -> LoadedPlugin:
+    return load_plugin(plugin_dir, GAME_PLUGIN_KIND)
+
+
+def load_scheduler_plugin(plugin_dir: Path) -> LoadedPlugin:
+    return load_plugin(plugin_dir, SCHEDULER_PLUGIN_KIND)

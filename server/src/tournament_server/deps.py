@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server.models.event import Event
-from tournament_server.plugin_registry.loader import LoadedGamePlugin
+from tournament_server.plugin_registry.loader import LoadedPlugin
 
 
 def get_db(request: Request) -> Iterator[Session]:
@@ -37,7 +37,7 @@ def get_session_id(
     return event.active_session_id
 
 
-def get_game_plugin_for_event(request: Request, db: Session) -> LoadedGamePlugin:
+def get_game_plugin_for_event(request: Request, db: Session) -> LoadedPlugin:
     event = get_the_event(db)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not initialized")

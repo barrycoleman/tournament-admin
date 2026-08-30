@@ -7,7 +7,10 @@ from fastapi import FastAPI, Request
 from tournament_server import audit  # noqa: F401  (registers AuditLog + hooks)
 from tournament_server import models  # noqa: F401  (registers all tables)
 from tournament_server.db import init_db, make_engine, make_session_factory
-from tournament_server.plugin_registry.discovery import discover_game_plugins
+from tournament_server.plugin_registry.discovery import (
+    discover_game_plugins,
+    discover_scheduler_plugins,
+)
 from tournament_server.routers import (
     audit_log,
     divisions,
@@ -40,6 +43,7 @@ def create_app(
     app.state.session_factory = session_factory
     app.state.plugins_root = Path(settings.plugins_root)
     app.state.game_plugins = discover_game_plugins(app.state.plugins_root)
+    app.state.scheduler_plugins = discover_scheduler_plugins(app.state.plugins_root)
 
     @app.middleware("http")
     async def actor_middleware(request: Request, call_next):
@@ -53,6 +57,7 @@ def create_app(
     app.include_router(participation.router)
     app.include_router(audit_log.router)
     app.include_router(plugins.router)
+    app.include_router(plugins.scheduler_router)
     app.include_router(matches.router)
     app.include_router(scores.router)
     app.include_router(rankings.router)

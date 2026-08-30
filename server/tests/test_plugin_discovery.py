@@ -36,3 +36,11 @@ def test_discover_game_plugins_skips_broken_folder_but_keeps_good_one(tmp_path):
     registry = discover_game_plugins(tmp_path / "plugins")
 
     assert set(registry) == {"example-game"}
+
+
+from tournament_server.plugin_registry.discovery import discover_scheduler_plugins
+
+
+def test_discover_scheduler_plugins_empty_root_returns_empty_dict(tmp_path):
+    registry = discover_scheduler_plugins(tmp_path / "plugins")
+    assert registry == {}

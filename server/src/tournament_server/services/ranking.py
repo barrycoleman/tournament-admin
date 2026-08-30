@@ -10,11 +10,11 @@ from tournament_server.models.match import Match
 from tournament_server.models.ranking import Ranking
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.team import Team
-from tournament_server.plugin_registry.loader import LoadedGamePlugin
+from tournament_server.plugin_registry.loader import LoadedPlugin
 
 
 def recompute_rankings(
-    db: Session, plugin: LoadedGamePlugin, session_id: int, division_id: int | None
+    db: Session, plugin: LoadedPlugin, session_id: int, division_id: int | None
 ) -> None:
     query = select(Match).where(
         Match.session_id == session_id, Match.status == "completed"

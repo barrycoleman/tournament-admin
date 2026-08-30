@@ -50,3 +50,21 @@ def test_load_game_plugin_handles_plugin_that_exits_at_import(tmp_path):
 
     with pytest.raises(PluginLoadError, match="error executing"):
         load_game_plugin(tmp_path)
+
+
+from tournament_server.plugin_registry.loader import (
+    GAME_PLUGIN_KIND,
+    SCHEDULER_PLUGIN_KIND,
+    load_plugin,
+)
+
+
+def test_load_plugin_generic_matches_load_game_plugin():
+    plugin = load_plugin(FIXTURE_EXAMPLE_PLUGIN, GAME_PLUGIN_KIND)
+    assert plugin.name == "example-game"
+    assert plugin.version == "1.0.0"
+
+
+def test_load_plugin_rejects_mismatched_kind():
+    with pytest.raises(PluginLoadError, match="expected 'scheduler'"):
+        load_plugin(FIXTURE_EXAMPLE_PLUGIN, SCHEDULER_PLUGIN_KIND)
