@@ -16,6 +16,13 @@ from tournament_server.plugin_registry.loader import LoadedPlugin
 def recompute_rankings(
     db: Session, plugin: LoadedPlugin, session_id: int, division_id: int | None
 ) -> None:
+    game_model = plugin.module.match_format()["game_model"]
+    if game_model == "cooperative_score":
+        # Cooperative-score ranking (average_score/matches_played based) is
+        # implemented in a later phase; skip recomputation here rather than
+        # feed rank_teams() the head-to-head shape it doesn't expect.
+        return
+
     query = select(Match).where(
         Match.session_id == session_id, Match.status == "completed"
     )

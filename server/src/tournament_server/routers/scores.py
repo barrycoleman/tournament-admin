@@ -106,9 +106,37 @@ def submit_score(
     db.commit()
     db.refresh(record)
 
+    game_model = plugin.module.match_format()["game_model"]
     all_alliances = db.execute(
         select(Alliance).where(Alliance.match_id == match_id)
     ).scalars().all()
+
+    if game_model == "cooperative_score":
+        for other_alliance in all_alliances:
+            if other_alliance.id == alliance_id:
+                continue
+            other_record = db.execute(
+                select(ScoreRecord).where(ScoreRecord.alliance_id == other_alliance.id)
+            ).scalars().first()
+            if other_record is None:
+                other_record = ScoreRecord(
+                    alliance_id=other_alliance.id,
+                    plugin_name=plugin.name,
+                    plugin_version=plugin.version,
+                    data_json=record.data_json,
+                    no_show=False,
+                    dq=False,
+                    sitting=False,
+                    submitted_by_device=audit.current_actor.get(),
+                    submitted_at=now,
+                    saved_at=now,
+                )
+                db.add(other_record)
+            else:
+                other_record.data_json = record.data_json
+                other_record.plugin_name = plugin.name
+                other_record.plugin_version = plugin.version
+        db.commit()
     scored_alliance_ids = {
         row.alliance_id
         for row in db.execute(
