@@ -322,6 +322,26 @@ def clear_schedule(
         game_plugin = request.app.state.game_plugins.get(event.game_plugin_name)
         if game_plugin is not None:
             recompute_rankings(db, game_plugin, session_id, division_id)
+
+            # Delete stale event-wide rankings before recomputing them, for
+            # the same reason the session-scoped rankings above are deleted
+            # first: a team whose event-wide completed-match count just
+            # dropped to zero would otherwise be left with a stale row,
+            # since recompute_event_rankings only touches rows for teams
+            # still present in its freshly-computed results.
+            event_ranking_query = select(Ranking).where(Ranking.session_id.is_(None))
+            if division_id is None:
+                event_ranking_query = event_ranking_query.where(
+                    Ranking.division_id.is_(None)
+                )
+            else:
+                event_ranking_query = event_ranking_query.where(
+                    Ranking.division_id == division_id
+                )
+            for ranking in db.execute(event_ranking_query).scalars().all():
+                db.delete(ranking)
+            db.flush()
+
             recompute_event_rankings(db, game_plugin, event.id, division_id)
 
     return {"matches_deleted": len(matches)}

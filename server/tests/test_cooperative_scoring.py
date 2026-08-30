@@ -320,3 +320,90 @@ def test_event_wide_ranking_aggregates_across_sessions(cooperative_client):
     assert rows[t1]["average_score"] == 30.0
     assert rows[t1]["matches_played"] == 2
     assert rows[t1]["session_id"] is None
+
+
+def test_clearing_a_session_removes_stale_event_wide_ranking_for_a_team_with_no_matches_left(
+    cooperative_client,
+):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "League"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    t1 = client.post("/api/teams", json={"number": "1", "name": "Team One"}).json()["id"]
+    t2 = client.post("/api/teams", json={"number": "2", "name": "Team Two"}).json()["id"]
+    t3 = client.post("/api/teams", json={"number": "3", "name": "Team Three"}).json()["id"]
+
+    session1_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    session2_id = client.post("/api/sessions", json={"label": "Session 2"}).json()["id"]
+
+    # Session 1: T1 + T2 share a scoresheet scoring 20 total. T1's only
+    # event-wide completed match lives here.
+    match1 = client.post(
+        "/api/matches",
+        json={
+            "session_id": session1_id,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [t1]},
+                {"station": "blue", "team_ids": [t2]},
+            ],
+        },
+    ).json()
+    red1 = next(a["id"] for a in match1["alliances"] if a["station"] == "red")
+    client.post(
+        f"/api/matches/{match1['id']}/alliances/{red1}/score",
+        json={"data": {"objects_scored": 10}},
+    )
+
+    # Session 2: T2 + T3 share a scoresheet scoring 40 total.
+    match2 = client.post(
+        "/api/matches",
+        json={
+            "session_id": session2_id,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [t2]},
+                {"station": "blue", "team_ids": [t3]},
+            ],
+        },
+    ).json()
+    red2 = next(a["id"] for a in match2["alliances"] if a["station"] == "red")
+    client.post(
+        f"/api/matches/{match2['id']}/alliances/{red2}/score",
+        json={"data": {"objects_scored": 20}},
+    )
+
+    # Before clearing: T1 has a real event-wide ranking row (1 match, average
+    # 20). T2 aggregates both sessions: (20 + 40) / 2 = 30, 2 matches.
+    before = {
+        row["team_id"]: row
+        for row in client.get("/api/rankings?event_wide=true").json()
+    }
+    assert before[t1]["average_score"] == 20.0
+    assert before[t1]["matches_played"] == 1
+    assert before[t2]["average_score"] == 30.0
+    assert before[t2]["matches_played"] == 2
+
+    # Clear Session 1's schedule. T1's only completed match anywhere in the
+    # event disappears with it, so T1 should have no event-wide ranking row
+    # at all afterward — not a stale row still showing its pre-deletion
+    # average_score/matches_played.
+    delete_response = client.delete(
+        "/api/schedule",
+        params={"session_id": session1_id, "round_type": "qualification"},
+    )
+    assert delete_response.status_code == 200
+
+    after = {
+        row["team_id"]: row
+        for row in client.get("/api/rankings?event_wide=true").json()
+    }
+    assert t1 not in after
+
+    # T2's remaining event-wide match is only Session 2's now: average 40,
+    # 1 match played.
+    assert after[t2]["average_score"] == 40.0
+    assert after[t2]["matches_played"] == 1
