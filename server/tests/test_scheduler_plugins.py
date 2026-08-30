@@ -45,13 +45,25 @@ def test_simple_random_passes_conformance():
 
 def test_simple_random_produces_valid_schedule_shape():
     plugin = load_plugin(SIMPLE_RANDOM_PLUGIN, SCHEDULER_PLUGIN_KIND)
-    teams = [{"team_id": i, "organization": None} for i in range(1, 9)]
-    field_sets = [{"field_set_id": 1, "name": "Main Fields"}]
-    fields = [{"field_id": 1, "field_set_id": 1}, {"field_id": 2, "field_set_id": 1}]
+    # Tight fixture: 6 teams, 2 field_sets, teams_per_alliance=2 (match_size=4).
+    # With only 6 teams available, there are not enough distinct teams left
+    # for a second concurrent match in the same time_slot unless
+    # used_this_slot correctly excludes the first field_set's picks — this
+    # is what actually exercises the concurrency-safety invariant (a single
+    # field_set can never trigger a double-booking with itself).
+    teams = [{"team_id": i, "organization": None} for i in range(1, 7)]
+    field_sets = [
+        {"field_set_id": 1, "name": "Field Set 1"},
+        {"field_set_id": 2, "name": "Field Set 2"},
+    ]
+    fields = [
+        {"field_id": 1, "field_set_id": 1},
+        {"field_id": 2, "field_set_id": 2},
+    ]
 
     matches = plugin.module.generate_schedule(
         teams=teams,
-        target_matches_per_team=3,
+        target_matches_per_team=2,
         teams_per_alliance=2,
         fields=fields,
         field_sets=field_sets,
