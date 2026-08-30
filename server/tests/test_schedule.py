@@ -125,3 +125,57 @@ def test_generate_schedule_rejects_double_booking_plugin_output(client):
     )
     assert response.status_code == 422
     assert "double-booked" in response.json()["detail"]
+
+
+def test_clear_schedule_deletes_matches_and_rankings(client):
+    session_id, team_ids = _setup_ready_session(client)
+    client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    matches_before = client.get(f"/api/matches?session_id={session_id}").json()
+    match = matches_before[0]
+    for alliance in match["alliances"]:
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{alliance['id']}/score",
+            json={"data": {"high_balls": 1, "low_balls": 1}},
+        )
+
+    rankings_before = client.get(f"/api/rankings?session_id={session_id}").json()
+    assert rankings_before != []  # the completed match above must have produced rankings
+
+    response = client.delete(
+        "/api/schedule",
+        params={"session_id": session_id, "round_type": "qualification"},
+    )
+    assert response.status_code == 200
+    assert response.json()["matches_deleted"] == len(matches_before)
+
+    remaining_matches = client.get(f"/api/matches?session_id={session_id}").json()
+    assert remaining_matches == []
+
+    rankings_after = client.get(f"/api/rankings?session_id={session_id}").json()
+    assert rankings_after == []
+
+
+def test_clear_schedule_allows_regeneration_afterward(client):
+    session_id, team_ids = _setup_ready_session(client)
+    payload = {
+        "session_id": session_id,
+        "round_type": "qualification",
+        "target_matches_per_team": 3,
+        "scheduler_plugin_name": "simple_random",
+    }
+    client.post("/api/schedule", json=payload)
+    client.delete(
+        "/api/schedule",
+        params={"session_id": session_id, "round_type": "qualification"},
+    )
+
+    response = client.post("/api/schedule", json=payload)
+    assert response.status_code == 201

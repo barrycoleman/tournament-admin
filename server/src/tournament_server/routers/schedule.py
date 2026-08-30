@@ -12,7 +12,9 @@ from tournament_server.models.field import Field
 from tournament_server.models.field_set import FieldSet
 from tournament_server.models.match import Match
 from tournament_server.models.participation import SessionParticipation
+from tournament_server.models.ranking import Ranking
 from tournament_server.models.schedule_generation import ScheduleGeneration
+from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
 from tournament_server.schemas.schedule import (
@@ -237,3 +239,51 @@ def generate_schedule(
     return ScheduleGenerateResponse(
         schedule_generation_id=generation.id, match_count=len(created_matches)
     )
+
+
+@router.delete("")
+def clear_schedule(
+    session_id: int = Query(...),
+    division_id: int | None = Query(None),
+    round_type: str = Query(...),
+    db: Session = Depends(get_db),
+) -> dict[str, int]:
+    # Delete stale rankings first
+    ranking_query = select(Ranking).where(Ranking.session_id == session_id)
+    if division_id is None:
+        ranking_query = ranking_query.where(Ranking.division_id.is_(None))
+    else:
+        ranking_query = ranking_query.where(Ranking.division_id == division_id)
+    for ranking in db.execute(ranking_query).scalars().all():
+        db.delete(ranking)
+    db.flush()
+
+    # Then delete matches and their cascading objects
+    match_query = select(Match).where(
+        Match.session_id == session_id, Match.round_type == round_type
+    )
+    if division_id is None:
+        match_query = match_query.where(Match.division_id.is_(None))
+    else:
+        match_query = match_query.where(Match.division_id == division_id)
+    matches = db.execute(match_query).scalars().all()
+
+    for match in matches:
+        alliances = db.execute(
+            select(Alliance).where(Alliance.match_id == match.id)
+        ).scalars().all()
+        for alliance in alliances:
+            for record in db.execute(
+                select(ScoreRecord).where(ScoreRecord.alliance_id == alliance.id)
+            ).scalars().all():
+                db.delete(record)
+            for alliance_team in db.execute(
+                select(AllianceTeam).where(AllianceTeam.alliance_id == alliance.id)
+            ).scalars().all():
+                db.delete(alliance_team)
+            db.flush()
+            db.delete(alliance)
+        db.delete(match)
+
+    db.commit()
+    return {"matches_deleted": len(matches)}
