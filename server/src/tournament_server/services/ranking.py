@@ -12,6 +12,7 @@ from tournament_server.models.match import Match
 from tournament_server.models.ranking import Ranking
 from tournament_server.models.ranking_configuration import RankingConfiguration
 from tournament_server.models.score_record import ScoreRecord
+from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
 from tournament_server.plugin_registry.loader import LoadedPlugin
 
@@ -310,6 +311,79 @@ def recompute_rankings(
         else:
             existing.win_points = entry["win_points"]
             existing.strength_of_schedule = entry["strength_of_schedule"]
+            existing.rank = entry["rank"]
+
+    db.commit()
+
+
+def recompute_event_rankings(
+    db: Session, plugin: LoadedPlugin, event_id: int, division_id: int | None
+) -> None:
+    game_model = plugin.module.match_format()["game_model"]
+    if game_model != "cooperative_score":
+        return
+
+    session_ids = [
+        row.id
+        for row in db.execute(
+            select(TournamentSession).where(TournamentSession.event_id == event_id)
+        ).scalars().all()
+    ]
+    if not session_ids:
+        return
+
+    query = select(Match).where(
+        Match.session_id.in_(session_ids), Match.status == "completed"
+    )
+    if division_id is None:
+        query = query.where(Match.division_id.is_(None))
+    else:
+        query = query.where(Match.division_id == division_id)
+    matches = db.execute(query).scalars().all()
+
+    division_filter = (
+        RankingConfiguration.division_id.is_(None)
+        if division_id is None
+        else RankingConfiguration.division_id == division_id
+    )
+    config = db.execute(
+        select(RankingConfiguration).where(
+            RankingConfiguration.event_id == event_id, division_filter
+        )
+    ).scalars().first()
+
+    team_results = _compute_cooperative_score_team_results(db, plugin, matches, config)
+    if not team_results:
+        return
+    ranked = plugin.module.rank_teams(team_results)
+
+    for entry in ranked:
+        ranking_division_filter = (
+            Ranking.division_id.is_(None)
+            if division_id is None
+            else Ranking.division_id == division_id
+        )
+        existing = db.execute(
+            select(Ranking).where(
+                Ranking.session_id.is_(None),
+                ranking_division_filter,
+                Ranking.team_id == entry["team_id"],
+            )
+        ).scalars().first()
+        if existing is None:
+            db.add(
+                Ranking(
+                    session_id=None,
+                    division_id=division_id,
+                    team_id=entry["team_id"],
+                    average_score=entry["average_score"],
+                    matches_played=entry["matches_played"],
+                    rank=entry["rank"],
+                )
+            )
+        else:
+            existing.average_score = entry["average_score"]
+            existing.matches_played = entry["matches_played"]
             existing.rank = entry["rank"]
 
     db.commit()

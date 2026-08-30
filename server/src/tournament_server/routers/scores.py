@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from tournament_server import audit
 from tournament_server.db import utc_now
-from tournament_server.deps import get_db, get_game_plugin_for_event
+from tournament_server.deps import get_db, get_game_plugin_for_event, get_the_event
 from tournament_server.models.alliance import Alliance
 from tournament_server.models.match import Match
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.schemas.score_record import ScoreRecordRead, ScoreSubmit
-from tournament_server.services.ranking import recompute_rankings
+from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
 
 router = APIRouter(prefix="/api/matches", tags=["scores"])
 
@@ -150,5 +150,8 @@ def submit_score(
         db.commit()
 
     recompute_rankings(db, plugin, match.session_id, match.division_id)
+    event = get_the_event(db)
+    if event is not None:
+        recompute_event_rankings(db, plugin, event.id, match.division_id)
 
     return _to_score_record_read(record, computed_score)

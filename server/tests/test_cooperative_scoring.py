@@ -281,3 +281,42 @@ def test_include_mode_zero_pads_a_team_with_fewer_matches_than_count(cooperative
     # (30 + 0 + 0) / 3 = 10.
     assert rows[t1]["average_score"] == 10.0
     assert rows[t1]["matches_played"] == 1
+
+
+def test_event_wide_ranking_aggregates_across_sessions(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "League"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    t1 = client.post("/api/teams", json={"number": "1", "name": "Team One"}).json()["id"]
+    t2 = client.post("/api/teams", json={"number": "2", "name": "Team Two"}).json()["id"]
+
+    session_scores = {"Session 1": 20, "Session 2": 40}
+    for label, total in session_scores.items():
+        session_id = client.post("/api/sessions", json={"label": label}).json()["id"]
+        match = client.post(
+            "/api/matches",
+            json={
+                "session_id": session_id,
+                "round_type": "qualification",
+                "match_number": 1,
+                "field_id": None,
+                "alliances": [
+                    {"station": "red", "team_ids": [t1]},
+                    {"station": "blue", "team_ids": [t2]},
+                ],
+            },
+        ).json()
+        red = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{red}/score",
+            json={"data": {"objects_scored": total // 2}},
+        )
+
+    response = client.get("/api/rankings?event_wide=true")
+    assert response.status_code == 200
+    rows = {row["team_id"]: row for row in response.json()}
+
+    # Average across both sessions: (20 + 40) / 2 = 30.
+    assert rows[t1]["average_score"] == 30.0
+    assert rows[t1]["matches_played"] == 2
+    assert rows[t1]["session_id"] is None

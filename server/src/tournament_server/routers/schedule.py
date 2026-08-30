@@ -21,7 +21,7 @@ from tournament_server.schemas.schedule import (
     ScheduleGenerateRequest,
     ScheduleGenerateResponse,
 )
-from tournament_server.services.ranking import recompute_rankings
+from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
 from tournament_server.services.scheduling import build_pairing_history
 
 router = APIRouter(prefix="/api/schedule", tags=["schedule"])
@@ -322,5 +322,6 @@ def clear_schedule(
         game_plugin = request.app.state.game_plugins.get(event.game_plugin_name)
         if game_plugin is not None:
             recompute_rankings(db, game_plugin, session_id, division_id)
+            recompute_event_rankings(db, game_plugin, event.id, division_id)
 
     return {"matches_deleted": len(matches)}

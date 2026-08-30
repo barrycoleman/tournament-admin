@@ -15,7 +15,7 @@ class Ranking(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"))
+    session_id: Mapped[int | None] = mapped_column(ForeignKey("sessions.id"), default=None)
     division_id: Mapped[int | None] = mapped_column(
         ForeignKey("divisions.id"), default=None
     )

@@ -13,11 +13,22 @@ router = APIRouter(prefix="/api/rankings", tags=["rankings"])
 
 @router.get("", response_model=list[RankingRead])
 def get_rankings(
-    session_id: int = Depends(get_session_id),
     division_id: int | None = Query(None),
+    event_wide: bool = Query(False),
+    session_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ) -> list[Ranking]:
-    query = select(Ranking).where(Ranking.session_id == session_id).order_by(Ranking.rank)
+    if event_wide:
+        query = select(Ranking).where(Ranking.session_id.is_(None)).order_by(Ranking.rank)
+    else:
+        resolved_session_id = (
+            session_id if session_id is not None else get_session_id(session_id, db)
+        )
+        query = (
+            select(Ranking)
+            .where(Ranking.session_id == resolved_session_id)
+            .order_by(Ranking.rank)
+        )
     if division_id is None:
         query = query.where(Ranking.division_id.is_(None))
     else:
