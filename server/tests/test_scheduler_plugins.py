@@ -66,6 +66,7 @@ def test_simple_random_produces_valid_schedule_shape():
         teams=teams,
         target_matches_per_team=2,
         teams_per_alliance=2,
+        alliance_count=2,
         fields=fields,
         field_sets=field_sets,
         cross_session_pairing_history={},
@@ -123,6 +124,7 @@ def test_balanced_avoids_the_only_repeat_pairing_when_an_alternative_exists():
         teams=teams,
         target_matches_per_team=1,
         teams_per_alliance=2,
+        alliance_count=2,
         fields=fields,
         field_sets=field_sets,
         cross_session_pairing_history=pairing_history,
@@ -147,6 +149,7 @@ def test_balanced_distributes_matches_evenly_across_teams():
         teams=teams,
         target_matches_per_team=4,
         teams_per_alliance=2,
+        alliance_count=2,
         fields=fields,
         field_sets=field_sets,
         cross_session_pairing_history={},
@@ -161,3 +164,29 @@ def test_balanced_distributes_matches_evenly_across_teams():
 
     spread = max(appearances.values()) - min(appearances.values())
     assert spread <= 1, appearances
+
+
+def test_simple_random_supports_alliance_count_other_than_two():
+    plugin = load_plugin(SIMPLE_RANDOM_PLUGIN, SCHEDULER_PLUGIN_KIND)
+    teams = [{"team_id": i, "organization": None} for i in range(1, 13)]
+    field_sets = [{"field_set_id": 1, "name": "Main Fields"}]
+    fields = [{"field_id": 1, "field_set_id": 1}]
+
+    matches = plugin.module.generate_schedule(
+        teams=teams,
+        target_matches_per_team=1,
+        teams_per_alliance=2,
+        alliance_count=3,
+        fields=fields,
+        field_sets=field_sets,
+        cross_session_pairing_history={},
+        constraints={"excluded_team_ids": []},
+    )
+
+    assert matches
+    for match in matches:
+        assert len(match["alliances"]) == 3
+        stations = {a["station"] for a in match["alliances"]}
+        assert stations == {"alliance_1", "alliance_2", "alliance_3"}
+        for alliance in match["alliances"]:
+            assert len(alliance["team_ids"]) == 2

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from tournament_server.deps import get_db, get_session_id, get_the_event
+from tournament_server.deps import get_db, get_game_plugin_for_event, get_session_id, get_the_event
 from tournament_server.models.alliance import Alliance, AllianceTeam
 from tournament_server.models.division import Division
 from tournament_server.models.field import Field
@@ -48,7 +48,9 @@ def _to_match_read(match: Match, db: Session) -> MatchRead:
 
 
 @router.post("", response_model=MatchRead, status_code=201)
-def create_match(payload: MatchCreate, db: Session = Depends(get_db)) -> MatchRead:
+def create_match(
+    payload: MatchCreate, request: Request, db: Session = Depends(get_db)
+) -> MatchRead:
     event = get_the_event(db)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not initialized")
@@ -63,9 +65,12 @@ def create_match(payload: MatchCreate, db: Session = Depends(get_db)) -> MatchRe
     if db.get(TournamentSession, session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    if len(payload.alliances) != 2:
+    game_plugin = get_game_plugin_for_event(request, db)
+    alliance_count = game_plugin.module.match_format()["alliance_count"]
+    if len(payload.alliances) != alliance_count:
         raise HTTPException(
-            status_code=422, detail="A match must have exactly 2 alliances"
+            status_code=422,
+            detail=f"A match must have exactly {alliance_count} alliances",
         )
     if payload.division_id is not None and db.get(Division, payload.division_id) is None:
         raise HTTPException(status_code=404, detail="Division not found")

@@ -8,6 +8,7 @@ def generate_schedule(
     teams: list[dict[str, Any]],
     target_matches_per_team: int,
     teams_per_alliance: int,
+    alliance_count: int,
     fields: list[dict[str, Any]],
     field_sets: list[dict[str, Any]],
     cross_session_pairing_history: dict[Any, dict[str, int]],
@@ -17,7 +18,7 @@ def generate_schedule(
     team_ids = [t["team_id"] for t in teams if t["team_id"] not in excluded]
 
     alliance_size = teams_per_alliance
-    match_size = alliance_size * 2
+    match_size = alliance_size * alliance_count
     if len(team_ids) < match_size:
         return []
 
@@ -28,6 +29,12 @@ def generate_schedule(
     total_matches = (len(team_ids) * target_matches_per_team) // match_size
     if total_matches < 1:
         return []
+
+    stations = (
+        ("red", "blue")
+        if alliance_count == 2
+        else tuple(f"alliance_{i + 1}" for i in range(alliance_count))
+    )
 
     appearances = {team_id: 0 for team_id in team_ids}
     matches: list[dict[str, Any]] = []
@@ -52,7 +59,7 @@ def generate_schedule(
 
             alliances = []
             remaining = list(chosen)
-            for station in ("red", "blue"):
+            for station in stations:
                 alliances.append(
                     {"station": station, "team_ids": remaining[:alliance_size]}
                 )

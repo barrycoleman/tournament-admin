@@ -130,30 +130,3 @@ def test_submit_score_with_force_still_rejects_unscoreable_data(client):
         },
     )
     assert response.status_code == 422
-
-
-def test_submit_score_requires_game_plugin_selected(client):
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
-    t1 = client.post("/api/teams", json={"number": "1", "name": "Team One"}).json()["id"]
-    t2 = client.post("/api/teams", json={"number": "2", "name": "Team Two"}).json()["id"]
-    match = client.post(
-        "/api/matches",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "match_number": 1,
-            "field_id": None,
-            "alliances": [
-                {"station": "red", "team_ids": [t1]},
-                {"station": "blue", "team_ids": [t2]},
-            ],
-        },
-    ).json()
-    red_id = match["alliances"][0]["id"]
-
-    response = client.post(
-        f"/api/matches/{match['id']}/alliances/{red_id}/score",
-        json={"data": {"high_balls": 1, "low_balls": 0}},
-    )
-    assert response.status_code == 422

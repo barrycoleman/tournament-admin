@@ -331,6 +331,7 @@ def _check_generate_schedule(module: Any) -> CheckResult:
         teams=teams,
         target_matches_per_team=2,
         teams_per_alliance=2,
+        alliance_count=2,
         fields=fields,
         field_sets=field_sets,
         cross_session_pairing_history={},

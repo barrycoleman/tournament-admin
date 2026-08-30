@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/schedule", tags=["schedule"])
 
 
 def _validate_generated_schedule(
-    generated: list, valid_field_set_ids: set[int]
+    generated: list, valid_field_set_ids: set[int], alliance_count: int
 ) -> None:
     if not isinstance(generated, list) or not generated:
         raise HTTPException(
@@ -56,9 +56,10 @@ def _validate_generated_schedule(
                 ),
             )
         alliances = entry["alliances"]
-        if not isinstance(alliances, list) or len(alliances) != 2:
+        if not isinstance(alliances, list) or len(alliances) != alliance_count:
             raise HTTPException(
-                status_code=422, detail="Each match must have exactly 2 alliances"
+                status_code=422,
+                detail=f"Each match must have exactly {alliance_count} alliances",
             )
         stations = set()
         slot_teams = teams_by_slot.setdefault(entry["time_slot"], set())
@@ -68,12 +69,18 @@ def _validate_generated_schedule(
                     status_code=422,
                     detail="Scheduler plugin returned an alliance missing 'station' or 'team_ids'",
                 )
+            station = alliance["station"]
+            if not isinstance(station, str) or not station:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Scheduler plugin returned a non-string or empty station name",
+                )
             if not alliance["team_ids"]:
                 raise HTTPException(
                     status_code=422,
                     detail="Scheduler plugin returned an alliance with no teams",
                 )
-            stations.add(alliance["station"])
+            stations.add(station)
             for team_id in alliance["team_ids"]:
                 if team_id in slot_teams:
                     raise HTTPException(
@@ -84,10 +91,10 @@ def _validate_generated_schedule(
                         ),
                     )
                 slot_teams.add(team_id)
-        if stations != {"red", "blue"}:
+        if len(stations) != len(alliances):
             raise HTTPException(
                 status_code=422,
-                detail=f"Alliance stations must be exactly red/blue, got {sorted(stations)}",
+                detail="Alliance stations must be distinct within a match",
             )
 
 
@@ -177,6 +184,7 @@ def generate_schedule(
             ),
         )
     teams_per_alliance = match_format["teams_per_alliance"]
+    alliance_count = match_format["alliance_count"]
 
     pairing_history = build_pairing_history(db, event.id)
 
@@ -185,6 +193,7 @@ def generate_schedule(
             teams=[{"team_id": t.id, "organization": t.organization} for t in teams],
             target_matches_per_team=payload.target_matches_per_team,
             teams_per_alliance=teams_per_alliance,
+            alliance_count=alliance_count,
             fields=[{"field_id": f.id, "field_set_id": f.field_set_id} for f in fields],
             field_sets=[{"field_set_id": fs.id, "name": fs.name} for fs in field_sets],
             cross_session_pairing_history=pairing_history,
@@ -196,7 +205,7 @@ def generate_schedule(
             detail=f"Scheduler plugin could not generate a schedule: {exc}",
         )
 
-    _validate_generated_schedule(generated, {fs.id for fs in field_sets})
+    _validate_generated_schedule(generated, {fs.id for fs in field_sets}, alliance_count)
 
     generation = ScheduleGeneration(
         session_id=payload.session_id,
