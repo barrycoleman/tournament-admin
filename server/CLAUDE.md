@@ -90,15 +90,17 @@ pattern every field in that fixture follows.
 ## Match & scoring
 
 An Event selects exactly one game plugin via `POST /api/event/game-plugin`
-— immutable once set. A Match always has exactly two Alliances (created
-together via `POST /api/matches`), each holding one or more Teams through
-the `alliance_teams` join table. `POST /api/matches/{id}/alliances/{id}/score`
-runs the event's plugin's `validate()` (blocking on violations unless
-`force: true` is passed) and stores the raw scoresheet as JSON — an
-alliance's actual score is always *derived* via `calculate_score()`, never
-stored redundantly, so it can never go stale relative to the plugin's
-logic. A Match becomes `"completed"` once every Alliance has a saved
-`ScoreRecord`, which triggers a ranking recompute for its session/division.
+— immutable once set. A Match has Alliances (created together via `POST
+/api/matches`), with the count determined by the game plugin's declared
+`alliance_count` (both shipped game plugins currently declare 2). Each
+alliance holds one or more Teams through the `alliance_teams` join table.
+`POST /api/matches/{id}/alliances/{id}/score` runs the event's plugin's
+`validate()` (blocking on violations unless `force: true` is passed) and
+stores the raw scoresheet as JSON — an alliance's actual score is always
+*derived* via `calculate_score()`, never stored redundantly, so it can never
+go stale relative to the plugin's logic. A Match becomes `"completed"` once
+every Alliance has a saved `ScoreRecord`, which triggers a ranking recompute
+for its session/division.
 
 Win-point allocation (2/1/0 for win/tie/loss) and strength-of-schedule
 (sum of opponents' current win points) are computed by the core server,
@@ -109,6 +111,15 @@ than the design spec's §5.1 prose ("win-point allocation" as something
 `rank_teams` does), but matches the plugin interface actually built and
 tested in Phase 2 — see that phase's plan for the reasoning.
 
+A game plugin declares `game_model` in `match_format()`: `head_to_head`
+(everything above — adversarial alliances, win/tie/loss ranking) or
+`cooperative_score` (alliances share one combined outcome, no winner,
+ranking is by average score — see the next section). `alliance_count`
+(also declared in `match_format()`) is read everywhere a match's alliance
+count matters — `POST /api/matches`, the scheduler-plugin contract, and
+`POST /api/schedule`'s structural validation — instead of being hardcoded,
+even though both game models shipped so far declare `alliance_count: 2`.
+
 Every list/read endpoint that's scoped to a session (`GET /api/matches`,
 `GET /api/rankings`) takes an explicit `session_id` query parameter,
 defaulting to `Event.active_session_id` via the shared
@@ -118,6 +129,41 @@ No-show/DQ handling: an alliance's effective score is `0` wherever it
 matters (the score-submission response, ranking computation) when its
 `ScoreRecord.no_show` or `.dq` is set — this zeroing is core-server logic,
 never passed into the plugin's `calculate_score()`.
+
+## Cooperative scoring
+
+A `cooperative_score` match's alliances aren't adversarial — they share
+one physical outcome. Submitting a score to either alliance via the
+existing scoring endpoint mirrors the raw scoresheet data (not the
+`no_show`/`dq`/`sitting` flags) onto the match's other alliance, so both
+end up scored identically unless one is independently marked `no_show` or
+`dq` afterward (a post-hoc DQ ruling is just a second submission directly
+to that one alliance with `dq: true` — see `routers/scores.py`'s
+`submit_score`).
+
+Qualification ranking for `cooperative_score` is average score, not
+win/tie/loss — each alliance in a completed match is credited
+independently to its own member teams (so a DQ'd alliance's teams get `0`
+for that match while the other alliance's teams keep their real score).
+`Ranking.average_score`/`matches_played` hold this; `win_points`/
+`strength_of_schedule` stay at their defaults and are meaningless for this
+game model. A game plugin's `rank_teams()` receives a different
+`team_results` shape depending on its declared `game_model` — see
+`services/ranking.py`'s `_compute_cooperative_score_team_results`.
+
+`RankingConfiguration` (`POST`/`GET /api/ranking-configuration`, one per
+event/division) lets an organizer exclude a team's lowest N matches or
+keep only their highest N (zero-padding the shortfall if they played
+fewer than N), with separate toggles for whether `no_show`/`dq` matches
+are eligible to be excluded. It's consulted only for `cooperative_score`
+ranking — `head_to_head` has no concept of dropping a match.
+
+`GET /api/rankings?event_wide=true` returns standings aggregated across
+every session in the event (a `Ranking` row with `session_id: null`),
+recomputed alongside the normal per-session ranking whenever a
+`cooperative_score` score is submitted or a schedule is cleared. This is
+what makes a multi-session league's overall standings work; `head_to_head`
+never populates this (`recompute_event_rankings` no-ops for it).
 
 ## Scheduling
 
