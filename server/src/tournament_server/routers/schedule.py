@@ -21,6 +21,7 @@ from tournament_server.schemas.schedule import (
     ScheduleGenerateRequest,
     ScheduleGenerateResponse,
 )
+from tournament_server.services.ranking import recompute_rankings
 from tournament_server.services.scheduling import build_pairing_history
 
 router = APIRouter(prefix="/api/schedule", tags=["schedule"])
@@ -167,6 +168,14 @@ def generate_schedule(
         raise HTTPException(status_code=422, detail="Session has no Fields configured")
 
     match_format = game_plugin.module.match_format()
+    if payload.round_type not in match_format["round_types"]:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{payload.round_type!r} is not a valid round_type for this "
+                "event's game plugin"
+            ),
+        )
     teams_per_alliance = match_format["teams_per_alliance"]
 
     pairing_history = build_pairing_history(db, event.id)
@@ -243,12 +252,19 @@ def generate_schedule(
 
 @router.delete("")
 def clear_schedule(
+    request: Request,
     session_id: int = Query(...),
     division_id: int | None = Query(None),
     round_type: str = Query(...),
     db: Session = Depends(get_db),
 ) -> dict[str, int]:
-    # Delete stale rankings first
+    if db.get(TournamentSession, session_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Delete stale rankings first. This is correct even when matches from
+    # other, untouched round_types remain: the recompute step below rebuilds
+    # them from whatever completed matches survive, or leaves them empty if
+    # nothing does.
     ranking_query = select(Ranking).where(Ranking.session_id == session_id)
     if division_id is None:
         ranking_query = ranking_query.where(Ranking.division_id.is_(None))
@@ -286,4 +302,16 @@ def clear_schedule(
         db.delete(match)
 
     db.commit()
+
+    # Best-effort: rebuild rankings from whatever completed matches remain
+    # for this (session_id, division_id) — e.g. other round_types that this
+    # call never touched. If the event or its game plugin isn't available,
+    # skip silently rather than turning a successful deletion into a 500;
+    # the rankings for this division were already cleared above.
+    event = get_the_event(db)
+    if event is not None and event.game_plugin_name is not None:
+        game_plugin = request.app.state.game_plugins.get(event.game_plugin_name)
+        if game_plugin is not None:
+            recompute_rankings(db, game_plugin, session_id, division_id)
+
     return {"matches_deleted": len(matches)}

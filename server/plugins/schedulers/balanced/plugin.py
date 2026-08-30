@@ -83,14 +83,51 @@ def generate_schedule(
                 break
 
             available.sort(key=lambda t: appearances[t])
-            pool = available[: min(len(available), match_size * 3)]
-            if len(pool) < match_size:
-                pool = available
+            # Restrict the candidate pool to teams tied at (or very near) the
+            # current minimum appearance count, so the cost-based sampling
+            # below only trades off pairing quality among teams who are
+            # equally "due" for a match. Every team tied at the true minimum
+            # is *forced* into the match (not just eligible for it) — a
+            # cost-driven sample can otherwise skip an individual min-tier
+            # team over and over (its pairings all happen to look expensive)
+            # while everyone else advances, which is exactly what produced
+            # the uneven per-team match counts this pool restriction exists
+            # to fix. Only the remaining seats, if the min tier is smaller
+            # than one match, are filled by widening into the next tier(s)
+            # and sampling among those for pairing quality.
+            min_appearances = appearances[available[0]]
+            forced = [t for t in available if appearances[t] == min_appearances]
+
+            if len(forced) >= match_size:
+                pool = forced
+                forced = []
+                extra_needed = match_size
+            else:
+                extra_needed = match_size - len(forced)
+                slack = 1
+                fillers = [
+                    t for t in available if appearances[t] == min_appearances + slack
+                ]
+                while (
+                    len(fillers) < extra_needed
+                    and len(forced) + len(fillers) < len(available)
+                ):
+                    slack += 1
+                    fillers = [
+                        t
+                        for t in available
+                        if min_appearances < appearances[t] <= min_appearances + slack
+                    ]
+                pool = fillers
 
             best_group: list[int] | None = None
             best_cost: float | None = None
             for _ in range(attempts_per_match):
-                candidate = random.sample(pool, match_size)
+                if forced:
+                    candidate = forced + random.sample(pool, extra_needed)
+                    random.shuffle(candidate)
+                else:
+                    candidate = random.sample(pool, match_size)
                 cost = group_cost(candidate)
                 if best_cost is None or cost < best_cost:
                     best_cost = cost

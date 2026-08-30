@@ -48,23 +48,28 @@ working example); a **scheduler** plugin (`kind: "scheduler"`, folder
 `SCHEDULER_PLUGIN_KIND`, and `plugins/schedulers/simple_random/plugin.py`
 for a complete working example).
 
-The server scans `<plugins_root>/games/*/` at startup
-(`plugin_registry/discovery.py`) and also accepts new plugins at
-runtime via `POST /api/plugins/games` (a zip with `manifest.json` and
-`plugin.py` at its root — no wrapping folder). A newly installed plugin
-is registered immediately; no restart is needed. Startup discovery
-skips a broken plugin folder with a warning rather than crashing; a zip
-upload that fails to install is rejected outright with a 409 (name
-already taken) or 422 (malformed).
+The server scans both `<plugins_root>/games/*/` and
+`<plugins_root>/schedulers/*/` at startup (`plugin_registry/discovery.py`)
+and also accepts new plugins of either kind at runtime — `POST
+/api/plugins/games` and `POST /api/plugins/schedulers` (each takes a zip
+with `manifest.json` and `plugin.py` at its root — no wrapping folder). A
+newly installed plugin is registered immediately; no restart is needed.
+Startup discovery skips a broken plugin folder with a warning rather than
+crashing; a zip upload that fails to install is rejected outright with a
+409 (name already taken) or 422 (malformed).
 
 Before distributing a plugin, its author should run
 `tm test-plugin <path-to-plugin-folder>`, which checks the plugin's
-contract (required functions present, schema shapes valid, scoring
-functions deterministic and int-returning, `rank_teams` produces a
-clean 1..N ranking) and exits non-zero on any failure. This conformance
-tool does not yet check for anything beyond the contract itself
-(no checksums, no capability scanning — that hardening is a separate,
-later phase per the design spec's §9).
+contract and exits non-zero on any failure. It works for either plugin
+kind, auto-detected from the plugin's manifest `kind` field: a game
+plugin is checked for required functions present, schema shapes valid,
+scoring functions deterministic and int-returning, and `rank_teams`
+producing a clean 1..N ranking; a scheduler plugin is checked against the
+`SCHEDULER_PLUGIN_KIND` contract (`generate_schedule` present and
+returning a valid schedule shape). This conformance tool does not yet
+check for anything beyond the contract itself (no checksums, no
+capability scanning — that hardening is a separate, later phase per the
+design spec's §9).
 
 The plugin folder root is configurable via the `TOURNAMENT_PLUGINS_ROOT`
 environment variable (default `./plugins`, resolved relative to wherever
@@ -128,10 +133,14 @@ otherwise).
 one `(session_id, division_id, round_type)` combination in a single call,
 via a scheduler plugin's `generate_schedule()`. It 409s if matches already
 exist for that combination — regenerating requires an explicit
-`DELETE /api/schedule` first, which also deletes that division's `Ranking`
-rows (a scoped fix for the general stale-ranking-row cleanup gap noted
-under Match & scoring above — this action makes that gap immediately
-visible, so it's addressed here specifically). The scheduler plugin
+`DELETE /api/schedule` first, which deletes only that combination's
+Matches (and their Alliances/AllianceTeams/ScoreRecords) and then
+recomputes that division's `Ranking` rows from whatever completed matches
+remain — including ones from other, untouched `round_type`s — rather than
+leaving them either stale or wiped (a scoped fix for the general
+stale-ranking-row cleanup gap noted under Match & scoring above — this
+action makes that gap immediately visible, so it's addressed here
+specifically). The scheduler plugin
 decides who plays whom and which FieldSet/time_slot each match runs in; the
 core server assigns `match_number` and the literal `field_id` afterward
 (round-robin within each match's FieldSet) — see `services/scheduling.py`
@@ -161,28 +170,47 @@ bracket progression exists yet.
   security boundary — anyone can claim to be anyone. A real
   identity/admission system is a later phase (Device/ScoringDevice
   admission is designed in the spec but not implemented in this plan).
-- The plugin-install endpoint (`POST /api/plugins/games`) dynamically
-  imports and executes arbitrary uploaded Python code, with the same
-  "no real authentication" gap as everything above — but this one is
-  qualitatively more dangerous than a CRUD endpoint, since it's a
-  code-execution primitive. This was raised explicitly with the project
-  owner, who accepted the risk for now (local-LAN, single-admin-in-the-
-  room threat model) rather than bolt on a one-off check ahead of a real
-  auth system. See the design spec's §10 for the role-based-passwords +
-  JWT direction planned for that future phase.
+- The plugin-install endpoints (`POST /api/plugins/games` and
+  `POST /api/plugins/schedulers`) dynamically import and execute arbitrary
+  uploaded Python code, with the same "no real authentication" gap as
+  everything above — but this is qualitatively more dangerous than a CRUD
+  endpoint, since it's a code-execution primitive, and that risk applies
+  identically to both endpoints (there's nothing game-plugin-specific
+  about it). This was raised explicitly with the project owner, who
+  accepted the risk for now (local-LAN, single-admin-in-the-room threat
+  model) rather than bolt on a one-off check ahead of a real auth system.
+  See the design spec's §10 for the role-based-passwords + JWT direction
+  planned for that future phase.
 - A Team belongs to at most one Division (nullable `division_id`), not a
   many-to-many relationship, as a deliberate YAGNI simplification — see
   the plan's Global Constraints for why.
 - No Alembic/migrations yet — schema changes go through
   `Base.metadata.create_all()`, which only adds new tables, never alters
-  existing ones. **This line has already been crossed**: Phase 3 added
-  `Event.game_plugin_name` to the pre-existing `events` table, so a
-  database created before Phase 3 will fail with `no such column:
-  events.game_plugin_name` on first read. No real events have been
-  created against this schema yet, so recreating the database is the
-  correct fix today — delete the `.db` file and let `create_all()` build
-  it fresh. Introduce real migrations before this project has any real
-  deployed event data that can't simply be recreated.
+  existing ones. **This line has already been crossed** twice: Phase 3
+  added `Event.game_plugin_name` to the pre-existing `events` table, and
+  this scheduling phase changed the `matches` table three more ways —
+  `field_id` went from a plain string to an integer FK, and two new
+  columns (`time_slot`, `schedule_generation_id`) were added. A database
+  created before either of these changes will fail with a `no such
+  column` (or a type-mismatch) error on first read. No real events have
+  been created against this schema yet, so recreating the database is
+  the correct fix today — delete the `.db` file and let `create_all()`
+  build it fresh. Introduce real migrations before this project has any
+  real deployed event data that can't simply be recreated.
+- Scheduling two Divisions within the same Session currently produces a
+  broken schedule. Each `POST /api/schedule` call is self-contained — it
+  restarts `time_slot` numbering at 0 and round-robins fields starting
+  from the session's lowest field id, with no way to scope a generation
+  to a subset of the session's FieldSets. Two divisions scheduled in the
+  same session will collide on both fields and time_slots, even though
+  FieldSets running concurrently is exactly the scenario `time_slot`
+  exists to keep safe within one generation call. A real fix needs a way
+  to scope a `POST /api/schedule` call to specific FieldSets (or
+  session-wide slot/field arbitration across all divisions), which is
+  real design work, not a bounded bugfix — deferred to a later phase. For
+  now, an event with multiple divisions that need concurrent physical
+  fields in the same session should not use this endpoint for more than
+  one division per session until that's built.
 
 ## Testing
 

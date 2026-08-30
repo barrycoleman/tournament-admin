@@ -163,6 +163,150 @@ def test_clear_schedule_deletes_matches_and_rankings(client):
     assert rankings_after == []
 
 
+def test_clear_schedule_recomputes_rankings_instead_of_wiping_other_round_types(client):
+    session_id, team_ids = _setup_ready_session(client)
+
+    # Practice: 8 teams, target 1 -> 2 matches.
+    practice_response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "practice",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert practice_response.status_code == 201
+    assert practice_response.json()["match_count"] == 2
+
+    # Qualification: 8 teams, target 3 -> 6 matches.
+    qual_response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert qual_response.status_code == 201
+    assert qual_response.json()["match_count"] == 6
+
+    all_matches = client.get(f"/api/matches?session_id={session_id}").json()
+    qual_matches_before = [m for m in all_matches if m["round_type"] == "qualification"]
+    practice_matches_before = [m for m in all_matches if m["round_type"] == "practice"]
+    assert len(qual_matches_before) == 6
+    assert len(practice_matches_before) == 2
+
+    # Score every qualification match so real rankings exist.
+    for match in qual_matches_before:
+        for alliance in match["alliances"]:
+            resp = client.post(
+                f"/api/matches/{match['id']}/alliances/{alliance['id']}/score",
+                json={"data": {"high_balls": alliance["id"] % 5 + 1, "low_balls": 1}},
+            )
+            assert resp.status_code == 200
+
+    rankings_before = client.get(f"/api/rankings?session_id={session_id}").json()
+    assert rankings_before != []
+
+    response = client.delete(
+        "/api/schedule",
+        params={"session_id": session_id, "round_type": "practice"},
+    )
+    assert response.status_code == 200
+    assert response.json()["matches_deleted"] == 2
+
+    # Not one qualification match or score was touched.
+    all_matches_after = client.get(f"/api/matches?session_id={session_id}").json()
+    qual_matches_after = [m for m in all_matches_after if m["round_type"] == "qualification"]
+    practice_matches_after = [m for m in all_matches_after if m["round_type"] == "practice"]
+    assert practice_matches_after == []
+    assert {m["id"] for m in qual_matches_after} == {m["id"] for m in qual_matches_before}
+
+    rankings_after = client.get(f"/api/rankings?session_id={session_id}").json()
+    assert rankings_after == rankings_before
+
+
+def test_clear_schedule_with_no_matching_round_type_leaves_rankings_untouched(client):
+    session_id, team_ids = _setup_ready_session(client)
+
+    qual_response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert qual_response.status_code == 201
+
+    qual_matches = client.get(f"/api/matches?session_id={session_id}").json()
+    for match in qual_matches:
+        for alliance in match["alliances"]:
+            resp = client.post(
+                f"/api/matches/{match['id']}/alliances/{alliance['id']}/score",
+                json={"data": {"high_balls": alliance["id"] % 5 + 1, "low_balls": 1}},
+            )
+            assert resp.status_code == 200
+
+    rankings_before = client.get(f"/api/rankings?session_id={session_id}").json()
+    assert rankings_before != []
+
+    # A typo'd/nonexistent round_type matches zero Match rows: a genuine no-op.
+    response = client.delete(
+        "/api/schedule",
+        params={"session_id": session_id, "round_type": "quallification"},
+    )
+    assert response.status_code == 200
+    assert response.json()["matches_deleted"] == 0
+
+    rankings_after = client.get(f"/api/rankings?session_id={session_id}").json()
+    assert rankings_after == rankings_before
+
+    matches_after = client.get(f"/api/matches?session_id={session_id}").json()
+    assert {m["id"] for m in matches_after} == {m["id"] for m in qual_matches}
+
+
+def test_clear_schedule_rejects_nonexistent_session(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.delete(
+        "/api/schedule",
+        params={"session_id": 999999, "round_type": "qualification"},
+    )
+    assert response.status_code == 404
+
+
+def test_generate_schedule_rejects_invalid_round_type(client):
+    session_id, _ = _setup_ready_session(client)
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "not-a-real-round-type",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 422
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    assert matches == []
+
+    from sqlalchemy import select
+
+    from tournament_server.models.schedule_generation import ScheduleGeneration
+
+    db = client.app.state.session_factory()
+    try:
+        generations = db.execute(select(ScheduleGeneration)).scalars().all()
+        assert generations == []
+    finally:
+        db.close()
+
+
 def test_clear_schedule_allows_regeneration_afterward(client):
     session_id, team_ids = _setup_ready_session(client)
     payload = {

@@ -132,3 +132,32 @@ def test_balanced_avoids_the_only_repeat_pairing_when_an_alternative_exists():
     assert len(matches) == 1
     alliance_team_sets = [set(a["team_ids"]) for a in matches[0]["alliances"]]
     assert {1, 2} in alliance_team_sets
+
+
+def test_balanced_distributes_matches_evenly_across_teams():
+    random.seed(0)
+    plugin = load_plugin(BALANCED_PLUGIN, SCHEDULER_PLUGIN_KIND)
+    module = plugin.module
+
+    teams = [{"team_id": i, "organization": None} for i in range(1, 13)]
+    field_sets = [{"field_set_id": 1, "name": "Main Fields"}]
+    fields = [{"field_id": 1, "field_set_id": 1}]
+
+    matches = module.generate_schedule(
+        teams=teams,
+        target_matches_per_team=4,
+        teams_per_alliance=2,
+        fields=fields,
+        field_sets=field_sets,
+        cross_session_pairing_history={},
+        constraints={"excluded_team_ids": []},
+    )
+
+    appearances = {t["team_id"]: 0 for t in teams}
+    for match in matches:
+        for alliance in match["alliances"]:
+            for team_id in alliance["team_ids"]:
+                appearances[team_id] += 1
+
+    spread = max(appearances.values()) - min(appearances.values())
+    assert spread <= 1, appearances
