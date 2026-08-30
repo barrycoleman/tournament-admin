@@ -11,4 +11,6 @@ class RankingRead(BaseModel):
     team_id: int
     win_points: int
     strength_of_schedule: float
+    average_score: float
+    matches_played: int
     rank: int

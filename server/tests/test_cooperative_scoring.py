@@ -64,3 +64,73 @@ def test_dq_on_one_alliance_does_not_affect_the_other(cooperative_client):
     assert red_after.status_code == 200
     assert red_after.json()["computed_score"] == 20
     assert red_after.json()["dq"] is False
+
+
+def test_cooperative_score_ranking_is_average_no_win_loss(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    t1 = client.post("/api/teams", json={"number": "1", "name": "Team One"}).json()["id"]
+    t2 = client.post("/api/teams", json={"number": "2", "name": "Team Two"}).json()["id"]
+    t3 = client.post("/api/teams", json={"number": "3", "name": "Team Three"}).json()["id"]
+
+    # Match 1: T1 (red) + T2 (blue) share a scoresheet scoring 20 total.
+    match1 = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [t1]},
+                {"station": "blue", "team_ids": [t2]},
+            ],
+        },
+    ).json()
+    red1 = next(a["id"] for a in match1["alliances"] if a["station"] == "red")
+    client.post(
+        f"/api/matches/{match1['id']}/alliances/{red1}/score",
+        json={"data": {"objects_scored": 10}},
+    )
+
+    # Match 2: T1 (red) + T3 (blue) share a scoresheet scoring 30 total.
+    match2 = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "match_number": 2,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [t1]},
+                {"station": "blue", "team_ids": [t3]},
+            ],
+        },
+    ).json()
+    red2 = next(a["id"] for a in match2["alliances"] if a["station"] == "red")
+    client.post(
+        f"/api/matches/{match2['id']}/alliances/{red2}/score",
+        json={"data": {"objects_scored": 15}},
+    )
+
+    response = client.get(f"/api/rankings?session_id={session_id}")
+    assert response.status_code == 200
+    rows = {row["team_id"]: row for row in response.json()}
+
+    # T1 played both matches: average = (20 + 30) / 2 = 25.
+    assert rows[t1]["average_score"] == 25.0
+    assert rows[t1]["matches_played"] == 2
+    assert rows[t1]["win_points"] == 0
+    # T2 played only match 1: average = 20.
+    assert rows[t2]["average_score"] == 20.0
+    assert rows[t2]["matches_played"] == 1
+    # T3 played only match 2: average = 30.
+    assert rows[t3]["average_score"] == 30.0
+    assert rows[t3]["matches_played"] == 1
+
+    # rank_teams sorts by -average_score, so T3 (30) > T1 (25) > T2 (20).
+    assert rows[t3]["rank"] == 1
+    assert rows[t1]["rank"] == 2
+    assert rows[t2]["rank"] == 3

@@ -22,4 +22,6 @@ class Ranking(Base):
     team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
     win_points: Mapped[int] = mapped_column(Integer, default=0)
     strength_of_schedule: Mapped[float] = mapped_column(Float, default=0.0)
+    average_score: Mapped[float] = mapped_column(Float, default=0.0)
+    matches_played: Mapped[int] = mapped_column(Integer, default=0)
     rank: Mapped[int] = mapped_column(Integer, default=0)
