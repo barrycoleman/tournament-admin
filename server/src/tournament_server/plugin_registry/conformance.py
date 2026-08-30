@@ -5,7 +5,17 @@ from pathlib import Path
 from typing import Any
 
 from tournament_server.plugin_registry.errors import PluginLoadError
-from tournament_server.plugin_registry.loader import load_game_plugin
+from tournament_server.plugin_registry.loader import (
+    GAME_PLUGIN_KIND,
+    SCHEDULER_PLUGIN_KIND,
+    load_plugin,
+)
+from tournament_server.plugin_registry.manifest import load_manifest
+
+_KNOWN_KINDS = {
+    GAME_PLUGIN_KIND.kind: GAME_PLUGIN_KIND,
+    SCHEDULER_PLUGIN_KIND.kind: SCHEDULER_PLUGIN_KIND,
+}
 
 VALID_DATA_TYPES = {"integer", "boolean", "enum"}
 VALID_WIDGETS = {"toggle", "counter", "select", "radio"}
@@ -51,13 +61,36 @@ def _safe_check(name: str, fn) -> CheckResult:
 
 def run_conformance_checks(plugin_dir: Path) -> ConformanceReport:
     try:
-        plugin = load_game_plugin(plugin_dir)
+        manifest = load_manifest(plugin_dir)
     except PluginLoadError as exc:
         return ConformanceReport(
-            plugin_name=None,
-            checks=[CheckResult("plugin loads", False, str(exc))],
+            plugin_name=None, checks=[CheckResult("plugin loads", False, str(exc))]
         )
 
+    kind = _KNOWN_KINDS.get(manifest.kind)
+    if kind is None:
+        return ConformanceReport(
+            plugin_name=None,
+            checks=[
+                CheckResult(
+                    "plugin loads", False, f"unknown plugin kind {manifest.kind!r}"
+                )
+            ],
+        )
+
+    try:
+        plugin = load_plugin(plugin_dir, kind)
+    except PluginLoadError as exc:
+        return ConformanceReport(
+            plugin_name=None, checks=[CheckResult("plugin loads", False, str(exc))]
+        )
+
+    if manifest.kind == "game":
+        return _run_game_checks(plugin)
+    return _run_scheduler_checks(plugin)
+
+
+def _run_game_checks(plugin) -> ConformanceReport:
     checks: list[CheckResult] = [CheckResult("plugin loads", True)]
 
     checks.append(
@@ -120,6 +153,17 @@ def run_conformance_checks(plugin_dir: Path) -> ConformanceReport:
         _safe_check("rank_teams() structure", lambda: _check_rank_teams(plugin.module))
     )
 
+    return ConformanceReport(plugin_name=plugin.name, checks=checks)
+
+
+def _run_scheduler_checks(plugin) -> ConformanceReport:
+    checks: list[CheckResult] = [CheckResult("plugin loads", True)]
+    checks.append(
+        _safe_check(
+            "generate_schedule() shape",
+            lambda: _check_generate_schedule(plugin.module),
+        )
+    )
     return ConformanceReport(plugin_name=plugin.name, checks=checks)
 
 
@@ -267,3 +311,65 @@ def _check_rank_teams(module: Any) -> CheckResult:
             "rank_teams() structure", False, "must not add, drop, or change team_ids"
         )
     return CheckResult("rank_teams() structure", True)
+
+
+def _check_generate_schedule(module: Any) -> CheckResult:
+    teams = [{"team_id": i, "organization": None} for i in range(1, 5)]
+    field_sets = [{"field_set_id": 1, "name": "Main Fields"}]
+    fields = [{"field_id": 1, "field_set_id": 1}, {"field_id": 2, "field_set_id": 1}]
+
+    result = module.generate_schedule(
+        teams=teams,
+        target_matches_per_team=2,
+        teams_per_alliance=2,
+        fields=fields,
+        field_sets=field_sets,
+        cross_session_pairing_history={},
+        constraints={"excluded_team_ids": []},
+    )
+
+    if not isinstance(result, list):
+        return CheckResult("generate_schedule() shape", False, "must return a list")
+
+    for match in result:
+        if not isinstance(match, dict):
+            return CheckResult(
+                "generate_schedule() shape", False, "each match must be a dict"
+            )
+        missing = {"time_slot", "field_set_id", "alliances"} - match.keys()
+        if missing:
+            return CheckResult(
+                "generate_schedule() shape",
+                False,
+                f"match missing keys: {sorted(missing)}",
+            )
+        alliances = match["alliances"]
+        if not isinstance(alliances, list) or len(alliances) != 2:
+            return CheckResult(
+                "generate_schedule() shape",
+                False,
+                "each match must have exactly 2 alliances",
+            )
+        stations = set()
+        for alliance in alliances:
+            if "station" not in alliance or "team_ids" not in alliance:
+                return CheckResult(
+                    "generate_schedule() shape",
+                    False,
+                    "alliance missing 'station' or 'team_ids'",
+                )
+            if not alliance["team_ids"]:
+                return CheckResult(
+                    "generate_schedule() shape",
+                    False,
+                    "alliance team_ids must be non-empty",
+                )
+            stations.add(alliance["station"])
+        if stations != {"red", "blue"}:
+            return CheckResult(
+                "generate_schedule() shape",
+                False,
+                f"alliance stations must be exactly red/blue, got {sorted(stations)}",
+            )
+
+    return CheckResult("generate_schedule() shape", True)

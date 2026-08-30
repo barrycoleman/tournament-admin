@@ -1,0 +1,6 @@
+{
+  "name": "simple_random",
+  "version": "1.0.0",
+  "kind": "scheduler",
+  "display_name": "Simple Random"
+}

@@ -12,7 +12,7 @@ def main(argv: list[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     test_plugin_parser = subparsers.add_parser(
-        "test-plugin", help="Run conformance checks against a game plugin folder"
+        "test-plugin", help="Run conformance checks against a plugin folder"
     )
     test_plugin_parser.add_argument("path", type=str)
 
