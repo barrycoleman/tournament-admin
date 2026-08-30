@@ -94,9 +94,16 @@ def run_conformance_checks(plugin_dir: Path) -> ConformanceReport:
 def _run_game_checks(plugin) -> ConformanceReport:
     checks: list[CheckResult] = [CheckResult("plugin loads", True)]
 
-    checks.append(
-        _safe_check("match_format() shape", lambda: _check_match_format(plugin.module))
+    match_format_check = _safe_check(
+        "match_format() shape", lambda: _check_match_format(plugin.module)
     )
+    checks.append(match_format_check)
+    game_model = None
+    if match_format_check.passed:
+        try:
+            game_model = plugin.module.match_format().get("game_model")
+        except Exception:
+            game_model = None
 
     schema_result = _safe_check(
         "scoresheet_schema() shape",
@@ -151,7 +158,10 @@ def _run_game_checks(plugin) -> ConformanceReport:
         )
 
     checks.append(
-        _safe_check("rank_teams() structure", lambda: _check_rank_teams(plugin.module))
+        _safe_check(
+            "rank_teams() structure",
+            lambda: _check_rank_teams(plugin.module, game_model),
+        )
     )
 
     return ConformanceReport(plugin_name=plugin.name, checks=checks)
@@ -280,27 +290,34 @@ def _check_validate(module: Any) -> CheckResult:
     return CheckResult("validate() shape", True)
 
 
-def _check_rank_teams(module: Any) -> CheckResult:
-    sample = [
-        {
-            "team_id": 1,
-            "win_points": 4,
-            "strength_of_schedule": 1.0,
-            "tiebreaker_seed": 100,
-        },
-        {
-            "team_id": 2,
-            "win_points": 6,
-            "strength_of_schedule": 2.0,
-            "tiebreaker_seed": 200,
-        },
-        {
-            "team_id": 3,
-            "win_points": 4,
-            "strength_of_schedule": 3.0,
-            "tiebreaker_seed": 300,
-        },
-    ]
+def _check_rank_teams(module: Any, game_model: str | None) -> CheckResult:
+    if game_model == "cooperative_score":
+        sample = [
+            {"team_id": 1, "average_score": 10.0, "matches_played": 3, "tiebreaker_seed": 100},
+            {"team_id": 2, "average_score": 15.0, "matches_played": 3, "tiebreaker_seed": 200},
+            {"team_id": 3, "average_score": 10.0, "matches_played": 2, "tiebreaker_seed": 300},
+        ]
+    else:
+        sample = [
+            {
+                "team_id": 1,
+                "win_points": 4,
+                "strength_of_schedule": 1.0,
+                "tiebreaker_seed": 100,
+            },
+            {
+                "team_id": 2,
+                "win_points": 6,
+                "strength_of_schedule": 2.0,
+                "tiebreaker_seed": 200,
+            },
+            {
+                "team_id": 3,
+                "win_points": 4,
+                "strength_of_schedule": 3.0,
+                "tiebreaker_seed": 300,
+            },
+        ]
     result = module.rank_teams(sample)
     if len(result) != len(sample):
         return CheckResult(

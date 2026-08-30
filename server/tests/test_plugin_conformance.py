@@ -279,3 +279,15 @@ def test_match_format_rejects_invalid_game_model(tmp_path):
     report = run_conformance_checks(broken_dir)
     match_format_check = next(c for c in report.checks if c.name == "match_format() shape")
     assert not match_format_check.passed
+
+
+def test_cooperative_game_passes_conformance():
+    from pathlib import Path
+
+    from tournament_server.plugin_registry.conformance import run_conformance_checks
+
+    cooperative_game = (
+        Path(__file__).parent / "fixtures" / "plugins" / "games" / "cooperative-game"
+    )
+    report = run_conformance_checks(cooperative_game)
+    assert report.passed, [c for c in report.checks if not c.passed]
