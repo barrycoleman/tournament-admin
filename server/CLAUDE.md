@@ -33,15 +33,20 @@ python -m tournament_server.main   # runs the dev server on 127.0.0.1:8000
 
 ## Plugin system
 
-A game plugin is a folder — `plugins/games/<name>/` — containing
-`manifest.json` (`name`, `version`, `kind: "game"`, `display_name`) and
-`plugin.py`, which must define seven module-level functions:
+A plugin is a folder — `plugins/<games-or-schedulers>/<name>/` —
+containing `manifest.json` (`name`, `version`, `kind`, `display_name`) and
+`plugin.py`. Two plugin kinds exist, sharing one generic registry
+(`plugin_registry/loader.py`'s `PluginKind`, `load_plugin`,
+`discover_plugins`): a **game** plugin (`kind: "game"`, folder
+`plugins/games/<name>/`) must define seven module-level functions —
 `match_format`, `scoresheet_schema`, `calculate_score`, `validate`,
-`rank_teams`, `skills_scoresheet_schema`, `calculate_skills_score`. See
-`tournament_server/plugin_registry/loader.py`'s
-`REQUIRED_GAME_PLUGIN_FUNCTIONS` for the authoritative list, and
+`rank_teams`, `skills_scoresheet_schema`, `calculate_skills_score` (see
+`GAME_PLUGIN_KIND` for the authoritative list, and
 `tests/fixtures/plugins/games/example-game/plugin.py` for a complete
-working example.
+working example); a **scheduler** plugin (`kind: "scheduler"`, folder
+`plugins/schedulers/<name>/`) must define one — `generate_schedule` (see
+`SCHEDULER_PLUGIN_KIND`, and `plugins/schedulers/simple_random/plugin.py`
+for a complete working example).
 
 The server scans `<plugins_root>/games/*/` at startup
 (`plugin_registry/discovery.py`) and also accepts new plugins at
@@ -109,6 +114,45 @@ matters (the score-submission response, ranking computation) when its
 `ScoreRecord.no_show` or `.dq` is set — this zeroing is core-server logic,
 never passed into the plugin's `calculate_score()`.
 
+## Scheduling
+
+Every Field belongs to exactly one FieldSet (`field_set_id` is required,
+never nullable). FieldSets in the same session run concurrently; fields
+within one FieldSet process matches sequentially — only one match is ever
+active per FieldSet at a time. `POST /api/fields` auto-creates a default
+`"Main Fields"` FieldSet when a session has none yet, and requires an
+explicit `field_set_id` once a session has more than one (ambiguous
+otherwise).
+
+`POST /api/schedule` generates a full practice/qualification schedule for
+one `(session_id, division_id, round_type)` combination in a single call,
+via a scheduler plugin's `generate_schedule()`. It 409s if matches already
+exist for that combination — regenerating requires an explicit
+`DELETE /api/schedule` first, which also deletes that division's `Ranking`
+rows (a scoped fix for the general stale-ranking-row cleanup gap noted
+under Match & scoring above — this action makes that gap immediately
+visible, so it's addressed here specifically). The scheduler plugin
+decides who plays whom and which FieldSet/time_slot each match runs in; the
+core server assigns `match_number` and the literal `field_id` afterward
+(round-robin within each match's FieldSet) — see `services/scheduling.py`
+for the cross-session pairing-history query the plugin receives, and
+`routers/schedule.py`'s `_validate_generated_schedule` for the structural
+checks (correct alliance shape, no team double-booked within a
+`time_slot`) applied to whatever the plugin returns, before anything is
+persisted — the same validate-before-persist discipline used for score
+submission.
+
+Two scheduler plugins ship in this repo, at `plugins/schedulers/`:
+`simple_random` (random, no optimization) and `balanced` (avoids repeat
+partner/opponent pairings and same-organization pairings using pairing
+history from every session in the event, falling back to minimizing the
+worst repeat count once every unique pairing is exhausted). Both are real
+plugins, not core code — a custom generator can replace either by
+following the same `generate_schedule` contract.
+
+Elimination brackets are a separate, later phase — no plugin contract for
+bracket progression exists yet.
+
 ## Known, deliberate gaps in this phase
 
 - There's no real authentication yet. Requests can pass an
@@ -145,14 +189,14 @@ never passed into the plugin's `calculate_score()`.
 Most tests use the `client` fixture from `conftest.py`, which builds a
 fresh `FastAPI` app against a fresh temp-file SQLite database (and an
 isolated temp `plugins_root`) per test — never a shared or mocked
-database. The fixture also pre-seeds the `example-game` fixture plugin
-into that `plugins_root` before the app starts, so it's discoverable at
-startup like a real installed plugin — tests that need a *different*
-starting registry state (e.g. an empty one, or one containing a
-specific other plugin) should build their own `create_app()`/`TestClient`
-instance directly rather than relying on `client`, the way
-`test_list_game_plugins_discovers_at_startup` in
-`test_plugins_router.py` already does. Follow the `client` pattern for
+database. The fixture also pre-seeds the `example-game` game plugin and the
+`simple_random`/`balanced` scheduler plugins into that `plugins_root`
+before the app starts, so all three are discoverable at startup like real
+installed plugins — tests that need a *different* starting registry state
+(e.g. an empty one, or one containing a specific other plugin) should
+build their own `create_app()`/`TestClient` instance directly rather than
+relying on `client`, the way `test_list_game_plugins_discovers_at_startup`
+in `test_plugins_router.py` already does. Follow the `client` pattern for
 anything else exercising the HTTP API: real calls through `TestClient`,
 real temporary files underneath.
 
