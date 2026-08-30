@@ -21,7 +21,7 @@ class MatchCreate(BaseModel):
     division_id: int | None = None
     round_type: str
     match_number: int
-    field_id: str
+    field_id: int | None = None
     scheduled_time: dt.datetime | None = None
     alliances: list[AllianceCreate]
 
@@ -32,7 +32,8 @@ class MatchRead(BaseModel):
     division_id: int | None
     round_type: str
     match_number: int
-    field_id: str
+    field_id: int | None
+    time_slot: int | None
     scheduled_time: dt.datetime | None
     status: str
     alliances: list[AllianceRead]

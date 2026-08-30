@@ -18,7 +18,11 @@ class Match(Base):
     )
     round_type: Mapped[str] = mapped_column(String(20))
     match_number: Mapped[int] = mapped_column(Integer)
-    field_id: Mapped[str] = mapped_column(String(50))
+    field_id: Mapped[int | None] = mapped_column(ForeignKey("fields.id"), default=None)
+    time_slot: Mapped[int | None] = mapped_column(Integer, default=None)
+    schedule_generation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("schedule_generations.id"), default=None
+    )
     scheduled_time: Mapped[dt.datetime | None] = mapped_column(
         UTCDateTime, default=None
     )

@@ -36,7 +36,7 @@ def test_rankings_reflect_win_points_and_strength_of_schedule(client):
             "session_id": session_id,
             "round_type": "qualification",
             "match_number": 1,
-            "field_id": "Field 1",
+            "field_id": None,
             "alliances": [
                 {"station": "red", "team_ids": [t1, t2]},
                 {"station": "blue", "team_ids": [t3, t4]},
@@ -55,7 +55,7 @@ def test_rankings_reflect_win_points_and_strength_of_schedule(client):
             "session_id": session_id,
             "round_type": "qualification",
             "match_number": 2,
-            "field_id": "Field 1",
+            "field_id": None,
             "alliances": [
                 {"station": "red", "team_ids": [t1, t3]},
                 {"station": "blue", "team_ids": [t2, t4]},

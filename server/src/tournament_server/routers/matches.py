@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from tournament_server.deps import get_db, get_session_id, get_the_event
 from tournament_server.models.alliance import Alliance, AllianceTeam
 from tournament_server.models.division import Division
+from tournament_server.models.field import Field
 from tournament_server.models.match import Match
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
@@ -39,6 +40,7 @@ def _to_match_read(match: Match, db: Session) -> MatchRead:
         round_type=match.round_type,
         match_number=match.match_number,
         field_id=match.field_id,
+        time_slot=match.time_slot,
         scheduled_time=match.scheduled_time,
         status=match.status,
         alliances=alliance_reads,
@@ -67,6 +69,8 @@ def create_match(payload: MatchCreate, db: Session = Depends(get_db)) -> MatchRe
         )
     if payload.division_id is not None and db.get(Division, payload.division_id) is None:
         raise HTTPException(status_code=404, detail="Division not found")
+    if payload.field_id is not None and db.get(Field, payload.field_id) is None:
+        raise HTTPException(status_code=404, detail="Field not found")
     for alliance_payload in payload.alliances:
         for team_id in alliance_payload.team_ids:
             if db.get(Team, team_id) is None:

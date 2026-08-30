@@ -17,7 +17,7 @@ def test_create_match_with_two_alliances(client):
             "session_id": session_id,
             "round_type": "qualification",
             "match_number": 1,
-            "field_id": "Field 1",
+            "field_id": None,
             "alliances": [
                 {"station": "red", "team_ids": [t1, t2]},
                 {"station": "blue", "team_ids": [t3, t4]},
@@ -45,7 +45,7 @@ def test_create_match_uses_active_session_when_omitted(client):
         json={
             "round_type": "qualification",
             "match_number": 1,
-            "field_id": "Field 1",
+            "field_id": None,
             "alliances": [
                 {"station": "red", "team_ids": [t1, t2]},
                 {"station": "blue", "team_ids": [t3, t4]},
@@ -66,7 +66,7 @@ def test_create_match_rejects_wrong_alliance_count(client):
             "session_id": session_id,
             "round_type": "qualification",
             "match_number": 1,
-            "field_id": "Field 1",
+            "field_id": None,
             "alliances": [{"station": "red", "team_ids": [t1, t2]}],
         },
     )
@@ -83,7 +83,7 @@ def test_create_match_rejects_unknown_team(client):
             "session_id": session_id,
             "round_type": "qualification",
             "match_number": 1,
-            "field_id": "Field 1",
+            "field_id": None,
             "alliances": [
                 {"station": "red", "team_ids": [t1, t2]},
                 {"station": "blue", "team_ids": [999]},
@@ -104,7 +104,27 @@ def test_create_match_rejects_unknown_division(client):
             "division_id": 999,
             "round_type": "qualification",
             "match_number": 1,
-            "field_id": "Field 1",
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [t1, t2]},
+                {"station": "blue", "team_ids": [t3, t4]},
+            ],
+        },
+    )
+    assert response.status_code == 404
+
+
+def test_create_match_rejects_unknown_field(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    session_id, t1, t2, t3, t4 = _setup_two_teams(client)
+
+    response = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": 999,
             "alliances": [
                 {"station": "red", "team_ids": [t1, t2]},
                 {"station": "blue", "team_ids": [t3, t4]},
@@ -123,7 +143,7 @@ def test_list_matches_defaults_to_active_session(client):
         json={
             "round_type": "qualification",
             "match_number": 1,
-            "field_id": "Field 1",
+            "field_id": None,
             "alliances": [
                 {"station": "red", "team_ids": [t1, t2]},
                 {"station": "blue", "team_ids": [t3, t4]},
@@ -154,7 +174,7 @@ def test_get_match(client):
             "session_id": session_id,
             "round_type": "qualification",
             "match_number": 1,
-            "field_id": "Field 1",
+            "field_id": None,
             "alliances": [
                 {"station": "red", "team_ids": [t1, t2]},
                 {"station": "blue", "team_ids": [t3, t4]},
