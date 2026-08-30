@@ -6,12 +6,26 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from tournament_server.deps import get_the_event
 from tournament_server.models.alliance import Alliance, AllianceTeam
 from tournament_server.models.match import Match
 from tournament_server.models.ranking import Ranking
+from tournament_server.models.ranking_configuration import RankingConfiguration
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.team import Team
 from tournament_server.plugin_registry.loader import LoadedPlugin
+
+
+def suggest_exclusion_count(total_matches: int) -> int:
+    if total_matches >= 16:
+        return 4
+    if total_matches >= 12:
+        return 3
+    if total_matches >= 8:
+        return 2
+    if total_matches >= 4:
+        return 1
+    return 0
 
 
 def _compute_average_score(
@@ -133,7 +147,20 @@ def recompute_rankings(
     matches = db.execute(query).scalars().all()
 
     if game_model == "cooperative_score":
-        team_results = _compute_cooperative_score_team_results(db, plugin, matches, None)
+        event = get_the_event(db)
+        config = None
+        if event is not None:
+            division_filter = (
+                RankingConfiguration.division_id.is_(None)
+                if division_id is None
+                else RankingConfiguration.division_id == division_id
+            )
+            config = db.execute(
+                select(RankingConfiguration).where(
+                    RankingConfiguration.event_id == event.id, division_filter
+                )
+            ).scalars().first()
+        team_results = _compute_cooperative_score_team_results(db, plugin, matches, config)
         if not team_results:
             return
         ranked = plugin.module.rank_teams(team_results)
