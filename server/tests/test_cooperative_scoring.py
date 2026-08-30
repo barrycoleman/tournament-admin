@@ -66,6 +66,62 @@ def test_dq_on_one_alliance_does_not_affect_the_other(cooperative_client):
     assert red_after.json()["dq"] is False
 
 
+def test_no_show_submitted_after_a_real_score_does_not_overwrite_the_real_score(
+    cooperative_client,
+):
+    client = cooperative_client
+    match_id, red_id, blue_id, t1, t2 = _setup_cooperative_match(client)
+
+    red_response = client.post(
+        f"/api/matches/{match_id}/alliances/{red_id}/score",
+        json={"data": {"objects_scored": 15}},
+    )
+    assert red_response.status_code == 200
+    assert red_response.json()["computed_score"] == 30
+
+    blue_response = client.post(
+        f"/api/matches/{match_id}/alliances/{blue_id}/score",
+        json={"data": {"objects_scored": 0}, "no_show": True},
+    )
+    assert blue_response.status_code == 200
+    assert blue_response.json()["computed_score"] == 0
+
+    # Red's own scoresheet data must survive the blue no-show submission
+    # unmirrored: re-submitting red's own real data should still compute the
+    # same real score, not the zeroed data blue submitted.
+    red_after = client.get(f"/api/matches/{match_id}").json()
+    assert red_after["status"] == "completed"
+
+    response = client.get("/api/rankings?event_wide=true")
+    rows = {row["team_id"]: row for row in response.json()}
+    assert rows[t1]["average_score"] == 30.0
+
+
+def test_dq_submitted_after_a_real_score_does_not_overwrite_the_real_score(
+    cooperative_client,
+):
+    client = cooperative_client
+    match_id, red_id, blue_id, t1, t2 = _setup_cooperative_match(client)
+
+    red_response = client.post(
+        f"/api/matches/{match_id}/alliances/{red_id}/score",
+        json={"data": {"objects_scored": 15}},
+    )
+    assert red_response.status_code == 200
+    assert red_response.json()["computed_score"] == 30
+
+    blue_response = client.post(
+        f"/api/matches/{match_id}/alliances/{blue_id}/score",
+        json={"data": {"objects_scored": 0}, "dq": True},
+    )
+    assert blue_response.status_code == 200
+    assert blue_response.json()["computed_score"] == 0
+
+    response = client.get("/api/rankings?event_wide=true")
+    rows = {row["team_id"]: row for row in response.json()}
+    assert rows[t1]["average_score"] == 30.0
+
+
 def test_cooperative_score_ranking_is_average_no_win_loss(cooperative_client):
     client = cooperative_client
     client.post("/api/event", json={"name": "Regional Qualifier"})
@@ -212,7 +268,16 @@ def test_exclude_mode_protects_no_show_match_until_toggle_allows_dropping_it(
             },
         ).json()
         red = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        blue = next(a["id"] for a in match["alliances"] if a["station"] == "blue")
         matches.append((match["id"], red, plan))
+        if plan["no_show"]:
+            # A flags-only no_show ruling no longer mirrors onto the partner
+            # alliance (that's the fix under test elsewhere), so seed blue
+            # with its own real record first to let the match complete.
+            client.post(
+                f"/api/matches/{match['id']}/alliances/{blue}/score",
+                json={"data": {"objects_scored": plan["objects_scored"]}},
+            )
         client.post(
             f"/api/matches/{match['id']}/alliances/{red}/score",
             json={"data": {"objects_scored": plan["objects_scored"]}, "no_show": plan["no_show"]},
@@ -407,3 +472,75 @@ def test_clearing_a_session_removes_stale_event_wide_ranking_for_a_team_with_no_
     # 1 match played.
     assert after[t2]["average_score"] == 40.0
     assert after[t2]["matches_played"] == 1
+
+
+def test_clearing_every_completed_match_in_the_event_persists_empty_event_wide_rankings(
+    cooperative_client,
+):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "League"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    t1 = client.post("/api/teams", json={"number": "1", "name": "Team One"}).json()["id"]
+    t2 = client.post("/api/teams", json={"number": "2", "name": "Team Two"}).json()["id"]
+
+    session1_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    session2_id = client.post("/api/sessions", json={"label": "Session 2"}).json()["id"]
+
+    # Score and complete one match in each of the event's two sessions, so
+    # real event-wide Ranking rows exist for both teams before we clear
+    # every completed match in the event.
+    match1 = client.post(
+        "/api/matches",
+        json={
+            "session_id": session1_id,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [t1]},
+                {"station": "blue", "team_ids": [t2]},
+            ],
+        },
+    ).json()
+    red1 = next(a["id"] for a in match1["alliances"] if a["station"] == "red")
+    client.post(
+        f"/api/matches/{match1['id']}/alliances/{red1}/score",
+        json={"data": {"objects_scored": 10}},
+    )
+
+    match2 = client.post(
+        "/api/matches",
+        json={
+            "session_id": session2_id,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [t1]},
+                {"station": "blue", "team_ids": [t2]},
+            ],
+        },
+    ).json()
+    red2 = next(a["id"] for a in match2["alliances"] if a["station"] == "red")
+    client.post(
+        f"/api/matches/{match2['id']}/alliances/{red2}/score",
+        json={"data": {"objects_scored": 20}},
+    )
+
+    before = client.get("/api/rankings?event_wide=true").json()
+    assert {row["team_id"] for row in before} == {t1, t2}
+
+    # Clear both sessions' schedules, leaving zero completed matches
+    # anywhere in the event. recompute_event_rankings exits early (no
+    # commit) on this path since there are no team results left, so the
+    # event-wide deletion above it must be durably committed on its own —
+    # not just flushed within a transaction that never gets committed.
+    for session_id in (session1_id, session2_id):
+        delete_response = client.delete(
+            "/api/schedule",
+            params={"session_id": session_id, "round_type": "qualification"},
+        )
+        assert delete_response.status_code == 200
+
+    after = client.get("/api/rankings?event_wide=true").json()
+    assert after == []

@@ -291,3 +291,60 @@ def test_cooperative_game_passes_conformance():
     )
     report = run_conformance_checks(cooperative_game)
     assert report.passed, [c for c in report.checks if not c.passed]
+
+
+def _write_variant_scheduler_plugin(tmp_path, generate_schedule_body: str) -> None:
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "name": "variant-scheduler",
+                "version": "1.0.0",
+                "kind": "scheduler",
+                "display_name": "Variant Scheduler",
+            }
+        )
+    )
+    (tmp_path / "plugin.py").write_text(
+        "def generate_schedule(**kwargs):\n" + generate_schedule_body
+    )
+
+
+def test_scheduler_with_non_red_blue_station_names_passes_conformance(tmp_path):
+    # The real server (routers/schedule.py's _validate_generated_schedule)
+    # accepts any distinct, non-empty station names for a scheduler
+    # plugin's alliances, not just "red"/"blue" — the conformance tool
+    # must not enforce a stricter, stale rule than the server actually
+    # applies.
+    _write_variant_scheduler_plugin(
+        tmp_path,
+        "    teams = kwargs['teams']\n"
+        "    return [{\n"
+        "        'time_slot': 0,\n"
+        "        'field_set_id': kwargs['field_sets'][0]['field_set_id'],\n"
+        "        'alliances': [\n"
+        "            {'station': 'alliance_1', 'team_ids': [teams[0]['team_id'], teams[1]['team_id']]},\n"
+        "            {'station': 'alliance_2', 'team_ids': [teams[2]['team_id'], teams[3]['team_id']]},\n"
+        "        ],\n"
+        "    }]\n",
+    )
+    report = run_conformance_checks(tmp_path)
+    assert report.passed, [c for c in report.checks if not c.passed]
+
+
+def test_scheduler_with_duplicate_station_names_fails_conformance(tmp_path):
+    _write_variant_scheduler_plugin(
+        tmp_path,
+        "    teams = kwargs['teams']\n"
+        "    return [{\n"
+        "        'time_slot': 0,\n"
+        "        'field_set_id': kwargs['field_sets'][0]['field_set_id'],\n"
+        "        'alliances': [\n"
+        "            {'station': 'alliance_1', 'team_ids': [teams[0]['team_id'], teams[1]['team_id']]},\n"
+        "            {'station': 'alliance_1', 'team_ids': [teams[2]['team_id'], teams[3]['team_id']]},\n"
+        "        ],\n"
+        "    }]\n",
+    )
+    report = run_conformance_checks(tmp_path)
+    assert not report.passed
+    failing = [c for c in report.checks if not c.passed]
+    assert any("distinct" in c.message for c in failing)

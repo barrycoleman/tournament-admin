@@ -157,6 +157,11 @@ keep only their highest N (zero-padding the shortfall if they played
 fewer than N), with separate toggles for whether `no_show`/`dq` matches
 are eligible to be excluded. It's consulted only for `cooperative_score`
 ranking — `head_to_head` has no concept of dropping a match.
+`services/ranking.py`'s `suggest_exclusion_count(total_matches)` computes
+the spec's tiered default suggestion for that exclusion count, but it's a
+pure function that no endpoint calls yet — a future UI or endpoint would
+need to invoke it explicitly rather than assuming the server already
+applies it as a default.
 
 `GET /api/rankings?event_wide=true` returns standings aggregated across
 every session in the event (a `Ranking` row with `session_id: null`),

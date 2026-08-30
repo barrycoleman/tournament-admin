@@ -385,18 +385,25 @@ def _check_generate_schedule(module: Any) -> CheckResult:
                     False,
                     "alliance missing 'station' or 'team_ids'",
                 )
+            station = alliance["station"]
+            if not isinstance(station, str) or not station:
+                return CheckResult(
+                    "generate_schedule() shape",
+                    False,
+                    "alliance station must be a non-empty string",
+                )
             if not alliance["team_ids"]:
                 return CheckResult(
                     "generate_schedule() shape",
                     False,
                     "alliance team_ids must be non-empty",
                 )
-            stations.add(alliance["station"])
-        if stations != {"red", "blue"}:
+            stations.add(station)
+        if len(stations) != len(alliances):
             return CheckResult(
                 "generate_schedule() shape",
                 False,
-                f"alliance stations must be exactly red/blue, got {sorted(stations)}",
+                "alliance stations must be distinct within a match",
             )
 
     return CheckResult("generate_schedule() shape", True)

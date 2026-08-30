@@ -340,7 +340,7 @@ def clear_schedule(
                 )
             for ranking in db.execute(event_ranking_query).scalars().all():
                 db.delete(ranking)
-            db.flush()
+            db.commit()
 
             recompute_event_rankings(db, game_plugin, event.id, division_id)
 

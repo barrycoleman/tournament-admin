@@ -111,7 +111,7 @@ def submit_score(
         select(Alliance).where(Alliance.match_id == match_id)
     ).scalars().all()
 
-    if game_model == "cooperative_score":
+    if game_model == "cooperative_score" and not (payload.no_show or payload.dq):
         for other_alliance in all_alliances:
             if other_alliance.id == alliance_id:
                 continue
