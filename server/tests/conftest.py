@@ -16,6 +16,10 @@ SIMPLE_RANDOM_SCHEDULER_PLUGIN = (
     Path(__file__).parent.parent / "plugins" / "schedulers" / "simple_random"
 )
 
+BALANCED_SCHEDULER_PLUGIN = (
+    Path(__file__).parent.parent / "plugins" / "schedulers" / "balanced"
+)
+
 
 @pytest.fixture()
 def client(tmp_path) -> TestClient:
@@ -29,6 +33,10 @@ def client(tmp_path) -> TestClient:
     schedulers_target = plugins_root / "schedulers" / "simple_random"
     schedulers_target.parent.mkdir(parents=True)
     shutil.copytree(SIMPLE_RANDOM_SCHEDULER_PLUGIN, schedulers_target)
+
+    balanced_target = plugins_root / "schedulers" / "balanced"
+    balanced_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(BALANCED_SCHEDULER_PLUGIN, balanced_target)
 
     app = create_app(db_path=db_path, plugins_root=str(plugins_root))
     return TestClient(app)

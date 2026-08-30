@@ -1,0 +1,6 @@
+{
+  "name": "balanced",
+  "version": "1.0.0",
+  "kind": "scheduler",
+  "display_name": "Balanced (avoids repeat pairings)"
+}

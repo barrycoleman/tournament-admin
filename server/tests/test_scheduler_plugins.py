@@ -1,3 +1,4 @@
+import random
 from pathlib import Path
 
 from plugin_helpers import zip_fixture_plugin
@@ -87,3 +88,47 @@ def test_cli_test_plugin_passes_for_simple_random(capsys):
     exit_code = main(["test-plugin", str(SIMPLE_RANDOM_PLUGIN)])
     assert exit_code == 0
     assert "All checks passed" in capsys.readouterr().out
+
+
+BALANCED_PLUGIN = Path(__file__).parent.parent / "plugins" / "schedulers" / "balanced"
+
+
+def test_balanced_passes_conformance():
+    report = run_conformance_checks(BALANCED_PLUGIN)
+    assert report.passed, [c for c in report.checks if not c.passed]
+
+
+def test_balanced_avoids_the_only_repeat_pairing_when_an_alternative_exists():
+    random.seed(0)
+    plugin = load_plugin(BALANCED_PLUGIN, SCHEDULER_PLUGIN_KIND)
+    module = plugin.module
+
+    teams = [{"team_id": i, "organization": None} for i in (1, 2, 3, 4)]
+    field_sets = [{"field_set_id": 1, "name": "Main Fields"}]
+    fields = [{"field_id": 1, "field_set_id": 1}]
+
+    # Every pairing among {1,2,3,4} has partnered twice already, except {1,2},
+    # which has never partnered. With only one match to generate, `balanced`
+    # should pick {1,2} as alliance-mates (the {1,2} vs {3,4} split) over
+    # either alternative split, since that's the only split whose two
+    # same-alliance pairs don't include a repeat partner.
+    all_pairs = [(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)]
+    pairing_history = {
+        frozenset(pair): {"partner_count": 2, "opponent_count": 0}
+        for pair in all_pairs
+    }
+    pairing_history[frozenset((1, 2))] = {"partner_count": 0, "opponent_count": 0}
+
+    matches = module.generate_schedule(
+        teams=teams,
+        target_matches_per_team=1,
+        teams_per_alliance=2,
+        fields=fields,
+        field_sets=field_sets,
+        cross_session_pairing_history=pairing_history,
+        constraints={"excluded_team_ids": []},
+    )
+
+    assert len(matches) == 1
+    alliance_team_sets = [set(a["team_ids"]) for a in matches[0]["alliances"]]
+    assert {1, 2} in alliance_team_sets
