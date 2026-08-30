@@ -238,3 +238,44 @@ def calculate_skills_score(scoresheet):
     )
     assert not score_check.passed
     assert "skipped" in score_check.message
+
+
+def test_match_format_requires_game_model(tmp_path):
+    import shutil
+
+    broken_dir = tmp_path / "missing-game-model"
+    shutil.copytree(FIXTURE_EXAMPLE_PLUGIN, broken_dir)
+    manifest = json.loads((broken_dir / "manifest.json").read_text())
+    manifest["name"] = "missing-game-model"
+    (broken_dir / "manifest.json").write_text(json.dumps(manifest))
+    plugin_text = (broken_dir / "plugin.py").read_text()
+    broken_text = plugin_text.replace(
+        '"game_model": "head_to_head",\n    ', ""
+    )
+    assert broken_text != plugin_text, "test fixture setup did not find the line to remove"
+    (broken_dir / "plugin.py").write_text(broken_text)
+
+    report = run_conformance_checks(broken_dir)
+    match_format_check = next(c for c in report.checks if c.name == "match_format() shape")
+    assert not match_format_check.passed
+    assert "game_model" in match_format_check.message
+
+
+def test_match_format_rejects_invalid_game_model(tmp_path):
+    import shutil
+
+    broken_dir = tmp_path / "bad-game-model"
+    shutil.copytree(FIXTURE_EXAMPLE_PLUGIN, broken_dir)
+    manifest = json.loads((broken_dir / "manifest.json").read_text())
+    manifest["name"] = "bad-game-model"
+    (broken_dir / "manifest.json").write_text(json.dumps(manifest))
+    plugin_text = (broken_dir / "plugin.py").read_text()
+    broken_text = plugin_text.replace(
+        '"game_model": "head_to_head"', '"game_model": "not-a-real-model"'
+    )
+    assert broken_text != plugin_text, "test fixture setup did not find the line to replace"
+    (broken_dir / "plugin.py").write_text(broken_text)
+
+    report = run_conformance_checks(broken_dir)
+    match_format_check = next(c for c in report.checks if c.name == "match_format() shape")
+    assert not match_format_check.passed

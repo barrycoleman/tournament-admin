@@ -10,6 +10,7 @@ def match_format() -> dict[str, Any]:
         "autonomous_seconds": 15,
         "driver_seconds": 105,
         "round_types": ["practice", "qualification", "elimination"],
+        "game_model": "head_to_head",
     }
 
 

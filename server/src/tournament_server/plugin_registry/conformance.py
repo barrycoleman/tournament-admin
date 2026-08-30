@@ -20,6 +20,7 @@ _KNOWN_KINDS = {
 VALID_DATA_TYPES = {"integer", "boolean", "enum"}
 VALID_WIDGETS = {"toggle", "counter", "select", "radio"}
 VALID_SCOPES = {"alliance", "team"}
+VALID_GAME_MODELS = {"head_to_head", "cooperative_score"}
 _REQUIRED_FIELD_KEYS = {
     "name",
     "label",
@@ -175,6 +176,7 @@ def _check_match_format(module: Any) -> CheckResult:
         "autonomous_seconds",
         "driver_seconds",
         "round_types",
+        "game_model",
     }
     missing = required_keys - result.keys()
     if missing:
@@ -184,6 +186,13 @@ def _check_match_format(module: Any) -> CheckResult:
     if not isinstance(result["round_types"], list) or not result["round_types"]:
         return CheckResult(
             "match_format() shape", False, "round_types must be a non-empty list"
+        )
+    if result["game_model"] not in VALID_GAME_MODELS:
+        return CheckResult(
+            "match_format() shape",
+            False,
+            f"game_model must be one of {sorted(VALID_GAME_MODELS)}, got "
+            f"{result['game_model']!r}",
         )
     return CheckResult("match_format() shape", True)
 
