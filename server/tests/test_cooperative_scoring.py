@@ -175,6 +175,77 @@ def test_exclude_mode_drops_lowest_non_protected_match(cooperative_client):
     assert rows[t1]["matches_played"] == 3
 
 
+def test_exclude_mode_protects_no_show_match_until_toggle_allows_dropping_it(
+    cooperative_client,
+):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    client.post(
+        "/api/ranking-configuration",
+        json={"mode": "exclude", "count": 1, "allow_drop_no_show": False},
+    )
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    t1 = client.post("/api/teams", json={"number": "1", "name": "Team One"}).json()["id"]
+    t2 = client.post("/api/teams", json={"number": "2", "name": "Team Two"}).json()["id"]
+
+    # Three matches for T1: real scores of 10 and 20, plus a no_show (effective
+    # score 0 regardless of the submitted data).
+    match_plans = [
+        {"objects_scored": 5, "no_show": False},  # score 10
+        {"objects_scored": 10, "no_show": False},  # score 20
+        {"objects_scored": 0, "no_show": True},  # score 0 (no_show)
+    ]
+    matches = []
+    for i, plan in enumerate(match_plans, start=1):
+        match = client.post(
+            "/api/matches",
+            json={
+                "session_id": session_id,
+                "round_type": "qualification",
+                "match_number": i,
+                "field_id": None,
+                "alliances": [
+                    {"station": "red", "team_ids": [t1]},
+                    {"station": "blue", "team_ids": [t2]},
+                ],
+            },
+        ).json()
+        red = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        matches.append((match["id"], red, plan))
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{red}/score",
+            json={"data": {"objects_scored": plan["objects_scored"]}, "no_show": plan["no_show"]},
+        )
+
+    response = client.get(f"/api/rankings?session_id={session_id}")
+    rows = {row["team_id"]: row for row in response.json()}
+
+    # Scores are 10, 20, 0 (no_show). allow_drop_no_show=False means the
+    # no_show match is not eligible to be the dropped one even though it is
+    # the lowest; the drop loop instead drops the next-lowest *droppable*
+    # match (10), leaving (0 + 20) / 2 = 10.0.
+    assert rows[t1]["average_score"] == 10.0
+
+    # Flip the toggle: the no_show match becomes droppable and, being the
+    # lowest score, is the one actually dropped: (10 + 20) / 2 = 15.0.
+    client.post(
+        "/api/ranking-configuration",
+        json={"mode": "exclude", "count": 1, "allow_drop_no_show": True},
+    )
+    # Re-submitting a score (any alliance in the session) triggers a ranking
+    # recompute against the now-updated configuration.
+    match_id, red_id, plan = matches[0]
+    client.post(
+        f"/api/matches/{match_id}/alliances/{red_id}/score",
+        json={"data": {"objects_scored": plan["objects_scored"]}, "no_show": plan["no_show"]},
+    )
+
+    response = client.get(f"/api/rankings?session_id={session_id}")
+    rows = {row["team_id"]: row for row in response.json()}
+    assert rows[t1]["average_score"] == 15.0
+
+
 def test_include_mode_zero_pads_a_team_with_fewer_matches_than_count(cooperative_client):
     client = cooperative_client
     client.post("/api/event", json={"name": "Regional Qualifier"})
