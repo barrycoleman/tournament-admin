@@ -170,6 +170,47 @@ recomputed alongside the normal per-session ranking whenever a
 what makes a multi-session league's overall standings work; `head_to_head`
 never populates this (`recompute_event_rankings` no-ops for it).
 
+## Finals
+
+A game plugin declares `alliance_selection` (`captain_pick` or
+`seed_pairing`) and `finals_format` (`single_elimination` or
+`score_chase`) in `match_format()`. A finals pair is always exactly 2
+teams, persistent for the whole finals stage, regardless of the game's
+qualification-stage `teams_per_alliance` — formed once via `POST
+/api/finals/start` (immediately, for `seed_pairing`) or via a sequence of
+`POST /api/finals/{id}/pick` calls in strict seed order (for
+`captain_pick`).
+
+**Only `score_chase` has an engine right now.** `POST /api/finals/start`
+explicitly rejects `single_elimination` with a 422 — the contract accepts
+either declared value and the conformance tool validates both, but
+starting a bracket for a `single_elimination` game isn't implemented yet.
+
+A `score_chase` bracket runs its `BracketAlliance` entrants one at a time,
+worst seed to best, each as a single solo `Match` (one `Alliance`
+containing both of the pair's teams — there's no opponent, unlike a
+qualification `cooperative_score` match's two separate mirrored
+alliances). The next run is created automatically the moment the current
+one's score is submitted (`routers/scores.py`'s `submit_score` detects
+`Match.finals_bracket_id` and calls `services/finals.py`'s
+`advance_score_chase` instead of touching qualification rankings at all).
+Final standings live in `FinalsResult` (score descending, ties broken by
+the alliance's own bracket seed) — not the qualification `Ranking` table,
+which has no meaning for a format with no opponent.
+
+A finals bracket runs on exactly one `FieldSet` for its entire lifetime
+(chosen at `POST /api/finals/start`, auto-defaulting when the session has
+only one) — each dynamically-created run round-robins across that set's
+fields via `FinalsBracket.next_field_index`, the same algorithm
+`routers/schedule.py` uses for qualification, just applied one match at a
+time instead of one batch at a time.
+
+**Known, deliberate gap**: `recompute_rankings`/`recompute_event_rankings`
+now exclude finals matches (`Match.finals_bracket_id IS NOT NULL`) from
+qualification ranking — but they still don't exclude `practice`-round
+matches, a pre-existing gap from an earlier phase this plan didn't
+introduce and doesn't fix.
+
 ## Scheduling
 
 Every Field belongs to exactly one FieldSet (`field_set_id` is required,
