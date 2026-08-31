@@ -139,7 +139,9 @@ def recompute_rankings(
     game_model = plugin.module.match_format()["game_model"]
 
     query = select(Match).where(
-        Match.session_id == session_id, Match.status == "completed"
+        Match.session_id == session_id,
+        Match.status == "completed",
+        Match.finals_bracket_id.is_(None),
     )
     if division_id is None:
         query = query.where(Match.division_id.is_(None))
@@ -333,7 +335,9 @@ def recompute_event_rankings(
         return
 
     query = select(Match).where(
-        Match.session_id.in_(session_ids), Match.status == "completed"
+        Match.session_id.in_(session_ids),
+        Match.status == "completed",
+        Match.finals_bracket_id.is_(None),
     )
     if division_id is None:
         query = query.where(Match.division_id.is_(None))

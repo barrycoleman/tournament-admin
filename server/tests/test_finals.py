@@ -473,3 +473,109 @@ def test_field_allocation_round_robins_across_multiple_fields(cooperative_client
 
     first_run_match = client.get(f"/api/matches/{bracket['runs'][0]['match_id']}").json()
     assert first_run_match["field_id"] in {field1["id"], field2["id"]}
+
+
+def _setup_and_start_score_chase(client, scores: list[int]):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    team_ids = [
+        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
+        for i in range(len(scores) * 2)
+    ]
+    for i, team_id in enumerate(team_ids):
+        match = client.post(
+            "/api/matches",
+            json={
+                "session_id": session_id,
+                "round_type": "qualification",
+                "match_number": 100 + i,
+                "field_id": None,
+                "alliances": [
+                    {"station": "red", "team_ids": [team_id]},
+                    {"station": "blue", "team_ids": [team_id]},
+                ],
+            },
+        ).json()
+        red = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{red}/score",
+            json={"data": {"objects_scored": (len(team_ids) - i) * 10}},
+        )
+
+    bracket = client.post(
+        "/api/finals/start", json={"session_id": session_id, "bracket_size": len(scores)}
+    ).json()
+    return bracket
+
+
+def test_score_chase_progression_creates_runs_in_worst_to_best_order(cooperative_client):
+    client = cooperative_client
+    bracket = _setup_and_start_score_chase(client, [1, 2])
+
+    assert len(bracket["runs"]) == 1
+    worst_seed_alliance_id = bracket["alliances"][-1]["id"]
+    assert bracket["runs"][0]["bracket_alliance_id"] == worst_seed_alliance_id
+
+    first_run_match_id = bracket["runs"][0]["match_id"]
+    first_run_alliance_id = client.get(f"/api/matches/{first_run_match_id}").json()["alliances"][0]["id"]
+    client.post(
+        f"/api/matches/{first_run_match_id}/alliances/{first_run_alliance_id}/score",
+        json={"data": {"objects_scored": 5}},
+    )
+
+    updated = client.get(f"/api/finals/{bracket['id']}").json()
+    assert len(updated["runs"]) == 2
+    best_seed_alliance_id = updated["alliances"][0]["id"]
+    assert updated["runs"][1]["bracket_alliance_id"] == best_seed_alliance_id
+    assert updated["status"] == "in_progress"
+
+
+def test_score_chase_completes_after_the_last_run_and_ranks_by_score(cooperative_client):
+    client = cooperative_client
+    bracket = _setup_and_start_score_chase(client, [1, 2])
+
+    first_run_match_id = bracket["runs"][0]["match_id"]
+    first_run_alliance_id = client.get(f"/api/matches/{first_run_match_id}").json()["alliances"][0]["id"]
+    client.post(
+        f"/api/matches/{first_run_match_id}/alliances/{first_run_alliance_id}/score",
+        json={"data": {"objects_scored": 5}},
+    )
+
+    updated = client.get(f"/api/finals/{bracket['id']}").json()
+    second_run_match_id = updated["runs"][1]["match_id"]
+    second_run_alliance_id = client.get(f"/api/matches/{second_run_match_id}").json()["alliances"][0]["id"]
+    client.post(
+        f"/api/matches/{second_run_match_id}/alliances/{second_run_alliance_id}/score",
+        json={"data": {"objects_scored": 20}},
+    )
+
+    final = client.get(f"/api/finals/{bracket['id']}").json()
+    assert final["status"] == "complete"
+    assert len(final["results"]) == 2
+    assert final["results"][0]["score"] == 40
+    assert final["results"][0]["rank"] == 1
+    assert final["results"][1]["score"] == 10
+    assert final["results"][1]["rank"] == 2
+
+
+def test_finals_matches_are_excluded_from_qualification_rankings(cooperative_client):
+    client = cooperative_client
+    bracket = _setup_and_start_score_chase(client, [1, 2])
+    session_id = bracket["session_id"]
+
+    before = client.get(f"/api/rankings?session_id={session_id}").json()
+    total_matches_before = {row["team_id"]: row["matches_played"] for row in before}
+
+    first_run_match_id = bracket["runs"][0]["match_id"]
+    first_run_alliance_id = client.get(f"/api/matches/{first_run_match_id}").json()["alliances"][0]["id"]
+    client.post(
+        f"/api/matches/{first_run_match_id}/alliances/{first_run_alliance_id}/score",
+        json={"data": {"objects_scored": 5}},
+    )
+
+    after = client.get(f"/api/rankings?session_id={session_id}").json()
+    total_matches_after = {row["team_id"]: row["matches_played"] for row in after}
+    assert total_matches_after == total_matches_before

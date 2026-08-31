@@ -12,6 +12,7 @@ from tournament_server.models.bracket_alliance import BracketAlliance, BracketAl
 from tournament_server.models.division import Division
 from tournament_server.models.field_set import FieldSet
 from tournament_server.models.finals_bracket import FinalsBracket
+from tournament_server.models.finals_result import FinalsResult
 from tournament_server.models.match import Match
 from tournament_server.models.ranking import Ranking
 from tournament_server.models.score_record import ScoreRecord
@@ -79,6 +80,12 @@ def _to_finals_bracket_read(
             )
         )
 
+    results = db.execute(
+        select(FinalsResult)
+        .where(FinalsResult.finals_bracket_id == bracket.id)
+        .order_by(FinalsResult.rank)
+    ).scalars().all()
+
     return FinalsBracketRead(
         id=bracket.id,
         session_id=bracket.session_id,
@@ -90,7 +97,9 @@ def _to_finals_bracket_read(
         status=bracket.status,
         alliances=[_to_bracket_alliance_read(a, db) for a in alliances],
         runs=runs,
-        results=[],
+        results=[
+            FinalsResultRead.model_validate(r, from_attributes=True) for r in results
+        ],
     )
 
 
