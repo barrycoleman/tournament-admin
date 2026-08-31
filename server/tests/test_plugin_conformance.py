@@ -281,6 +281,51 @@ def test_match_format_rejects_invalid_game_model(tmp_path):
     assert not match_format_check.passed
 
 
+def test_match_format_requires_alliance_selection(tmp_path):
+    import shutil
+
+    from tournament_server.plugin_registry.conformance import run_conformance_checks
+
+    broken_dir = tmp_path / "missing-alliance-selection"
+    shutil.copytree(FIXTURE_EXAMPLE_PLUGIN, broken_dir)
+    manifest = json.loads((broken_dir / "manifest.json").read_text())
+    manifest["name"] = "missing-alliance-selection"
+    (broken_dir / "manifest.json").write_text(json.dumps(manifest))
+    plugin_text = (broken_dir / "plugin.py").read_text()
+    broken_text = plugin_text.replace(
+        '"alliance_selection": "captain_pick",\n        ', ""
+    )
+    assert broken_text != plugin_text, "test fixture setup did not find the line to remove"
+    (broken_dir / "plugin.py").write_text(broken_text)
+
+    report = run_conformance_checks(broken_dir)
+    match_format_check = next(c for c in report.checks if c.name == "match_format() shape")
+    assert not match_format_check.passed
+    assert "alliance_selection" in match_format_check.message
+
+
+def test_match_format_rejects_invalid_finals_format(tmp_path):
+    import shutil
+
+    from tournament_server.plugin_registry.conformance import run_conformance_checks
+
+    broken_dir = tmp_path / "bad-finals-format"
+    shutil.copytree(FIXTURE_EXAMPLE_PLUGIN, broken_dir)
+    manifest = json.loads((broken_dir / "manifest.json").read_text())
+    manifest["name"] = "bad-finals-format"
+    (broken_dir / "manifest.json").write_text(json.dumps(manifest))
+    plugin_text = (broken_dir / "plugin.py").read_text()
+    broken_text = plugin_text.replace(
+        '"finals_format": "single_elimination"', '"finals_format": "not-a-real-format"'
+    )
+    assert broken_text != plugin_text, "test fixture setup did not find the line to replace"
+    (broken_dir / "plugin.py").write_text(broken_text)
+
+    report = run_conformance_checks(broken_dir)
+    match_format_check = next(c for c in report.checks if c.name == "match_format() shape")
+    assert not match_format_check.passed
+
+
 def test_cooperative_game_passes_conformance():
     from pathlib import Path
 

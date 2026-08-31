@@ -21,6 +21,8 @@ VALID_DATA_TYPES = {"integer", "boolean", "enum"}
 VALID_WIDGETS = {"toggle", "counter", "select", "radio"}
 VALID_SCOPES = {"alliance", "team"}
 VALID_GAME_MODELS = {"head_to_head", "cooperative_score"}
+VALID_ALLIANCE_SELECTIONS = {"captain_pick", "seed_pairing"}
+VALID_FINALS_FORMATS = {"single_elimination", "score_chase"}
 _REQUIRED_FIELD_KEYS = {
     "name",
     "label",
@@ -187,6 +189,8 @@ def _check_match_format(module: Any) -> CheckResult:
         "driver_seconds",
         "round_types",
         "game_model",
+        "alliance_selection",
+        "finals_format",
     }
     missing = required_keys - result.keys()
     if missing:
@@ -203,6 +207,20 @@ def _check_match_format(module: Any) -> CheckResult:
             False,
             f"game_model must be one of {sorted(VALID_GAME_MODELS)}, got "
             f"{result['game_model']!r}",
+        )
+    if result["alliance_selection"] not in VALID_ALLIANCE_SELECTIONS:
+        return CheckResult(
+            "match_format() shape",
+            False,
+            f"alliance_selection must be one of {sorted(VALID_ALLIANCE_SELECTIONS)}, "
+            f"got {result['alliance_selection']!r}",
+        )
+    if result["finals_format"] not in VALID_FINALS_FORMATS:
+        return CheckResult(
+            "match_format() shape",
+            False,
+            f"finals_format must be one of {sorted(VALID_FINALS_FORMATS)}, got "
+            f"{result['finals_format']!r}",
         )
     return CheckResult("match_format() shape", True)
 

@@ -11,6 +11,8 @@ def match_format() -> dict[str, Any]:
         "driver_seconds": 90,
         "round_types": ["practice", "qualification", "elimination"],
         "game_model": "cooperative_score",
+        "alliance_selection": "seed_pairing",
+        "finals_format": "score_chase",
     }
 
 
