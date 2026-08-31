@@ -24,6 +24,10 @@ COOPERATIVE_GAME_PLUGIN = (
     Path(__file__).parent / "fixtures" / "plugins" / "games" / "cooperative-game"
 )
 
+CAPTAIN_PICK_GAME_PLUGIN = (
+    Path(__file__).parent / "fixtures" / "plugins" / "games" / "captain-pick-game"
+)
+
 
 @pytest.fixture()
 def client(tmp_path) -> TestClient:
@@ -33,6 +37,10 @@ def client(tmp_path) -> TestClient:
     games_target = plugins_root / "games" / "example-game"
     games_target.parent.mkdir(parents=True)
     shutil.copytree(FIXTURE_EXAMPLE_PLUGIN, games_target)
+
+    captain_pick_target = plugins_root / "games" / "captain-pick-game"
+    captain_pick_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(CAPTAIN_PICK_GAME_PLUGIN, captain_pick_target)
 
     schedulers_target = plugins_root / "schedulers" / "simple_random"
     schedulers_target.parent.mkdir(parents=True)

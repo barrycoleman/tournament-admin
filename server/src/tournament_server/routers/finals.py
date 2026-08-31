@@ -192,3 +192,77 @@ def get_finals(
         raise HTTPException(status_code=404, detail="Finals bracket not found")
     game_plugin = get_game_plugin_for_event(request, db)
     return _to_finals_bracket_read(bracket, db, game_plugin)
+
+
+@router.post("/{bracket_id}/pick", response_model=FinalsBracketRead)
+def pick_partner(
+    bracket_id: int, payload: FinalsPickRequest, request: Request, db: Session = Depends(get_db)
+) -> FinalsBracketRead:
+    bracket = db.get(FinalsBracket, bracket_id)
+    if bracket is None:
+        raise HTTPException(status_code=404, detail="Finals bracket not found")
+    if bracket.status != "selecting_alliances":
+        raise HTTPException(
+            status_code=409, detail="This bracket is not currently selecting alliances"
+        )
+
+    alliances = db.execute(
+        select(BracketAlliance)
+        .where(BracketAlliance.bracket_id == bracket_id)
+        .order_by(BracketAlliance.seed)
+    ).scalars().all()
+
+    team_counts: dict[int, int] = {}
+    claimed_team_ids: set[int] = set()
+    for alliance in alliances:
+        rows = db.execute(
+            select(BracketAllianceTeam).where(
+                BracketAllianceTeam.bracket_alliance_id == alliance.id
+            )
+        ).scalars().all()
+        team_counts[alliance.id] = len(rows)
+        for row in rows:
+            claimed_team_ids.add(row.team_id)
+
+    pending = [a for a in alliances if team_counts[a.id] < 2]
+    if not pending:
+        raise HTTPException(
+            status_code=409, detail="Every alliance in this bracket already has a partner"
+        )
+    next_captain = pending[0]
+    if payload.captain_bracket_alliance_id != next_captain.id:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"It is not this alliance's turn to pick; alliance "
+                f"{next_captain.id} (seed {next_captain.seed}) picks next"
+            ),
+        )
+
+    if payload.partner_team_id in claimed_team_ids:
+        raise HTTPException(
+            status_code=409, detail="This team is already on a bracket alliance"
+        )
+    if db.get(Team, payload.partner_team_id) is None:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    db.add(
+        BracketAllianceTeam(
+            bracket_alliance_id=next_captain.id, team_id=payload.partner_team_id
+        )
+    )
+    db.commit()
+
+    remaining_pending = [
+        a
+        for a in alliances
+        if a.id != next_captain.id
+        and team_counts[a.id] < 2
+    ]
+    if not remaining_pending:
+        bracket.status = "in_progress"
+        db.commit()
+
+    db.refresh(bracket)
+    game_plugin = get_game_plugin_for_event(request, db)
+    return _to_finals_bracket_read(bracket, db, game_plugin)
