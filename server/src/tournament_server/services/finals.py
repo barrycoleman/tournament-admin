@@ -145,17 +145,25 @@ def recompute_finals_results(db: Session, bracket: FinalsBracket, game_plugin) -
 def advance_score_chase(db: Session, bracket: FinalsBracket, game_plugin) -> None:
     recompute_finals_results(db, bracket, game_plugin)
 
+    if bracket.status == "complete":
+        return
+
+    existing_runs = db.execute(
+        select(Match).where(Match.finals_bracket_id == bracket.id)
+    ).scalars().all()
+    if any(m.status != "completed" for m in existing_runs):
+        # A run's score was resubmitted (e.g. a post-hoc DQ correction) while
+        # another run is still in progress or unscored. recompute_finals_results
+        # above already refreshed standings for whatever is scored so far —
+        # do not create another run or advance the bracket in this case.
+        return
+
     all_alliances = db.execute(
         select(BracketAlliance)
         .where(BracketAlliance.bracket_id == bracket.id)
         .order_by(BracketAlliance.seed.desc())
     ).scalars().all()
-    ran_alliance_ids = {
-        m.bracket_alliance_id
-        for m in db.execute(
-            select(Match).where(Match.finals_bracket_id == bracket.id)
-        ).scalars().all()
-    }
+    ran_alliance_ids = {m.bracket_alliance_id for m in existing_runs}
 
     remaining = [a for a in all_alliances if a.id not in ran_alliance_ids]
     if remaining:

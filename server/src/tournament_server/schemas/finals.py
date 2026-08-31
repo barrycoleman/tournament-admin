@@ -21,7 +21,7 @@ class BracketAllianceRead(BaseModel):
 
 class FinalsRunRead(BaseModel):
     match_id: int
-    bracket_alliance_id: int
+    bracket_alliance_id: int | None
     status: str
     score: int | None
 

@@ -579,3 +579,103 @@ def test_finals_matches_are_excluded_from_qualification_rankings(cooperative_cli
     after = client.get(f"/api/rankings?session_id={session_id}").json()
     total_matches_after = {row["team_id"]: row["matches_played"] for row in after}
     assert total_matches_after == total_matches_before
+
+
+def test_start_finals_rejects_empty_field_set(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    empty_field_set = client.post(
+        "/api/field-sets", json={"session_id": session_id, "name": "Empty Set"}
+    ).json()
+
+    team_ids = [
+        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
+        for i in range(4)
+    ]
+    for i, team_id in enumerate(team_ids):
+        match = client.post(
+            "/api/matches",
+            json={
+                "session_id": session_id,
+                "round_type": "qualification",
+                "match_number": 100 + i,
+                "field_id": None,
+                "alliances": [
+                    {"station": "red", "team_ids": [team_id]},
+                    {"station": "blue", "team_ids": [team_id]},
+                ],
+            },
+        ).json()
+        red = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{red}/score",
+            json={"data": {"objects_scored": (4 - i) * 10}},
+        )
+
+    response = client.post(
+        "/api/finals/start",
+        json={
+            "session_id": session_id,
+            "bracket_size": 2,
+            "field_set_id": empty_field_set["id"],
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_resubmitting_a_completed_run_does_not_create_an_extra_run(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    team_ids = [
+        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
+        for i in range(4)
+    ]
+    for i, team_id in enumerate(team_ids):
+        match = client.post(
+            "/api/matches",
+            json={
+                "session_id": session_id,
+                "round_type": "qualification",
+                "match_number": 100 + i,
+                "field_id": None,
+                "alliances": [
+                    {"station": "red", "team_ids": [team_id]},
+                    {"station": "blue", "team_ids": [team_id]},
+                ],
+            },
+        ).json()
+        red = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{red}/score",
+            json={"data": {"objects_scored": (4 - i) * 10}},
+        )
+
+    bracket = client.post(
+        "/api/finals/start", json={"session_id": session_id, "bracket_size": 2}
+    ).json()
+    first_run_match_id = bracket["runs"][0]["match_id"]
+    first_run_alliance_id = client.get(f"/api/matches/{first_run_match_id}").json()["alliances"][0]["id"]
+    client.post(
+        f"/api/matches/{first_run_match_id}/alliances/{first_run_alliance_id}/score",
+        json={"data": {"objects_scored": 5}},
+    )
+
+    after_first_score = client.get(f"/api/finals/{bracket['id']}").json()
+    assert len(after_first_score["runs"]) == 2
+
+    # Resubmit a correction to the first (already-completed) run.
+    client.post(
+        f"/api/matches/{first_run_match_id}/alliances/{first_run_alliance_id}/score",
+        json={"data": {"objects_scored": 7}},
+    )
+
+    after_resubmit = client.get(f"/api/finals/{bracket['id']}").json()
+    assert len(after_resubmit["runs"]) == 2
+    # cooperative-game's calculate_score doubles objects_scored.
+    assert after_resubmit["runs"][0]["score"] == 14

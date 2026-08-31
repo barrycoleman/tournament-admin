@@ -285,7 +285,9 @@ def clear_schedule(
 
     # Then delete matches and their cascading objects
     match_query = select(Match).where(
-        Match.session_id == session_id, Match.round_type == round_type
+        Match.session_id == session_id,
+        Match.round_type == round_type,
+        Match.finals_bracket_id.is_(None),
     )
     if division_id is None:
         match_query = match_query.where(Match.division_id.is_(None))

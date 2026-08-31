@@ -10,6 +10,7 @@ from tournament_server.deps import get_db, get_game_plugin_for_event, get_the_ev
 from tournament_server.models.alliance import Alliance
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
 from tournament_server.models.division import Division
+from tournament_server.models.field import Field
 from tournament_server.models.field_set import FieldSet
 from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.finals_result import FinalsResult
@@ -53,7 +54,7 @@ def _to_finals_bracket_read(
     ).scalars().all()
 
     matches = db.execute(
-        select(Match).where(Match.finals_bracket_id == bracket.id)
+        select(Match).where(Match.finals_bracket_id == bracket.id).order_by(Match.id)
     ).scalars().all()
     runs = []
     for match in matches:
@@ -115,6 +116,24 @@ def start_finals(
     if payload.division_id is not None and db.get(Division, payload.division_id) is None:
         raise HTTPException(status_code=404, detail="Division not found")
 
+    existing_bracket_query = select(FinalsBracket).where(
+        FinalsBracket.session_id == payload.session_id,
+        FinalsBracket.status != "complete",
+    )
+    if payload.division_id is None:
+        existing_bracket_query = existing_bracket_query.where(
+            FinalsBracket.division_id.is_(None)
+        )
+    else:
+        existing_bracket_query = existing_bracket_query.where(
+            FinalsBracket.division_id == payload.division_id
+        )
+    if db.execute(existing_bracket_query).scalars().first() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="A finals bracket is already in progress for this session/division",
+        )
+
     game_plugin = get_game_plugin_for_event(request, db)
     match_format = game_plugin.module.match_format()
     finals_format = match_format["finals_format"]
@@ -159,6 +178,14 @@ def start_finals(
         field_set = db.get(FieldSet, field_set_id)
         if field_set is None or field_set.session_id != payload.session_id:
             raise HTTPException(status_code=404, detail="FieldSet not found")
+
+    field_ids_for_set = db.execute(
+        select(Field.id).where(Field.field_set_id == field_set_id)
+    ).scalars().all()
+    if not field_ids_for_set:
+        raise HTTPException(
+            status_code=422, detail="This FieldSet has no fields configured"
+        )
 
     ranking_query = select(Ranking).where(Ranking.session_id == payload.session_id)
     if payload.division_id is None:
@@ -244,6 +271,13 @@ def pick_partner(
     if bracket.status != "selecting_alliances":
         raise HTTPException(
             status_code=409, detail="This bracket is not currently selecting alliances"
+        )
+    field_ids_for_set = db.execute(
+        select(Field.id).where(Field.field_set_id == bracket.field_set_id)
+    ).scalars().all()
+    if not field_ids_for_set:
+        raise HTTPException(
+            status_code=422, detail="This bracket's FieldSet has no fields configured"
         )
 
     alliances = db.execute(
