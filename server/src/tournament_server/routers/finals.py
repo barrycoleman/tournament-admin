@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server.deps import get_db, get_game_plugin_for_event, get_the_event
+from tournament_server.models.alliance import Alliance
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
 from tournament_server.models.division import Division
 from tournament_server.models.field_set import FieldSet
 from tournament_server.models.finals_bracket import FinalsBracket
+from tournament_server.models.match import Match
 from tournament_server.models.ranking import Ranking
+from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
 from tournament_server.schemas.finals import (
@@ -20,6 +25,7 @@ from tournament_server.schemas.finals import (
     FinalsRunRead,
     FinalsStartRequest,
 )
+from tournament_server.services.finals import start_score_chase
 
 router = APIRouter(prefix="/api/finals", tags=["finals"])
 
@@ -45,11 +51,33 @@ def _to_finals_bracket_read(
         .order_by(BracketAlliance.seed)
     ).scalars().all()
 
-    # Match.finals_bracket_id / Match.bracket_alliance_id don't exist as columns
-    # until Task 4 adds them, so no Match can be linked to a bracket yet — this
-    # task never creates one. `runs` is always empty here; Task 4 replaces this
-    # with a real query + score lookup once both columns and run-creation exist.
-    runs: list[FinalsRunRead] = []
+    matches = db.execute(
+        select(Match).where(Match.finals_bracket_id == bracket.id)
+    ).scalars().all()
+    runs = []
+    for match in matches:
+        match_alliance = db.execute(
+            select(Alliance).where(Alliance.match_id == match.id)
+        ).scalars().first()
+        score = None
+        if match_alliance is not None:
+            score_record = db.execute(
+                select(ScoreRecord).where(ScoreRecord.alliance_id == match_alliance.id)
+            ).scalars().first()
+            if score_record is not None:
+                score = (
+                    0
+                    if (score_record.no_show or score_record.dq)
+                    else game_plugin.module.calculate_score(json.loads(score_record.data_json))
+                )
+        runs.append(
+            FinalsRunRead(
+                match_id=match.id,
+                bracket_alliance_id=match.bracket_alliance_id,
+                status=match.status,
+                score=score,
+            )
+        )
 
     return FinalsBracketRead(
         id=bracket.id,
@@ -167,6 +195,9 @@ def start_finals(
                 )
             )
         bracket.status = "in_progress"
+        db.commit()
+        if bracket.format == "score_chase":
+            start_score_chase(db, bracket)
     else:
         for i, ranking in enumerate(top_teams):
             alliance = BracketAlliance(bracket_id=bracket.id, seed=i + 1)
@@ -262,6 +293,8 @@ def pick_partner(
     if not remaining_pending:
         bracket.status = "in_progress"
         db.commit()
+        if bracket.format == "score_chase":
+            start_score_chase(db, bracket)
 
     db.refresh(bracket)
     game_plugin = get_game_plugin_for_event(request, db)

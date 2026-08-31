@@ -23,6 +23,12 @@ class Match(Base):
     schedule_generation_id: Mapped[int | None] = mapped_column(
         ForeignKey("schedule_generations.id"), default=None
     )
+    finals_bracket_id: Mapped[int | None] = mapped_column(
+        ForeignKey("finals_brackets.id"), default=None
+    )
+    bracket_alliance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("bracket_alliances.id"), default=None
+    )
     scheduled_time: Mapped[dt.datetime | None] = mapped_column(
         UTCDateTime, default=None
     )

@@ -5,6 +5,7 @@ from tournament_server.models.event import Event
 from tournament_server.models.field import Field
 from tournament_server.models.field_set import FieldSet
 from tournament_server.models.finals_bracket import FinalsBracket
+from tournament_server.models.finals_result import FinalsResult
 from tournament_server.models.match import Match
 from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.ranking import Ranking
@@ -24,6 +25,7 @@ __all__ = [
     "Field",
     "FieldSet",
     "FinalsBracket",
+    "FinalsResult",
     "Match",
     "Ranking",
     "RankingConfiguration",

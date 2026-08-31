@@ -381,5 +381,95 @@ def test_captain_pick_completes_bracket_once_every_captain_has_picked(captain_pi
         json={"captain_bracket_alliance_id": seed_2["id"], "partner_team_id": unclaimed[1]},
     )
     assert response.status_code == 200
-    assert response.json()["status"] == "in_progress"
-    assert response.json()["runs"] == []
+    body = response.json()
+    assert body["status"] == "in_progress"
+    # captain-pick-game declares finals_format="score_chase", so once every
+    # captain has picked this bracket's first score-chase run is created
+    # automatically for the worst seed (seed_2, per "worst to best" order).
+    assert len(body["runs"]) == 1
+    assert body["runs"][0]["bracket_alliance_id"] == seed_2["id"]
+
+
+def test_starting_a_score_chase_bracket_creates_the_first_run_for_the_worst_seed(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    team_ids = [
+        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
+        for i in range(4)
+    ]
+    for i, team_id in enumerate(team_ids):
+        match = client.post(
+            "/api/matches",
+            json={
+                "session_id": session_id,
+                "round_type": "qualification",
+                "match_number": 100 + i,
+                "field_id": None,
+                "alliances": [
+                    {"station": "red", "team_ids": [team_id]},
+                    {"station": "blue", "team_ids": [team_id]},
+                ],
+            },
+        ).json()
+        red = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{red}/score",
+            json={"data": {"objects_scored": (4 - i) * 10}},
+        )
+
+    bracket = client.post(
+        "/api/finals/start", json={"session_id": session_id, "bracket_size": 2}
+    ).json()
+    assert bracket["status"] == "in_progress"
+    assert len(bracket["runs"]) == 1
+    worst_seed_alliance = bracket["alliances"][-1]
+    assert bracket["runs"][0]["bracket_alliance_id"] == worst_seed_alliance["id"]
+    assert bracket["runs"][0]["score"] is None
+
+
+def test_field_allocation_round_robins_across_multiple_fields(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    field1 = client.post(
+        "/api/fields", json={"session_id": session_id, "name": "Field 1"}
+    ).json()
+    field2 = client.post(
+        "/api/fields", json={"session_id": session_id, "name": "Field 2"}
+    ).json()
+
+    team_ids = [
+        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
+        for i in range(4)
+    ]
+    for i, team_id in enumerate(team_ids):
+        match = client.post(
+            "/api/matches",
+            json={
+                "session_id": session_id,
+                "round_type": "qualification",
+                "match_number": 100 + i,
+                "field_id": None,
+                "alliances": [
+                    {"station": "red", "team_ids": [team_id]},
+                    {"station": "blue", "team_ids": [team_id]},
+                ],
+            },
+        ).json()
+        red = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{red}/score",
+            json={"data": {"objects_scored": (4 - i) * 10}},
+        )
+
+    bracket = client.post(
+        "/api/finals/start", json={"session_id": session_id, "bracket_size": 2}
+    ).json()
+
+    first_run_match = client.get(f"/api/matches/{bracket['runs'][0]['match_id']}").json()
+    assert first_run_match["field_id"] in {field1["id"], field2["id"]}
