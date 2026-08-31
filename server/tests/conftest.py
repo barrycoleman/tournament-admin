@@ -38,10 +38,6 @@ def client(tmp_path) -> TestClient:
     games_target.parent.mkdir(parents=True)
     shutil.copytree(FIXTURE_EXAMPLE_PLUGIN, games_target)
 
-    captain_pick_target = plugins_root / "games" / "captain-pick-game"
-    captain_pick_target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(CAPTAIN_PICK_GAME_PLUGIN, captain_pick_target)
-
     schedulers_target = plugins_root / "schedulers" / "simple_random"
     schedulers_target.parent.mkdir(parents=True)
     shutil.copytree(SIMPLE_RANDOM_SCHEDULER_PLUGIN, schedulers_target)
@@ -62,6 +58,27 @@ def cooperative_client(tmp_path) -> TestClient:
     games_target = plugins_root / "games" / "cooperative-game"
     games_target.parent.mkdir(parents=True)
     shutil.copytree(COOPERATIVE_GAME_PLUGIN, games_target)
+
+    schedulers_target = plugins_root / "schedulers" / "simple_random"
+    schedulers_target.parent.mkdir(parents=True)
+    shutil.copytree(SIMPLE_RANDOM_SCHEDULER_PLUGIN, schedulers_target)
+
+    balanced_target = plugins_root / "schedulers" / "balanced"
+    balanced_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(BALANCED_SCHEDULER_PLUGIN, balanced_target)
+
+    app = create_app(db_path=db_path, plugins_root=str(plugins_root))
+    return TestClient(app)
+
+
+@pytest.fixture()
+def captain_pick_client(tmp_path) -> TestClient:
+    db_path = str(tmp_path / "test.db")
+    plugins_root = tmp_path / "plugins"
+
+    games_target = plugins_root / "games" / "captain-pick-game"
+    games_target.parent.mkdir(parents=True)
+    shutil.copytree(CAPTAIN_PICK_GAME_PLUGIN, games_target)
 
     schedulers_target = plugins_root / "schedulers" / "simple_random"
     schedulers_target.parent.mkdir(parents=True)

@@ -17,10 +17,8 @@ FIXTURE_SECOND_GAME_PLUGIN = (
 def test_list_game_plugins_shows_preseeded_plugin(client):
     response = client.get("/api/plugins/games")
     assert response.status_code == 200
-    assert len(response.json()) == 2
-    plugin_names = {p["name"] for p in response.json()}
-    assert "example-game" in plugin_names
-    assert "captain-pick-game" in plugin_names
+    assert len(response.json()) == 1
+    assert response.json()[0]["name"] == "example-game"
 
 
 def test_list_game_plugins_discovers_at_startup(tmp_path):

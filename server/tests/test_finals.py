@@ -150,7 +150,8 @@ def test_get_finals_returns_current_state(cooperative_client):
     assert response.json()["status"] == "in_progress"
 
 
-def test_captain_pick_rejects_out_of_turn_pick(client):
+def test_captain_pick_rejects_out_of_turn_pick(captain_pick_client):
+    client = captain_pick_client
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "captain-pick-game"})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
@@ -228,7 +229,8 @@ def test_captain_pick_rejects_out_of_turn_pick(client):
     assert response.status_code == 422
 
 
-def test_captain_pick_rejects_already_claimed_partner(client):
+def test_captain_pick_rejects_already_claimed_partner(captain_pick_client):
+    client = captain_pick_client
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "captain-pick-game"})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
@@ -301,7 +303,8 @@ def test_captain_pick_rejects_already_claimed_partner(client):
     assert response.status_code == 409
 
 
-def test_captain_pick_completes_bracket_once_every_captain_has_picked(client):
+def test_captain_pick_completes_bracket_once_every_captain_has_picked(captain_pick_client):
+    client = captain_pick_client
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "captain-pick-game"})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
