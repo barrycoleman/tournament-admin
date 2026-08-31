@@ -47,6 +47,9 @@ In scope:
   progression, walkovers for unavailable entrants.
 - The score-chase sequence: run ordering, just-in-time run creation,
   final-score ranking.
+- Field allocation for dynamically-created finals matches: a bracket runs
+  on one fixed `FieldSet`, round-robining its fields as matches are
+  created one at a time.
 - Endpoints to start finals, run the captain-pick flow, and read bracket
   state.
 - Integration with the existing score-submission endpoint.
@@ -99,11 +102,17 @@ declared key must be present" conformance philosophy. `example-game`
 
 ## 3. Shared data model: forming a persistent finals pair
 
-- **`FinalsBracket`** — `id, session_id, division_id, format
+- **`FinalsBracket`** — `id, session_id, division_id, field_set_id, format
   ("single_elimination" | "score_chase"), bracket_size (N), wins_to_advance
   (meaningful only for "single_elimination"; ignored for "score_chase"),
   status ("selecting_alliances" | "in_progress" | "complete")`. One row
-  per division per finals run.
+  per division per finals run. `field_set_id` is fixed for the bracket's
+  entire lifetime — a finals bracket runs as one sequence on one set of
+  fields, unlike qualification scheduling, which deliberately spreads
+  across multiple *concurrently*-running field sets (§9's cross-division
+  collision caveat is the qualification-side version of the same
+  "concurrent field sets" idea; a finals bracket sidesteps it by using
+  exactly one).
 - **`BracketAlliance`** — `id, bracket_id, seed (1..N)`. A persistent
   finals pair, distinct from the existing per-match `Alliance` model
   (which stays exactly as-is — a finals *game*/*run* still creates real
@@ -119,6 +128,14 @@ bracket_size (N)`, and — only when `format == "single_elimination"` —
 `wins_to_advance`. The top `N` seeds come from that division's current
 qualification `Ranking` (the ordinary, already-existing session-scoped or
 event-wide ranking, whichever the organizer's event structure uses).
+
+`field_set_id` is picked the same way Phase 4's `POST /api/fields` already
+auto-defaults: omit it and the session's one existing `FieldSet` is used
+automatically; if the session has more than one `FieldSet`, it must be
+specified explicitly (422 if omitted and ambiguous). Unlike qualification
+scheduling, a finals bracket never auto-creates a default `FieldSet` on
+your behalf — by the time finals start, the session's fields are already
+set up from running qualification matches on them.
 
 - If `alliance_selection == "seed_pairing"`: all `N` `BracketAlliance` rows
   form immediately from adjacent seed pairs (1+2, 3+4, ...; `N` must be
@@ -137,6 +154,18 @@ math (§4) or `score_chase`'s run order (§5) is the **better** (lowest
 qualification-rank-numbered) seed among its two teams — the captain's
 seed for `captain_pick`, or the lower of the two paired seeds for
 `seed_pairing`.
+
+**Field assignment**: both formats create `Match` rows one at a time as
+the bracket/sequence progresses (§4, §5), rather than in a single batch
+the way qualification scheduling does — but the assignment mechanism is
+the same one Phase 4 already uses, just invoked once per match instead of
+once per batch: the bracket tracks a running "next field index" into its
+`field_set_id`'s `Field` rows (ordered by `id`, matching Phase 4's
+existing convention), and each newly-created match gets the next field in
+that rotation, wrapping back to the first field once every field in the
+set has been used once. A `FinalsBracket` with only one `Field` in its
+`field_set_id` simply reuses that one field for every match, which is
+correct and expected for a small event.
 
 ## 4. Single-elimination bracket
 
@@ -216,12 +245,14 @@ concept.
 ## 6. Endpoints
 
 - **`POST /api/finals/start`** — `{session_id, division_id, bracket_size,
-  wins_to_advance}` (`wins_to_advance` required only for
+  wins_to_advance, field_set_id}` (`wins_to_advance` required only for
   `single_elimination`, per the game's declared `finals_format`; ignored
-  otherwise). Validates the division has at least `bracket_size` ranked
-  teams, creates the `FinalsBracket`, and either forms all
-  `BracketAlliance` rows immediately (`seed_pairing`) or creates just the
-  captain placeholders (`captain_pick`).
+  otherwise. `field_set_id` optional, auto-defaulting to the session's
+  sole `FieldSet` — 422 if omitted and the session has more than one).
+  Validates the division has at least `bracket_size` ranked teams, creates
+  the `FinalsBracket`, and either forms all `BracketAlliance` rows
+  immediately (`seed_pairing`) or creates just the captain placeholders
+  (`captain_pick`).
 - **`POST /api/finals/{bracket_id}/pick`** — `{captain_bracket_alliance_id,
   partner_team_id}` (`captain_pick` only). Validates it's that captain's
   turn (the lowest-seeded `BracketAlliance` in this bracket that doesn't
@@ -252,6 +283,12 @@ with, so qualification ranking logic doesn't apply to it at all.
 - New fixture coverage: `example-game` (already `head_to_head`) exercises
   `single_elimination` with `captain_pick`; `cooperative-game` (already
   `cooperative_score`) exercises `score_chase` with `seed_pairing`.
+- Field assignment: a bracket with 2+ fields in its `field_set_id` round-
+  robins across them correctly as matches are created one at a time; a
+  bracket on a single-field `FieldSet` reuses that one field for every
+  match; `POST /api/finals/start` auto-defaults `field_set_id` correctly
+  when the session has exactly one, and 422s when it has more than one
+  and none was specified.
 - Single-elimination: seeding math with and without byes; a tied game not
   counting toward either side's series win; a walkover for an unavailable
   entrant; the next matchup's first game appearing the instant both its
