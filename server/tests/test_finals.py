@@ -1289,3 +1289,46 @@ def test_unavailable_alliance_mid_series_resolves_walkover_without_extra_game(cl
         m for m in matches_response.json() if m["round_type"] == "elimination"
     ]
     assert len(elimination_matches_after) == games_before_unavailable
+
+
+def test_delete_finals_cascades_everything(cooperative_client):
+    client = cooperative_client
+    session_id, team_ids = _setup_ranked_teams(client, 4)
+    _rank_teams_directly(client, session_id, team_ids)
+
+    bracket = client.post(
+        "/api/finals/start", json={"session_id": session_id, "bracket_size": 2}
+    ).json()
+    first_run_match_id = bracket["runs"][0]["match_id"]
+
+    response = client.delete(f"/api/finals/{bracket['id']}")
+    assert response.status_code == 204
+
+    assert client.get(f"/api/finals/{bracket['id']}").status_code == 404
+    assert client.get(f"/api/matches/{first_run_match_id}").status_code == 404
+
+
+def test_delete_finals_rejects_completed_bracket(cooperative_client):
+    client = cooperative_client
+    session_id, team_ids = _setup_ranked_teams(client, 4)
+    _rank_teams_directly(client, session_id, team_ids)
+
+    bracket = client.post(
+        "/api/finals/start", json={"session_id": session_id, "bracket_size": 2}
+    ).json()
+    for _ in range(2):
+        current = client.get(f"/api/finals/{bracket['id']}").json()
+        if current["status"] == "complete":
+            break
+        pending_run = next(r for r in current["runs"] if r["score"] is None)
+        match = client.get(f"/api/matches/{pending_run['match_id']}").json()
+        alliance_id = match["alliances"][0]["id"]
+        client.post(
+            f"/api/matches/{pending_run['match_id']}/alliances/{alliance_id}/score",
+            json={"data": {"objects_scored": 5}},
+        )
+    final = client.get(f"/api/finals/{bracket['id']}").json()
+    assert final["status"] == "complete"
+
+    response = client.delete(f"/api/finals/{bracket['id']}")
+    assert response.status_code == 409
