@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from tournament_server.deps import get_db, get_game_plugin_for_event, get_the_event
 from tournament_server.models.alliance import Alliance
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
+from tournament_server.models.bracket_matchup import BracketMatchup
 from tournament_server.models.division import Division
 from tournament_server.models.field import Field
 from tournament_server.models.field_set import FieldSet
@@ -21,13 +22,19 @@ from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
 from tournament_server.schemas.finals import (
     BracketAllianceRead,
+    BracketMatchupRead,
     FinalsBracketRead,
     FinalsPickRequest,
     FinalsResultRead,
     FinalsRunRead,
     FinalsStartRequest,
 )
-from tournament_server.services.finals import start_score_chase
+from tournament_server.services.finals import (
+    expand_wins_to_advance,
+    generate_bracket,
+    start_score_chase,
+    total_rounds_for_bracket_size,
+)
 
 router = APIRouter(prefix="/api/finals", tags=["finals"])
 
@@ -87,6 +94,12 @@ def _to_finals_bracket_read(
         .order_by(FinalsResult.rank)
     ).scalars().all()
 
+    matchups = db.execute(
+        select(BracketMatchup)
+        .where(BracketMatchup.bracket_id == bracket.id)
+        .order_by(BracketMatchup.round_number, BracketMatchup.position)
+    ).scalars().all()
+
     return FinalsBracketRead(
         id=bracket.id,
         session_id=bracket.session_id,
@@ -101,7 +114,9 @@ def _to_finals_bracket_read(
         results=[
             FinalsResultRead.model_validate(r, from_attributes=True) for r in results
         ],
-        matchups=[],
+        matchups=[
+            BracketMatchupRead.model_validate(m, from_attributes=True) for m in matchups
+        ],
     )
 
 
@@ -140,22 +155,24 @@ def start_finals(
     finals_format = match_format["finals_format"]
     alliance_selection = match_format["alliance_selection"]
 
-    if finals_format == "single_elimination":
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "single_elimination finals are not implemented yet — "
-                "only score_chase is supported"
-            ),
-        )
-
     if payload.bracket_size < 2:
         raise HTTPException(status_code=422, detail="bracket_size must be at least 2")
-    if payload.bracket_size % 2 != 0:
-        raise HTTPException(
-            status_code=422,
-            detail="bracket_size must be even (a finals pair is always 2 teams)",
-        )
+
+    total_rounds = total_rounds_for_bracket_size(payload.bracket_size)
+    if finals_format == "single_elimination":
+        if payload.wins_to_advance is None:
+            raise HTTPException(
+                status_code=422,
+                detail="wins_to_advance is required for single_elimination",
+            )
+        try:
+            wins_to_advance_list = expand_wins_to_advance(
+                payload.wins_to_advance, total_rounds
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+    else:
+        wins_to_advance_list = [1] * total_rounds
 
     field_set_id = payload.field_set_id
     if field_set_id is None:
@@ -210,7 +227,7 @@ def start_finals(
         field_set_id=field_set_id,
         format=finals_format,
         bracket_size=payload.bracket_size,
-        wins_to_advance=json.dumps([1]),
+        wins_to_advance=json.dumps(wins_to_advance_list),
         status="selecting_alliances",
     )
     db.add(bracket)
@@ -235,6 +252,8 @@ def start_finals(
         db.commit()
         if bracket.format == "score_chase":
             start_score_chase(db, bracket)
+        elif bracket.format == "single_elimination":
+            generate_bracket(db, bracket)
     else:
         for i, ranking in enumerate(top_teams):
             alliance = BracketAlliance(bracket_id=bracket.id, seed=i + 1)
@@ -339,6 +358,8 @@ def pick_partner(
         db.commit()
         if bracket.format == "score_chase":
             start_score_chase(db, bracket)
+        elif bracket.format == "single_elimination":
+            generate_bracket(db, bracket)
 
     db.refresh(bracket)
     game_plugin = get_game_plugin_for_event(request, db)

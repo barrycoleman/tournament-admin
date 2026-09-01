@@ -66,18 +66,157 @@ def test_start_finals_seed_pairing_forms_alliances_immediately(cooperative_clien
     assert set(body["alliances"][1]["team_ids"]) == {team_ids[2], team_ids[3]}
 
 
-def test_start_finals_rejects_single_elimination(client):
+def _setup_ranked_teams_for_example_game(client, count: int) -> tuple[int, list[int]]:
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "example-game"})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
     client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
 
+    team_ids = [
+        client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        for i in range(count)
+    ]
+    return session_id, team_ids
+
+
+def _rank_teams_directly_head_to_head(client, session_id: int, team_ids: list[int]) -> None:
+    # Pairs teams into single-team-per-alliance qualification matches (the
+    # same pattern the existing captain-pick tests already use against
+    # example-game) so every team ends up with a Ranking row. The exact
+    # win/loss pattern doesn't matter for this plan's tests, which only
+    # assert on counts (how many byes, how many real games) — never on
+    # which specific team ends up holding which seed.
+    match_number = 1000
+    for i in range(0, len(team_ids) - 1, 2):
+        match = client.post(
+            "/api/matches",
+            json={
+                "session_id": session_id,
+                "round_type": "qualification",
+                "match_number": match_number,
+                "field_id": None,
+                "alliances": [
+                    {"station": "red", "team_ids": [team_ids[i]]},
+                    {"station": "blue", "team_ids": [team_ids[i + 1]]},
+                ],
+            },
+        ).json()
+        match_number += 1
+        red_id = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        blue_id = next(a["id"] for a in match["alliances"] if a["station"] == "blue")
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{red_id}/score",
+            json={"data": {"high_balls": 10, "low_balls": 0, "auto_winner": "tie"}},
+        )
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{blue_id}/score",
+            json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
+        )
+    if len(team_ids) % 2 == 1:
+        # Odd count: give the last team a match of its own too (reusing an
+        # already-ranked team as its opponent) so it still gets a Ranking row.
+        match = client.post(
+            "/api/matches",
+            json={
+                "session_id": session_id,
+                "round_type": "qualification",
+                "match_number": match_number,
+                "field_id": None,
+                "alliances": [
+                    {"station": "red", "team_ids": [team_ids[-1]]},
+                    {"station": "blue", "team_ids": [team_ids[0]]},
+                ],
+            },
+        ).json()
+        red_id = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        blue_id = next(a["id"] for a in match["alliances"] if a["station"] == "blue")
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{red_id}/score",
+            json={"data": {"high_balls": 1, "low_balls": 0, "auto_winner": "tie"}},
+        )
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{blue_id}/score",
+            json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
+        )
+
+
+def test_start_finals_single_elimination_accepts_wins_to_advance_list(client):
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+
     response = client.post(
         "/api/finals/start",
-        json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": 2},
+        json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": [1, 2]},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "selecting_alliances"
+    assert body["wins_to_advance"] == [1, 2]
+
+
+def test_start_finals_rejects_wrong_length_wins_to_advance_list(client):
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+
+    response = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": [1, 1, 1]},
     )
     assert response.status_code == 422
-    assert "not implemented" in response.json()["detail"]
+
+
+def test_generate_bracket_resolves_byes_and_seeds_pairs_correctly(client):
+    # example-game is captain_pick + single_elimination. 5 captains means 5
+    # alliances once every captain has picked a partner from the remaining
+    # 5 teams (10 teams total). capacity = 8 for bracket_size=5, giving 3
+    # round-1 byes and 1 real round-1 game.
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 10)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+
+    bracket = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 5, "wins_to_advance": 1},
+    ).json()
+    assert bracket["status"] == "selecting_alliances"
+    assert len(bracket["alliances"]) == 5
+
+    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
+    unclaimed = [t for t in team_ids if t not in claimed]
+    final_response = None
+    for i, alliance in enumerate(bracket["alliances"]):
+        final_response = client.post(
+            f"/api/finals/{bracket['id']}/pick",
+            json={
+                "captain_bracket_alliance_id": alliance["id"],
+                "partner_team_id": unclaimed[i],
+            },
+        )
+    final_body = final_response.json()
+    assert final_body["status"] == "in_progress"
+
+    matchups = final_body["matchups"]
+    assert len(matchups) == 7  # capacity 8 -> 4 round-1 + 2 round-2 + 1 final
+    round_1 = [m for m in matchups if m["round_number"] == 1]
+    assert len(round_1) == 4
+    decided_byes = [m for m in round_1 if m["winner_alliance_id"] is not None]
+    assert len(decided_byes) == 3
+
+    real_game_matchup = next(m for m in round_1 if m["winner_alliance_id"] is None)
+    assert real_game_matchup["alliance_a_id"] is not None
+    assert real_game_matchup["alliance_b_id"] is not None
+
+    games_response = client.get(f"/api/matches?session_id={session_id}")
+    finals_games = [m for m in games_response.json() if m["round_type"] == "elimination"]
+    # Round-1 produces exactly 1 real game (4v5, asserted above via
+    # real_game_matchup). But with byes going to seeds 1, 2 and 3 (seeds 6-8
+    # don't exist), round-2 slot 1 is fed by *two* round-1 byes (seed 2 and
+    # seed 3 both advance without playing), so that round-2 matchup already
+    # has both alliances known at generation time and is immediately
+    # playable too — a legitimate cascade, not a bug. Hence 2 real games
+    # total, not 1.
+    assert len(finals_games) == 2
 
 
 def test_start_finals_rejects_odd_bracket_size(cooperative_client):

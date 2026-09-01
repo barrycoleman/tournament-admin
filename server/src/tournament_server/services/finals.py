@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from tournament_server.models.alliance import Alliance, AllianceTeam
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
+from tournament_server.models.bracket_matchup import BracketMatchup
 from tournament_server.models.field import Field
 from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.finals_result import FinalsResult
@@ -107,6 +108,127 @@ def start_score_chase(db: Session, bracket: FinalsBracket) -> None:
     ).scalars().all()
     if alliances:
         create_score_chase_run(db, bracket, alliances[0])
+
+
+def _seed_order(capacity: int) -> list[int]:
+    if capacity == 1:
+        return [1]
+    half = _seed_order(capacity // 2)
+    order: list[int] = []
+    for seed in half:
+        order.append(seed)
+        order.append(capacity + 1 - seed)
+    return order
+
+
+def _create_matchup_game(db: Session, bracket: FinalsBracket, matchup: BracketMatchup) -> Match:
+    field_id = next_finals_field_id(db, bracket)
+    existing_game_count = len(
+        db.execute(
+            select(Match).where(Match.finals_bracket_id == bracket.id)
+        ).scalars().all()
+    )
+
+    match = Match(
+        session_id=bracket.session_id,
+        division_id=bracket.division_id,
+        round_type="elimination",
+        match_number=existing_game_count + 1,
+        field_id=field_id,
+        finals_bracket_id=bracket.id,
+        bracket_matchup_id=matchup.id,
+    )
+    db.add(match)
+    db.flush()
+
+    for alliance_id, station in (
+        (matchup.alliance_a_id, "red"),
+        (matchup.alliance_b_id, "blue"),
+    ):
+        alliance = Alliance(match_id=match.id, station=station)
+        db.add(alliance)
+        db.flush()
+        team_ids = [
+            row.team_id
+            for row in db.execute(
+                select(BracketAllianceTeam).where(
+                    BracketAllianceTeam.bracket_alliance_id == alliance_id
+                )
+            ).scalars().all()
+        ]
+        for team_id in team_ids:
+            db.add(AllianceTeam(alliance_id=alliance.id, team_id=team_id))
+
+    db.commit()
+    db.refresh(match)
+    return match
+
+
+def _maybe_create_matchup_game(
+    db: Session, bracket: FinalsBracket, matchup: BracketMatchup
+) -> None:
+    if matchup.winner_alliance_id is not None:
+        return
+    if matchup.alliance_a_id is None or matchup.alliance_b_id is None:
+        return
+    incomplete_game = db.execute(
+        select(Match).where(
+            Match.bracket_matchup_id == matchup.id, Match.status != "completed"
+        )
+    ).scalars().first()
+    if incomplete_game is not None:
+        return
+    _create_matchup_game(db, bracket, matchup)
+
+
+def generate_bracket(db: Session, bracket: FinalsBracket) -> None:
+    alliances_by_seed = {
+        a.seed: a.id
+        for a in db.execute(
+            select(BracketAlliance).where(BracketAlliance.bracket_id == bracket.id)
+        ).scalars().all()
+    }
+    capacity = bracket_capacity(bracket.bracket_size)
+    total_rounds = total_rounds_for_bracket_size(bracket.bracket_size)
+    order = _seed_order(capacity)
+
+    matchups: dict[tuple[int, int], BracketMatchup] = {}
+    for round_number in range(1, total_rounds + 1):
+        for position in range(capacity // (2**round_number)):
+            matchup = BracketMatchup(
+                bracket_id=bracket.id, round_number=round_number, position=position
+            )
+            db.add(matchup)
+            db.flush()
+            matchups[(round_number, position)] = matchup
+
+    for position in range(capacity // 2):
+        seed_a = order[2 * position]
+        seed_b = order[2 * position + 1]
+        matchup = matchups[(1, position)]
+        matchup.alliance_a_id = alliances_by_seed.get(seed_a)
+        matchup.alliance_b_id = alliances_by_seed.get(seed_b)
+        if matchup.alliance_a_id is not None and matchup.alliance_b_id is None:
+            matchup.winner_alliance_id = matchup.alliance_a_id
+        elif matchup.alliance_b_id is not None and matchup.alliance_a_id is None:
+            matchup.winner_alliance_id = matchup.alliance_b_id
+    db.commit()
+
+    if total_rounds > 1:
+        for position in range(capacity // 2):
+            matchup = matchups[(1, position)]
+            if matchup.winner_alliance_id is None:
+                continue
+            next_matchup = matchups[(2, position // 2)]
+            if position % 2 == 0:
+                next_matchup.alliance_a_id = matchup.winner_alliance_id
+            else:
+                next_matchup.alliance_b_id = matchup.winner_alliance_id
+        db.commit()
+
+    for round_number in range(1, total_rounds + 1):
+        for position in range(capacity // (2**round_number)):
+            _maybe_create_matchup_game(db, bracket, matchups[(round_number, position)])
 
 
 def recompute_finals_results(db: Session, bracket: FinalsBracket, game_plugin) -> None:
