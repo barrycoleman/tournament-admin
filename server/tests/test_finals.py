@@ -903,3 +903,77 @@ def test_single_elimination_full_4_alliance_bracket_traced_end_to_end(client):
     assert bracket["status"] == "complete"
     final_matchup = next(m for m in bracket["matchups"] if m["round_number"] == 2)
     assert final_matchup["winner_alliance_id"] is not None
+
+
+def test_resubmitting_a_decided_matchups_game_does_not_re_decide_it(client):
+    # Mirrors test_resubmitting_a_completed_run_does_not_create_an_extra_run's
+    # score-chase resubmission-safety check, but for single-elimination:
+    # advance_single_elimination's first guard ("matchup.winner_alliance_id
+    # is not None") must make a post-hoc correction to an already-decided
+    # matchup's completed game a no-op — it must not re-decide the matchup,
+    # touch its advanced winner, or spawn an extra game.
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+
+    bracket = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": [1, 2]},
+    ).json()
+    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
+    unclaimed = [t for t in team_ids if t not in claimed]
+    final_response = None
+    for i, alliance in enumerate(bracket["alliances"]):
+        final_response = client.post(
+            f"/api/finals/{bracket['id']}/pick",
+            json={
+                "captain_bracket_alliance_id": alliance["id"],
+                "partner_team_id": unclaimed[i],
+            },
+        )
+    bracket = final_response.json()
+
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    finals_games = [m for m in matches_response.json() if m["round_type"] == "elimination"]
+    assert len(finals_games) == 2  # both round-1 games created immediately (no byes)
+
+    # Decide one round-1 matchup outright: red wins 10-0 (wins_to_advance[0]=1).
+    game = next(m for m in finals_games if any(a["station"] == "red" for a in m["alliances"]))
+    red_id = next(a["id"] for a in game["alliances"] if a["station"] == "red")
+    blue_id = next(a["id"] for a in game["alliances"] if a["station"] == "blue")
+    client.post(
+        f"/api/matches/{game['id']}/alliances/{red_id}/score",
+        json={"data": {"high_balls": 10, "low_balls": 0, "auto_winner": "tie"}},
+    )
+    client.post(
+        f"/api/matches/{game['id']}/alliances/{blue_id}/score",
+        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
+    )
+
+    bracket = client.get(f"/api/finals/{bracket['id']}").json()
+    matchups_after_decision = bracket["matchups"]
+    decided = [m for m in matchups_after_decision if m["winner_alliance_id"] is not None]
+    assert len(decided) == 1  # only the one matchup we just played is decided
+
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    finals_games_after_decision = [
+        m for m in matches_response.json() if m["round_type"] == "elimination"
+    ]
+    assert len(finals_games_after_decision) == 2  # no extra game created for the decided matchup;
+    # the final isn't created yet since its other side is still unknown.
+
+    # Resubmit a correction to that SAME already-completed game — e.g. red's
+    # score is corrected upward (still a red win, but the point is the
+    # matchup must not be reprocessed at all, regardless of the new score).
+    client.post(
+        f"/api/matches/{game['id']}/alliances/{red_id}/score",
+        json={"data": {"high_balls": 20, "low_balls": 0, "auto_winner": "tie"}},
+    )
+
+    bracket = client.get(f"/api/finals/{bracket['id']}").json()
+    assert bracket["matchups"] == matchups_after_decision  # nothing changed
+
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    finals_games_after_resubmit = [
+        m for m in matches_response.json() if m["round_type"] == "elimination"
+    ]
+    assert len(finals_games_after_resubmit) == 2  # still no extra game created
