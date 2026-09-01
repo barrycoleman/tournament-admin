@@ -17,6 +17,6 @@ class FinalsBracket(Base):
     field_set_id: Mapped[int] = mapped_column(ForeignKey("field_sets.id"))
     format: Mapped[str] = mapped_column(String(20))
     bracket_size: Mapped[int] = mapped_column(Integer)
-    wins_to_advance: Mapped[int] = mapped_column(Integer, default=1)
+    wins_to_advance: Mapped[str] = mapped_column(String, default="[1]")
     status: Mapped[str] = mapped_column(String(30), default="selecting_alliances")
     next_field_index: Mapped[int] = mapped_column(Integer, default=0)

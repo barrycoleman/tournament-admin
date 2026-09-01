@@ -14,6 +14,36 @@ from tournament_server.models.match import Match
 from tournament_server.models.score_record import ScoreRecord
 
 
+def bracket_capacity(bracket_size: int) -> int:
+    capacity = 1
+    while capacity < bracket_size:
+        capacity *= 2
+    return capacity
+
+
+def total_rounds_for_bracket_size(bracket_size: int) -> int:
+    return bracket_capacity(bracket_size).bit_length() - 1
+
+
+def expand_wins_to_advance(raw: int | list[int], total_rounds: int) -> list[int]:
+    if isinstance(raw, int):
+        if raw < 1:
+            raise ValueError("wins_to_advance must be at least 1")
+        return [raw] * total_rounds
+    if len(raw) != total_rounds:
+        raise ValueError(
+            f"wins_to_advance list must have exactly {total_rounds} entries "
+            f"for this bracket_size, got {len(raw)}"
+        )
+    if any(v < 1 for v in raw):
+        raise ValueError("every wins_to_advance entry must be at least 1")
+    return list(raw)
+
+
+def wins_to_advance_for_round(bracket: FinalsBracket, round_number: int) -> int:
+    return json.loads(bracket.wins_to_advance)[round_number - 1]
+
+
 def next_finals_field_id(db: Session, bracket: FinalsBracket) -> int:
     field_ids = [
         f.id

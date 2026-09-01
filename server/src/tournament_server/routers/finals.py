@@ -94,13 +94,14 @@ def _to_finals_bracket_read(
         field_set_id=bracket.field_set_id,
         format=bracket.format,
         bracket_size=bracket.bracket_size,
-        wins_to_advance=bracket.wins_to_advance,
+        wins_to_advance=json.loads(bracket.wins_to_advance),
         status=bracket.status,
         alliances=[_to_bracket_alliance_read(a, db) for a in alliances],
         runs=runs,
         results=[
             FinalsResultRead.model_validate(r, from_attributes=True) for r in results
         ],
+        matchups=[],
     )
 
 
@@ -209,7 +210,7 @@ def start_finals(
         field_set_id=field_set_id,
         format=finals_format,
         bracket_size=payload.bracket_size,
-        wins_to_advance=1,
+        wins_to_advance=json.dumps([1]),
         status="selecting_alliances",
     )
     db.add(bracket)

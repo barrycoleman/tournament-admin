@@ -1,5 +1,6 @@
 from tournament_server.models.alliance import Alliance, AllianceTeam
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
+from tournament_server.models.bracket_matchup import BracketMatchup
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
 from tournament_server.models.field import Field
@@ -20,6 +21,7 @@ __all__ = [
     "AllianceTeam",
     "BracketAlliance",
     "BracketAllianceTeam",
+    "BracketMatchup",
     "Division",
     "Event",
     "Field",

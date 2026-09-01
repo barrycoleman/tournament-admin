@@ -7,8 +7,19 @@ class FinalsStartRequest(BaseModel):
     session_id: int
     division_id: int | None = None
     bracket_size: int
-    wins_to_advance: int | None = None
+    wins_to_advance: int | list[int] | None = None
     field_set_id: int | None = None
+
+
+class BracketMatchupRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    round_number: int
+    position: int
+    alliance_a_id: int | None
+    alliance_b_id: int | None
+    winner_alliance_id: int | None
 
 
 class BracketAllianceRead(BaseModel):
@@ -41,11 +52,12 @@ class FinalsBracketRead(BaseModel):
     field_set_id: int
     format: str
     bracket_size: int
-    wins_to_advance: int
+    wins_to_advance: list[int]
     status: str
     alliances: list[BracketAllianceRead]
     runs: list[FinalsRunRead]
     results: list[FinalsResultRead]
+    matchups: list[BracketMatchupRead]
 
 
 class FinalsPickRequest(BaseModel):
