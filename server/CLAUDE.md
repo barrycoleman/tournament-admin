@@ -181,10 +181,49 @@ qualification-stage `teams_per_alliance` — formed once via `POST
 `POST /api/finals/{id}/pick` calls in strict seed order (for
 `captain_pick`).
 
-**Only `score_chase` has an engine right now.** `POST /api/finals/start`
-explicitly rejects `single_elimination` with a 422 — the contract accepts
-either declared value and the conformance tool validates both, but
-starting a bracket for a `single_elimination` game isn't implemented yet.
+`single_elimination` brackets use `BracketMatchup` (`id, bracket_id,
+round_number, position, alliance_a_id, alliance_b_id, winner_alliance_id`)
+for the tree — which matchup feeds which is computed from
+`round_number`/`position` arithmetic (`(round, position)` feeds into
+`(round + 1, position // 2)`), never stored as an explicit pointer.
+Seeding uses the standard recursive tournament-bracket order
+(`services/finals.py`'s `_seed_order`), with byes going to the top seeds
+when `bracket_size` isn't a power of two — byes only ever occur in round
+1 (a property guaranteed by `bracket_capacity` always picking the
+smallest power of two `>= bracket_size`), so bracket generation resolves
+them with a single forward pass into round 2, not a repeated cascade.
+
+A matchup's first game is created the instant both its sides are known
+(from seeding, a bye, or an earlier matchup's winner) — `submit_score`
+detects `Match.bracket_matchup_id` and calls
+`services/finals.py`'s `advance_single_elimination`, which counts a
+series' decided games (a tie counts toward neither side) against that
+round's `wins_to_advance` and creates another game, decides the matchup,
+or does nothing if the last completed game wasn't the last one currently
+in flight (the same score-correction safety `advance_score_chase` already
+has for score-chase). `wins_to_advance` is a per-round list (`POST
+/api/finals/start` accepts a single int, expanded uniformly, or an
+explicit list whose length must exactly match the bracket's round count)
+— e.g. `[1, 1, 1, 2]` for a bracket where every round is single-game
+except a best-of-3 final.
+
+`POST /api/finals/{id}/alliances/{alliance_id}/unavailable`
+(`single_elimination` only, bracket must be `"in_progress"`) marks a
+`BracketAlliance.unavailable` and resolves an immediate walkover if its
+current matchup's opponent is already known (mid-series or not);
+otherwise the flag is simply checked later, at the moment that matchup
+would otherwise get its first game.
+
+`DELETE /api/finals/{id}` cascades the bracket and everything it created
+(alliances, matchups or results, matches/alliances/scores) — 409 once the
+bracket is `"complete"`, matching `DELETE /api/schedule`'s existing
+cascade-delete pattern for qualification rounds.
+
+Starting a `captain_pick` bracket (either format) additionally requires
+`2 * bracket_size` teams checked into the session
+(`SessionParticipation.checked_in`) — enough for both the captains and
+the partners they'll pick — using the same eligible-team-pool query
+`routers/schedule.py`'s `generate_schedule` already builds.
 
 A `score_chase` bracket runs its `BracketAlliance` entrants one at a time,
 worst seed to best, each as a single solo `Match` (one `Alliance`
