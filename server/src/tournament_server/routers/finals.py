@@ -16,6 +16,7 @@ from tournament_server.models.field_set import FieldSet
 from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.finals_result import FinalsResult
 from tournament_server.models.match import Match
+from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.ranking import Ranking
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.session import TournamentSession
@@ -204,6 +205,33 @@ def start_finals(
         raise HTTPException(
             status_code=422, detail="This FieldSet has no fields configured"
         )
+
+    if alliance_selection == "captain_pick":
+        participation_query = select(SessionParticipation).where(
+            SessionParticipation.session_id == payload.session_id,
+            SessionParticipation.checked_in.is_(True),
+        )
+        checked_in_team_ids = [
+            row.team_id for row in db.execute(participation_query).scalars().all()
+        ]
+        eligible_team_query = select(Team).where(Team.id.in_(checked_in_team_ids))
+        if payload.division_id is None:
+            eligible_team_query = eligible_team_query.where(Team.division_id.is_(None))
+        else:
+            eligible_team_query = eligible_team_query.where(
+                Team.division_id == payload.division_id
+            )
+        eligible_team_count = len(db.execute(eligible_team_query).scalars().all())
+        needed_total_teams = payload.bracket_size * 2
+        if eligible_team_count < needed_total_teams:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Only {eligible_team_count} teams checked into this "
+                    f"session, need {needed_total_teams} for a captain_pick "
+                    f"bracket of size {payload.bracket_size}"
+                ),
+            )
 
     ranking_query = select(Ranking).where(Ranking.session_id == payload.session_id)
     if payload.division_id is None:

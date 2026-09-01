@@ -78,6 +78,14 @@ def _setup_ranked_teams_for_example_game(client, count: int) -> tuple[int, list[
         ).json()["id"]
         for i in range(count)
     ]
+    # example-game is captain_pick, which now requires 2 * bracket_size teams
+    # checked into the session before /api/finals/start will even form a
+    # bracket, so every caller of this helper needs its teams checked in.
+    for team_id in team_ids:
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
     return session_id, team_ids
 
 
@@ -300,6 +308,11 @@ def test_captain_pick_rejects_out_of_turn_pick(captain_pick_client):
         client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
         for i in range(4)
     ]
+    for team_id in team_ids:
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
     match = client.post(
         "/api/matches",
         json={
@@ -379,6 +392,11 @@ def test_captain_pick_rejects_already_claimed_partner(captain_pick_client):
         client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
         for i in range(4)
     ]
+    for team_id in team_ids:
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
     match = client.post(
         "/api/matches",
         json={
@@ -453,6 +471,11 @@ def test_captain_pick_completes_bracket_once_every_captain_has_picked(captain_pi
         client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
         for i in range(4)
     ]
+    for team_id in team_ids:
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
     match = client.post(
         "/api/matches",
         json={
@@ -1011,3 +1034,52 @@ def test_resubmitting_a_decided_matchups_game_does_not_re_decide_it(client):
         m for m in matches_response.json() if m["round_type"] == "elimination"
     ]
     assert len(finals_games_after_resubmit) == 2  # still no extra game created
+
+
+def test_start_finals_rejects_insufficient_checked_in_teams_for_captain_pick(captain_pick_client):
+    client = captain_pick_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "captain-pick-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    team_ids = [
+        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
+        for i in range(4)
+    ]
+    # Only check in 3 of the 4 teams a bracket_size=2 captain_pick bracket needs.
+    for team_id in team_ids[:3]:
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+
+    match = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [team_ids[0]]},
+                {"station": "blue", "team_ids": [team_ids[1]]},
+            ],
+        },
+    ).json()
+    red_id = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+    blue_id = next(a["id"] for a in match["alliances"] if a["station"] == "blue")
+    client.post(
+        f"/api/matches/{match['id']}/alliances/{red_id}/score",
+        json={"data": {"high_balls": 10, "low_balls": 0, "auto_winner": "tie"}},
+    )
+    client.post(
+        f"/api/matches/{match['id']}/alliances/{blue_id}/score",
+        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
+    )
+
+    response = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 2},
+    )
+    assert response.status_code == 422
