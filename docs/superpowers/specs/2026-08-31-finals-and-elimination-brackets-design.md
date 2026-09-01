@@ -24,12 +24,17 @@ apply to the already-shipped score-chase engine:
   as available, not the additional `N` partners the bracket structurally
   needs) — this closes a gap that applies to a `captain_pick` bracket of
   either finals format, not just `single_elimination`.
+- `wins_to_advance` becomes a **per-round** value instead of one flat
+  value for the whole bracket (e.g. best-of-1 for every round except a
+  best-of-3 final) — originally deferred in §1/§9, added now since the
+  marginal cost is low while this phase is already building the
+  series-decision logic that needs to consult it.
 
 Phase 6a also left `wins_to_advance` accepted by `POST /api/finals/start`
 but silently discarded (hardcoded to `1`) — score-chase never uses it,
 and no implementation of `single_elimination` existed yet to consume it.
-This revision makes it real: required and validated (≥1) when the game's
-`finals_format` is `single_elimination`, exactly as §6 already specified.
+This revision makes it real: required and validated when the game's
+`finals_format` is `single_elimination`, per the per-round shape below.
 
 ## 0. Project constraint
 
@@ -90,12 +95,14 @@ Explicitly out of scope / deferred:
 - **Captain decline/backout** during the pick process — captains pick in
   strict seed order with no mechanism to decline a pick and cede the slot,
   a real feature of some real events that's out of scope here.
-- **Per-round `wins_to_advance` variation** (e.g. best-of-1 early rounds,
-  best-of-3 finals) — one `wins_to_advance` value for the whole bracket.
 - **Multi-division finals collisions within one session** — the same class
   of gap already documented as a known, deliberate limitation for
   qualification scheduling (Phase 4's spec/CLAUDE.md); not solved here
   either.
+- **Per-round `wins_to_advance` in a `score_chase` bracket** — meaningless
+  there (no series, no rounds in that sense) and stays that way; the
+  per-round shape (§3, §4) is `single_elimination`-only. (Per-round
+  variation *within* `single_elimination` is no longer deferred — see §3.)
 - **WebSocket broadcast** of newly-created matches — the master spec's
   real-time design (§6) explicitly calls out "a freshly generated
   elimination match appears instantly" as a WebSocket concern; this phase
@@ -134,7 +141,16 @@ declared key must be present" conformance philosophy. `example-game`
   ("single_elimination" | "score_chase"), bracket_size (N), wins_to_advance
   (meaningful only for "single_elimination"; ignored for "score_chase"),
   status ("selecting_alliances" | "in_progress" | "complete")`. One row
-  per division per finals run. `field_set_id` is fixed for the bracket's
+  per division per finals run. `wins_to_advance` is stored as a JSON-
+  encoded list of ints, one entry per round (`total_rounds =
+  log2(next_power_of_2(bracket_size))`), the same JSON-as-text pattern
+  `ScoreRecord.data_json` already uses elsewhere in this codebase — index
+  0 is round 1, the last index is the final round. `POST /api/finals/start`
+  (§6) accepts either a single int (expanded server-side into a uniform
+  list of the right length) or an explicit list of exactly `total_rounds`
+  entries — e.g. `[1, 1, 1, 2]` for a 4-round bracket where every round is
+  best-of-1 except a best-of-3 final. `field_set_id` is fixed for the
+  bracket's
   entire lifetime — a finals bracket runs as one sequence on one set of
   fields, unlike qualification scheduling, which deliberately spreads
   across multiple *concurrently*-running field sets (§9's cross-division
@@ -243,11 +259,14 @@ created:
   games so far: a **tied** game's alliance scores don't count toward
   either side's series win count (the series simply continues — an extra
   game beyond the theoretical minimum is generated the same way any other
-  game is, no special-casing needed). Once one side reaches
-  `wins_to_advance` wins, the matchup is decided: `winner_alliance_id` is
-  set, and that alliance is placed into the next round's matchup — whose
-  first game is then created immediately if its other side is already
-  known too (and not itself `unavailable`).
+  game is, no special-casing needed). Once one side reaches that
+  matchup's `round_number`'s entry in the bracket's per-round
+  `wins_to_advance` list (§3) — e.g. a matchup in the final round needs
+  more wins than one in round 1 of a bracket configured `[1, 1, 1, 2]` —
+  the matchup is decided: `winner_alliance_id` is set, and that alliance
+  is placed into the next round's matchup — whose first game is then
+  created immediately if its other side is already known too (and not
+  itself `unavailable`).
 - The bracket's final matchup (the one whose winner feeds no further
   matchup, i.e. the highest `round_number`) being decided moves the whole
   `FinalsBracket` to `"complete"`.
@@ -321,11 +340,15 @@ concept.
 ## 6. Endpoints
 
 - **`POST /api/finals/start`** — `{session_id, division_id, bracket_size,
-  wins_to_advance, field_set_id}` (`wins_to_advance` required, ≥1, only
-  for `single_elimination`, per the game's declared `finals_format`;
-  ignored otherwise. `field_set_id` optional, auto-defaulting to the
-  session's sole `FieldSet` — 422 if omitted and the session has more than
-  one). Validates the division has at least `bracket_size` ranked teams,
+  wins_to_advance, field_set_id}` (`wins_to_advance` required only for
+  `single_elimination`, per the game's declared `finals_format`; ignored
+  otherwise. Accepts either a single int ≥1, expanded server-side into a
+  uniform per-round list, or an explicit list of ints each ≥1 whose length
+  must exactly equal `total_rounds = log2(next_power_of_2(bracket_size))`
+  — 422, naming the expected length, if the list is the wrong size.
+  `field_set_id` optional, auto-defaulting to the session's sole
+  `FieldSet` — 422 if omitted and the session has more than one).
+  Validates the division has at least `bracket_size` ranked teams,
   creates the `FinalsBracket`, and either forms all `BracketAlliance` rows
   immediately (`seed_pairing`) or creates just the captain placeholders
   (`captain_pick`). For `captain_pick`, additionally validates at least
@@ -342,11 +365,13 @@ concept.
   `BracketAlliance` in this bracket. Once every captain has picked,
   triggers bracket generation (§4) or the first score-chase run (§5).
 - **`GET /api/finals/{bracket_id}`** — current state: `format, status,
-  bracket_size, wins_to_advance`, the `BracketAlliance` list (with team
-  rosters, seeds, and `unavailable`), and either the `BracketMatchup` tree
-  (with each matchup's current alliances/winner) or the score-chase run
-  order with completed scores/current `FinalsResult` standings, depending
-  on `format`.
+  bracket_size`, `wins_to_advance` (always returned as the full per-round
+  list, even when the bracket was started with a single-int shorthand),
+  the `BracketAlliance` list (with team rosters, seeds, and
+  `unavailable`), and either the `BracketMatchup` tree (with each
+  matchup's current alliances/winner) or the score-chase run order with
+  completed scores/current `FinalsResult` standings, depending on
+  `format`.
 - **`POST /api/finals/{bracket_id}/alliances/{alliance_id}/unavailable`**
   — `single_elimination` only, only while the bracket is `"in_progress"`.
   See §4's Walkovers subsection for the full resolution behavior.
@@ -389,6 +414,11 @@ with, so qualification ranking logic doesn't apply to it at all.
   appearing the instant both its sides are known (not before); a
   hand-computed full small bracket (e.g. 4 or 8 entrants) traced
   end-to-end.
+- Per-round `wins_to_advance`: a single-int start expands to a uniform
+  per-round list; an explicit list of the correct length is honored
+  per-round (e.g. `[1, 1, 1, 2]` — an early-round matchup decides after
+  one win, the final needs two); a list of the wrong length 422s naming
+  the expected length.
 - Walkovers: an unavailable alliance whose opponent is already known
   resolves immediately, including mid-series (after at least one game has
   already been played); an unavailable alliance whose opponent isn't
@@ -413,9 +443,10 @@ with, so qualification ranking logic doesn't apply to it at all.
 
 ## 9. Deferred / open items
 
-- Double elimination, captain decline/backout, per-round
-  `wins_to_advance`, multi-division same-session collisions, and WebSocket
-  broadcast — see §1.
+- Double elimination, captain decline/backout, multi-division
+  same-session collisions, and WebSocket broadcast — see §1. (Per-round
+  `wins_to_advance` for `single_elimination` is no longer deferred — see
+  §3/§4/§6.)
 - Per-team (rather than whole-`BracketAlliance`) unavailability — a pair
   competes and forfeits as one unit throughout this design; a pair with
   only one team able to play isn't modeled.
