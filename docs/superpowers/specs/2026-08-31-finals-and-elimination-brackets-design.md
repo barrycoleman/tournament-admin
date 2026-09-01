@@ -3,6 +3,34 @@
 Status: approved for planning
 Date: 2026-08-31
 
+**Revision note (2026-08-31, second pass):** §§2-3 and §5 (the contract
+additions, shared alliance-formation foundation, and score-chase engine)
+were implemented and merged as "Phase 6a" before this revision. This
+revision covers "Phase 6b": the single-elimination engine (§4), plus three
+additions found necessary once real usage surfaced gaps Phase 6a's own
+final review caught — none of these were in the original scope, and none
+apply to the already-shipped score-chase engine:
+
+- §3 gains `BracketAlliance.unavailable`, consulted only by §4's walkover
+  logic (score-chase already has a working "unavailable" story via the
+  existing `no_show` scoring flag — see §5 — because a run's `Match`
+  always exists by the time it's that alliance's turn; a single-elimination
+  matchup several rounds deep may have no `Match` yet when a team
+  withdraws, so it needs its own advance-marking mechanism).
+- §6 gains `DELETE /api/finals/{id}` and
+  `POST /api/finals/{id}/alliances/{alliance_id}/unavailable`.
+- §6's `POST /api/finals/start` gains an upfront team-sufficiency check for
+  `captain_pick` brackets (previously only the `N` captains were validated
+  as available, not the additional `N` partners the bracket structurally
+  needs) — this closes a gap that applies to a `captain_pick` bracket of
+  either finals format, not just `single_elimination`.
+
+Phase 6a also left `wins_to_advance` accepted by `POST /api/finals/start`
+but silently discarded (hardcoded to `1`) — score-chase never uses it,
+and no implementation of `single_elimination` existed yet to consume it.
+This revision makes it real: required and validated (≥1) when the game's
+`finals_format` is `single_elimination`, exactly as §6 already specified.
+
 ## 0. Project constraint
 
 Nothing in this project's code, comments, documentation, file names, or
@@ -113,12 +141,17 @@ declared key must be present" conformance philosophy. `example-game`
   collision caveat is the qualification-side version of the same
   "concurrent field sets" idea; a finals bracket sidesteps it by using
   exactly one).
-- **`BracketAlliance`** — `id, bracket_id, seed (1..N)`. A persistent
-  finals pair, distinct from the existing per-match `Alliance` model
-  (which stays exactly as-is — a finals *game*/*run* still creates real
-  `Alliance`/`AllianceTeam` rows the same way a qualification match does,
-  snapshotting the `BracketAlliance`'s current team roster at the moment
-  each game/run is generated).
+- **`BracketAlliance`** — `id, bracket_id, seed (1..N), unavailable (bool,
+  default false)`. A persistent finals pair, distinct from the existing
+  per-match `Alliance` model (which stays exactly as-is — a finals
+  *game*/*run* still creates real `Alliance`/`AllianceTeam` rows the same
+  way a qualification match does, snapshotting the `BracketAlliance`'s
+  current team roster at the moment each game/run is generated).
+  `unavailable` is consulted only by §4's single-elimination walkover
+  logic — a whole-pair flag (not per-team), since a finals pair competes
+  as one inseparable unit everywhere else in this design; if one team of
+  a pair can't compete, the pair forfeits as a unit, not with one team
+  playing alone.
 - **`BracketAllianceTeam`** — `id, bracket_alliance_id, team_id`. Always
   exactly 2 rows per `BracketAlliance` once formation completes (captain +
   partner, or the two seed-paired teams).
@@ -179,15 +212,33 @@ cell; which matchup feeds which is computed from `round_number`/`position`
 arithmetic (a matchup at `(round, position)` feeds the winner into
 `(round + 1, position // 2)`), not stored as an explicit pointer.
 
+**Seeding-with-byes construction**: entrants are assigned to tree
+positions via the standard recursive bracket-seeding order — `order(1) =
+[1]`; `order(2k)` is built by taking each seed `s` in `order(k)` in turn
+and emitting `s` followed by `capacity + 1 - s` (`capacity` = the final
+bracket size). For a capacity-8 bracket this produces `[1, 8, 4, 5, 2, 7,
+3, 6]`, i.e. round-1 pairs `1v8, 4v5, 2v7, 3v6` — the standard seeding
+every bracket sport uses, so the best seeds face the weakest opposition
+first. A seed number beyond `N` (there is no entrant) is a bye. All
+`BracketMatchup` rows for every round are created upfront with whichever
+sides are already known from this placement; any round-1 matchup with one
+real entrant and one bye resolves immediately (`winner_alliance_id` set to
+the real entrant, zero games played), and that resolution cascades forward
+through the tree — a matchup whose newly-known side is itself a
+just-resolved bye is resolved the same way, repeated until no further
+byes cascade — before any real `Match` is created for anything.
+
 **Game-by-game series progression**: rather than creating an entire
 best-of-`wins_to_advance` series upfront, only the next needed game is
 created:
 
 - The moment both sides of a `BracketMatchup` are known (either from
-  initial seeding, or from an earlier matchup's winner being placed here),
-  its first game is created immediately — a real `Match` (`round_type:
-  "elimination"`, `bracket_matchup_id` set) with two `Alliance` rows
-  snapshotting each `BracketAlliance`'s current team roster.
+  initial seeding/bye resolution, or from an earlier matchup's winner
+  being placed here) — and neither side is currently `unavailable` (see
+  below) — its first game is created immediately — a real `Match`
+  (`round_type: "elimination"`, `bracket_matchup_id` set) with two
+  `Alliance` rows snapshotting each `BracketAlliance`'s current team
+  roster.
 - After each game's scores are recorded, count that matchup's decided
   games so far: a **tied** game's alliance scores don't count toward
   either side's series win count (the series simply continues — an extra
@@ -196,13 +247,38 @@ created:
   `wins_to_advance` wins, the matchup is decided: `winner_alliance_id` is
   set, and that alliance is placed into the next round's matchup — whose
   first game is then created immediately if its other side is already
-  known too.
-- A `BracketAlliance` (or one of its teams) marked `unavailable` causes an
-  automatic walkover: its matchup is decided in the opponent's favor with
-  zero games played, and the opponent advances immediately.
-- The bracket's final matchup (the one with no `feeds_into` target, i.e.
-  the highest `round_number`) being decided moves the whole
+  known too (and not itself `unavailable`).
+- The bracket's final matchup (the one whose winner feeds no further
+  matchup, i.e. the highest `round_number`) being decided moves the whole
   `FinalsBracket` to `"complete"`.
+
+**Walkovers**: `POST /api/finals/{id}/alliances/{alliance_id}/unavailable`
+(only valid while the bracket is `"in_progress"`) sets
+`BracketAlliance.unavailable = true` and immediately re-checks that
+alliance's current matchup, however far the bracket has progressed:
+
+- If the matchup's opponent side is already known (whether or not a game
+  has already been played in this series — a mid-series withdrawal
+  forfeits the remainder of the series the same as one that never
+  started), the matchup is decided in the opponent's favor right away,
+  with no further games, and the winner is placed into the next round
+  exactly as an ordinary decision would be. If the current game in that
+  series already exists as a `Match` but hasn't been scored yet, it's
+  left as-is (`status` stays whatever it was) rather than deleted or
+  force-completed — it simply becomes an inert, unscored artifact of a
+  matchup that resolved before it was played, the same way a bye leaves
+  no `Match` at all for the round it skipped.
+- If the matchup's opponent side isn't known yet (this alliance is
+  waiting on an earlier round to finish), nothing resolves immediately —
+  the flag is simply set, and is checked at the moment this matchup would
+  otherwise get its first game created (the "both sides known" check
+  above also checks `unavailable`); if the alliance is still marked
+  unavailable at that point, the matchup resolves as a walkover then
+  instead of a game being created.
+- Marking the *opponent* of an already-decided matchup unavailable has no
+  effect (the matchup is already decided; there is nothing left to walk
+  over). Marking an alliance unavailable that has already lost a matchup
+  is a no-op for the same reason — it's already out of the bracket.
 
 ## 5. Score-chase sequence
 
@@ -245,14 +321,20 @@ concept.
 ## 6. Endpoints
 
 - **`POST /api/finals/start`** — `{session_id, division_id, bracket_size,
-  wins_to_advance, field_set_id}` (`wins_to_advance` required only for
-  `single_elimination`, per the game's declared `finals_format`; ignored
-  otherwise. `field_set_id` optional, auto-defaulting to the session's
-  sole `FieldSet` — 422 if omitted and the session has more than one).
-  Validates the division has at least `bracket_size` ranked teams, creates
-  the `FinalsBracket`, and either forms all `BracketAlliance` rows
+  wins_to_advance, field_set_id}` (`wins_to_advance` required, ≥1, only
+  for `single_elimination`, per the game's declared `finals_format`;
+  ignored otherwise. `field_set_id` optional, auto-defaulting to the
+  session's sole `FieldSet` — 422 if omitted and the session has more than
+  one). Validates the division has at least `bracket_size` ranked teams,
+  creates the `FinalsBracket`, and either forms all `BracketAlliance` rows
   immediately (`seed_pairing`) or creates just the captain placeholders
-  (`captain_pick`).
+  (`captain_pick`). For `captain_pick`, additionally validates at least
+  `2 × bracket_size` teams are checked into the session (via
+  `SessionParticipation.checked_in`, scoped to the division the same way
+  the qualification-scheduling team pool already is) — `bracket_size`
+  captains plus `bracket_size` more teams to be picked as partners — 422
+  if fewer, since a `captain_pick` bracket that can't structurally be
+  filled would otherwise sit in `"selecting_alliances"` forever.
 - **`POST /api/finals/{bracket_id}/pick`** — `{captain_bracket_alliance_id,
   partner_team_id}` (`captain_pick` only). Validates it's that captain's
   turn (the lowest-seeded `BracketAlliance` in this bracket that doesn't
@@ -261,10 +343,22 @@ concept.
   triggers bracket generation (§4) or the first score-chase run (§5).
 - **`GET /api/finals/{bracket_id}`** — current state: `format, status,
   bracket_size, wins_to_advance`, the `BracketAlliance` list (with team
-  rosters and seeds), and either the `BracketMatchup` tree (with each
-  matchup's current alliances/winner) or the score-chase run order with
-  completed scores/current `FinalsResult` standings, depending on
-  `format`.
+  rosters, seeds, and `unavailable`), and either the `BracketMatchup` tree
+  (with each matchup's current alliances/winner) or the score-chase run
+  order with completed scores/current `FinalsResult` standings, depending
+  on `format`.
+- **`POST /api/finals/{bracket_id}/alliances/{alliance_id}/unavailable`**
+  — `single_elimination` only, only while the bracket is `"in_progress"`.
+  See §4's Walkovers subsection for the full resolution behavior.
+- **`DELETE /api/finals/{bracket_id}`** — 409 if `status == "complete"`
+  (a finished bracket's results are the record of what happened —
+  redoing one is a deliberate new `POST /api/finals/start`, not a
+  delete-and-retry). Otherwise cascades: the `FinalsBracket` itself, its
+  `BracketAlliance`/`BracketAllianceTeam` rows, its `BracketMatchup` rows
+  (`single_elimination`) or `FinalsResult` rows (`score_chase`), and every
+  `Match`/`Alliance`/`AllianceTeam`/`ScoreRecord` this bracket created —
+  mirroring the cascading-delete scope `DELETE /api/schedule` already uses
+  for a qualification round.
 
 ## 7. Integration with score submission
 
@@ -289,26 +383,42 @@ with, so qualification ranking logic doesn't apply to it at all.
   match; `POST /api/finals/start` auto-defaults `field_set_id` correctly
   when the session has exactly one, and 422s when it has more than one
   and none was specified.
-- Single-elimination: seeding math with and without byes; a tied game not
-  counting toward either side's series win; a walkover for an unavailable
-  entrant; the next matchup's first game appearing the instant both its
-  sides are known (not before); a hand-computed full small bracket (e.g.
-  4 or 8 entrants) traced end-to-end.
+- Single-elimination: seeding math with and without byes, including a bye
+  cascading through two consecutive rounds; a tied game not counting
+  toward either side's series win; the next matchup's first game
+  appearing the instant both its sides are known (not before); a
+  hand-computed full small bracket (e.g. 4 or 8 entrants) traced
+  end-to-end.
+- Walkovers: an unavailable alliance whose opponent is already known
+  resolves immediately, including mid-series (after at least one game has
+  already been played); an unavailable alliance whose opponent isn't
+  known yet resolves the moment that opponent is determined; marking an
+  already-decided matchup's participants unavailable is a no-op.
 - Score-chase: run order is strictly worst-seed-first; the next run isn't
   created until the previous one's score is submitted; `FinalsResult`
   ranking and its seed-based tiebreak; an `unavailable` entrant recorded
-  as a zero-score run, not skipped.
+  as a zero-score run, not skipped (this is score-chase's pre-existing
+  `no_show`-based mechanism, unrelated to the new `BracketAlliance
+  .unavailable` field, which single-elimination alone consults).
 - Captain-pick: turn enforcement (rejecting an out-of-turn pick), rejecting
   a partner already claimed by another alliance, the bracket only leaving
-  `"selecting_alliances"` once every captain has picked.
+  `"selecting_alliances"` once every captain has picked, and the new
+  upfront `2 × bracket_size` checked-in-team sufficiency check (422 when
+  short, for both finals formats).
 - Seed-pairing: correct adjacent-pair formation, and the 422 case for an
   odd `bracket_size`.
+- `DELETE /api/finals/{id}`: full cascade verified (no orphaned `Match`/
+  `Alliance`/`BracketMatchup`/`FinalsResult` rows survive), and the 409
+  when `status == "complete"`.
 
 ## 9. Deferred / open items
 
 - Double elimination, captain decline/backout, per-round
   `wins_to_advance`, multi-division same-session collisions, and WebSocket
   broadcast — see §1.
+- Per-team (rather than whole-`BracketAlliance`) unavailability — a pair
+  competes and forfeits as one unit throughout this design; a pair with
+  only one team able to play isn't modeled.
 - **Awards** (master spec §3's `Award` model — name, type, session/division
   scope, recipient) aren't touched by this phase; a finals bracket's
   results are queryable (`GET /api/finals/{id}`, `FinalsResult`) but
