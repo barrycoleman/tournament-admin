@@ -231,6 +231,108 @@ def generate_bracket(db: Session, bracket: FinalsBracket) -> None:
             _maybe_create_matchup_game(db, bracket, matchups[(round_number, position)])
 
 
+def _decide_matchup(
+    db: Session, bracket: FinalsBracket, winner_id: int, matchup: BracketMatchup
+) -> None:
+    matchup.winner_alliance_id = winner_id
+    db.add(matchup)
+    db.commit()
+
+    total_rounds = total_rounds_for_bracket_size(bracket.bracket_size)
+    if matchup.round_number == total_rounds:
+        bracket.status = "complete"
+        db.add(bracket)
+        db.commit()
+        return
+
+    next_matchup = db.execute(
+        select(BracketMatchup).where(
+            BracketMatchup.bracket_id == bracket.id,
+            BracketMatchup.round_number == matchup.round_number + 1,
+            BracketMatchup.position == matchup.position // 2,
+        )
+    ).scalars().first()
+    if matchup.position % 2 == 0:
+        next_matchup.alliance_a_id = winner_id
+    else:
+        next_matchup.alliance_b_id = winner_id
+    db.add(next_matchup)
+    db.commit()
+    _maybe_create_matchup_game(db, bracket, next_matchup)
+
+
+def advance_single_elimination(
+    db: Session, bracket: FinalsBracket, game_plugin, match: Match
+) -> None:
+    matchup = db.get(BracketMatchup, match.bracket_matchup_id)
+    if matchup is None or matchup.winner_alliance_id is not None:
+        return
+
+    incomplete_game = db.execute(
+        select(Match).where(
+            Match.bracket_matchup_id == matchup.id, Match.status != "completed"
+        )
+    ).scalars().first()
+    if incomplete_game is not None:
+        # Another game in this series is still unscored — this call is
+        # either the normal in-flight game just being scored (which is
+        # already "completed" by the time this function runs and so isn't
+        # itself the "incomplete" one found here) or a correction to an
+        # older game while a newer one in the same series is still open.
+        # Either way, don't decide the matchup or create another game
+        # until every existing game in the series is completed.
+        return
+
+    games = db.execute(
+        select(Match).where(
+            Match.bracket_matchup_id == matchup.id, Match.status == "completed"
+        )
+    ).scalars().all()
+
+    wins = {matchup.alliance_a_id: 0, matchup.alliance_b_id: 0}
+    for game in games:
+        alliances = db.execute(
+            select(Alliance).where(Alliance.match_id == game.id)
+        ).scalars().all()
+        scores: dict[int, int] = {}
+        for alliance in alliances:
+            score_record = db.execute(
+                select(ScoreRecord).where(ScoreRecord.alliance_id == alliance.id)
+            ).scalars().first()
+            if score_record is None:
+                continue
+            effective_score = (
+                0
+                if (score_record.no_show or score_record.dq)
+                else game_plugin.module.calculate_score(json.loads(score_record.data_json))
+            )
+            bracket_alliance_id = (
+                matchup.alliance_a_id if alliance.station == "red" else matchup.alliance_b_id
+            )
+            scores[bracket_alliance_id] = effective_score
+        if len(scores) == 2:
+            score_a = scores[matchup.alliance_a_id]
+            score_b = scores[matchup.alliance_b_id]
+            if score_a > score_b:
+                wins[matchup.alliance_a_id] += 1
+            elif score_b > score_a:
+                wins[matchup.alliance_b_id] += 1
+            # a tied game counts toward neither side's series win
+
+    wins_needed = wins_to_advance_for_round(bracket, matchup.round_number)
+    winner_id = None
+    if wins[matchup.alliance_a_id] >= wins_needed:
+        winner_id = matchup.alliance_a_id
+    elif wins[matchup.alliance_b_id] >= wins_needed:
+        winner_id = matchup.alliance_b_id
+
+    if winner_id is None:
+        _create_matchup_game(db, bracket, matchup)
+        return
+
+    _decide_matchup(db, bracket, winner_id, matchup)
+
+
 def recompute_finals_results(db: Session, bracket: FinalsBracket, game_plugin) -> None:
     matches = db.execute(
         select(Match).where(

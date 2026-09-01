@@ -14,7 +14,7 @@ from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.match import Match
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.schemas.score_record import ScoreRecordRead, ScoreSubmit
-from tournament_server.services.finals import advance_score_chase
+from tournament_server.services.finals import advance_score_chase, advance_single_elimination
 from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
 
 router = APIRouter(prefix="/api/matches", tags=["scores"])
@@ -153,8 +153,11 @@ def submit_score(
 
     if match.finals_bracket_id is not None:
         bracket = db.get(FinalsBracket, match.finals_bracket_id)
-        if bracket is not None and bracket.format == "score_chase" and match.status == "completed":
-            advance_score_chase(db, bracket, plugin)
+        if bracket is not None and match.status == "completed":
+            if bracket.format == "score_chase":
+                advance_score_chase(db, bracket, plugin)
+            elif bracket.format == "single_elimination":
+                advance_single_elimination(db, bracket, plugin, match)
         return _to_score_record_read(record, computed_score)
 
     recompute_rankings(db, plugin, match.session_id, match.division_id)

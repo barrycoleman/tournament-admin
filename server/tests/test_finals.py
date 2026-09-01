@@ -818,3 +818,88 @@ def test_resubmitting_a_completed_run_does_not_create_an_extra_run(cooperative_c
     assert len(after_resubmit["runs"]) == 2
     # cooperative-game's calculate_score doubles objects_scored.
     assert after_resubmit["runs"][0]["score"] == 14
+
+
+def _score_matchup_game(client, session_id: int, matchup_id: int, red_score: int, blue_score: int):
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    game = next(
+        m for m in matches_response.json()
+        if m.get("status") != "completed"
+        and any(a["station"] == "red" for a in m["alliances"])
+        and m["round_type"] == "elimination"
+    )
+    red_id = next(a["id"] for a in game["alliances"] if a["station"] == "red")
+    blue_id = next(a["id"] for a in game["alliances"] if a["station"] == "blue")
+    client.post(
+        f"/api/matches/{game['id']}/alliances/{red_id}/score",
+        json={"data": {"high_balls": red_score, "low_balls": 0, "auto_winner": "tie"}},
+    )
+    client.post(
+        f"/api/matches/{game['id']}/alliances/{blue_id}/score",
+        json={"data": {"high_balls": blue_score, "low_balls": 0, "auto_winner": "tie"}},
+    )
+
+
+def test_single_elimination_full_4_alliance_bracket_traced_end_to_end(client):
+    # bracket_size=4, capacity=4, no byes: 2 round-1 games, 1 final.
+    # wins_to_advance=[1, 2]: round 1 is single-game, the final is best-of-3.
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+
+    bracket = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": [1, 2]},
+    ).json()
+    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
+    unclaimed = [t for t in team_ids if t not in claimed]
+    final_response = None
+    for i, alliance in enumerate(bracket["alliances"]):
+        final_response = client.post(
+            f"/api/finals/{bracket['id']}/pick",
+            json={
+                "captain_bracket_alliance_id": alliance["id"],
+                "partner_team_id": unclaimed[i],
+            },
+        )
+    bracket = final_response.json()
+    assert bracket["status"] == "in_progress"
+    assert len(bracket["matchups"]) == 3  # 2 round-1 + 1 final
+
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    finals_games = [m for m in matches_response.json() if m["round_type"] == "elimination"]
+    assert len(finals_games) == 2  # both round-1 games created immediately (no byes)
+
+    # Round 1, matchup 0: red wins 10-0 (decides the series, wins_to_advance[0]=1).
+    _score_matchup_game(client, session_id, None, red_score=10, blue_score=0)
+    # Round 1, matchup 1: red wins 10-0.
+    _score_matchup_game(client, session_id, None, red_score=10, blue_score=0)
+
+    bracket = client.get(f"/api/finals/{bracket['id']}").json()
+    final_matchup = next(m for m in bracket["matchups"] if m["round_number"] == 2)
+    assert final_matchup["alliance_a_id"] is not None
+    assert final_matchup["alliance_b_id"] is not None
+
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    finals_games = [m for m in matches_response.json() if m["round_type"] == "elimination"]
+    assert len(finals_games) == 3  # the final's first game was created immediately
+
+    # Final, game 1: a tie — doesn't count toward either side's series win.
+    _score_matchup_game(client, session_id, None, red_score=5, blue_score=5)
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    finals_games = [m for m in matches_response.json() if m["round_type"] == "elimination"]
+    assert len(finals_games) == 4  # an extra game was generated after the tie
+
+    bracket = client.get(f"/api/finals/{bracket['id']}").json()
+    assert bracket["status"] == "in_progress"  # still not decided after the tie
+
+    # Final, game 2: red wins (1 win so far, needs 2).
+    _score_matchup_game(client, session_id, None, red_score=10, blue_score=0)
+    bracket = client.get(f"/api/finals/{bracket['id']}").json()
+    assert bracket["status"] == "in_progress"
+
+    # Final, game 3: red wins again (2 wins, reaches wins_to_advance[1]=2).
+    _score_matchup_game(client, session_id, None, red_score=10, blue_score=0)
+    bracket = client.get(f"/api/finals/{bracket['id']}").json()
+    assert bracket["status"] == "complete"
+    final_matchup = next(m for m in bracket["matchups"] if m["round_number"] == 2)
+    assert final_matchup["winner_alliance_id"] is not None
