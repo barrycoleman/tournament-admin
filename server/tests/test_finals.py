@@ -912,6 +912,12 @@ def test_resubmitting_a_decided_matchups_game_does_not_re_decide_it(client):
     # is not None") must make a post-hoc correction to an already-decided
     # matchup's completed game a no-op — it must not re-decide the matchup,
     # touch its advanced winner, or spawn an extra game.
+    #
+    # Critically, the resubmitted score below FLIPS what the winner would be
+    # if the guard were missing and the code recomputed from scratch (red's
+    # 10-0 win becomes a 0-10 loss). A test that merely resubmits a *bigger*
+    # win for the same side can't tell "guard worked" from "guard was never
+    # there" — this one can.
     session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
     _rank_teams_directly_head_to_head(client, session_id, team_ids)
 
@@ -950,9 +956,13 @@ def test_resubmitting_a_decided_matchups_game_does_not_re_decide_it(client):
     )
 
     bracket = client.get(f"/api/finals/{bracket['id']}").json()
-    matchups_after_decision = bracket["matchups"]
-    decided = [m for m in matchups_after_decision if m["winner_alliance_id"] is not None]
-    assert len(decided) == 1  # only the one matchup we just played is decided
+    decided_matchup = next(
+        m for m in bracket["matchups"] if m["round_number"] == 1 and m["winner_alliance_id"] is not None
+    )
+    red_alliance_id = decided_matchup["winner_alliance_id"]  # red is the side that just won
+
+    final_matchup = next(m for m in bracket["matchups"] if m["round_number"] == 2)
+    assert red_alliance_id in (final_matchup["alliance_a_id"], final_matchup["alliance_b_id"])
 
     matches_response = client.get(f"/api/matches?session_id={session_id}")
     finals_games_after_decision = [
@@ -961,16 +971,40 @@ def test_resubmitting_a_decided_matchups_game_does_not_re_decide_it(client):
     assert len(finals_games_after_decision) == 2  # no extra game created for the decided matchup;
     # the final isn't created yet since its other side is still unknown.
 
-    # Resubmit a correction to that SAME already-completed game — e.g. red's
-    # score is corrected upward (still a red win, but the point is the
-    # matchup must not be reprocessed at all, regardless of the new score).
+    # Resubmit a correction to that SAME already-completed game — but this
+    # time favoring blue instead. If the guard is doing its job, this must
+    # have NO effect: red must remain the recorded winner.
+    #
+    # The two POSTs below are ordered/valued so blue is strictly ahead after
+    # EACH individual post (blue's score is raised to 15 — i.e. 45 points
+    # under example-game's high_balls*3 formula, beating red's original 30 —
+    # before red's score is then lowered to 0). This avoids ever passing
+    # through a tied intermediate state, which would itself spawn a spurious
+    # extra game and mask whether the winner really got recomputed. With the
+    # guard removed, this ordering deterministically flips the recorded
+    # winner straight to blue; with the guard present, neither post has any
+    # effect at all.
+    client.post(
+        f"/api/matches/{game['id']}/alliances/{blue_id}/score",
+        json={"data": {"high_balls": 15, "low_balls": 0, "auto_winner": "tie"}},
+    )
     client.post(
         f"/api/matches/{game['id']}/alliances/{red_id}/score",
-        json={"data": {"high_balls": 20, "low_balls": 0, "auto_winner": "tie"}},
+        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
     )
 
     bracket = client.get(f"/api/finals/{bracket['id']}").json()
-    assert bracket["matchups"] == matchups_after_decision  # nothing changed
+    decided_matchup_after_resubmit = next(
+        m for m in bracket["matchups"] if m["id"] == decided_matchup["id"]
+    )
+    # Unchanged, NOT flipped to blue — proves the guard actually fired.
+    assert decided_matchup_after_resubmit["winner_alliance_id"] == red_alliance_id
+
+    final_matchup_after_resubmit = next(m for m in bracket["matchups"] if m["round_number"] == 2)
+    assert red_alliance_id in (
+        final_matchup_after_resubmit["alliance_a_id"],
+        final_matchup_after_resubmit["alliance_b_id"],
+    )
 
     matches_response = client.get(f"/api/matches?session_id={session_id}")
     finals_games_after_resubmit = [
