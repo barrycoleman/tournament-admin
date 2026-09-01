@@ -1160,11 +1160,23 @@ def test_unavailable_alliance_waiting_on_earlier_round_resolves_later(client):
     # Now play the still-pending round-1 real game — the moment its winner
     # is placed into round 2, the earlier unavailable flag resolves that
     # round-2 matchup as a walkover instead of creating a game for it.
+    # Two incomplete elimination matches exist at this point (round-1
+    # position 1's real game, and round-2 position 1's real game, both
+    # created directly by generate_bracket since two round-1 byes feed
+    # round-2 position 1 immediately). match_number is assigned as a
+    # strictly-increasing per-bracket counter in the exact order
+    # generate_bracket creates matches (round 1 before round 2), so the
+    # lowest match_number deterministically identifies round-1's game
+    # regardless of the API's response ordering.
     matches_response = client.get(f"/api/matches?session_id={session_id}")
-    game = next(
-        m for m in matches_response.json()
-        if m["round_type"] == "elimination" and m["status"] != "completed"
+    pending_games = sorted(
+        (
+            m for m in matches_response.json()
+            if m["round_type"] == "elimination" and m["status"] != "completed"
+        ),
+        key=lambda m: m["match_number"],
     )
+    game = pending_games[0]
     red_id = next(a["id"] for a in game["alliances"] if a["station"] == "red")
     blue_id = next(a["id"] for a in game["alliances"] if a["station"] == "blue")
     client.post(
@@ -1180,3 +1192,100 @@ def test_unavailable_alliance_waiting_on_earlier_round_resolves_later(client):
     round_2_matchup = next(m for m in bracket["matchups"] if m["id"] == round_2_matchup["id"])
     assert round_2_matchup["winner_alliance_id"] is not None
     assert round_2_matchup["winner_alliance_id"] != bye_matchup["winner_alliance_id"]
+
+
+def test_unavailable_alliance_mid_series_resolves_walkover_without_extra_game(client):
+    # Mid-series walkover: a wins_to_advance=[2, 2] (best-of-3 everywhere)
+    # round-1 matchup that has already played and completed ONE game (red
+    # wins, 1 win -- not yet enough to decide the series at wins_needed=2)
+    # must still have `unavailable` resolve it immediately. This exercises
+    # the check-ordering in `_maybe_create_matchup_game`: the `unavailable`
+    # check has to run BEFORE the "is there an incomplete game already
+    # scheduled for this matchup" check, because completing that first
+    # (non-deciding) game already auto-schedules a follow-up game via
+    # `advance_single_elimination`'s "winner_id is None -> create another
+    # game" branch -- exactly the kind of "incomplete game" that would
+    # otherwise block a naive re-ordering of these two checks.
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+
+    bracket = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": [2, 2]},
+    ).json()
+    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
+    unclaimed = [t for t in team_ids if t not in claimed]
+    final_response = None
+    for i, alliance in enumerate(bracket["alliances"]):
+        final_response = client.post(
+            f"/api/finals/{bracket['id']}/pick",
+            json={
+                "captain_bracket_alliance_id": alliance["id"],
+                "partner_team_id": unclaimed[i],
+            },
+        )
+    bracket = final_response.json()
+    round_1_matchup = bracket["matchups"][0]  # round 1, position 0
+
+    # match_number is a strictly-increasing per-bracket counter assigned in
+    # creation order; generate_bracket creates round-1 position 0's game
+    # before position 1's (both created immediately here since bracket_size
+    # == capacity == 4, so there are no byes), so match_number 1 always
+    # belongs to round_1_matchup regardless of the API's response order.
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    elimination_matches = [
+        m for m in matches_response.json() if m["round_type"] == "elimination"
+    ]
+    assert len(elimination_matches) == 2  # both round-1 games created immediately
+    game_1 = next(m for m in elimination_matches if m["match_number"] == 1)
+    red_id = next(a["id"] for a in game_1["alliances"] if a["station"] == "red")
+    blue_id = next(a["id"] for a in game_1["alliances"] if a["station"] == "blue")
+
+    # Play ONE game of that series: red wins 10-0 -> 1 win, not enough
+    # (wins_needed=2).
+    client.post(
+        f"/api/matches/{game_1['id']}/alliances/{red_id}/score",
+        json={"data": {"high_balls": 10, "low_balls": 0, "auto_winner": "tie"}},
+    )
+    client.post(
+        f"/api/matches/{game_1['id']}/alliances/{blue_id}/score",
+        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
+    )
+
+    bracket_after_game_1 = client.get(f"/api/finals/{bracket['id']}").json()
+    matchup_after_game_1 = next(
+        m for m in bracket_after_game_1["matchups"] if m["id"] == round_1_matchup["id"]
+    )
+    assert matchup_after_game_1["winner_alliance_id"] is None  # series not yet decided
+
+    # Completing that non-deciding game already auto-scheduled a follow-up
+    # game for the same matchup (ordinary best-of-N continuation) -- confirm
+    # it's there before the walkover, so the count-unchanged assertion below
+    # is actually meaningful and not vacuously true.
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    elimination_matches = [
+        m for m in matches_response.json() if m["round_type"] == "elimination"
+    ]
+    assert len(elimination_matches) == 3  # matchup 0's follow-up game auto-created
+    games_before_unavailable = len(elimination_matches)
+
+    # Now mark the losing alliance (blue) unavailable. Even though a second,
+    # unplayed game for this series already exists, the unavailable check
+    # must take priority and decide the matchup for red immediately -- not
+    # silently defer just because "an incomplete game exists for this
+    # matchup".
+    response = client.post(
+        f"/api/finals/{bracket['id']}/alliances/{round_1_matchup['alliance_b_id']}/unavailable"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    decided_matchup = next(m for m in body["matchups"] if m["id"] == round_1_matchup["id"])
+    assert decided_matchup["winner_alliance_id"] == round_1_matchup["alliance_a_id"]
+
+    # And no additional (third) game was created for this matchup as a side
+    # effect of resolving the walkover.
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    elimination_matches_after = [
+        m for m in matches_response.json() if m["round_type"] == "elimination"
+    ]
+    assert len(elimination_matches_after) == games_before_unavailable
