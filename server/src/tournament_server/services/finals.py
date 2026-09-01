@@ -362,8 +362,9 @@ def mark_unavailable(db: Session, bracket: FinalsBracket, alliance: BracketAllia
         # see the `unavailable` flag and resolve the walkover itself the
         # moment that matchup's other side becomes known.
         return
-    if matchup.alliance_a_id is not None and matchup.alliance_b_id is not None:
-        _maybe_create_matchup_game(db, bracket, matchup)
+    # _maybe_create_matchup_game already checks both alliance ids are set
+    # (and returns early if not), so no need to duplicate that check here.
+    _maybe_create_matchup_game(db, bracket, matchup)
 
 
 def recompute_finals_results(db: Session, bracket: FinalsBracket, game_plugin) -> None:

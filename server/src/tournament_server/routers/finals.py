@@ -64,33 +64,34 @@ def _to_finals_bracket_read(
         .order_by(BracketAlliance.seed)
     ).scalars().all()
 
-    matches = db.execute(
-        select(Match).where(Match.finals_bracket_id == bracket.id).order_by(Match.id)
-    ).scalars().all()
     runs = []
-    for match in matches:
-        match_alliance = db.execute(
-            select(Alliance).where(Alliance.match_id == match.id)
-        ).scalars().first()
-        score = None
-        if match_alliance is not None:
-            score_record = db.execute(
-                select(ScoreRecord).where(ScoreRecord.alliance_id == match_alliance.id)
+    if bracket.format != "single_elimination":
+        matches = db.execute(
+            select(Match).where(Match.finals_bracket_id == bracket.id).order_by(Match.id)
+        ).scalars().all()
+        for match in matches:
+            match_alliance = db.execute(
+                select(Alliance).where(Alliance.match_id == match.id)
             ).scalars().first()
-            if score_record is not None:
-                score = (
-                    0
-                    if (score_record.no_show or score_record.dq)
-                    else game_plugin.module.calculate_score(json.loads(score_record.data_json))
+            score = None
+            if match_alliance is not None:
+                score_record = db.execute(
+                    select(ScoreRecord).where(ScoreRecord.alliance_id == match_alliance.id)
+                ).scalars().first()
+                if score_record is not None:
+                    score = (
+                        0
+                        if (score_record.no_show or score_record.dq)
+                        else game_plugin.module.calculate_score(json.loads(score_record.data_json))
+                    )
+            runs.append(
+                FinalsRunRead(
+                    match_id=match.id,
+                    bracket_alliance_id=match.bracket_alliance_id,
+                    status=match.status,
+                    score=score,
                 )
-        runs.append(
-            FinalsRunRead(
-                match_id=match.id,
-                bracket_alliance_id=match.bracket_alliance_id,
-                status=match.status,
-                score=score,
             )
-        )
 
     results = db.execute(
         select(FinalsResult)
@@ -174,7 +175,7 @@ def start_finals(
                 payload.wins_to_advance, total_rounds
             )
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     else:
         wins_to_advance_list = [1] * total_rounds
 

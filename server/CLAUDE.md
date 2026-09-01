@@ -195,8 +195,9 @@ them with a single forward pass into round 2, not a repeated cascade.
 
 A matchup's first game is created the instant both its sides are known
 (from seeding, a bye, or an earlier matchup's winner) — `submit_score`
-detects `Match.bracket_matchup_id` and calls
-`services/finals.py`'s `advance_single_elimination`, which counts a
+detects `Match.finals_bracket_id` (same as `score_chase`) and dispatches
+to `services/finals.py`'s `advance_single_elimination` based on the
+bracket's `format`, which counts a
 series' decided games (a tie counts toward neither side) against that
 round's `wins_to_advance` and creates another game, decides the matchup,
 or does nothing if the last completed game wasn't the last one currently

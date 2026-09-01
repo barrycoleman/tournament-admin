@@ -33,9 +33,13 @@ def _rank_teams_directly(cooperative_client, session_id: int, team_ids: list[int
             },
         ).json()
         red_id = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        # Scale the step so the highest score never exceeds cooperative-game's
+        # scoresheet max of 40 regardless of team count (this reduces to the
+        # original `(len(team_ids) - i) * 10` for the count=4 case).
+        step = 40 // len(team_ids)
         cooperative_client.post(
             f"/api/matches/{match['id']}/alliances/{red_id}/score",
-            json={"data": {"objects_scored": (len(team_ids) - i) * 10}},
+            json={"data": {"objects_scored": (len(team_ids) - i) * step}},
         )
 
 
@@ -175,6 +179,40 @@ def test_start_finals_rejects_wrong_length_wins_to_advance_list(client):
     assert response.status_code == 422
 
 
+def test_single_elimination_bracket_never_populates_runs(client):
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+
+    bracket = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": 1},
+    ).json()
+    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
+    unclaimed = [t for t in team_ids if t not in claimed]
+    final_response = None
+    for i, alliance in enumerate(bracket["alliances"]):
+        final_response = client.post(
+            f"/api/finals/{bracket['id']}/pick",
+            json={
+                "captain_bracket_alliance_id": alliance["id"],
+                "partner_team_id": unclaimed[i],
+            },
+        )
+    bracket = final_response.json()
+    assert bracket["runs"] == []
+
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    game = next(m for m in matches_response.json() if m["round_type"] == "elimination")
+    red_id = next(a["id"] for a in game["alliances"] if a["station"] == "red")
+    client.post(
+        f"/api/matches/{game['id']}/alliances/{red_id}/score",
+        json={"data": {"high_balls": 10, "low_balls": 0, "auto_winner": "tie"}},
+    )
+
+    bracket = client.get(f"/api/finals/{bracket['id']}").json()
+    assert bracket["runs"] == []
+
+
 def test_generate_bracket_resolves_byes_and_seeds_pairs_correctly(client):
     # example-game is captain_pick + single_elimination. 5 captains means 5
     # alliances once every captain has picked a partner from the remaining
@@ -227,16 +265,18 @@ def test_generate_bracket_resolves_byes_and_seeds_pairs_correctly(client):
     assert len(finals_games) == 2
 
 
-def test_start_finals_rejects_odd_bracket_size(cooperative_client):
+def test_start_finals_accepts_odd_bracket_size(cooperative_client):
     client = cooperative_client
-    session_id, team_ids = _setup_ranked_teams(client, 4)
+    session_id, team_ids = _setup_ranked_teams(client, 6)
     _rank_teams_directly(client, session_id, team_ids)
 
     response = client.post(
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 3},
     )
-    assert response.status_code == 422
+    assert response.status_code == 201
+    body = response.json()
+    assert len(body["alliances"]) == 3
 
 
 def test_start_finals_auto_defaults_single_field_set(cooperative_client):

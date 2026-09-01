@@ -187,8 +187,10 @@ your behalf — by the time finals start, the session's fields are already
 set up from running qualification matches on them.
 
 - If `alliance_selection == "seed_pairing"`: all `N` `BracketAlliance` rows
-  form immediately from adjacent seed pairs (1+2, 3+4, ...; `N` must be
-  even), and the bracket moves straight to `"in_progress"`.
+  form immediately from adjacent seed pairs (1+2, 3+4, ...; this needs
+  `2N` ranked teams total, but `N` itself has no parity requirement — an
+  odd `N` is perfectly valid, e.g. 3 alliances from 6 teams), and the
+  bracket moves straight to `"in_progress"`.
 - If `alliance_selection == "captain_pick"`: only the `N` captain
   placeholders exist at first (one `BracketAlliance` per captain, with
   only the captain's own `BracketAllianceTeam` row); the bracket stays in
@@ -435,8 +437,9 @@ with, so qualification ranking logic doesn't apply to it at all.
   `"selecting_alliances"` once every captain has picked, and the new
   upfront `2 × bracket_size` checked-in-team sufficiency check (422 when
   short, for both finals formats).
-- Seed-pairing: correct adjacent-pair formation, and the 422 case for an
-  odd `bracket_size`.
+- Seed-pairing: correct adjacent-pair formation, including an odd
+  `bracket_size` (e.g. 3 alliances from 6 ranked teams) — `N` has no
+  parity requirement, only the underlying `2N` ranked-team count does.
 - `DELETE /api/finals/{id}`: full cascade verified (no orphaned `Match`/
   `Alliance`/`BracketMatchup`/`FinalsResult` rows survive), and the 409
   when `status == "complete"`.
