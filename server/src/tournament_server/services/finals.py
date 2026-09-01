@@ -171,6 +171,14 @@ def _maybe_create_matchup_game(
         return
     if matchup.alliance_a_id is None or matchup.alliance_b_id is None:
         return
+    alliance_a = db.get(BracketAlliance, matchup.alliance_a_id)
+    alliance_b = db.get(BracketAlliance, matchup.alliance_b_id)
+    if alliance_a.unavailable:
+        _decide_matchup(db, bracket, matchup.alliance_b_id, matchup)
+        return
+    if alliance_b.unavailable:
+        _decide_matchup(db, bracket, matchup.alliance_a_id, matchup)
+        return
     incomplete_game = db.execute(
         select(Match).where(
             Match.bracket_matchup_id == matchup.id, Match.status != "completed"
@@ -331,6 +339,31 @@ def advance_single_elimination(
         return
 
     _decide_matchup(db, bracket, winner_id, matchup)
+
+
+def mark_unavailable(db: Session, bracket: FinalsBracket, alliance: BracketAlliance) -> None:
+    alliance.unavailable = True
+    db.add(alliance)
+    db.commit()
+
+    matchup = db.execute(
+        select(BracketMatchup).where(
+            BracketMatchup.bracket_id == bracket.id,
+            BracketMatchup.winner_alliance_id.is_(None),
+        ).where(
+            (BracketMatchup.alliance_a_id == alliance.id)
+            | (BracketMatchup.alliance_b_id == alliance.id)
+        )
+    ).scalars().first()
+    if matchup is None:
+        # Either this alliance already won its way out of the bracket, or
+        # its matchup hasn't been reached yet (still waiting on an earlier
+        # round) — in the latter case, `_maybe_create_matchup_game` will
+        # see the `unavailable` flag and resolve the walkover itself the
+        # moment that matchup's other side becomes known.
+        return
+    if matchup.alliance_a_id is not None and matchup.alliance_b_id is not None:
+        _maybe_create_matchup_game(db, bracket, matchup)
 
 
 def recompute_finals_results(db: Session, bracket: FinalsBracket, game_plugin) -> None:

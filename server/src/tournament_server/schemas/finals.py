@@ -28,6 +28,7 @@ class BracketAllianceRead(BaseModel):
     id: int
     seed: int
     team_ids: list[int]
+    unavailable: bool
 
 
 class FinalsRunRead(BaseModel):

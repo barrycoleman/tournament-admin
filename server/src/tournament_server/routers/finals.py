@@ -33,6 +33,7 @@ from tournament_server.schemas.finals import (
 from tournament_server.services.finals import (
     expand_wins_to_advance,
     generate_bracket,
+    mark_unavailable,
     start_score_chase,
     total_rounds_for_bracket_size,
 )
@@ -49,7 +50,9 @@ def _to_bracket_alliance_read(alliance: BracketAlliance, db: Session) -> Bracket
             )
         ).scalars().all()
     ]
-    return BracketAllianceRead(id=alliance.id, seed=alliance.seed, team_ids=team_ids)
+    return BracketAllianceRead(
+        id=alliance.id, seed=alliance.seed, team_ids=team_ids, unavailable=alliance.unavailable
+    )
 
 
 def _to_finals_bracket_read(
@@ -388,6 +391,35 @@ def pick_partner(
             start_score_chase(db, bracket)
         elif bracket.format == "single_elimination":
             generate_bracket(db, bracket)
+
+    db.refresh(bracket)
+    game_plugin = get_game_plugin_for_event(request, db)
+    return _to_finals_bracket_read(bracket, db, game_plugin)
+
+
+@router.post(
+    "/{bracket_id}/alliances/{alliance_id}/unavailable", response_model=FinalsBracketRead
+)
+def mark_alliance_unavailable(
+    bracket_id: int, alliance_id: int, request: Request, db: Session = Depends(get_db)
+) -> FinalsBracketRead:
+    bracket = db.get(FinalsBracket, bracket_id)
+    if bracket is None:
+        raise HTTPException(status_code=404, detail="Finals bracket not found")
+    if bracket.format != "single_elimination":
+        raise HTTPException(
+            status_code=422,
+            detail="Marking an alliance unavailable only applies to single_elimination brackets",
+        )
+    if bracket.status != "in_progress":
+        raise HTTPException(
+            status_code=409, detail="This bracket is not currently in progress"
+        )
+    alliance = db.get(BracketAlliance, alliance_id)
+    if alliance is None or alliance.bracket_id != bracket_id:
+        raise HTTPException(status_code=404, detail="Alliance not found on this bracket")
+
+    mark_unavailable(db, bracket, alliance)
 
     db.refresh(bracket)
     game_plugin = get_game_plugin_for_event(request, db)

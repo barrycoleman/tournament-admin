@@ -1083,3 +1083,100 @@ def test_start_finals_rejects_insufficient_checked_in_teams_for_captain_pick(cap
         json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 2},
     )
     assert response.status_code == 422
+
+
+def test_unavailable_alliance_with_known_opponent_resolves_immediately(client):
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+
+    bracket = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": 1},
+    ).json()
+    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
+    unclaimed = [t for t in team_ids if t not in claimed]
+    final_response = None
+    for i, alliance in enumerate(bracket["alliances"]):
+        final_response = client.post(
+            f"/api/finals/{bracket['id']}/pick",
+            json={
+                "captain_bracket_alliance_id": alliance["id"],
+                "partner_team_id": unclaimed[i],
+            },
+        )
+    bracket = final_response.json()
+    round_1_matchup = bracket["matchups"][0]
+    alliance_to_forfeit = round_1_matchup["alliance_b_id"]
+
+    response = client.post(
+        f"/api/finals/{bracket['id']}/alliances/{alliance_to_forfeit}/unavailable"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    decided_matchup = next(m for m in body["matchups"] if m["id"] == round_1_matchup["id"])
+    assert decided_matchup["winner_alliance_id"] == round_1_matchup["alliance_a_id"]
+
+
+def test_unavailable_alliance_waiting_on_earlier_round_resolves_later(client):
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 10)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+
+    bracket = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 5, "wins_to_advance": 1},
+    ).json()
+    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
+    unclaimed = [t for t in team_ids if t not in claimed]
+    final_response = None
+    for i, alliance in enumerate(bracket["alliances"]):
+        final_response = client.post(
+            f"/api/finals/{bracket['id']}/pick",
+            json={
+                "captain_bracket_alliance_id": alliance["id"],
+                "partner_team_id": unclaimed[i],
+            },
+        )
+    bracket = final_response.json()
+    round_1 = [m for m in bracket["matchups"] if m["round_number"] == 1]
+    bye_matchup = next(m for m in round_1 if m["winner_alliance_id"] is not None)
+    real_game_matchup = next(m for m in round_1 if m["winner_alliance_id"] is None)
+
+    # bye_matchup's winner is already sitting in round 2, waiting on
+    # real_game_matchup's still-unplayed result. Mark that winner
+    # unavailable now — its round-2 matchup has only one side known, so
+    # nothing resolves yet.
+    response = client.post(
+        f"/api/finals/{bracket['id']}/alliances/{bye_matchup['winner_alliance_id']}/unavailable"
+    )
+    body = response.json()
+    round_2_matchup = next(
+        m for m in body["matchups"]
+        if m["round_number"] == 2
+        and (m["alliance_a_id"] == bye_matchup["winner_alliance_id"]
+             or m["alliance_b_id"] == bye_matchup["winner_alliance_id"])
+    )
+    assert round_2_matchup["winner_alliance_id"] is None
+
+    # Now play the still-pending round-1 real game — the moment its winner
+    # is placed into round 2, the earlier unavailable flag resolves that
+    # round-2 matchup as a walkover instead of creating a game for it.
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    game = next(
+        m for m in matches_response.json()
+        if m["round_type"] == "elimination" and m["status"] != "completed"
+    )
+    red_id = next(a["id"] for a in game["alliances"] if a["station"] == "red")
+    blue_id = next(a["id"] for a in game["alliances"] if a["station"] == "blue")
+    client.post(
+        f"/api/matches/{game['id']}/alliances/{red_id}/score",
+        json={"data": {"high_balls": 10, "low_balls": 0, "auto_winner": "tie"}},
+    )
+    client.post(
+        f"/api/matches/{game['id']}/alliances/{blue_id}/score",
+        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
+    )
+
+    bracket = client.get(f"/api/finals/{bracket['id']}").json()
+    round_2_matchup = next(m for m in bracket["matchups"] if m["id"] == round_2_matchup["id"])
+    assert round_2_matchup["winner_alliance_id"] is not None
+    assert round_2_matchup["winner_alliance_id"] != bye_matchup["winner_alliance_id"]
