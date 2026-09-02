@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime as dt
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,10 +20,16 @@ from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
 from tournament_server.schemas.schedule import (
+    ResolvedTimeBlockRead,
     ScheduleGenerateRequest,
     ScheduleGenerateResponse,
 )
 from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
+from tournament_server.services.schedule_timing import (
+    assign_scheduled_times,
+    implicit_default_time_block,
+    resolve_block_cycle_times,
+)
 from tournament_server.services.scheduling import build_pairing_history
 
 router = APIRouter(prefix="/api/schedule", tags=["schedule"])
@@ -207,6 +215,58 @@ def generate_schedule(
 
     _validate_generated_schedule(generated, {fs.id for fs in field_sets}, alliance_count)
 
+    match_duration_seconds = (
+        match_format["autonomous_seconds"] + match_format["driver_seconds"]
+    )
+    total_time_slots_needed = len({entry["time_slot"] for entry in generated})
+
+    session_obj = db.get(TournamentSession, payload.session_id)
+    if payload.time_blocks is not None:
+        if session_obj.session_date is None or session_obj.timezone is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Session must have both session_date and timezone set "
+                    "to use time_blocks"
+                ),
+            )
+        time_blocks_input = [b.model_dump() for b in payload.time_blocks]
+        session_date = session_obj.session_date
+        timezone_name = session_obj.timezone
+    else:
+        implicit_start = utc_now() + dt.timedelta(minutes=5)
+        time_blocks_input = [implicit_default_time_block(
+            match_duration_seconds, payload.warn_below_multiplier
+        )]
+        time_blocks_input[0]["start_time"] = implicit_start.strftime("%H:%M")
+        session_date = implicit_start.date()
+        timezone_name = "UTC"
+
+    try:
+        resolved_blocks = resolve_block_cycle_times(
+            time_blocks_input, total_time_slots_needed
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    sorted_distinct_time_slots = sorted({entry["time_slot"] for entry in generated})
+    scheduled_times = assign_scheduled_times(
+        resolved_blocks, sorted_distinct_time_slots, session_date, timezone_name
+    )
+
+    warn_threshold_seconds = match_duration_seconds * payload.warn_below_multiplier
+    tight_blocks = [
+        b for b in resolved_blocks if b.cycle_time_seconds < warn_threshold_seconds
+    ]
+    cycle_time_warning = None
+    if tight_blocks:
+        block_names = ", ".join(b.start_time for b in tight_blocks)
+        cycle_time_warning = (
+            f"Cycle time is below {payload.warn_below_multiplier}x match "
+            f"duration ({match_duration_seconds}s) in block(s) starting at "
+            f"{block_names}"
+        )
+
     generation = ScheduleGeneration(
         session_id=payload.session_id,
         division_id=payload.division_id,
@@ -241,6 +301,7 @@ def generate_schedule(
             field_id=field_id,
             time_slot=entry["time_slot"],
             schedule_generation_id=generation.id,
+            scheduled_time=scheduled_times[entry["time_slot"]],
         )
         db.add(match)
         db.flush()
@@ -255,7 +316,17 @@ def generate_schedule(
     db.commit()
 
     return ScheduleGenerateResponse(
-        schedule_generation_id=generation.id, match_count=len(created_matches)
+        schedule_generation_id=generation.id,
+        match_count=len(created_matches),
+        resolved_time_blocks=[
+            ResolvedTimeBlockRead(
+                start_time=b.start_time,
+                end_time=b.end_time,
+                cycle_time_seconds=b.cycle_time_seconds,
+            )
+            for b in resolved_blocks
+        ],
+        cycle_time_warning=cycle_time_warning,
     )
 
 

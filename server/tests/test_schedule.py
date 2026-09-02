@@ -323,3 +323,171 @@ def test_clear_schedule_allows_regeneration_afterward(client):
 
     response = client.post("/api/schedule", json=payload)
     assert response.status_code == 201
+
+
+def test_generate_schedule_with_time_blocks_assigns_scheduled_time(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={
+            "label": "Session 1",
+            "session_date": "2026-09-05",
+            "timezone": "America/Los_Angeles",
+        },
+    ).json()["id"]
+    team_ids = []
+    for i in range(8):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        team_ids.append(team_id)
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {"start_time": "10:00", "end_time": "12:00", "cycle_time": None}
+            ],
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert len(body["resolved_time_blocks"]) == 1
+    assert body["resolved_time_blocks"][0]["cycle_time_seconds"] > 0
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    for match in matches:
+        assert match["scheduled_time"] is not None
+
+
+def test_generate_schedule_without_time_blocks_uses_implicit_default(client):
+    session_id, team_ids = _setup_ready_session(client)
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert len(body["resolved_time_blocks"]) == 1
+    assert body["resolved_time_blocks"][0]["end_time"] is None
+    assert body["cycle_time_warning"] is None
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    for match in matches:
+        assert match["scheduled_time"] is not None
+
+
+def test_generate_schedule_rejects_time_blocks_without_session_date_or_timezone(client):
+    session_id, team_ids = _setup_ready_session(client)
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {"start_time": "10:00", "end_time": "12:00", "cycle_time": None}
+            ],
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_generate_schedule_rejects_mismatched_time_blocks(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={
+            "label": "Session 1",
+            "session_date": "2026-09-05",
+            "timezone": "America/Los_Angeles",
+        },
+    ).json()["id"]
+    team_ids = []
+    for i in range(8):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        team_ids.append(team_id)
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {"start_time": "10:00", "end_time": "10:05", "cycle_time": 300}
+            ],
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_generate_schedule_warns_when_cycle_time_too_tight(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    game_plugin_name = plugins[0]["name"]
+    client.post("/api/event/game-plugin", json={"name": game_plugin_name})
+
+    session_id = client.post(
+        "/api/sessions",
+        json={
+            "label": "Session 1",
+            "session_date": "2026-09-05",
+            "timezone": "America/Los_Angeles",
+        },
+    ).json()["id"]
+    team_ids = []
+    for i in range(4):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        team_ids.append(team_id)
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {"start_time": "10:00", "end_time": "10:01", "cycle_time": 60}
+            ],
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["cycle_time_warning"] is not None
