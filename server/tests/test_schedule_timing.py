@@ -118,3 +118,36 @@ def test_implicit_default_time_block_derives_cycle_time_from_multiplier():
     block = implicit_default_time_block(match_duration_seconds=120, warn_below_multiplier=1.5)
     assert block["cycle_time"] == 180
     assert block["end_time"] is None
+
+
+def test_resolve_rejects_multiple_open_ended_blocks():
+    blocks = [
+        {"start_time": "10:00", "end_time": None, "cycle_time": 180},
+        {"start_time": "14:00", "end_time": None, "cycle_time": 120},
+    ]
+    with pytest.raises(ValueError, match="At most one time block may be open-ended"):
+        resolve_block_cycle_times(blocks, total_time_slots_needed=50)
+
+
+def test_assign_scheduled_times_across_multiple_blocks():
+    blocks = [
+        ResolvedBlock(
+            start_time="10:00", end_time="11:00", cycle_time_seconds=120.0, time_slot_count=2
+        ),
+        ResolvedBlock(
+            start_time="14:00", end_time=None, cycle_time_seconds=180.0, time_slot_count=3
+        ),
+    ]
+    assignments = assign_scheduled_times(
+        blocks, [10, 20, 30, 40, 50], dt.date(2026, 9, 5), "America/Los_Angeles"
+    )
+    # First block: 2 slots (10, 20) spaced by 120 seconds at 10:00 LA (17:00 UTC)
+    assert assignments[10] == dt.datetime(2026, 9, 5, 17, 0, tzinfo=dt.UTC)
+    assert assignments[20] == dt.datetime(2026, 9, 5, 17, 2, tzinfo=dt.UTC)
+    # Second block: 3 slots (30, 40, 50) starting at 14:00 LA (21:00 UTC), spaced by 180 seconds
+    assert assignments[30] == dt.datetime(2026, 9, 5, 21, 0, tzinfo=dt.UTC)
+    assert assignments[40] == dt.datetime(2026, 9, 5, 21, 3, tzinfo=dt.UTC)
+    assert assignments[50] == dt.datetime(2026, 9, 5, 21, 6, tzinfo=dt.UTC)
+    # All returned datetimes are UTC-aware
+    for dt_obj in assignments.values():
+        assert dt_obj.tzinfo is dt.UTC
