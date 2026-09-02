@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 class SessionCreate(BaseModel):
     label: str
     session_date: dt.date | None = None
+    timezone: str | None = None
 
 
 class SessionRead(BaseModel):
@@ -17,3 +18,4 @@ class SessionRead(BaseModel):
     event_id: int
     label: str
     session_date: dt.date | None
+    timezone: str | None

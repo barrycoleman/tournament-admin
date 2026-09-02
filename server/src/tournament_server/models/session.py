@@ -15,3 +15,4 @@ class TournamentSession(Base):
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id"))
     label: Mapped[str] = mapped_column(String(200))
     session_date: Mapped[dt.date | None] = mapped_column(Date, default=None)
+    timezone: Mapped[str | None] = mapped_column(String(100), default=None)

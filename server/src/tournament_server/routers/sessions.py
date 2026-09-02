@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,8 +20,18 @@ def create_session(
     event = get_the_event(db)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not initialized")
+    if payload.timezone is not None:
+        try:
+            ZoneInfo(payload.timezone)
+        except ZoneInfoNotFoundError:
+            raise HTTPException(
+                status_code=422, detail=f"Unknown timezone: {payload.timezone!r}"
+            )
     session_obj = TournamentSession(
-        event_id=event.id, label=payload.label, session_date=payload.session_date
+        event_id=event.id,
+        label=payload.label,
+        session_date=payload.session_date,
+        timezone=payload.timezone,
     )
     db.add(session_obj)
     db.commit()

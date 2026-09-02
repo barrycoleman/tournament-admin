@@ -30,3 +30,35 @@ def test_set_active_session_rejects_unknown_session(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     response = client.post("/api/event/active-session", json={"session_id": 999})
     assert response.status_code == 404
+
+
+def test_create_session_with_valid_timezone(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post(
+        "/api/sessions",
+        json={
+            "label": "Session 1",
+            "session_date": "2026-09-05",
+            "timezone": "America/Los_Angeles",
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["timezone"] == "America/Los_Angeles"
+    assert body["session_date"] == "2026-09-05"
+
+
+def test_create_session_rejects_invalid_timezone(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post(
+        "/api/sessions",
+        json={"label": "Session 1", "timezone": "Not/A/Real/Zone"},
+    )
+    assert response.status_code == 422
+
+
+def test_create_session_without_timezone_defaults_to_none(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post("/api/sessions", json={"label": "Session 1"})
+    assert response.status_code == 201
+    assert response.json()["timezone"] is None
