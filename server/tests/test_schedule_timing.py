@@ -116,6 +116,19 @@ def test_resolve_rejects_too_few_remaining_slots_for_calculate_for_me_blocks():
         resolve_block_cycle_times(blocks, total_time_slots_needed=1)
 
 
+def test_resolve_rejects_disproportionately_small_calculate_for_me_block():
+    # Enough slots overall to satisfy the "at least one per block" guard
+    # (2 slots, 2 blocks), but one block's duration (1 minute) is so tiny
+    # relative to the other (22 hours) that duration-proportional
+    # apportionment still rounds its share down to zero.
+    blocks = [
+        {"start_time": "00:00", "end_time": "00:01", "cycle_time": None},
+        {"start_time": "01:00", "end_time": "23:00", "cycle_time": None},
+    ]
+    with pytest.raises(ValueError, match="zero time slots"):
+        resolve_block_cycle_times(blocks, total_time_slots_needed=2)
+
+
 def test_assign_scheduled_times_produces_utc_and_respects_timezone():
     blocks = [
         ResolvedBlock(

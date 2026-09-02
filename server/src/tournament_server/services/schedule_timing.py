@@ -51,6 +51,13 @@ def _apportion_time_slots(
     )
     for i in by_fractional_part_desc[:remainder]:
         counts[i] += 1
+    if 0 in counts:
+        raise ValueError(
+            "Duration-proportional apportionment left at least one "
+            "'calculate for me' time block with zero time slots — its "
+            "duration is too small relative to the others; adjust the "
+            "blocks or target_matches_per_team"
+        )
     return counts
 
 
