@@ -294,6 +294,40 @@ following the same `generate_schedule` contract.
 Elimination brackets are a separate, later phase — no plugin contract for
 bracket progression exists yet.
 
+## Time-based scheduling
+
+`POST /api/schedule` assigns every generated `Match` a real UTC
+`scheduled_time`, computed from `time_blocks` — a list of `{start_time,
+end_time, cycle_time}` windows (`services/schedule_timing.py`). Each
+block is independently pinned (`end_time` + `cycle_time` both given, a
+fixed match capacity), "calculate for me" (`cycle_time: null`, needs
+`end_time` to divide by), or open-ended (`end_time: null`, needs
+`cycle_time`, must be the last block, and cannot coexist with a
+"calculate for me" block — see `resolve_block_cycle_times`'s docstring-
+equivalent validation for why). Multiple "calculate for me" blocks always
+end up with the same computed cycle time, by construction — capacity is
+apportioned by duration via `_apportion_time_slots`'s largest-remainder
+method.
+
+Cycle time governs the interval between distinct `time_slot`s, not raw
+matches — several matches can share one `time_slot` when multiple
+`FieldSet`s run concurrently, and they all get the identical
+`scheduled_time`.
+
+Omitting `time_blocks` entirely synthesizes one implicit open-ended block
+starting five minutes from `utc_now()`, at a cycle time derived from the
+game plugin's `autonomous_seconds + driver_seconds` times
+`warn_below_multiplier` (default `1.5`) — a pace that's never tight
+enough to trigger this feature's own warning. This requires no
+`session_date`/`timezone` on the session at all; using real `time_blocks`
+does, since there's a real calendar window to resolve times against
+(`TournamentSession.timezone`, an IANA zone name, alongside the existing
+`session_date`).
+
+`ScheduleGenerateResponse.cycle_time_warning` fires when any resolved
+block's cycle time is below `match_duration_seconds *
+warn_below_multiplier` — informational only, never blocks generation.
+
 ## Known, deliberate gaps in this phase
 
 - There's no real authentication yet. Requests can pass an
