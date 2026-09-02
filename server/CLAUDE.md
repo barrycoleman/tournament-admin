@@ -304,10 +304,12 @@ fixed match capacity), "calculate for me" (`cycle_time: null`, needs
 `end_time` to divide by), or open-ended (`end_time: null`, needs
 `cycle_time`, must be the last block, and cannot coexist with a
 "calculate for me" block — see `resolve_block_cycle_times`'s docstring-
-equivalent validation for why). Multiple "calculate for me" blocks always
-end up with the same computed cycle time, by construction — capacity is
-apportioned by duration via `_apportion_time_slots`'s largest-remainder
-method.
+equivalent validation for why). Multiple "calculate for me" blocks are
+apportioned capacity by duration via `_apportion_time_slots`'s
+largest-remainder method, which yields the same computed cycle time across
+blocks when durations divide the remaining slots into exact integer
+proportions; when they don't, integer rounding can leave blocks with
+slightly different (but each individually correct) cycle times.
 
 Cycle time governs the interval between distinct `time_slot`s, not raw
 matches — several matches can share one `time_slot` when multiple
@@ -317,8 +319,9 @@ matches — several matches can share one `time_slot` when multiple
 Omitting `time_blocks` entirely synthesizes one implicit open-ended block
 starting five minutes from `utc_now()`, at a cycle time derived from the
 game plugin's `autonomous_seconds + driver_seconds` times
-`warn_below_multiplier` (default `1.5`) — a pace that's never tight
-enough to trigger this feature's own warning. This requires no
+`warn_below_multiplier` (default `1.5`) — comfortably above the warning
+threshold in the typical case, though rounding at an exact `.5` boundary
+can in rare cases still trigger it. This requires no
 `session_date`/`timezone` on the session at all; using real `time_blocks`
 does, since there's a real calendar window to resolve times against
 (`TournamentSession.timezone`, an IANA zone name, alongside the existing
