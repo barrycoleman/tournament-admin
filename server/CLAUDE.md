@@ -299,17 +299,20 @@ bracket progression exists yet.
 `POST /api/schedule` assigns every generated `Match` a real UTC
 `scheduled_time`, computed from `time_blocks` — a list of `{start_time,
 end_time, cycle_time}` windows (`services/schedule_timing.py`). Each
-block is independently pinned (`end_time` + `cycle_time` both given, a
-fixed match capacity), "calculate for me" (`cycle_time: null`, needs
-`end_time` to divide by), or open-ended (`end_time: null`, needs
-`cycle_time`, must be the last block, and cannot coexist with a
-"calculate for me" block — see `resolve_block_cycle_times`'s docstring-
-equivalent validation for why). Multiple "calculate for me" blocks are
-apportioned capacity by duration via `_apportion_time_slots`'s
-largest-remainder method, which yields the same computed cycle time across
-blocks when durations divide the remaining slots into exact integer
-proportions; when they don't, integer rounding can leave blocks with
-slightly different (but each individually correct) cycle times.
+`start_time`/`end_time` must be a zero-padded `"HH:MM"` string (enforced by
+the request schema); blocks must be given in ascending `start_time` order
+with no two windows overlapping (422 otherwise). Each block is
+independently pinned (`end_time` + `cycle_time` both given, a fixed match
+capacity), "calculate for me" (`cycle_time: null`, needs `end_time` to
+divide by), or open-ended (`end_time: null`, needs `cycle_time`, must be
+the last block, and cannot coexist with a "calculate for me" block — see
+`resolve_block_cycle_times`'s validation for why). Multiple "calculate for
+me" blocks are apportioned capacity by duration via
+`_apportion_time_slots`'s largest-remainder method, which yields the same
+computed cycle time across blocks when durations divide the remaining
+slots into exact integer proportions; when they don't, integer rounding
+can leave blocks with slightly different (but each individually correct)
+cycle times.
 
 Cycle time governs the interval between distinct `time_slot`s, not raw
 matches — several matches can share one `time_slot` when multiple
@@ -330,6 +333,14 @@ does, since there's a real calendar window to resolve times against
 `ScheduleGenerateResponse.cycle_time_warning` fires when any resolved
 block's cycle time is below `match_duration_seconds *
 warn_below_multiplier` — informational only, never blocks generation.
+
+All `time_blocks` are resolved against a single `session_date` — a block
+can't span midnight (an `end_time` earlier than its own `start_time` is
+rejected as invalid, not treated as spilling into the next day). A block
+whose `start_time` falls in a DST spring-forward gap or fall-back overlap
+in the session's `timezone` resolves via Python's default (`fold=0`)
+rather than raising — not expected to matter for tournament scheduling,
+but worth knowing if a session ever spans a DST transition.
 
 ## Known, deliberate gaps in this phase
 

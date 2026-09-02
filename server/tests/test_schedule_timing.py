@@ -74,7 +74,11 @@ def test_resolve_rejects_block_with_neither_end_time_nor_cycle_time():
         resolve_block_cycle_times(blocks, total_time_slots_needed=10)
 
 
-def test_multiple_calculate_for_me_blocks_get_the_same_cycle_time():
+def test_multiple_calculate_for_me_blocks_split_capacity_by_duration():
+    # Durations divide the remaining slots into exact integer proportions
+    # here (1hr:2hr = 10:20 of 30), so the computed cycle times end up
+    # equal — the common case, not a general guarantee (see the next test
+    # for the case where they don't divide evenly).
     blocks = [
         {"start_time": "08:00", "end_time": "09:00", "cycle_time": None},  # 1hr
         {"start_time": "10:00", "end_time": "12:00", "cycle_time": None},  # 2hr
@@ -83,6 +87,33 @@ def test_multiple_calculate_for_me_blocks_get_the_same_cycle_time():
     cycle_times = {round(b.cycle_time_seconds) for b in resolved}
     assert len(cycle_times) == 1
     assert sum(b.time_slot_count for b in resolved) == 30
+
+
+def test_multiple_calculate_for_me_blocks_can_get_different_cycle_times():
+    # 20min + 60min blocks needing 7 slots: proportional shares are 1.75
+    # and 5.25, which the largest-remainder method rounds to 2 and 5 —
+    # integer counts that don't divide the durations into equal cycle
+    # times (1200/2=600s vs 3600/5=720s). This is expected, not a bug:
+    # each block's own slots still fit exactly inside its own window.
+    blocks = [
+        {"start_time": "00:00", "end_time": "00:20", "cycle_time": None},
+        {"start_time": "01:00", "end_time": "02:00", "cycle_time": None},
+    ]
+    resolved = resolve_block_cycle_times(blocks, total_time_slots_needed=7)
+    assert resolved[0].time_slot_count == 2
+    assert resolved[0].cycle_time_seconds == pytest.approx(600.0)
+    assert resolved[1].time_slot_count == 5
+    assert resolved[1].cycle_time_seconds == pytest.approx(720.0)
+    assert sum(b.time_slot_count for b in resolved) == 7
+
+
+def test_resolve_rejects_too_few_remaining_slots_for_calculate_for_me_blocks():
+    blocks = [
+        {"start_time": "08:00", "end_time": "09:00", "cycle_time": None},
+        {"start_time": "10:00", "end_time": "14:00", "cycle_time": None},
+    ]
+    with pytest.raises(ValueError, match="at least one"):
+        resolve_block_cycle_times(blocks, total_time_slots_needed=1)
 
 
 def test_assign_scheduled_times_produces_utc_and_respects_timezone():

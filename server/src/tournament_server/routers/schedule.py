@@ -29,6 +29,7 @@ from tournament_server.services.schedule_timing import (
     assign_scheduled_times,
     implicit_default_time_block,
     resolve_block_cycle_times,
+    validate_blocks_ordered_and_non_overlapping,
 )
 from tournament_server.services.scheduling import build_pairing_history
 
@@ -242,17 +243,18 @@ def generate_schedule(
         session_date = implicit_start.date()
         timezone_name = "UTC"
 
+    sorted_distinct_time_slots = sorted({entry["time_slot"] for entry in generated})
     try:
+        if payload.time_blocks is not None:
+            validate_blocks_ordered_and_non_overlapping(time_blocks_input)
         resolved_blocks = resolve_block_cycle_times(
             time_blocks_input, total_time_slots_needed
         )
+        scheduled_times = assign_scheduled_times(
+            resolved_blocks, sorted_distinct_time_slots, session_date, timezone_name
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    sorted_distinct_time_slots = sorted({entry["time_slot"] for entry in generated})
-    scheduled_times = assign_scheduled_times(
-        resolved_blocks, sorted_distinct_time_slots, session_date, timezone_name
-    )
 
     warn_threshold_seconds = match_duration_seconds * payload.warn_below_multiplier
     tight_blocks = [

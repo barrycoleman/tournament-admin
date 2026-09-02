@@ -491,3 +491,252 @@ def test_generate_schedule_warns_when_cycle_time_too_tight(client):
     )
     assert response.status_code == 201
     assert response.json()["cycle_time_warning"] is not None
+
+
+def test_generate_schedule_rejects_zero_cycle_time(client):
+    session_id, team_ids = _setup_ready_session(client)
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {"start_time": "10:00", "end_time": "12:00", "cycle_time": 0}
+            ],
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_generate_schedule_rejects_negative_cycle_time(client):
+    session_id, team_ids = _setup_ready_session(client)
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {"start_time": "10:00", "end_time": "12:00", "cycle_time": -60}
+            ],
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_generate_schedule_rejects_malformed_start_time(client):
+    session_id, team_ids = _setup_ready_session(client)
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {"start_time": "9:00", "end_time": "12:00", "cycle_time": 180}
+            ],
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_generate_schedule_rejects_overlapping_time_blocks(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={
+            "label": "Session 1",
+            "session_date": "2026-09-05",
+            "timezone": "America/Los_Angeles",
+        },
+    ).json()["id"]
+    for i in range(8):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {"start_time": "10:00", "end_time": "12:00", "cycle_time": 180},
+                {"start_time": "11:00", "end_time": "13:00", "cycle_time": 180},
+            ],
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_generate_schedule_rejects_time_blocks_not_in_ascending_order(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={
+            "label": "Session 1",
+            "session_date": "2026-09-05",
+            "timezone": "America/Los_Angeles",
+        },
+    ).json()["id"]
+    for i in range(8):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {"start_time": "14:00", "end_time": "16:00", "cycle_time": 180},
+                {"start_time": "10:00", "end_time": "12:00", "cycle_time": 180},
+            ],
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_generate_schedule_shares_scheduled_time_across_concurrent_field_sets(client):
+    session_id, team_ids = _setup_ready_session(client, num_teams=8)
+
+    field_set_a = client.post(
+        "/api/field-sets", json={"session_id": session_id, "name": "Set A"}
+    ).json()["id"]
+    field_set_b = client.post(
+        "/api/field-sets", json={"session_id": session_id, "name": "Set B"}
+    ).json()["id"]
+    client.post(
+        "/api/fields",
+        json={"session_id": session_id, "name": "Field A1", "field_set_id": field_set_a},
+    )
+    client.post(
+        "/api/fields",
+        json={"session_id": session_id, "name": "Field B1", "field_set_id": field_set_b},
+    )
+
+    import types
+
+    from tournament_server.plugin_registry.loader import LoadedPlugin
+
+    def concurrent_generate_schedule(**kwargs):
+        return [
+            {
+                "time_slot": 0,
+                "field_set_id": field_set_a,
+                "alliances": [
+                    {"station": "red", "team_ids": [team_ids[0], team_ids[1]]},
+                    {"station": "blue", "team_ids": [team_ids[2], team_ids[3]]},
+                ],
+            },
+            {
+                "time_slot": 0,
+                "field_set_id": field_set_b,
+                "alliances": [
+                    {"station": "red", "team_ids": [team_ids[4], team_ids[5]]},
+                    {"station": "blue", "team_ids": [team_ids[6], team_ids[7]]},
+                ],
+            },
+        ]
+
+    stub = LoadedPlugin(
+        name="simple_random",
+        version="1.0.0",
+        display_name="Simple Random",
+        folder=None,
+        module=types.SimpleNamespace(generate_schedule=concurrent_generate_schedule),
+    )
+    client.app.state.scheduler_plugins["simple_random"] = stub
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    # Two matches share time_slot 0 across two FieldSets: this must count
+    # as ONE distinct time slot for cycle-time capacity math (an implicit
+    # single-slot open-ended default block, not two).
+    assert len(body["resolved_time_blocks"]) == 1
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    assert len(matches) == 2
+    scheduled_times = {m["scheduled_time"] for m in matches}
+    assert len(scheduled_times) == 1
+
+
+def test_generate_schedule_warn_below_multiplier_override_changes_warning_outcome(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={
+            "label": "Session 1",
+            "session_date": "2026-09-05",
+            "timezone": "America/Los_Angeles",
+        },
+    ).json()["id"]
+    for i in range(4):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    payload = {
+        "session_id": session_id,
+        "round_type": "qualification",
+        "target_matches_per_team": 1,
+        "scheduler_plugin_name": "simple_random",
+        "time_blocks": [
+            {"start_time": "10:00", "end_time": "10:01", "cycle_time": 60}
+        ],
+    }
+
+    lenient_response = client.post(
+        "/api/schedule", json={**payload, "warn_below_multiplier": 0.1}
+    )
+    assert lenient_response.status_code == 201
+    assert lenient_response.json()["cycle_time_warning"] is None
+
+    client.delete(
+        f"/api/schedule?session_id={session_id}&round_type=qualification"
+    )
+
+    strict_response = client.post(
+        "/api/schedule", json={**payload, "warn_below_multiplier": 1000.0}
+    )
+    assert strict_response.status_code == 201
+    assert strict_response.json()["cycle_time_warning"] is not None
