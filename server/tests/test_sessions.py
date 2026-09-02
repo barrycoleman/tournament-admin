@@ -62,3 +62,12 @@ def test_create_session_without_timezone_defaults_to_none(client):
     response = client.post("/api/sessions", json={"label": "Session 1"})
     assert response.status_code == 201
     assert response.json()["timezone"] is None
+
+
+def test_create_session_rejects_empty_timezone(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post(
+        "/api/sessions",
+        json={"label": "Session 1", "timezone": ""},
+    )
+    assert response.status_code == 422

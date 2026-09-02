@@ -23,7 +23,7 @@ def create_session(
     if payload.timezone is not None:
         try:
             ZoneInfo(payload.timezone)
-        except ZoneInfoNotFoundError:
+        except (ZoneInfoNotFoundError, ValueError):
             raise HTTPException(
                 status_code=422, detail=f"Unknown timezone: {payload.timezone!r}"
             )
