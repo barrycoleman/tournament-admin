@@ -192,8 +192,14 @@ def start_finals(
             )
         existing_sets = db.execute(existing_sets_query).scalars().all()
         if len(existing_sets) == 0:
+            if payload.division_id is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Session has no unassigned FieldSets configured",
+                )
             raise HTTPException(
-                status_code=422, detail="Session has no FieldSets configured"
+                status_code=422,
+                detail=f"No FieldSets are assigned to division_id {payload.division_id}",
             )
         if len(existing_sets) > 1:
             raise HTTPException(
