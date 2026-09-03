@@ -152,10 +152,11 @@ standard access/refresh-token trade-off, not a gap: verifying every access
 token against the database on every request would defeat the point of a
 stateless token.
 
-`POST /api/event`, `GET /api/event` (when no event exists yet), `POST
-/api/auth/login`, and `POST /api/auth/refresh` are the only endpoints that
-ever run with no `Authorization` header at all — they are the bootstrap
-surface itself. Nothing else can require auth before an event and its
+`POST /api/event`, `GET /api/event` (always, per §4 — not conditional on
+whether an event exists), `POST /api/auth/login`, and `POST
+/api/auth/refresh` are the only endpoints that ever run with no
+`Authorization` header at all — they are the bootstrap/discovery surface
+itself. Nothing else can require auth before an event and its
 `RoleCredential` rows exist.
 
 New dependencies: `PyJWT` (token issuance/verification) and `bcrypt`
@@ -186,7 +187,8 @@ exceptions:
 
 | Router(s) | Writes (POST/PATCH/DELETE) | Reads (GET) |
 |---|---|---|
-| `event`, `sessions`, `divisions`, `field_sets`, `fields`, `teams`, `participation`, `matches`, `ranking_configuration`, `schedule`, `finals` | `admin` only | any authenticated role |
+| `event` | `admin` only (`POST /api/event`, `/active-session`, `/game-plugin`) | **no token required** — `GET /api/event` is the permanent discovery surface a client checks before it can even know whether to show a login form, not a conditionally-gated endpoint |
+| `sessions`, `divisions`, `field_sets`, `fields`, `teams`, `participation`, `matches`, `ranking_configuration`, `schedule`, `finals` | `admin` only | any authenticated role |
 | `scores` | `admin`, **`scorer`, `referee`** | any authenticated role |
 | `audit_log` | *(read-only router)* | **`admin` only** — operational/sensitive, not event-day data |
 | `plugins` | `admin` only | **`admin` only** — operational/config surface, not event-day data |
