@@ -9,6 +9,10 @@ class FieldSetCreate(BaseModel):
     division_id: int | None = None
 
 
+class FieldSetUpdate(BaseModel):
+    division_id: int | None
+
+
 class FieldSetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
