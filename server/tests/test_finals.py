@@ -43,6 +43,34 @@ def _rank_teams_directly(cooperative_client, session_id: int, team_ids: list[int
         )
 
 
+def _rank_teams_for_division(
+    cooperative_client, session_id: int, division_id: int, team_ids: list[int]
+) -> None:
+    # Same as _rank_teams_directly, but the matches (and therefore the
+    # rankings they produce) are tied to a specific division.
+    for i, team_id in enumerate(team_ids):
+        match = cooperative_client.post(
+            "/api/matches",
+            json={
+                "session_id": session_id,
+                "division_id": division_id,
+                "round_type": "qualification",
+                "match_number": 1000 + i,
+                "field_id": None,
+                "alliances": [
+                    {"station": "red", "team_ids": [team_id]},
+                    {"station": "blue", "team_ids": [team_id]},
+                ],
+            },
+        ).json()
+        red_id = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        step = 40 // len(team_ids)
+        cooperative_client.post(
+            f"/api/matches/{match['id']}/alliances/{red_id}/score",
+            json={"data": {"objects_scored": (len(team_ids) - i) * step}},
+        )
+
+
 def test_start_finals_seed_pairing_forms_alliances_immediately(cooperative_client):
     client = cooperative_client
     client.post("/api/event", json={"name": "Regional Qualifier"})
@@ -300,6 +328,244 @@ def test_start_finals_auto_defaults_single_field_set(cooperative_client):
     )
     assert response.status_code == 201
     assert response.json()["field_set_id"] == field["field_set_id"]
+
+
+def test_start_finals_rejects_field_set_from_a_different_division(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+
+    division_red = client.post("/api/divisions", json={"name": "Red"}).json()["id"]
+    division_blue = client.post("/api/divisions", json={"name": "Blue"}).json()["id"]
+
+    client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Red Fields", "division_id": division_red},
+    )
+    blue_field_set_id = client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Blue Fields", "division_id": division_blue},
+    ).json()["id"]
+    client.post(
+        "/api/fields",
+        json={
+            "session_id": session_id,
+            "name": "Blue Field 1",
+            "field_set_id": blue_field_set_id,
+        },
+    )
+
+    team_ids = [
+        client.post(
+            "/api/teams",
+            json={
+                "number": str(i + 1),
+                "name": f"Red Team {i + 1}",
+                "division_id": division_red,
+            },
+        ).json()["id"]
+        for i in range(4)
+    ]
+    _rank_teams_for_division(client, session_id, division_red, team_ids)
+
+    response = client.post(
+        "/api/finals/start",
+        json={
+            "session_id": session_id,
+            "division_id": division_red,
+            "bracket_size": 2,
+            "field_set_id": blue_field_set_id,
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_start_finals_accepts_explicit_field_set_from_the_same_division(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+
+    division_red = client.post("/api/divisions", json={"name": "Red"}).json()["id"]
+    red_field_set_id = client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Red Fields", "division_id": division_red},
+    ).json()["id"]
+    client.post(
+        "/api/fields",
+        json={
+            "session_id": session_id,
+            "name": "Red Field 1",
+            "field_set_id": red_field_set_id,
+        },
+    )
+
+    team_ids = [
+        client.post(
+            "/api/teams",
+            json={
+                "number": str(i + 1),
+                "name": f"Red Team {i + 1}",
+                "division_id": division_red,
+            },
+        ).json()["id"]
+        for i in range(4)
+    ]
+    _rank_teams_for_division(client, session_id, division_red, team_ids)
+
+    response = client.post(
+        "/api/finals/start",
+        json={
+            "session_id": session_id,
+            "division_id": division_red,
+            "bracket_size": 2,
+            "field_set_id": red_field_set_id,
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["field_set_id"] == red_field_set_id
+
+
+def test_start_finals_rejects_division_assigned_field_set_for_no_division_bracket(
+    cooperative_client,
+):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+
+    division_red = client.post("/api/divisions", json={"name": "Red"}).json()["id"]
+    red_field_set_id = client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Red Fields", "division_id": division_red},
+    ).json()["id"]
+    client.post(
+        "/api/fields",
+        json={
+            "session_id": session_id,
+            "name": "Red Field 1",
+            "field_set_id": red_field_set_id,
+        },
+    )
+
+    team_ids = [
+        client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        for i in range(4)
+    ]
+    _rank_teams_directly(client, session_id, team_ids)
+
+    response = client.post(
+        "/api/finals/start",
+        json={
+            "session_id": session_id,
+            "bracket_size": 2,
+            "field_set_id": red_field_set_id,
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_start_finals_auto_select_excludes_other_divisions_field_sets(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+
+    division_red = client.post("/api/divisions", json={"name": "Red"}).json()["id"]
+    division_blue = client.post("/api/divisions", json={"name": "Blue"}).json()["id"]
+
+    # Only Blue has a FieldSet in this session — Red has none of its own.
+    blue_field_set_id = client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Blue Fields", "division_id": division_blue},
+    ).json()["id"]
+    client.post(
+        "/api/fields",
+        json={
+            "session_id": session_id,
+            "name": "Blue Field 1",
+            "field_set_id": blue_field_set_id,
+        },
+    )
+
+    # Red still has ranked teams — rankings come from completed matches
+    # (created directly here), not from ever owning a FieldSet.
+    team_ids = [
+        client.post(
+            "/api/teams",
+            json={
+                "number": str(i + 1),
+                "name": f"Red Team {i + 1}",
+                "division_id": division_red,
+            },
+        ).json()["id"]
+        for i in range(4)
+    ]
+    _rank_teams_for_division(client, session_id, division_red, team_ids)
+
+    response = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "division_id": division_red, "bracket_size": 2},
+    )
+    assert response.status_code == 422
+
+
+def test_start_finals_auto_select_finds_own_divisions_field_set(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+
+    division_red = client.post("/api/divisions", json={"name": "Red"}).json()["id"]
+    division_blue = client.post("/api/divisions", json={"name": "Blue"}).json()["id"]
+
+    red_field_set = client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Red Fields", "division_id": division_red},
+    ).json()
+    blue_field_set_id = client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Blue Fields", "division_id": division_blue},
+    ).json()["id"]
+    client.post(
+        "/api/fields",
+        json={
+            "session_id": session_id,
+            "name": "Red Field 1",
+            "field_set_id": red_field_set["id"],
+        },
+    )
+    client.post(
+        "/api/fields",
+        json={
+            "session_id": session_id,
+            "name": "Blue Field 1",
+            "field_set_id": blue_field_set_id,
+        },
+    )
+
+    team_ids = [
+        client.post(
+            "/api/teams",
+            json={
+                "number": str(i + 1),
+                "name": f"Red Team {i + 1}",
+                "division_id": division_red,
+            },
+        ).json()["id"]
+        for i in range(4)
+    ]
+    _rank_teams_for_division(client, session_id, division_red, team_ids)
+
+    response = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "division_id": division_red, "bracket_size": 2},
+    )
+    assert response.status_code == 201
+    assert response.json()["field_set_id"] == red_field_set["id"]
 
 
 def test_start_finals_requires_enough_ranked_teams(cooperative_client):

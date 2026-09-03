@@ -181,9 +181,16 @@ def start_finals(
 
     field_set_id = payload.field_set_id
     if field_set_id is None:
-        existing_sets = db.execute(
-            select(FieldSet).where(FieldSet.session_id == payload.session_id)
-        ).scalars().all()
+        existing_sets_query = select(FieldSet).where(
+            FieldSet.session_id == payload.session_id
+        )
+        if payload.division_id is None:
+            existing_sets_query = existing_sets_query.where(FieldSet.division_id.is_(None))
+        else:
+            existing_sets_query = existing_sets_query.where(
+                FieldSet.division_id == payload.division_id
+            )
+        existing_sets = db.execute(existing_sets_query).scalars().all()
         if len(existing_sets) == 0:
             raise HTTPException(
                 status_code=422, detail="Session has no FieldSets configured"
@@ -201,6 +208,10 @@ def start_finals(
         field_set = db.get(FieldSet, field_set_id)
         if field_set is None or field_set.session_id != payload.session_id:
             raise HTTPException(status_code=404, detail="FieldSet not found")
+        if field_set.division_id != payload.division_id:
+            raise HTTPException(
+                status_code=422, detail="That FieldSet belongs to a different division"
+            )
 
     field_ids_for_set = db.execute(
         select(Field.id).where(Field.field_set_id == field_set_id)

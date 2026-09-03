@@ -362,13 +362,13 @@ since it was already scoped per generation call; only the FieldSet lookup
 itself was blind to which division a call was for.
 
 A FieldSet's single nullable `division_id` makes true double-assignment
-through `POST /api/schedule` structurally impossible — reassigning it
-after the fact only affects which *future* `POST /api/schedule` calls
-will consider that FieldSet, never any already-created `Match`. This
-guarantee is scoped to `POST /api/schedule`: `POST /api/finals/start`
-still selects FieldSets without checking division ownership, so the same
-class of field collision remains reachable through that endpoint — a
-known, deliberately deferred gap, not covered by this phase.
+structurally impossible — reassigning it after the fact only affects
+which *future* generation call will consider that FieldSet, never any
+already-created `Match`. `POST /api/finals/start` enforces the same
+guarantee as `POST /api/schedule`: an explicit `field_set_id` must have
+the exact same `division_id` as the request (including `null` matching
+`null` for a no-division bracket), and its own auto-select path (when no
+`field_set_id` is given) is filtered by division the same way.
 
 ## Known, deliberate gaps in this phase
 
