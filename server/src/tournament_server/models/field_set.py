@@ -12,3 +12,6 @@ class FieldSet(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"))
     name: Mapped[str] = mapped_column(String(200))
+    division_id: Mapped[int | None] = mapped_column(
+        ForeignKey("divisions.id"), default=None
+    )

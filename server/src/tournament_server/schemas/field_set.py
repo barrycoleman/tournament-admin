@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 class FieldSetCreate(BaseModel):
     session_id: int
     name: str
+    division_id: int | None = None
 
 
 class FieldSetRead(BaseModel):
@@ -14,3 +15,4 @@ class FieldSetRead(BaseModel):
     id: int
     session_id: int
     name: str
+    division_id: int | None
