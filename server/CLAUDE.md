@@ -342,6 +342,28 @@ in the session's `timezone` resolves via Python's default (`fold=0`)
 rather than raising — not expected to matter for tournament scheduling,
 but worth knowing if a session ever spans a DST transition.
 
+## Multi-division scheduling
+
+A `FieldSet` can be assigned exclusively to one `Division` via
+`division_id` (set on `POST /api/field-sets`, or changed later via
+`PATCH /api/field-sets/{id}` — the request body's `division_id` key is
+required, so the caller always states the intended value: an id to
+assign, or `null` to clear). `POST /api/schedule` only ever draws its
+FieldSets/Fields from this assignment: a division-scoped generation
+(`division_id` given) only considers that division's own FieldSets; a
+no-division generation (`division_id` omitted) only considers unassigned
+FieldSets. This is what lets two Divisions in the same Session each
+generate their own schedule without colliding on fields or `time_slot`s
+— each division's schedule generation, its `time_slot` numbering, and
+its `time_blocks`/cycle-time resolution were already correctly scoped by
+`Team.division_id`; only the FieldSet lookup itself was blind to which
+division a call was for.
+
+A FieldSet's single nullable `division_id` makes true double-assignment
+structurally impossible — reassigning it after the fact only affects
+which *future* `POST /api/schedule` calls will consider that FieldSet,
+never any already-created `Match`.
+
 ## Known, deliberate gaps in this phase
 
 - There's no real authentication yet. Requests can pass an
@@ -377,20 +399,6 @@ but worth knowing if a session ever spans a DST transition.
   the correct fix today — delete the `.db` file and let `create_all()`
   build it fresh. Introduce real migrations before this project has any
   real deployed event data that can't simply be recreated.
-- Scheduling two Divisions within the same Session currently produces a
-  broken schedule. Each `POST /api/schedule` call is self-contained — it
-  restarts `time_slot` numbering at 0 and round-robins fields starting
-  from the session's lowest field id, with no way to scope a generation
-  to a subset of the session's FieldSets. Two divisions scheduled in the
-  same session will collide on both fields and time_slots, even though
-  FieldSets running concurrently is exactly the scenario `time_slot`
-  exists to keep safe within one generation call. A real fix needs a way
-  to scope a `POST /api/schedule` call to specific FieldSets (or
-  session-wide slot/field arbitration across all divisions), which is
-  real design work, not a bounded bugfix — deferred to a later phase. For
-  now, an event with multiple divisions that need concurrent physical
-  fields in the same session should not use this endpoint for more than
-  one division per session until that's built.
 
 ## Testing
 
