@@ -172,11 +172,24 @@ def generate_schedule(
         team_query = team_query.where(Team.division_id == payload.division_id)
     teams = db.execute(team_query).scalars().all()
 
-    field_sets = db.execute(
-        select(FieldSet).where(FieldSet.session_id == payload.session_id)
-    ).scalars().all()
+    field_set_query = select(FieldSet).where(FieldSet.session_id == payload.session_id)
+    if payload.division_id is None:
+        field_set_query = field_set_query.where(FieldSet.division_id.is_(None))
+    else:
+        field_set_query = field_set_query.where(
+            FieldSet.division_id == payload.division_id
+        )
+    field_sets = db.execute(field_set_query).scalars().all()
     if not field_sets:
-        raise HTTPException(status_code=422, detail="Session has no FieldSets configured")
+        if payload.division_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Session has no unassigned FieldSets configured",
+            )
+        raise HTTPException(
+            status_code=422,
+            detail=f"No FieldSets are assigned to division_id {payload.division_id}",
+        )
     fields = db.execute(
         select(Field).where(Field.field_set_id.in_([fs.id for fs in field_sets]))
     ).scalars().all()

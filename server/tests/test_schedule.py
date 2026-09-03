@@ -740,3 +740,207 @@ def test_generate_schedule_warn_below_multiplier_override_changes_warning_outcom
     )
     assert strict_response.status_code == 201
     assert strict_response.json()["cycle_time_warning"] is not None
+
+
+def test_generate_schedule_scopes_field_sets_to_division(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+
+    division_red = client.post("/api/divisions", json={"name": "Red"}).json()["id"]
+    division_blue = client.post("/api/divisions", json={"name": "Blue"}).json()["id"]
+
+    field_set_red = client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Red Fields", "division_id": division_red},
+    ).json()["id"]
+    field_set_blue = client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Blue Fields", "division_id": division_blue},
+    ).json()["id"]
+    client.post(
+        "/api/fields",
+        json={"session_id": session_id, "name": "Red Field 1", "field_set_id": field_set_red},
+    )
+    client.post(
+        "/api/fields",
+        json={"session_id": session_id, "name": "Blue Field 1", "field_set_id": field_set_blue},
+    )
+
+    for i in range(4):
+        team_id = client.post(
+            "/api/teams",
+            json={
+                "number": f"R{i + 1}",
+                "name": f"Red Team {i + 1}",
+                "division_id": division_red,
+            },
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    for i in range(4):
+        team_id = client.post(
+            "/api/teams",
+            json={
+                "number": f"B{i + 1}",
+                "name": f"Blue Team {i + 1}",
+                "division_id": division_blue,
+            },
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+
+    red_response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "division_id": division_red,
+            "round_type": "qualification",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert red_response.status_code == 201
+
+    blue_response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "division_id": division_blue,
+            "round_type": "qualification",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert blue_response.status_code == 201
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    red_matches = [m for m in matches if m["division_id"] == division_red]
+    blue_matches = [m for m in matches if m["division_id"] == division_blue]
+    assert red_matches
+    assert blue_matches
+
+    fields = client.get(f"/api/fields?session_id={session_id}").json()
+    red_field_id = next(f["id"] for f in fields if f["name"] == "Red Field 1")
+    blue_field_id = next(f["id"] for f in fields if f["name"] == "Blue Field 1")
+
+    assert {m["field_id"] for m in red_matches} == {red_field_id}
+    assert {m["field_id"] for m in blue_matches} == {blue_field_id}
+
+
+def test_generate_schedule_rejects_division_with_no_field_set(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    division_id = client.post("/api/divisions", json={"name": "Red"}).json()["id"]
+    other_division_id = client.post("/api/divisions", json={"name": "Blue"}).json()["id"]
+
+    # A FieldSet exists in the session, but it belongs to a different
+    # division — Red has none of its own. Pre-fix, this FieldSet would be
+    # found anyway (the query ignored division entirely), so this must
+    # fail even though a FieldSet technically exists in the session.
+    other_field_set_id = client.post(
+        "/api/field-sets",
+        json={
+            "session_id": session_id,
+            "name": "Blue Fields",
+            "division_id": other_division_id,
+        },
+    ).json()["id"]
+    client.post(
+        "/api/fields",
+        json={
+            "session_id": session_id,
+            "name": "Blue Field 1",
+            "field_set_id": other_field_set_id,
+        },
+    )
+
+    for i in range(4):
+        team_id = client.post(
+            "/api/teams",
+            json={"number": str(i + 1), "name": f"Team {i + 1}", "division_id": division_id},
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "division_id": division_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_generate_schedule_without_division_only_uses_unassigned_field_sets(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+
+    division_id = client.post("/api/divisions", json={"name": "Red"}).json()["id"]
+    red_field_set_id = client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Red Fields", "division_id": division_id},
+    ).json()["id"]
+    client.post(
+        "/api/fields",
+        json={
+            "session_id": session_id,
+            "name": "Red Field 1",
+            "field_set_id": red_field_set_id,
+        },
+    )
+
+    unassigned_field_set_id = client.post(
+        "/api/field-sets", json={"session_id": session_id, "name": "Unassigned Fields"}
+    ).json()["id"]
+    client.post(
+        "/api/fields",
+        json={
+            "session_id": session_id,
+            "name": "Unassigned Field",
+            "field_set_id": unassigned_field_set_id,
+        },
+    )
+
+    for i in range(4):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 201
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    fields = client.get(f"/api/fields?session_id={session_id}").json()
+    unassigned_field_id = next(f["id"] for f in fields if f["name"] == "Unassigned Field")
+
+    assert matches
+    for match in matches:
+        assert match["field_id"] == unassigned_field_id
