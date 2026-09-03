@@ -353,16 +353,22 @@ FieldSets/Fields from this assignment: a division-scoped generation
 (`division_id` given) only considers that division's own FieldSets; a
 no-division generation (`division_id` omitted) only considers unassigned
 FieldSets. This is what lets two Divisions in the same Session each
-generate their own schedule without colliding on fields or `time_slot`s
-— each division's schedule generation, its `time_slot` numbering, and
-its `time_blocks`/cycle-time resolution were already correctly scoped by
-`Team.division_id`; only the FieldSet lookup itself was blind to which
-division a call was for.
+generate their own schedule without colliding on physical fields — each
+division's `time_slot` numbering is independent, and overlapping
+`time_slot` values across divisions are correct and expected once their
+fields are disjoint (that's parallel fields working as designed, not a
+collision). `time_blocks`/cycle-time resolution needed no changes either,
+since it was already scoped per generation call; only the FieldSet lookup
+itself was blind to which division a call was for.
 
 A FieldSet's single nullable `division_id` makes true double-assignment
-structurally impossible — reassigning it after the fact only affects
-which *future* `POST /api/schedule` calls will consider that FieldSet,
-never any already-created `Match`.
+through `POST /api/schedule` structurally impossible — reassigning it
+after the fact only affects which *future* `POST /api/schedule` calls
+will consider that FieldSet, never any already-created `Match`. This
+guarantee is scoped to `POST /api/schedule`: `POST /api/finals/start`
+still selects FieldSets without checking division ownership, so the same
+class of field collision remains reachable through that endpoint — a
+known, deliberately deferred gap, not covered by this phase.
 
 ## Known, deliberate gaps in this phase
 

@@ -832,6 +832,19 @@ def test_generate_schedule_scopes_field_sets_to_division(client):
     assert {m["field_id"] for m in red_matches} == {red_field_id}
     assert {m["field_id"] for m in blue_matches} == {blue_field_id}
 
+    delete_response = client.delete(
+        "/api/schedule",
+        params={
+            "session_id": session_id,
+            "division_id": division_red,
+            "round_type": "qualification",
+        },
+    )
+    assert delete_response.json()["matches_deleted"] == len(red_matches)
+
+    remaining = client.get(f"/api/matches?session_id={session_id}").json()
+    assert {m["division_id"] for m in remaining} == {division_blue}
+
 
 def test_generate_schedule_rejects_division_with_no_field_set(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
@@ -883,6 +896,7 @@ def test_generate_schedule_rejects_division_with_no_field_set(client):
         },
     )
     assert response.status_code == 422
+    assert str(division_id) in response.json()["detail"]
 
 
 def test_generate_schedule_without_division_only_uses_unassigned_field_sets(client):
