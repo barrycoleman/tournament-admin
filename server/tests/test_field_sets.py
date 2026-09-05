@@ -21,6 +21,14 @@ def test_create_field_set_rejects_unknown_session(client):
     assert response.status_code == 401
 
 
+def test_create_field_set_rejects_unknown_session_when_authenticated(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post(
+        "/api/field-sets", json={"session_id": 999, "name": "Main Fields"}
+    )
+    assert response.status_code == 404
+
+
 def test_list_field_sets_for_session(client):
     session_id = _make_session(client)
     client.post("/api/field-sets", json={"session_id": session_id, "name": "Odd Fields"})

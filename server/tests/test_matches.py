@@ -193,6 +193,12 @@ def test_get_missing_match_returns_401_without_a_session(client):
     assert response.status_code == 401
 
 
+def test_get_missing_match_returns_404_when_authenticated(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.get("/api/matches/999")
+    assert response.status_code == 404
+
+
 def test_create_match_requires_game_plugin_selected(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
