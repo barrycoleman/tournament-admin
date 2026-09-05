@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from auth_helpers import TEST_PASSWORD, login_as
+from auth_helpers import TEST_PASSWORD, bearer, login_as
 from plugin_helpers import zip_fixture_plugin
 from tournament_server.app import create_app
 
@@ -22,6 +22,15 @@ def test_list_game_plugins_shows_preseeded_plugin(client):
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert response.json()[0]["name"] == "example-game"
+
+
+def test_list_game_plugins_403s_for_non_admin(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    raw = client.__class__(client.app)
+    scorer_token = login_as(raw, "scorer")
+
+    response = raw.get("/api/plugins/games", headers=bearer(scorer_token))
+    assert response.status_code == 403
 
 
 def test_list_game_plugins_discovers_at_startup(tmp_path):
