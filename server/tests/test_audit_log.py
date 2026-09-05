@@ -1,3 +1,6 @@
+from auth_helpers import bearer, login_as
+
+
 def test_creating_event_logs_insert_with_default_actor(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
 
@@ -94,3 +97,12 @@ def test_audit_log_default_limit_returns_all_when_under_cap(client):
     response = client.get("/api/audit-log")
     assert response.status_code == 200
     assert len(response.json()) == 1
+
+
+def test_list_audit_log_403s_for_non_admin(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    raw = client.__class__(client.app)
+    scorer_token = login_as(raw, "scorer")
+
+    response = raw.get("/api/audit-log", headers=bearer(scorer_token))
+    assert response.status_code == 403

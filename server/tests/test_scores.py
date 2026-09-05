@@ -1,3 +1,6 @@
+from auth_helpers import bearer, login_as
+
+
 def _setup_match(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "example-game"})
@@ -130,3 +133,30 @@ def test_submit_score_with_force_still_rejects_unscoreable_data(client):
         },
     )
     assert response.status_code == 422
+
+
+def test_submit_score_403s_for_attendee(client):
+    match_id, red_id, blue_id = _setup_match(client)
+    raw = client.__class__(client.app)
+    attendee_token = login_as(raw, "attendee")
+
+    response = raw.post(
+        f"/api/matches/{match_id}/alliances/{red_id}/score",
+        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        headers=bearer(attendee_token),
+    )
+    assert response.status_code == 403
+
+
+def test_submit_score_succeeds_for_scorer_and_referee(client):
+    match_id, red_id, blue_id = _setup_match(client)
+    raw = client.__class__(client.app)
+
+    for role in ("scorer", "referee"):
+        token = login_as(raw, role)
+        response = raw.post(
+            f"/api/matches/{match_id}/alliances/{red_id}/score",
+            json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+            headers=bearer(token),
+        )
+        assert response.status_code == 200, f"{role} should be able to submit a score"
