@@ -421,6 +421,24 @@ in `test_plugins_router.py` already does. Follow the `client` pattern for
 anything else exercising the HTTP API: real calls through `TestClient`,
 real temporary files underneath.
 
+The `client`/`cooperative_client`/`captain_pick_client` fixtures are an
+`_AutoAuthTestClient` (see `conftest.py`): the moment a `POST /api/event`
+on that client instance succeeds (201), it transparently logs in as
+`admin` and pins `Authorization: Bearer <token>` on that client instance
+for every request after that — so every test using these fixtures is
+implicitly acting as Admin from event creation onward, with no explicit
+login call visible in the test body. A test that needs a different role,
+no token at all, or to exercise the bootstrap/login flow itself should
+not rely on this fixture — build a raw `TestClient` instead and use
+`tests/auth_helpers.py`'s `login_as`/`bearer` helpers to authenticate as
+whatever role the test actually needs.
+
+`GET /health` is intentionally the only HTTP endpoint with no auth
+dependency at all (it's defined directly in `app.py`, not through a
+router, and returns only a static status) and is deliberately absent
+from the design spec's authorization table — a benign exception, not a
+gap.
+
 The `plugin_registry` subpackage also has plain unit tests (e.g.
 `test_plugin_manifest.py`, `test_plugin_loader.py`,
 `test_plugin_conformance.py`) that call its functions directly against
