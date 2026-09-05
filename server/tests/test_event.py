@@ -59,3 +59,15 @@ def test_select_game_plugin_is_immutable(client):
 
     response = client.post("/api/event/game-plugin", json={"name": "example-game"})
     assert response.status_code == 409
+
+
+def test_create_event_requires_password(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from tournament_server.app import create_app
+
+    app = create_app(db_path=str(tmp_path / "test.db"), plugins_root=str(tmp_path / "plugins"))
+    raw_client = TestClient(app)
+
+    response = raw_client.post("/api/event", json={"name": "Regional Qualifier"})
+    assert response.status_code == 422

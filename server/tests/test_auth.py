@@ -224,3 +224,44 @@ def test_session_revoke_rejects_unknown_id(client):
 
     response = raw.delete("/api/auth/sessions/999999", headers=bearer(admin_token))
     assert response.status_code == 404
+
+
+def test_event_creation_seeds_all_six_roles_with_the_shared_password(client):
+    raw = TestClient(client.app)
+    raw.post(
+        "/api/event", json={"name": "Regional Qualifier", "password": TEST_PASSWORD}
+    )
+    for role in ROLES:
+        response = raw.post(
+            "/api/auth/login", json={"role": role, "password": TEST_PASSWORD}
+        )
+        assert response.status_code == 200, f"{role} could not log in"
+
+
+def test_changing_one_roles_password_does_not_affect_others(client):
+    raw = TestClient(client.app)
+    raw.post(
+        "/api/event", json={"name": "Regional Qualifier", "password": TEST_PASSWORD}
+    )
+    admin_token = login_as(raw, "admin")
+
+    raw.patch(
+        "/api/auth/passwords/scorer",
+        json={"password": "scorer-only-password"},
+        headers=bearer(admin_token),
+    )
+
+    scorer_old = raw.post(
+        "/api/auth/login", json={"role": "scorer", "password": TEST_PASSWORD}
+    )
+    assert scorer_old.status_code == 401
+    scorer_new = raw.post(
+        "/api/auth/login", json={"role": "scorer", "password": "scorer-only-password"}
+    )
+    assert scorer_new.status_code == 200
+
+    for other_role in ("judge", "referee", "attendee", "display_device"):
+        response = raw.post(
+            "/api/auth/login", json={"role": other_role, "password": TEST_PASSWORD}
+        )
+        assert response.status_code == 200, f"{other_role} should be unaffected"

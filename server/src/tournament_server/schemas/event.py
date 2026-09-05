@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 class EventCreate(BaseModel):
     name: str
+    password: str
 
 
 class EventRead(BaseModel):

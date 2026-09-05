@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from auth_helpers import TEST_PASSWORD
 from tournament_server.app import create_app
 
 FIXTURE_EXAMPLE_PLUGIN = (
@@ -29,6 +30,25 @@ CAPTAIN_PICK_GAME_PLUGIN = (
 )
 
 
+class _AutoAuthTestClient(TestClient):
+    def request(self, method, url, *args, **kwargs):
+        if method.upper() == "POST" and url == "/api/event":
+            json_body = kwargs.get("json")
+            if json_body is not None and "password" not in json_body:
+                kwargs["json"] = {**json_body, "password": TEST_PASSWORD}
+            response = super().request(method, url, *args, **kwargs)
+            if response.status_code == 201:
+                login = super().request(
+                    "POST",
+                    "/api/auth/login",
+                    json={"role": "admin", "password": TEST_PASSWORD},
+                )
+                token = login.json()["access_token"]
+                self.headers["Authorization"] = f"Bearer {token}"
+            return response
+        return super().request(method, url, *args, **kwargs)
+
+
 @pytest.fixture()
 def client(tmp_path) -> TestClient:
     db_path = str(tmp_path / "test.db")
@@ -47,7 +67,7 @@ def client(tmp_path) -> TestClient:
     shutil.copytree(BALANCED_SCHEDULER_PLUGIN, balanced_target)
 
     app = create_app(db_path=db_path, plugins_root=str(plugins_root))
-    return TestClient(app)
+    return _AutoAuthTestClient(app)
 
 
 @pytest.fixture()
@@ -68,7 +88,7 @@ def cooperative_client(tmp_path) -> TestClient:
     shutil.copytree(BALANCED_SCHEDULER_PLUGIN, balanced_target)
 
     app = create_app(db_path=db_path, plugins_root=str(plugins_root))
-    return TestClient(app)
+    return _AutoAuthTestClient(app)
 
 
 @pytest.fixture()
@@ -89,4 +109,4 @@ def captain_pick_client(tmp_path) -> TestClient:
     shutil.copytree(BALANCED_SCHEDULER_PLUGIN, balanced_target)
 
     app = create_app(db_path=db_path, plugins_root=str(plugins_root))
-    return TestClient(app)
+    return _AutoAuthTestClient(app)

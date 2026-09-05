@@ -3,8 +3,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from tournament_server.auth import ROLES, hash_password, require_admin
 from tournament_server.deps import get_db, get_the_event
 from tournament_server.models.event import Event
+from tournament_server.models.role_credential import RoleCredential
 from tournament_server.models.session import TournamentSession
 from tournament_server.schemas.event import (
     ActiveSessionUpdate,
@@ -22,6 +24,9 @@ def create_event(payload: EventCreate, db: Session = Depends(get_db)) -> Event:
         raise HTTPException(status_code=409, detail="Event already initialized")
     event = Event(name=payload.name)
     db.add(event)
+    password_hash = hash_password(payload.password)
+    for role in ROLES:
+        db.add(RoleCredential(role=role, password_hash=password_hash))
     db.commit()
     db.refresh(event)
     return event
@@ -37,7 +42,9 @@ def read_event(db: Session = Depends(get_db)) -> Event:
 
 @router.post("/active-session", response_model=EventRead)
 def set_active_session(
-    payload: ActiveSessionUpdate, db: Session = Depends(get_db)
+    payload: ActiveSessionUpdate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> Event:
     event = get_the_event(db)
     if event is None:
@@ -53,7 +60,10 @@ def set_active_session(
 
 @router.post("/game-plugin", response_model=EventRead)
 def select_game_plugin(
-    payload: GamePluginSelect, request: Request, db: Session = Depends(get_db)
+    payload: GamePluginSelect,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> Event:
     event = get_the_event(db)
     if event is None:
