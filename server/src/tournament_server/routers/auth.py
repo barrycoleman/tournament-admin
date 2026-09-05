@@ -93,7 +93,7 @@ def logout(
     session_row = db.execute(
         select(AuthSession).where(AuthSession.refresh_token_hash == token_hash)
     ).scalars().first()
-    if session_row is not None:
+    if session_row is not None and (session_row.role == _role or _role == "admin"):
         session_row.revoked_at = utc_now()
         db.commit()
     return Response(status_code=204)

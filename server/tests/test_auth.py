@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import datetime as dt
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from auth_helpers import TEST_PASSWORD, bearer, login_as
 from tournament_server.auth import ROLES, hash_password
+from tournament_server.models.auth_session import AuthSession
 from tournament_server.models.event import Event
 from tournament_server.models.role_credential import RoleCredential
 
@@ -118,6 +121,84 @@ def test_logout_revokes_the_session(client):
         "/api/auth/refresh", json={"refresh_token": login["refresh_token"]}
     )
     assert replay.status_code == 401
+
+
+def test_logout_cannot_revoke_a_different_roles_session(client):
+    raw = _raw_client(client)
+    judge_login = raw.post(
+        "/api/auth/login", json={"role": "judge", "password": TEST_PASSWORD}
+    ).json()
+    scorer_token = login_as(raw, "scorer")
+
+    # Scorer holds judge's raw refresh token but is a different role than
+    # the session it names — per design spec §3, logout only revokes the
+    # caller's own current session, so this must be a no-op (still 204,
+    # matching the endpoint's "no error either way" behavior).
+    logout = raw.post(
+        "/api/auth/logout",
+        json={"refresh_token": judge_login["refresh_token"]},
+        headers=bearer(scorer_token),
+    )
+    assert logout.status_code == 204
+
+    # The judge session must still be active.
+    replay = raw.post(
+        "/api/auth/refresh", json={"refresh_token": judge_login["refresh_token"]}
+    )
+    assert replay.status_code == 200
+
+
+def test_logout_as_admin_can_revoke_a_different_roles_session(client):
+    raw = _raw_client(client)
+    judge_login = raw.post(
+        "/api/auth/login", json={"role": "judge", "password": TEST_PASSWORD}
+    ).json()
+    admin_token = login_as(raw, "admin")
+
+    logout = raw.post(
+        "/api/auth/logout",
+        json={"refresh_token": judge_login["refresh_token"]},
+        headers=bearer(admin_token),
+    )
+    assert logout.status_code == 204
+
+    replay = raw.post(
+        "/api/auth/refresh", json={"refresh_token": judge_login["refresh_token"]}
+    )
+    assert replay.status_code == 401
+
+
+def test_logout_requires_authentication(client):
+    raw = _raw_client(client)
+    response = raw.post("/api/auth/logout", json={"refresh_token": "irrelevant"})
+    assert response.status_code == 401
+
+
+def test_refresh_rejects_expired_token(client):
+    from tournament_server.auth import hash_token
+    from tournament_server.db import utc_now
+
+    raw = _raw_client(client)
+    fake_refresh_token = "expired-refresh-token"
+    db = client.app.state.session_factory()
+    try:
+        now = utc_now()
+        db.add(
+            AuthSession(
+                role="judge",
+                refresh_token_hash=hash_token(fake_refresh_token),
+                issued_at=now - dt.timedelta(days=15),
+                expires_at=now - dt.timedelta(days=1),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = raw.post(
+        "/api/auth/refresh", json={"refresh_token": fake_refresh_token}
+    )
+    assert response.status_code == 401
 
 
 def test_password_change_is_admin_only(client):
