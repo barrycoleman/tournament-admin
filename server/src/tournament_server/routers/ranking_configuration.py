@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from tournament_server.auth import require_admin, require_any_role
 from tournament_server.deps import get_db, get_the_event
 from tournament_server.models.division import Division
 from tournament_server.models.ranking_configuration import RankingConfiguration
@@ -19,7 +20,9 @@ VALID_MODES = {"exclude", "include"}
 
 @router.post("", response_model=RankingConfigurationRead, status_code=201)
 def set_ranking_configuration(
-    payload: RankingConfigurationSet, db: Session = Depends(get_db)
+    payload: RankingConfigurationSet,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> RankingConfiguration:
     event = get_the_event(db)
     if event is None:
@@ -68,7 +71,9 @@ def set_ranking_configuration(
 
 @router.get("", response_model=RankingConfigurationRead)
 def get_ranking_configuration(
-    division_id: int | None = Query(None), db: Session = Depends(get_db)
+    division_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
 ) -> RankingConfiguration:
     event = get_the_event(db)
     if event is None:

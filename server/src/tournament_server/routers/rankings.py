@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from tournament_server.auth import require_any_role
 from tournament_server.deps import get_db, get_session_id
 from tournament_server.models.ranking import Ranking
 from tournament_server.schemas.ranking import RankingRead
@@ -17,6 +18,7 @@ def get_rankings(
     event_wide: bool = Query(False),
     session_id: int | None = Query(None),
     db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
 ) -> list[Ranking]:
     if event_wide:
         query = select(Ranking).where(Ranking.session_id.is_(None)).order_by(Ranking.rank)

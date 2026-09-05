@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from tournament_server.auth import require_admin, require_any_role
 from tournament_server.deps import get_db, get_game_plugin_for_event, get_session_id, get_the_event
 from tournament_server.models.alliance import Alliance, AllianceTeam
 from tournament_server.models.division import Division
@@ -49,7 +50,10 @@ def _to_match_read(match: Match, db: Session) -> MatchRead:
 
 @router.post("", response_model=MatchRead, status_code=201)
 def create_match(
-    payload: MatchCreate, request: Request, db: Session = Depends(get_db)
+    payload: MatchCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> MatchRead:
     event = get_the_event(db)
     if event is None:
@@ -108,7 +112,9 @@ def create_match(
 
 @router.get("", response_model=list[MatchRead])
 def list_matches(
-    session_id: int = Depends(get_session_id), db: Session = Depends(get_db)
+    session_id: int = Depends(get_session_id),
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
 ) -> list[MatchRead]:
     matches = db.execute(
         select(Match).where(Match.session_id == session_id)
@@ -117,7 +123,11 @@ def list_matches(
 
 
 @router.get("/{match_id}", response_model=MatchRead)
-def get_match(match_id: int, db: Session = Depends(get_db)) -> MatchRead:
+def get_match(
+    match_id: int,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
+) -> MatchRead:
     match = db.get(Match, match_id)
     if match is None:
         raise HTTPException(status_code=404, detail="Match not found")

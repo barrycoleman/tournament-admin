@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from tournament_server.auth import require_admin, require_any_role
 from tournament_server.deps import get_db, get_game_plugin_for_event, get_the_event
 from tournament_server.models.alliance import Alliance, AllianceTeam
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
@@ -127,7 +128,10 @@ def _to_finals_bracket_read(
 
 @router.post("/start", response_model=FinalsBracketRead, status_code=201)
 def start_finals(
-    payload: FinalsStartRequest, request: Request, db: Session = Depends(get_db)
+    payload: FinalsStartRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> FinalsBracketRead:
     event = get_the_event(db)
     if event is None:
@@ -321,7 +325,10 @@ def start_finals(
 
 @router.get("/{bracket_id}", response_model=FinalsBracketRead)
 def get_finals(
-    bracket_id: int, request: Request, db: Session = Depends(get_db)
+    bracket_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
 ) -> FinalsBracketRead:
     bracket = db.get(FinalsBracket, bracket_id)
     if bracket is None:
@@ -332,7 +339,11 @@ def get_finals(
 
 @router.post("/{bracket_id}/pick", response_model=FinalsBracketRead)
 def pick_partner(
-    bracket_id: int, payload: FinalsPickRequest, request: Request, db: Session = Depends(get_db)
+    bracket_id: int,
+    payload: FinalsPickRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> FinalsBracketRead:
     bracket = db.get(FinalsBracket, bracket_id)
     if bracket is None:
@@ -419,7 +430,11 @@ def pick_partner(
     "/{bracket_id}/alliances/{alliance_id}/unavailable", response_model=FinalsBracketRead
 )
 def mark_alliance_unavailable(
-    bracket_id: int, alliance_id: int, request: Request, db: Session = Depends(get_db)
+    bracket_id: int,
+    alliance_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> FinalsBracketRead:
     bracket = db.get(FinalsBracket, bracket_id)
     if bracket is None:
@@ -445,7 +460,11 @@ def mark_alliance_unavailable(
 
 
 @router.delete("/{bracket_id}", status_code=204)
-def delete_finals(bracket_id: int, db: Session = Depends(get_db)) -> Response:
+def delete_finals(
+    bracket_id: int,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> Response:
     bracket = db.get(FinalsBracket, bracket_id)
     if bracket is None:
         raise HTTPException(status_code=404, detail="Finals bracket not found")

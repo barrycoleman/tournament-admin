@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from tournament_server.auth import require_admin
 from tournament_server.db import utc_now
 from tournament_server.deps import get_db, get_the_event
 from tournament_server.models.alliance import Alliance, AllianceTeam
@@ -109,7 +110,10 @@ def _validate_generated_schedule(
 
 @router.post("", response_model=ScheduleGenerateResponse, status_code=201)
 def generate_schedule(
-    payload: ScheduleGenerateRequest, request: Request, db: Session = Depends(get_db)
+    payload: ScheduleGenerateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> ScheduleGenerateResponse:
     event = get_the_event(db)
     if event is None:
@@ -352,6 +356,7 @@ def clear_schedule(
     division_id: int | None = Query(None),
     round_type: str = Query(...),
     db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> dict[str, int]:
     if db.get(TournamentSession, session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
