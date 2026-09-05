@@ -26,11 +26,19 @@ def actor_scope(name: str):
         current_actor.reset(token)
 
 
-# Guards against ever recursively auditing the audit table itself. In
-# practice audit rows are only ever written via the raw `connection.execute`
-# calls below (never through `session.add(AuditLog(...))`), so this can't
-# currently trigger — it's cheap insurance against a future change that
-# adds an ORM-level write to this table.
+# Tables this module refuses to audit, for two distinct reasons:
+#
+# - "audit_log" guards against ever recursively auditing the audit table
+#   itself. In practice audit rows are only ever written via the raw
+#   `connection.execute` calls below (never through
+#   `session.add(AuditLog(...))`), so this can't currently trigger — it's
+#   cheap insurance against a future change that adds an ORM-level write to
+#   this table.
+# - "role_credentials", "auth_sessions", and "signing_keys" hold
+#   password/token hashes and the JWT signing key. Excluding them is
+#   load-bearing, not insurance: without it, every login and every event
+#   creation would write hashed secrets straight into the audit log. This is
+#   exercised by every login and every event creation in the test suite.
 _EXCLUDED_TABLES = {"audit_log", "role_credentials", "auth_sessions", "signing_keys"}
 
 
