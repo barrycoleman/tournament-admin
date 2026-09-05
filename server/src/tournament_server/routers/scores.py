@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server import audit
+from tournament_server.auth import require_scorer_or_referee
 from tournament_server.db import utc_now
 from tournament_server.deps import get_db, get_game_plugin_for_event, get_the_event
 from tournament_server.models.alliance import Alliance
@@ -44,6 +45,7 @@ def submit_score(
     payload: ScoreSubmit,
     request: Request,
     db: Session = Depends(get_db),
+    _role: str = Depends(require_scorer_or_referee),
 ) -> ScoreRecordRead:
     match = db.get(Match, match_id)
     if match is None:
