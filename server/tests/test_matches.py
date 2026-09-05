@@ -188,9 +188,9 @@ def test_get_match(client):
     assert response.json()["id"] == match_id
 
 
-def test_get_missing_match_returns_404(client):
+def test_get_missing_match_returns_401_without_a_session(client):
     response = client.get("/api/matches/999")
-    assert response.status_code == 404
+    assert response.status_code == 401
 
 
 def test_create_match_requires_game_plugin_selected(client):

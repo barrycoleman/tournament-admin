@@ -26,7 +26,7 @@ def test_create_team_assigns_tiebreaker_seed(client):
 
 def test_create_team_requires_event(client):
     response = client.post("/api/teams", json={"number": "1234A", "name": "Robo Raiders"})
-    assert response.status_code == 404
+    assert response.status_code == 401
 
 
 def test_list_teams(client):

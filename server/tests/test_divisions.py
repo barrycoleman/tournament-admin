@@ -13,4 +13,4 @@ def test_create_and_list_divisions(client):
 
 def test_create_division_requires_event(client):
     response = client.post("/api/divisions", json={"name": "Elementary"})
-    assert response.status_code == 404
+    assert response.status_code == 401

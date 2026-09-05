@@ -14,7 +14,7 @@ def test_create_and_list_sessions(client):
 
 def test_create_session_requires_event(client):
     response = client.post("/api/sessions", json={"label": "Session 1"})
-    assert response.status_code == 404
+    assert response.status_code == 401
 
 
 def test_set_active_session(client):

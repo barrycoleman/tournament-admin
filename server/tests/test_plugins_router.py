@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from auth_helpers import TEST_PASSWORD, login_as
 from plugin_helpers import zip_fixture_plugin
 from tournament_server.app import create_app
 
@@ -15,6 +16,8 @@ FIXTURE_SECOND_GAME_PLUGIN = (
 
 
 def test_list_game_plugins_shows_preseeded_plugin(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+
     response = client.get("/api/plugins/games")
     assert response.status_code == 200
     assert len(response.json()) == 1
@@ -31,8 +34,14 @@ def test_list_game_plugins_discovers_at_startup(tmp_path):
         db_path=str(tmp_path / "test.db"), plugins_root=str(plugins_root)
     )
     test_client = TestClient(app)
+    test_client.post(
+        "/api/event", json={"name": "Regional Qualifier", "password": TEST_PASSWORD}
+    )
+    token = login_as(test_client, "admin")
 
-    response = test_client.get("/api/plugins/games")
+    response = test_client.get(
+        "/api/plugins/games", headers={"Authorization": f"Bearer {token}"}
+    )
     assert response.status_code == 200
     body = response.json()
     assert len(body) == 1
@@ -41,6 +50,7 @@ def test_list_game_plugins_discovers_at_startup(tmp_path):
 
 
 def test_upload_game_plugin_installs_and_lists_immediately(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
     zip_bytes = zip_fixture_plugin(FIXTURE_SECOND_GAME_PLUGIN)
 
     response = client.post(
@@ -57,6 +67,7 @@ def test_upload_game_plugin_installs_and_lists_immediately(client):
 
 
 def test_upload_duplicate_plugin_name_returns_409(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
     zip_bytes = zip_fixture_plugin(FIXTURE_EXAMPLE_PLUGIN)
     client.post(
         "/api/plugins/games",
@@ -71,6 +82,7 @@ def test_upload_duplicate_plugin_name_returns_409(client):
 
 
 def test_upload_malformed_zip_returns_422(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
     response = client.post(
         "/api/plugins/games",
         files={"file": ("bad.zip", b"not a zip file", "application/zip")},

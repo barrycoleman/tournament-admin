@@ -43,7 +43,7 @@ def test_select_game_plugin(client):
 
 def test_select_game_plugin_requires_event(client):
     response = client.post("/api/event/game-plugin", json={"name": "example-game"})
-    assert response.status_code == 404
+    assert response.status_code == 401
 
 
 def test_select_game_plugin_rejects_unknown_plugin(client):
