@@ -31,7 +31,7 @@ def actor_scope(name: str):
 # calls below (never through `session.add(AuditLog(...))`), so this can't
 # currently trigger — it's cheap insurance against a future change that
 # adds an ORM-level write to this table.
-_EXCLUDED_TABLES = {"audit_log"}
+_EXCLUDED_TABLES = {"audit_log", "role_credentials", "auth_sessions", "signing_keys"}
 
 
 class AuditLog(Base):
