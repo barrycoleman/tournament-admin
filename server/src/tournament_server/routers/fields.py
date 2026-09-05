@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from tournament_server.auth import require_admin, require_any_role
 from tournament_server.deps import get_db, get_session_id
 from tournament_server.models.field import Field
 from tournament_server.models.field_set import FieldSet
@@ -14,7 +15,11 @@ router = APIRouter(prefix="/api/fields", tags=["fields"])
 
 
 @router.post("", response_model=FieldRead, status_code=201)
-def create_field(payload: FieldCreate, db: Session = Depends(get_db)) -> Field:
+def create_field(
+    payload: FieldCreate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> Field:
     if db.get(TournamentSession, payload.session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -52,7 +57,9 @@ def create_field(payload: FieldCreate, db: Session = Depends(get_db)) -> Field:
 
 @router.get("", response_model=list[FieldRead])
 def list_fields(
-    session_id: int = Depends(get_session_id), db: Session = Depends(get_db)
+    session_id: int = Depends(get_session_id),
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
 ) -> list[Field]:
     field_set_ids = [
         row.id

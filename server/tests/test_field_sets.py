@@ -98,6 +98,7 @@ def test_patch_field_set_clears_division(client):
 
 
 def test_patch_field_set_rejects_unknown_field_set(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
     response = client.patch("/api/field-sets/999", json={"division_id": None})
     assert response.status_code == 404
 

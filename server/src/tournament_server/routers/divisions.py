@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from tournament_server.auth import require_admin, require_any_role
 from tournament_server.deps import get_db, get_the_event
 from tournament_server.models.division import Division
 from tournament_server.schemas.division import DivisionCreate, DivisionRead
@@ -13,7 +14,9 @@ router = APIRouter(prefix="/api/divisions", tags=["divisions"])
 
 @router.post("", response_model=DivisionRead, status_code=201)
 def create_division(
-    payload: DivisionCreate, db: Session = Depends(get_db)
+    payload: DivisionCreate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> Division:
     event = get_the_event(db)
     if event is None:
@@ -26,5 +29,7 @@ def create_division(
 
 
 @router.get("", response_model=list[DivisionRead])
-def list_divisions(db: Session = Depends(get_db)) -> list[Division]:
+def list_divisions(
+    db: Session = Depends(get_db), _role: str = Depends(require_any_role)
+) -> list[Division]:
     return list(db.execute(select(Division)).scalars().all())

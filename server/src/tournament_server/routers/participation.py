@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from tournament_server.auth import require_admin, require_any_role
 from tournament_server.deps import get_db
 from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.session import TournamentSession
@@ -21,7 +22,10 @@ router = APIRouter(prefix="/api/sessions", tags=["participation"])
     "/{session_id}/participants", response_model=ParticipationRead, status_code=201
 )
 def add_participant(
-    session_id: int, payload: ParticipationCreate, db: Session = Depends(get_db)
+    session_id: int,
+    payload: ParticipationCreate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> SessionParticipation:
     session_obj = db.get(TournamentSession, session_id)
     if session_obj is None:
@@ -48,7 +52,9 @@ def add_participant(
     "/{session_id}/participants", response_model=list[ParticipationRead]
 )
 def list_participants(
-    session_id: int, db: Session = Depends(get_db)
+    session_id: int,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
 ) -> list[SessionParticipation]:
     return list(
         db.execute(

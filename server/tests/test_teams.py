@@ -52,6 +52,7 @@ def test_get_team(client):
 
 
 def test_get_missing_team_returns_404(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
     response = client.get("/api/teams/999")
     assert response.status_code == 404
 

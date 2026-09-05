@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from tournament_server.auth import require_admin, require_any_role
 from tournament_server.deps import get_db, get_the_event
 from tournament_server.models.division import Division
 from tournament_server.models.team import Team
@@ -13,7 +14,11 @@ router = APIRouter(prefix="/api/teams", tags=["teams"])
 
 
 @router.post("", response_model=TeamRead, status_code=201)
-def create_team(payload: TeamCreate, db: Session = Depends(get_db)) -> Team:
+def create_team(
+    payload: TeamCreate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> Team:
     event = get_the_event(db)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not initialized")
@@ -28,12 +33,18 @@ def create_team(payload: TeamCreate, db: Session = Depends(get_db)) -> Team:
 
 
 @router.get("", response_model=list[TeamRead])
-def list_teams(db: Session = Depends(get_db)) -> list[Team]:
+def list_teams(
+    db: Session = Depends(get_db), _role: str = Depends(require_any_role)
+) -> list[Team]:
     return list(db.execute(select(Team)).scalars().all())
 
 
 @router.get("/{team_id}", response_model=TeamRead)
-def get_team(team_id: int, db: Session = Depends(get_db)) -> Team:
+def get_team(
+    team_id: int,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
+) -> Team:
     team = db.get(Team, team_id)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")
@@ -42,7 +53,10 @@ def get_team(team_id: int, db: Session = Depends(get_db)) -> Team:
 
 @router.patch("/{team_id}", response_model=TeamRead)
 def update_team(
-    team_id: int, payload: TeamUpdate, db: Session = Depends(get_db)
+    team_id: int,
+    payload: TeamUpdate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> Team:
     team = db.get(Team, team_id)
     if team is None:
