@@ -372,23 +372,22 @@ the exact same `division_id` as the request (including `null` matching
 
 ## Known, deliberate gaps in this phase
 
-- There's no real authentication yet. Requests can pass an
-  `X-Actor-Name` header to identify who's making a change (used only for
-  the audit log); it defaults to `"admin"`. Don't mistake this for a
-  security boundary — anyone can claim to be anyone. A real
-  identity/admission system is a later phase (Device/ScoringDevice
-  admission is designed in the spec but not implemented in this plan).
-- The plugin-install endpoints (`POST /api/plugins/games` and
-  `POST /api/plugins/schedulers`) dynamically import and execute arbitrary
-  uploaded Python code, with the same "no real authentication" gap as
-  everything above — but this is qualitatively more dangerous than a CRUD
-  endpoint, since it's a code-execution primitive, and that risk applies
-  identically to both endpoints (there's nothing game-plugin-specific
-  about it). This was raised explicitly with the project owner, who
-  accepted the risk for now (local-LAN, single-admin-in-the-room threat
-  model) rather than bolt on a one-off check ahead of a real auth system.
-  See the design spec's §10 for the role-based-passwords + JWT direction
-  planned for that future phase.
+- Real authentication now exists — see
+  `docs/superpowers/specs/2026-09-03-real-authentication-design.md`. Six
+  roles (`admin`, `scorer`, `judge`, `referee`, `attendee`,
+  `display_device`) share one password per event until the Admin
+  differentiates them; every endpoint requires a bearer JWT via
+  `tournament_server.auth.require_role(...)`, with `admin` always
+  passing regardless of what a given endpoint's allowed-roles list says.
+  The plugin-install endpoints (`POST /api/plugins/games` and
+  `POST /api/plugins/schedulers`) are gated `admin`-only like every other
+  write in the `plugins` router — but note this is still a
+  code-execution primitive available to any admin, not a sandboxed
+  install; that hardening (checksums, capability scanning) is still a
+  separate, later phase per the design spec's §9. `Device`/
+  `ScoringDevice` admission — an *additional* per-device admission layer
+  on top of a role's session — remains a distinct, unbuilt future phase
+  (design spec §7).
 - A Team belongs to at most one Division (nullable `division_id`), not a
   many-to-many relationship, as a deliberate YAGNI simplification — see
   the plan's Global Constraints for why.
