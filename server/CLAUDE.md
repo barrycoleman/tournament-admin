@@ -422,16 +422,19 @@ anything else exercising the HTTP API: real calls through `TestClient`,
 real temporary files underneath.
 
 The `client`/`cooperative_client`/`captain_pick_client` fixtures are an
-`_AutoAuthTestClient` (see `conftest.py`): the moment a `POST /api/event`
-on that client instance succeeds (201), it transparently logs in as
-`admin` and pins `Authorization: Bearer <token>` on that client instance
-for every request after that — so every test using these fixtures is
-implicitly acting as Admin from event creation onward, with no explicit
-login call visible in the test body. A test that needs a different role,
-no token at all, or to exercise the bootstrap/login flow itself should
-not rely on this fixture — build a raw `TestClient` instead and use
-`tests/auth_helpers.py`'s `login_as`/`bearer` helpers to authenticate as
-whatever role the test actually needs.
+`_AutoAuthTestClient` (see `conftest.py`): on a `POST /api/event` call, if
+the request body has no `password`, it silently injects a fixed test
+password before sending — which is what lets every pre-existing test
+that predates real authentication keep calling `client.post("/api/event",
+json={"name": ...})` unchanged. The moment that call succeeds (201), the
+fixture transparently logs in as `admin` and pins `Authorization: Bearer
+<token>` on that client instance for every request after that — so every
+test using these fixtures is implicitly acting as Admin from event
+creation onward, with no explicit login call visible in the test body. A
+test that needs a different role, no token at all, or to exercise the
+bootstrap/login flow itself should not rely on this fixture — build a raw
+`TestClient` instead and use `tests/auth_helpers.py`'s `login_as`/`bearer`
+helpers to authenticate as whatever role the test actually needs.
 
 `GET /health` is intentionally the only HTTP endpoint with no auth
 dependency at all (it's defined directly in `app.py`, not through a
