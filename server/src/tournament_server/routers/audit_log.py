@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server.audit import AuditLog
+from tournament_server.auth import require_admin
 from tournament_server.deps import get_db
 from tournament_server.schemas.audit import AuditLogRead
 
@@ -16,6 +17,7 @@ def list_audit_log(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
 ) -> list[AuditLogRead]:
     rows = (
         db.execute(

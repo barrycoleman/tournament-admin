@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 
+from tournament_server.auth import require_admin
 from tournament_server.plugin_registry.errors import (
     PluginAlreadyExistsError,
     PluginInstallError,
@@ -13,7 +14,9 @@ router = APIRouter(prefix="/api/plugins/games", tags=["plugins"])
 
 
 @router.get("")
-def list_game_plugins(request: Request) -> list[dict[str, str]]:
+def list_game_plugins(
+    request: Request, _role: str = Depends(require_admin)
+) -> list[dict[str, str]]:
     registry = request.app.state.game_plugins
     return [
         {"name": p.name, "version": p.version, "display_name": p.display_name}
@@ -22,7 +25,9 @@ def list_game_plugins(request: Request) -> list[dict[str, str]]:
 
 
 @router.post("", status_code=201)
-def upload_game_plugin(request: Request, file: UploadFile) -> dict[str, str]:
+def upload_game_plugin(
+    request: Request, file: UploadFile, _role: str = Depends(require_admin)
+) -> dict[str, str]:
     zip_bytes = file.file.read()
     plugins_root = request.app.state.plugins_root
     try:
@@ -44,7 +49,9 @@ scheduler_router = APIRouter(prefix="/api/plugins/schedulers", tags=["plugins"])
 
 
 @scheduler_router.get("")
-def list_scheduler_plugins(request: Request) -> list[dict[str, str]]:
+def list_scheduler_plugins(
+    request: Request, _role: str = Depends(require_admin)
+) -> list[dict[str, str]]:
     registry = request.app.state.scheduler_plugins
     return [
         {"name": p.name, "version": p.version, "display_name": p.display_name}
@@ -53,7 +60,9 @@ def list_scheduler_plugins(request: Request) -> list[dict[str, str]]:
 
 
 @scheduler_router.post("", status_code=201)
-def upload_scheduler_plugin(request: Request, file: UploadFile) -> dict[str, str]:
+def upload_scheduler_plugin(
+    request: Request, file: UploadFile, _role: str = Depends(require_admin)
+) -> dict[str, str]:
     zip_bytes = file.file.read()
     plugins_root = request.app.state.plugins_root
     try:
