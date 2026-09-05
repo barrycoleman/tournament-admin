@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import datetime as dt
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EventCreate(BaseModel):
     name: str
-    password: str
+    password: str = Field(min_length=1)
 
 
 class EventRead(BaseModel):

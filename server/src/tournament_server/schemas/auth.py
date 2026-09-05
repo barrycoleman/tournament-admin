@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LoginRequest(BaseModel):
@@ -20,7 +20,7 @@ class LogoutRequest(BaseModel):
 
 
 class PasswordChangeRequest(BaseModel):
-    password: str
+    password: str = Field(min_length=1)
 
 
 class TokenResponse(BaseModel):
