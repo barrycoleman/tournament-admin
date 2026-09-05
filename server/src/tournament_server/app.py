@@ -13,6 +13,7 @@ from tournament_server.plugin_registry.discovery import (
 )
 from tournament_server.routers import (
     audit_log,
+    auth,
     divisions,
     event,
     field_sets,
@@ -56,6 +57,7 @@ def create_app(
             return await call_next(request)
 
     app.include_router(event.router)
+    app.include_router(auth.router)
     app.include_router(sessions.router)
     app.include_router(divisions.router)
     app.include_router(field_sets.router)
