@@ -370,6 +370,47 @@ the exact same `division_id` as the request (including `null` matching
 `null` for a no-division bracket), and its own auto-select path (when no
 `field_set_id` is given) is filtered by division the same way.
 
+## Scoring device admission
+
+A `ScoringDevice` (`POST /api/devices/register` — no auth required,
+matching `POST /api/auth/login`'s bootstrap-endpoint status) self-registers
+and gets a persistent, human-friendly random name (`shifty-squirrel`-style,
+adjective-animal) plus a browser-storable `device_token`; it starts
+`pending`. An admin reviews `GET /api/devices` and calls
+`POST /api/devices/{id}/admit` (or `.../revoke` to un-admit). This is a
+distinct, additional layer on top of role-based auth (see
+`docs/superpowers/specs/2026-09-03-real-authentication-design.md`), not a
+replacement for it: role auth gates *whether a caller can act at all*;
+device admission gates *whether score-writes count as coming from a
+trusted, admin-vetted device* and attributes them to a real name instead
+of the spoofable `X-Actor-Name` header.
+
+Admission has no stored status enum — `admitted_at is not None AND (now -
+last_seen_at) < idle_timeout` is computed at every point of use (list,
+enforcement), mirroring `AuthSession`'s existing lazy-expiry pattern; no
+background job sweeps expired admissions. `last_seen_at` is kept current
+by a request-level middleware (`app.py`) that touches it on *any* request
+carrying a valid `X-Device-Token`, not just scoring ones — so the
+idle-timeout (`TOURNAMENT_DEVICE_IDLE_TIMEOUT_MINUTES`, default 60)
+reflects real device activity.
+
+`require_admitted_device` (`device_auth.py`) is applied only to
+`POST /api/matches/{id}/alliances/{id}/score`, in addition to the existing
+`require_scorer_or_referee` role gate. `admin` bypasses only the
+*rejection*, never the *lookup*: a present, currently-admitted device
+token still attributes `ScoreRecord.submitted_by_device` to the real
+device name even for an admin caller, but an admin is never blocked by a
+missing/invalid/un-admitted one — every other role is. Every caller that
+never sends `X-Device-Token` (including all pre-device-phase tests) keeps
+falling back to today's `audit.current_actor.get()`-based attribution,
+unchanged.
+
+`Device`/Pi-display admission (the master spec's other, separate device
+concept — admin-driven, for unattended kiosk displays) is not built —
+still a distinct, later phase once a Pi client and a WebSocket
+"active-session" push mechanism exist. See
+`docs/superpowers/specs/2026-09-08-scoring-device-admission-design.md`.
+
 ## Known, deliberate gaps in this phase
 
 - Real authentication now exists — see
