@@ -117,9 +117,11 @@ New `devices` router, prefix `/api/devices`:
   UI can show "needs re-admission" rather than "never admitted"),
   `registered_at`, `admitted_at`, `admitted_by`, `last_seen_at`.
 - **`POST /api/devices/{id}/admit`** — **admin-only.** Sets
-  `admitted_at = now`, `admitted_by = <acting admin's actor identity>`.
-  404 if the device doesn't exist. Idempotent — admitting an
-  already-admitted (or idle) device just refreshes `admitted_at`.
+  `admitted_at = now`, `admitted_by = <acting admin's actor identity>`,
+  **and `last_seen_at = now`** (see §5 for why re-admitting must also
+  refresh `last_seen_at`, not just `admitted_at`). 404 if the device
+  doesn't exist. Idempotent — admitting an already-admitted (or idle)
+  device just refreshes all three fields.
 - **`POST /api/devices/{id}/revoke`** — **admin-only.** Clears
   `admitted_at`/`admitted_by` back to `None`. 404 if the device doesn't
   exist. Idempotent — revoking an already-pending device is a no-op that
@@ -166,15 +168,36 @@ submit scores" half.
 ## 5. Activity tracking & attribution
 
 A new ASGI middleware, registered in `app.py` alongside the existing
-`actor_scope` middleware: on every request, if an `X-Device-Token` header
-is present, hash it and update that `ScoringDevice` row's `last_seen_at`
-to now — best-effort only. An unknown or malformed token is silently
-ignored by this middleware (enforcement and error responses are the
-job of `require_admitted_device` on the one endpoint that needs them, not
-this middleware). This is what makes the idle-timeout reflect genuine
-device activity across every endpoint a scoring device's browser touches
+`actor_scope` middleware: it lets the request complete first, and only
+then — if an `X-Device-Token` header was present **and the response
+succeeded (status `< 400`)** — hashes the token and updates that
+`ScoringDevice` row's `last_seen_at` to now. An unknown or malformed
+token is silently ignored (enforcement and error responses are the job
+of `require_admitted_device` on the one endpoint that needs them, not
+this middleware).
+
+**The success-only condition is load-bearing, not an optimization.** If
+`last_seen_at` were touched unconditionally (including on a *rejected*
+request), a device that has genuinely gone idle would revive its own
+admission simply by attempting — and failing — a request: the failed
+attempt would refresh `last_seen_at`, making the very next attempt (or
+even that same request one tick later) pass `is_currently_admitted`'s
+lazy check with no admin action at all. That directly contradicts this
+phase's own "requiring one-click re-admission" goal (§1, from the master
+spec). Gating the touch on response success means only a request the
+device was actually *allowed* to make counts as activity — an idle
+device's repeated rejected attempts never resurrect it; only an admin's
+explicit `admit` (§3) does. `POST /api/devices/{id}/admit` correspondingly
+sets `last_seen_at = now` as well as `admitted_at = now`, so re-admitting
+a device that has been silent for a long time takes effect immediately,
+rather than staying rejected until its next successful request happens
+to refresh the clock.
+
+This is what makes the idle-timeout reflect genuine device activity
+across every endpoint a scoring device's browser successfully touches
 (viewing matches, rankings, etc.), not just how often it happens to
-submit a score.
+submit a score — while still keeping "idle" a one-way gate only an admin
+can reopen.
 
 `POST /api/matches/{match_id}/alliances/{alliance_id}/score` additionally
 sets `ScoreRecord.submitted_by_device` from the resolved device's
@@ -230,7 +253,9 @@ project's existing testing policy — no mocking at the HTTP boundary):
   and `last_seen_at` in the past beyond the configured timeout (matching
   how the auth spec's own tests seed an expired `AuthSession` directly)
   — the same device's score submission now 403s again, without ever
-  calling revoke; re-admitting succeeds again.
+  calling revoke. Critically, that rejected attempt must **not** silently
+  revive the device (confirm a second, immediately-following identical
+  attempt still 403s) — only an explicit re-admit restores access.
 - `POST /api/devices/{id}/revoke` immediately un-admits a device (403 on
   its next score-submission attempt), and is idempotent when called on
   an already-pending device.
