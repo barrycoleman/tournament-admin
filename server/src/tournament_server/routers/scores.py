@@ -10,6 +10,7 @@ from tournament_server import audit
 from tournament_server.auth import require_scorer_or_referee
 from tournament_server.db import utc_now
 from tournament_server.deps import get_db, get_game_plugin_for_event, get_the_event
+from tournament_server.device_auth import require_admitted_device
 from tournament_server.models.alliance import Alliance
 from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.match import Match
@@ -46,6 +47,7 @@ def submit_score(
     request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_scorer_or_referee),
+    device_friendly_name: str | None = Depends(require_admitted_device),
 ) -> ScoreRecordRead:
     match = db.get(Match, match_id)
     if match is None:
@@ -53,6 +55,10 @@ def submit_score(
     alliance = db.get(Alliance, alliance_id)
     if alliance is None or alliance.match_id != match_id:
         raise HTTPException(status_code=404, detail="Alliance not found on this match")
+
+    submitted_by = (
+        device_friendly_name if device_friendly_name is not None else audit.current_actor.get()
+    )
 
     plugin = get_game_plugin_for_event(request, db)
 
@@ -92,7 +98,7 @@ def submit_score(
             no_show=payload.no_show,
             dq=payload.dq,
             sitting=payload.sitting,
-            submitted_by_device=audit.current_actor.get(),
+            submitted_by_device=submitted_by,
             submitted_at=now,
             saved_at=now,
         )
@@ -102,7 +108,7 @@ def submit_score(
         existing.no_show = payload.no_show
         existing.dq = payload.dq
         existing.sitting = payload.sitting
-        existing.submitted_by_device = audit.current_actor.get()
+        existing.submitted_by_device = submitted_by
         existing.submitted_at = now
         existing.saved_at = now
         record = existing
@@ -131,7 +137,7 @@ def submit_score(
                     no_show=False,
                     dq=False,
                     sitting=False,
-                    submitted_by_device=audit.current_actor.get(),
+                    submitted_by_device=submitted_by,
                     submitted_at=now,
                     saved_at=now,
                 )
