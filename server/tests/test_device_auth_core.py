@@ -123,7 +123,7 @@ def test_touch_device_activity_updates_last_seen(tmp_path):
     db.add(device)
     db.commit()
 
-    touch_device_activity(db, "raw-device-token")
+    touch_device_activity(db, "raw-device-token", dt.timedelta(minutes=60))
 
     db.refresh(device)
     assert device.last_seen_at > stale
@@ -131,4 +131,4 @@ def test_touch_device_activity_updates_last_seen(tmp_path):
 
 def test_touch_device_activity_silently_ignores_unknown_token(tmp_path):
     db = _db(tmp_path)
-    touch_device_activity(db, "no-such-token")  # must not raise
+    touch_device_activity(db, "no-such-token", dt.timedelta(minutes=60))  # must not raise

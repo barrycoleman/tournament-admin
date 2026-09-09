@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 
 from fastapi.testclient import TestClient
 
@@ -142,6 +143,47 @@ def test_idle_timeout_flips_admitted_device_to_idle(client):
     listed = client.get("/api/devices").json()
     matched = next(d for d in listed if d["id"] == device_id)
     assert matched["status"] == "idle"
+
+
+def test_admit_and_revoke_write_an_audit_trail_without_leaking_the_token(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    raw = client.__class__(client.app)
+    device = raw.post("/api/devices/register").json()
+    device_id = next(
+        d["id"] for d in client.get("/api/devices").json()
+        if d["friendly_name"] == device["friendly_name"]
+    )
+
+    client.post(f"/api/devices/{device_id}/admit")
+
+    audit_log = client.get("/api/audit-log").json()
+    admit_entries = [
+        e for e in audit_log
+        if e["table_name"] == "scoring_devices" and e["action"] == "admit"
+    ]
+    assert len(admit_entries) == 1
+    admit_entry = admit_entries[0]
+    assert admit_entry["after"]["friendly_name"] == device["friendly_name"]
+
+    serialized = json.dumps(admit_entry)
+    assert "device_token_hash" not in serialized
+    assert device["device_token"] not in serialized
+
+    client.post(f"/api/devices/{device_id}/revoke")
+
+    audit_log_after_revoke = client.get("/api/audit-log").json()
+    revoke_entries = [
+        e for e in audit_log_after_revoke
+        if e["table_name"] == "scoring_devices" and e["action"] == "revoke"
+    ]
+    assert len(revoke_entries) == 1
+    revoke_entry = revoke_entries[0]
+    assert revoke_entry["after"]["admitted_at"] is None
+    assert revoke_entry["after"]["admitted_by"] is None
+
+    serialized_revoke = json.dumps(revoke_entry)
+    assert "device_token_hash" not in serialized_revoke
+    assert device["device_token"] not in serialized_revoke
 
 
 def test_activity_middleware_updates_last_seen_on_any_request(client):

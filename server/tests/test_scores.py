@@ -258,6 +258,46 @@ def test_idle_device_rejected_until_explicitly_re_admitted(client):
     assert fresh_response.status_code == 200
 
 
+def test_idle_device_not_revived_by_a_successful_non_scoring_request(client):
+    import datetime as dt
+
+    from tournament_server.db import utc_now
+    from tournament_server.models.scoring_device import ScoringDevice
+
+    match_id, red_id, blue_id = _setup_match(client)
+    raw = client.__class__(client.app)
+    device = raw.post("/api/devices/register").json()
+    device_id = next(
+        d["id"] for d in client.get("/api/devices").json()
+        if d["friendly_name"] == device["friendly_name"]
+    )
+    client.post(f"/api/devices/{device_id}/admit")
+    scorer_token = login_as(raw, "scorer")
+
+    db = client.app.state.session_factory()
+    row = db.get(ScoringDevice, device_id)
+    row.last_seen_at = utc_now() - dt.timedelta(hours=2)
+    db.commit()
+    db.close()
+
+    successful_read = raw.get(
+        "/api/divisions",
+        headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
+    )
+    assert successful_read.status_code == 200
+
+    listed = client.get("/api/devices").json()
+    matched = next(d for d in listed if d["id"] == device_id)
+    assert matched["status"] == "idle"
+
+    still_rejected = raw.post(
+        f"/api/matches/{match_id}/alliances/{red_id}/score",
+        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
+    )
+    assert still_rejected.status_code == 403
+
+
 def test_revoked_device_cannot_submit_score(client):
     match_id, red_id, blue_id = _setup_match(client)
     raw = client.__class__(client.app)

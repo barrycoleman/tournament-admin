@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import datetime as dt
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server import audit
+from tournament_server.audit import AuditLog
 from tournament_server.auth import hash_token, require_admin
 from tournament_server.db import utc_now
 from tournament_server.deps import get_db
@@ -19,7 +23,7 @@ from tournament_server.schemas.device import DeviceRead, DeviceRegisterResponse
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 
-def _to_device_read(device: ScoringDevice, idle_timeout) -> DeviceRead:
+def _to_device_read(device: ScoringDevice, idle_timeout: dt.timedelta) -> DeviceRead:
     now = utc_now()
     return DeviceRead(
         id=device.id,
@@ -70,6 +74,11 @@ def admit_device(
     device = db.get(ScoringDevice, device_id)
     if device is None:
         raise HTTPException(status_code=404, detail="Device not found")
+    before = {
+        "friendly_name": device.friendly_name,
+        "admitted_at": device.admitted_at.isoformat() if device.admitted_at else None,
+        "admitted_by": device.admitted_by,
+    }
     now = utc_now()
     device.admitted_at = now
     device.admitted_by = audit.current_actor.get()
@@ -79,6 +88,21 @@ def admit_device(
     # device's next successful request happens to touch last_seen_at —
     # re-admitting must take effect immediately.
     device.last_seen_at = now
+    after = {
+        "friendly_name": device.friendly_name,
+        "admitted_at": device.admitted_at.isoformat(),
+        "admitted_by": device.admitted_by,
+    }
+    db.add(
+        AuditLog(
+            table_name="scoring_devices",
+            row_pk=device.id,
+            action="admit",
+            actor=audit.current_actor.get(),
+            before_json=json.dumps(before),
+            after_json=json.dumps(after),
+        )
+    )
     db.commit()
     db.refresh(device)
     return _to_device_read(device, request.app.state.device_idle_timeout)
@@ -94,8 +118,28 @@ def revoke_device(
     device = db.get(ScoringDevice, device_id)
     if device is None:
         raise HTTPException(status_code=404, detail="Device not found")
+    before = {
+        "friendly_name": device.friendly_name,
+        "admitted_at": device.admitted_at.isoformat() if device.admitted_at else None,
+        "admitted_by": device.admitted_by,
+    }
     device.admitted_at = None
     device.admitted_by = None
+    after = {
+        "friendly_name": device.friendly_name,
+        "admitted_at": None,
+        "admitted_by": None,
+    }
+    db.add(
+        AuditLog(
+            table_name="scoring_devices",
+            row_pk=device.id,
+            action="revoke",
+            actor=audit.current_actor.get(),
+            before_json=json.dumps(before),
+            after_json=json.dumps(after),
+        )
+    )
     db.commit()
     db.refresh(device)
     return _to_device_read(device, request.app.state.device_idle_timeout)

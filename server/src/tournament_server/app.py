@@ -73,7 +73,9 @@ def create_app(
         if device_token and response.status_code < 400:
             db = request.app.state.session_factory()
             try:
-                device_auth.touch_device_activity(db, device_token)
+                device_auth.touch_device_activity(
+                    db, device_token, request.app.state.device_idle_timeout
+                )
             finally:
                 db.close()
         return response

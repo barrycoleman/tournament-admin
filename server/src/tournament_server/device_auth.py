@@ -41,8 +41,17 @@ def generate_friendly_name(db: Session) -> str:
         if exists is None:
             return candidate
     # Word list exhausted (never expected in practice for a single event's
-    # device count) — append a short random suffix to guarantee termination.
-    return f"{random.choice(_ADJECTIVES)}-{random.choice(_ANIMALS)}-{secrets.token_hex(2)}"
+    # device count) — append a short random suffix, still checked for
+    # uniqueness so a rare double-collision doesn't surface as an
+    # unauthenticated-endpoint 500.
+    for _ in range(_MAX_NAME_RETRIES):
+        candidate = f"{random.choice(_ADJECTIVES)}-{random.choice(_ANIMALS)}-{secrets.token_hex(2)}"
+        exists = db.execute(
+            select(ScoringDevice).where(ScoringDevice.friendly_name == candidate)
+        ).scalars().first()
+        if exists is None:
+            return candidate
+    raise RuntimeError("Could not generate a unique device friendly name")
 
 
 def is_currently_admitted(
@@ -59,14 +68,27 @@ def device_status(
     return "admitted" if is_currently_admitted(device, now, idle_timeout) else "idle"
 
 
-def touch_device_activity(db: Session, device_token: str) -> None:
+def touch_device_activity(
+    db: Session, device_token: str, idle_timeout: dt.timedelta
+) -> None:
     token_hash = hash_token(device_token)
     device = db.execute(
         select(ScoringDevice).where(ScoringDevice.device_token_hash == token_hash)
     ).scalars().first()
-    if device is not None:
-        device.last_seen_at = utc_now()
-        db.commit()
+    if device is None:
+        return
+    now = utc_now()
+    if device.admitted_at is not None and not is_currently_admitted(device, now, idle_timeout):
+        # This device was admitted at some point but has gone idle — only
+        # an explicit re-admit may restore it (see the design spec's §5).
+        # Letting any successful request refresh last_seen_at here would
+        # make "idle" a self-healing sliding window instead of the
+        # one-way gate the design requires, since require_admitted_device
+        # only gates the one scoring endpoint — every other successful
+        # request (a plain read) would otherwise silently revive it.
+        return
+    device.last_seen_at = now
+    db.commit()
 
 
 def require_admitted_device(
