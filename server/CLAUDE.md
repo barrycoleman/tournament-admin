@@ -389,10 +389,21 @@ Admission has no stored status enum — `admitted_at is not None AND (now -
 last_seen_at) < idle_timeout` is computed at every point of use (list,
 enforcement), mirroring `AuthSession`'s existing lazy-expiry pattern; no
 background job sweeps expired admissions. `last_seen_at` is kept current
-by a request-level middleware (`app.py`) that touches it on *any* request
-carrying a valid `X-Device-Token`, not just scoring ones — so the
-idle-timeout (`TOURNAMENT_DEVICE_IDLE_TIMEOUT_MINUTES`, default 60)
-reflects real device activity.
+by a request-level middleware (`app.py`) that touches it on any
+*successful* request carrying a valid `X-Device-Token`, not just scoring
+ones — so the idle-timeout (`TOURNAMENT_DEVICE_IDLE_TIMEOUT_MINUTES`,
+default 60) reflects real device activity. Making the touch conditional
+on success alone isn't enough, though: `require_admitted_device` only
+gates the one scoring endpoint, so an ordinary successful `GET` would
+otherwise silently revive an already-idle device with no admin action —
+`touch_device_activity` (`device_auth.py`) additionally refuses to
+refresh `last_seen_at` for a device that is admitted but currently *not*
+within its idle window, so "idle" stays a true one-way gate only an
+explicit `admit` (which also refreshes `last_seen_at`) can reopen.
+`admit`/`revoke` each write an explicit `AuditLog` entry too (curated,
+not the generic per-column hook — `scoring_devices` stays excluded from
+that so `device_token_hash` never leaks into the log), since revoking
+would otherwise erase the only record a device was ever admitted.
 
 `require_admitted_device` (`device_auth.py`) is applied only to
 `POST /api/matches/{id}/alliances/{id}/score`, in addition to the existing

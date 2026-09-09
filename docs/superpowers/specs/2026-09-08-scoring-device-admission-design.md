@@ -127,6 +127,19 @@ New `devices` router, prefix `/api/devices`:
   exist. Idempotent — revoking an already-pending device is a no-op that
   still returns success.
 
+Both `admit` and `revoke` write an explicit `AuditLog` row (`table_name:
+"scoring_devices"`, `action: "admit"` or `"revoke"`, the acting admin as
+`actor`, before/after JSON holding `friendly_name`/`admitted_at`/
+`admitted_by` — never `device_token_hash`) alongside the row update. This
+is deliberately a curated, explicit write rather than un-excluding
+`scoring_devices` from the generic per-column audit hook (§2 already
+excludes the whole table so the token hash never leaks into the audit
+log): without it, `revoke` overwriting `admitted_at`/`admitted_by` back to
+`None` would erase the only record that a device was ever admitted, by
+whom, or that it was later revoked — the one piece of history worth
+keeping for a feature whose entire purpose is establishing which devices
+are trusted to submit scores.
+
 ## 4. Enforcement & auth integration
 
 A new `require_admitted_device` FastAPI dependency, applied *in addition
@@ -170,34 +183,54 @@ submit scores" half.
 A new ASGI middleware, registered in `app.py` alongside the existing
 `actor_scope` middleware: it lets the request complete first, and only
 then — if an `X-Device-Token` header was present **and the response
-succeeded (status `< 400`)** — hashes the token and updates that
-`ScoringDevice` row's `last_seen_at` to now. An unknown or malformed
-token is silently ignored (enforcement and error responses are the job
-of `require_admitted_device` on the one endpoint that needs them, not
-this middleware).
+succeeded (status `< 400`)** — hashes the token and calls
+`touch_device_activity`, which updates that `ScoringDevice` row's
+`last_seen_at` to now **unless the device has already gone idle**. An
+unknown or malformed token is silently ignored (enforcement and error
+responses are the job of `require_admitted_device` on the one endpoint
+that needs them, not this middleware).
 
-**The success-only condition is load-bearing, not an optimization.** If
-`last_seen_at` were touched unconditionally (including on a *rejected*
-request), a device that has genuinely gone idle would revive its own
-admission simply by attempting — and failing — a request: the failed
-attempt would refresh `last_seen_at`, making the very next attempt (or
-even that same request one tick later) pass `is_currently_admitted`'s
-lazy check with no admin action at all. That directly contradicts this
-phase's own "requiring one-click re-admission" goal (§1, from the master
-spec). Gating the touch on response success means only a request the
-device was actually *allowed* to make counts as activity — an idle
-device's repeated rejected attempts never resurrect it; only an admin's
-explicit `admit` (§3) does. `POST /api/devices/{id}/admit` correspondingly
-sets `last_seen_at = now` as well as `admitted_at = now`, so re-admitting
-a device that has been silent for a long time takes effect immediately,
-rather than staying rejected until its next successful request happens
-to refresh the clock.
+**Two conditions are both load-bearing here, not one — an earlier version
+of this design had only the first and was wrong.** `require_admitted_device`
+gates exactly one endpoint (§4); every other endpoint a scoring device's
+browser touches (viewing matches, rankings, etc.) succeeds on role auth
+alone, with no device-admission check at all. So:
+
+1. The touch must be success-only (status `< 400`), or a device that has
+   gone idle would revive its own admission simply by attempting — and
+   failing — a *score-submission* request: the failed attempt would
+   refresh `last_seen_at`, making the very next attempt pass
+   `is_currently_admitted`'s lazy check with no admin action at all.
+2. Gating on success alone is **not sufficient**, because it does nothing
+   to stop an ordinary, *successful* read (a plain `GET`, ungated by
+   device admission at all) from doing the exact same thing — the device
+   attaches its token to a routine request, that request succeeds on role
+   auth alone, and the naive middleware would refresh `last_seen_at`
+   anyway, silently un-idling the device with no admin action. This is
+   the far more likely path in practice, since a real client polls for
+   match/ranking updates constantly. `touch_device_activity` therefore
+   checks the device's own current status before touching it: if
+   `admitted_at is not None` (it has been admitted at some point) but
+   `is_currently_admitted` is currently false (it's idle *right now*),
+   the touch is skipped entirely — activity, successful or not, cannot
+   revive an already-idle device. A `pending` device (never yet admitted)
+   or a device that is *still* within its admitted window keeps getting
+   touched normally, so a genuinely active device never spuriously goes
+   idle in the first place; only a device that has already crossed the
+   idle threshold is locked out until an explicit re-admit.
+
+Both conditions together are what make "idle" an actual one-way gate only
+an admin's `admit` (§3) can reopen — dropping either one reopens the
+self-revival hole. `POST /api/devices/{id}/admit` correspondingly sets
+`last_seen_at = now` as well as `admitted_at = now`, so re-admitting a
+device that has been idle for a long time takes effect immediately,
+rather than waiting on its next successful request to refresh the clock
+(which, per the rule above, wouldn't happen anyway until it's re-admitted).
 
 This is what makes the idle-timeout reflect genuine device activity
-across every endpoint a scoring device's browser successfully touches
-(viewing matches, rankings, etc.), not just how often it happens to
-submit a score — while still keeping "idle" a one-way gate only an admin
-can reopen.
+across every endpoint a scoring device's browser successfully touches,
+for as long as it stays within the window — while still keeping "idle" a
+true one-way gate only an admin can reopen, once it lapses.
 
 `POST /api/matches/{match_id}/alliances/{alliance_id}/score` additionally
 sets `ScoreRecord.submitted_by_device` from the resolved device's
@@ -255,10 +288,20 @@ project's existing testing policy — no mocking at the HTTP boundary):
   — the same device's score submission now 403s again, without ever
   calling revoke. Critically, that rejected attempt must **not** silently
   revive the device (confirm a second, immediately-following identical
-  attempt still 403s) — only an explicit re-admit restores access.
+  attempt still 403s) — only an explicit re-admit restores access. A
+  second, equally critical case: a *successful* request to an endpoint
+  `require_admitted_device` doesn't even gate (e.g. a plain `GET`) must
+  **also** not revive an already-idle device — confirm the device's
+  computed status is still `"idle"` and a following score-submission
+  attempt still 403s, even though the read itself succeeded.
 - `POST /api/devices/{id}/revoke` immediately un-admits a device (403 on
   its next score-submission attempt), and is idempotent when called on
   an already-pending device.
+- `admit` and `revoke` each write an `AuditLog` entry visible via
+  `GET /api/audit-log` (`table_name == "scoring_devices"`,
+  `action == "admit"`/`"revoke"`) whose `before`/`after` contain the
+  device's `friendly_name` and admission fields but never
+  `device_token_hash`.
 - `GET /api/devices` is admin-only (403 for `scorer`, matching the
   representative-authorization-check pattern the auth spec's own tests
   already established); non-admin roles get 403 on admit/revoke too.
