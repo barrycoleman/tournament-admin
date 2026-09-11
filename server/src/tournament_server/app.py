@@ -29,6 +29,7 @@ from tournament_server.routers import (
     rankings,
     schedule,
     scores,
+    server_info,
     sessions,
     teams,
 )
@@ -36,13 +37,17 @@ from tournament_server.settings import Settings
 
 
 def create_app(
-    db_path: str | None = None, plugins_root: str | None = None
+    db_path: str | None = None,
+    plugins_root: str | None = None,
+    port: int | None = None,
 ) -> FastAPI:
     settings = Settings.from_env()
     if db_path is not None:
         settings.db_path = db_path
     if plugins_root is not None:
         settings.plugins_root = plugins_root
+    if port is not None:
+        settings.port = port
 
     engine = make_engine(settings.db_path)
     session_factory = make_session_factory(engine)
@@ -56,6 +61,7 @@ def create_app(
     app.state.device_idle_timeout = dt.timedelta(
         minutes=settings.device_idle_timeout_minutes
     )
+    app.state.port = settings.port
 
     @app.middleware("http")
     async def actor_middleware(request: Request, call_next):
@@ -99,6 +105,7 @@ def create_app(
     app.include_router(rankings.router)
     app.include_router(schedule.router)
     app.include_router(finals.router)
+    app.include_router(server_info.router)
 
     @app.get("/health")
     def health() -> dict[str, str]:

@@ -14,7 +14,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 pytest tests/ -v
-python -m tournament_server.main   # runs the dev server on 127.0.0.1:8000
+python -m tournament_server.main   # runs the dev server, LAN-reachable on port 8000 (or the next free port)
 ```
 
 ## Layout
@@ -462,6 +462,40 @@ byte-for-byte identical (via Alembic's own autogenerate-diff machinery)
 to what `Base.metadata` declares — this is what fails, loudly, if a
 future phase changes a model without also writing the matching
 migration.
+
+## Network binding and discoverability
+
+`python -m tournament_server.main` binds to `0.0.0.0` (all interfaces,
+including loopback), not `127.0.0.1` — required by this project's own
+LAN-connected-device architecture (scorer tablets, Pi displays), which
+loopback-only binding directly contradicted. `TOURNAMENT_HOST`/
+`TOURNAMENT_PORT` env vars override the defaults (`Settings.host`/
+`Settings.port`, `settings.py`). If the configured port is taken,
+`network.py`'s `find_free_port` probes the next 10 ports in sequence
+before giving up with a clear `ERROR: no free port in <range> on <host>`
+(printed to stderr, non-zero exit) — no raw socket traceback. The actual
+bound port (after probing) is threaded into `create_app(port=...)` so
+`app.state.port` always reflects reality, never the configured default
+alone.
+
+`GET /api/server-info` (admin-only) reports `{"port", "addresses"}` —
+`addresses` is this machine's own non-loopback, non-link-local IPv4
+addresses (`network.py`'s `enumerate_lan_addresses`, via `psutil`'s
+`net_if_addrs()`), with common virtual/container/VPN adapters (`docker*`,
+`br-*`, `veth*`, `tun*`, `tap*`, `vmnet*`, `virbr*`, `utun*`, `ppp*`,
+`vboxnet*`, `zt*`) filtered out by interface name — a plain
+loopback/link-local IP-range filter isn't enough, since a Docker bridge
+or an active VPN tunnel both present as ordinary private-range IPv4
+addresses that plain range-filtering can't tell apart from the real
+venue LAN interface (verified against this project's own dev machine,
+which has both). `psutil` was picked over a stdlib-only approach
+(hostname-based lookup) specifically because the stdlib approach fails
+outright on the common Debian/Ubuntu default of mapping the hostname to
+`127.0.1.1` in `/etc/hosts` — not a rare edge case. This is what a future
+admin UI uses to show its own LAN-reachable address(es)/port (e.g. as a
+QR code) so other devices on the venue network can find it — filtering
+is still best-effort and can occasionally miss or include the wrong
+interface on an unusual setup.
 
 ## Known, deliberate gaps in this phase
 
