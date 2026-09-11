@@ -1194,6 +1194,7 @@ Expected: prints `tournament.db: schema already up to date.` and exits 0.
 ```bash
 rm -f tournament.db*
 python3 -c "
+from tournament_server import models  # noqa: F401 -- registers all tables on Base
 from tournament_server.db import Base, make_engine
 engine = make_engine('tournament.db')
 tables = [t for name, t in Base.metadata.tables.items() if name != 'scoring_devices']
@@ -1202,6 +1203,12 @@ Base.metadata.create_all(engine, tables=tables)
 tm migrate --db-path tournament.db
 echo \"exit code: \$?\"
 ```
+
+(The `models` import is required here — a bare `python3 -c` process has no
+prior import of `tournament_server.app`/`conftest.py` to register tables
+on `Base.metadata` as a side effect, unlike every pytest run. Without it
+this script silently builds zero tables and `tm migrate` takes the
+FRESH_INSTALL path instead of hitting the refusal it's meant to test.)
 
 Expected: prints the `ERROR: tournament.db's schema doesn't match any
 known version...` message and exits 1.
