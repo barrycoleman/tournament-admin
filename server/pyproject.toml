@@ -11,6 +11,7 @@ dependencies = [
     "python-multipart>=0.0.9,<1.0",
     "pyjwt>=2.9,<3.0",
     "bcrypt>=4.2,<5.0",
+    "alembic>=1.13,<2.0",
 ]
 
 [project.scripts]
@@ -28,6 +29,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"tournament_server._alembic" = ["script.py.mako"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
