@@ -27,7 +27,7 @@ version — deleting the database would delete their tournament.
 This phase adopts Alembic and puts real migrations in place, but scopes
 the work honestly around what's actually true today: **there is no real
 data anywhere against any historical schema shape.** Nothing in this
-phase attempts to reconstruct migrations for the 23 tables' worth of
+phase attempts to reconstruct migrations for the 24 tables' worth of
 incremental history across every prior phase (auth, scoring-device
 admission, multi-division/time-based scheduling, finals, and so on). That
 would be speculative effort spent modeling data states that have never
@@ -56,8 +56,16 @@ existed. Instead:
   burden; it's the same answer this project has already given twice.
 
 In scope:
-- Adopting Alembic (`server/alembic/`, `server/alembic.ini`) with `env.py`
-  reading the database URL dynamically from `Settings.from_env()`.
+- Adopting Alembic (`src/tournament_server/_alembic/`, `server/alembic.ini`)
+  with `env.py` reading the database URL dynamically from
+  `Settings.from_env()`. The script directory lives *inside* the
+  installed package, not at the conventional project-root `alembic/`
+  location a bare `alembic init` would suggest — packaging-readiness
+  (§6/§8) requires it be addressable via `importlib.resources`, which
+  only works for files inside an actual installed package.
+  `server/alembic.ini` stays at the project root as a dev-time
+  convenience for hand-running `alembic revision --autogenerate`; the
+  running application never reads it.
 - One baseline migration (`versions/`) that creates every table the
   current SQLAlchemy models declare.
 - A schema-version check that runs at `create_app()` time (shared by both
@@ -102,16 +110,20 @@ any other event's database.
 **The baseline migration** (`versions/0001_baseline.py` — an illustrative
 filename; the generated migration's actual hash-based filename is fine)
 is generated once, up front, via `alembic revision --autogenerate` run
-against a freshly-created, fully-`create_all()`'d database, then reviewed
-by hand before being committed. It creates all 23 tables this project's
-models currently declare (`alliances`, `alliance_teams`, `auth_sessions`,
-`bracket_alliances`, `bracket_alliance_teams`, `bracket_matchups`,
-`divisions`, `events`, `fields`, `field_sets`, `finals_brackets`,
-`finals_results`, `matches`, `sessions`, `session_participation`,
-`rankings`, `ranking_configurations`, `role_credentials`,
-`schedule_generations`, `score_records`, `scoring_devices`,
-`signing_keys`, `teams`) exactly as they exist today — this is a snapshot,
-not a replay of history.
+against a genuinely empty database (an already-`create_all()`'d database
+would diff as empty against matching metadata, producing no migration at
+all), then reviewed by hand before being committed. It creates all 24
+tables this project's models currently declare (`alliances`,
+`alliance_teams`, `audit_log`, `auth_sessions`, `bracket_alliances`,
+`bracket_alliance_teams`, `bracket_matchups`, `divisions`, `events`,
+`fields`, `field_sets`, `finals_brackets`, `finals_results`, `matches`,
+`sessions`, `session_participation`, `rankings`, `ranking_configurations`,
+`role_credentials`, `schedule_generations`, `score_records`,
+`scoring_devices`, `signing_keys`, `teams`) exactly as they exist today —
+this is a snapshot, not a replay of history. `audit_log` is declared
+directly on `Base` in `audit.py`, outside the `models/` package, but is
+always imported by the running app and therefore part of the real schema
+this baseline must capture.
 
 ## 3. Startup flow
 
@@ -226,19 +238,22 @@ never the only thing standing between them.
 - **New dependency**: `alembic` (added to `pyproject.toml`'s main
   `dependencies`, not `dev` — it's needed at runtime, not just for
   testing, since migrations run automatically at startup).
-- `server/alembic.ini` — Alembic's config file. `sqlalchemy.url` is left
-  blank/unused here; `env.py` overrides it programmatically from
-  `Settings.from_env().db_path` so the already-existing
-  `TOURNAMENT_DB_PATH` environment variable keeps being the single
-  source of truth for where the database lives.
-- `server/alembic/env.py` — the environment script Alembic runs on every
-  invocation; imports `tournament_server.models` (registering all tables
-  against `Base.metadata`, exactly like `app.py` already does) and points
-  at the dynamically-resolved database URL.
-- `server/alembic/script.py.mako` — Alembic's default migration template,
-  unmodified.
-- `server/alembic/versions/` — one file per migration, starting with the
-  single baseline migration this phase adds.
+- `server/alembic.ini` — Alembic's config file, at the project root as a
+  dev-time convenience only (see §1); its `script_location` points into
+  the package. `sqlalchemy.url` is left blank/unused here; `env.py`
+  overrides it programmatically from `Settings.from_env().db_path` so the
+  already-existing `TOURNAMENT_DB_PATH` environment variable keeps being
+  the single source of truth for where the database lives.
+- `src/tournament_server/_alembic/env.py` — the environment script
+  Alembic runs on every invocation; imports `tournament_server.models`
+  and `tournament_server.audit` (registering all tables against
+  `Base.metadata`, exactly like `app.py` already does — `audit_log` is
+  declared on `Base` in `audit.py`, outside `models/`) and points at the
+  dynamically-resolved database URL.
+- `src/tournament_server/_alembic/script.py.mako` — Alembic's default
+  migration template, unmodified.
+- `src/tournament_server/_alembic/versions/` — one file per migration,
+  starting with the single baseline migration this phase adds.
 - `src/tournament_server/migrations.py` (new) — `ensure_schema_current`
   and the pre-migration backup helper live here, not inline in `app.py`,
   matching this project's existing pattern of keeping `app.py` a thin
