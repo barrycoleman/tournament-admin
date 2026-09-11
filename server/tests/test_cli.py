@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 
 from tournament_server.cli import main
@@ -108,3 +110,28 @@ def test_migrate_command_reports_upgraded(tmp_path, capsys, monkeypatch):
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "pre-migration backup was created" in captured.out
+
+
+def test_migrate_command_works_in_a_fresh_process(tmp_path):
+    """Regression test: a real `tm migrate` invocation has no prior
+    import of tournament_server.models/audit, unlike every other test in
+    this suite (conftest.py imports tournament_server.app at collection
+    time, which populates Base.metadata as a side effect and would mask
+    this bug). This test runs `tm migrate` in a genuinely fresh
+    subprocess to prove it doesn't depend on that side effect.
+    """
+    from tournament_server.db import Base, make_engine
+
+    db_path = str(tmp_path / "pre_alembic.db")
+    engine = make_engine(db_path)
+    Base.metadata.create_all(engine)
+
+    result = subprocess.run(
+        [sys.executable, "-m", "tournament_server.cli", "migrate", "--db-path", db_path],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "stamped as up to date" in result.stdout

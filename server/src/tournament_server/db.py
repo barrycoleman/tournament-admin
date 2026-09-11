@@ -69,4 +69,6 @@ def make_session_factory(engine: Engine) -> sessionmaker:
 
 
 def init_db(engine: Engine) -> None:
+    """Bare create_all(); test-only — real schema management goes through
+    migrations.ensure_schema_current."""
     Base.metadata.create_all(engine)

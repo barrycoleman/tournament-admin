@@ -6,12 +6,15 @@ from enum import Enum
 from importlib import resources
 
 from alembic import command
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
 
+from tournament_server import audit  # noqa: F401  (registers the audit_log table)
+from tournament_server import models  # noqa: F401  (registers all model tables)
 from tournament_server.db import Base
 
 
@@ -45,17 +48,13 @@ def _has_any_tables(engine: Engine) -> bool:
 
 
 def _reflected_schema_matches_models(engine: Engine) -> bool:
-    inspector = inspect(engine)
-    existing_tables = set(inspector.get_table_names())
-    expected_tables = set(Base.metadata.tables.keys())
-    if existing_tables != expected_tables:
-        return False
-    for table_name, table in Base.metadata.tables.items():
-        existing_columns = {col["name"] for col in inspector.get_columns(table_name)}
-        expected_columns = {col.name for col in table.columns}
-        if existing_columns != expected_columns:
-            return False
-    return True
+    # Uses Alembic's own autogenerate diff (the same machinery
+    # tests/test_alembic_drift.py already relies on) rather than a
+    # hand-rolled comparison, so this catches type/nullability/constraint
+    # drift, not just table/column name differences.
+    with engine.connect() as connection:
+        context = MigrationContext.configure(connection)
+        return compare_metadata(context, Base.metadata) == []
 
 
 def _backup_path(db_path: str, now: dt.datetime) -> str:
@@ -70,7 +69,11 @@ def _backup_database(engine: Engine, db_path: str) -> None:
     # be missing not-yet-checkpointed writes).
     with engine.connect() as connection:
         connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
-    shutil.copyfile(db_path, _backup_path(db_path, dt.datetime.now(dt.UTC)))
+    # copy2 (not copyfile) preserves mode bits — this database holds the
+    # JWT signing key, password hashes, and token hashes, and these
+    # backups are never pruned, so the backup must stay as restrictively
+    # permissioned as the source file rather than widening under umask.
+    shutil.copy2(db_path, _backup_path(db_path, dt.datetime.now(dt.UTC)))
 
 
 def ensure_schema_current(engine: Engine, db_path: str) -> MigrationOutcome:

@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import sys
+
 import uvicorn
 
 from tournament_server.app import create_app
+from tournament_server.migrations import SchemaMismatchError
 
-app = create_app()
+try:
+    app = create_app()
+except SchemaMismatchError as exc:
+    print(f"ERROR: {exc}", file=sys.stderr)
+    sys.exit(1)
 
 
 def run() -> None:

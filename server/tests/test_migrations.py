@@ -59,6 +59,56 @@ def test_mismatched_pre_alembic_database_is_refused(tmp_path):
     assert raised, "expected SchemaMismatchError"
 
 
+def test_type_mismatched_pre_alembic_database_is_refused(tmp_path):
+    """A database whose reflected schema has matching table/column NAMES
+    but an incompatible column TYPE must still be refused. The old
+    name-only comparison would have wrongly stamped this as current;
+    compare_metadata (via Alembic's own autogenerate diff) catches the
+    type drift.
+    """
+    db_path = str(tmp_path / "type_mismatch.db")
+    engine = make_engine(db_path)
+
+    tables_except_teams = [
+        t for name, t in Base.metadata.tables.items() if name != "teams"
+    ]
+    Base.metadata.create_all(engine, tables=tables_except_teams)
+
+    with engine.connect() as connection:
+        # Same table/column names as the real `teams` model, but `number`
+        # is INTEGER here where the model declares String(20) — a type
+        # drift that a name-only comparison can't see.
+        connection.exec_driver_sql(
+            """
+            CREATE TABLE teams (
+                id INTEGER NOT NULL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                division_id INTEGER,
+                number INTEGER NOT NULL,
+                name VARCHAR(200) NOT NULL,
+                organization VARCHAR(200),
+                city VARCHAR(200),
+                state VARCHAR(100),
+                country VARCHAR(100),
+                tiebreaker_seed INTEGER NOT NULL,
+                FOREIGN KEY(event_id) REFERENCES events (id),
+                FOREIGN KEY(division_id) REFERENCES divisions (id)
+            )
+            """
+        )
+        connection.commit()
+
+    raised = False
+    try:
+        ensure_schema_current(engine, db_path)
+    except SchemaMismatchError:
+        raised = True
+    assert raised, (
+        "expected SchemaMismatchError for a table matching by name but "
+        "with an incompatible column type"
+    )
+
+
 def test_database_already_at_head_does_nothing(tmp_path):
     db_path = str(tmp_path / "current.db")
     engine = make_engine(db_path)

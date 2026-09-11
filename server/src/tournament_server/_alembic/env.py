@@ -5,6 +5,8 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+# Required: audit_log is declared on Base here, outside models/ — removing
+# this import silently drops a table from autogenerate
 from tournament_server import audit  # noqa: F401  (registers the audit_log table)
 from tournament_server import models  # noqa: F401  (registers all model tables)
 from tournament_server.db import Base
