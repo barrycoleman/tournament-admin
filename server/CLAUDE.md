@@ -422,6 +422,47 @@ still a distinct, later phase once a Pi client and a WebSocket
 "active-session" push mechanism exist. See
 `docs/superpowers/specs/2026-09-08-scoring-device-admission-design.md`.
 
+## Database migrations
+
+Real Alembic migrations exist as of this phase (see
+`docs/superpowers/specs/2026-09-10-database-migrations-design.md`). A
+single baseline migration
+(`src/tournament_server/_alembic/versions/`) captures the full schema
+exactly as it existed the moment this phase landed — no attempt was made
+to reconstruct migrations for any earlier schema shape, since no real
+deployed event data has ever existed against one (every prior phase's own
+"known gaps" note said the same thing: delete the `.db` file and let
+`create_all()` rebuild it). From this point on, every schema change ships
+as a real migration in the same commit as the model change that needs it.
+
+`ensure_schema_current` (`migrations.py`) runs automatically on every
+`create_app()` call — the real server at startup, and every test fixture
+alike, since they share this one entry point. A brand-new database gets
+migrated from scratch; an existing pre-Alembic database whose reflected
+schema exactly matches today's models gets silently stamped at the
+baseline revision (no `CREATE TABLE` re-run against tables that already
+exist); a database that's genuinely behind head gets an automatic,
+WAL-checkpointed, timestamped backup
+(`<db_path>.pre-migration-<timestamp>.bak`) before `alembic upgrade head`
+runs; and a pre-Alembic database that doesn't match anything known
+refuses to start, with the same "delete the file and let it rebuild"
+instruction this project has already given twice. `tm migrate` is the
+same check, runnable by hand (useful for scripting or an operator who
+wants to migrate before switching versions without starting the server).
+
+Alembic is invoked entirely through its Python API (`alembic.command`),
+never by shelling out to an `alembic` binary, and migration
+scripts/config are addressed via `importlib.resources` rather than a
+path built relative to `__file__` — both deliberate choices so this
+works unchanged once PyInstaller packaging (a separate, later phase)
+exists, without needing rework then. `tests/test_alembic_drift.py` is
+the guard against migrations and models silently diverging: it asserts
+that applying only the checked-in migrations produces a schema
+byte-for-byte identical (via Alembic's own autogenerate-diff machinery)
+to what `Base.metadata` declares — this is what fails, loudly, if a
+future phase changes a model without also writing the matching
+migration.
+
 ## Known, deliberate gaps in this phase
 
 - Real authentication now exists — see
@@ -443,19 +484,10 @@ still a distinct, later phase once a Pi client and a WebSocket
 - A Team belongs to at most one Division (nullable `division_id`), not a
   many-to-many relationship, as a deliberate YAGNI simplification — see
   the plan's Global Constraints for why.
-- No Alembic/migrations yet — schema changes go through
-  `Base.metadata.create_all()`, which only adds new tables, never alters
-  existing ones. **This line has already been crossed** twice: Phase 3
-  added `Event.game_plugin_name` to the pre-existing `events` table, and
-  this scheduling phase changed the `matches` table three more ways —
-  `field_id` went from a plain string to an integer FK, and two new
-  columns (`time_slot`, `schedule_generation_id`) were added. A database
-  created before either of these changes will fail with a `no such
-  column` (or a type-mismatch) error on first read. No real events have
-  been created against this schema yet, so recreating the database is
-  the correct fix today — delete the `.db` file and let `create_all()`
-  build it fresh. Introduce real migrations before this project has any
-  real deployed event data that can't simply be recreated.
+- No automated cleanup of `.pre-migration-*.bak` backup files — they
+  accumulate; an operator deletes old ones manually. `alembic downgrade`
+  is not a supported, tested rollback path — the pre-migration backup is
+  the recovery mechanism for a bad migration, not a scripted downgrade.
 
 ## Testing
 
