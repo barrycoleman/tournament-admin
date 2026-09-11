@@ -7,7 +7,8 @@ from fastapi import FastAPI, Request
 
 from tournament_server import audit, device_auth  # noqa: F401  (audit registers hooks)
 from tournament_server import models  # noqa: F401  (registers all tables)
-from tournament_server.db import init_db, make_engine, make_session_factory
+from tournament_server.db import make_engine, make_session_factory
+from tournament_server.migrations import ensure_schema_current
 from tournament_server.plugin_registry.discovery import (
     discover_game_plugins,
     discover_scheduler_plugins,
@@ -45,7 +46,7 @@ def create_app(
 
     engine = make_engine(settings.db_path)
     session_factory = make_session_factory(engine)
-    init_db(engine)
+    ensure_schema_current(engine, settings.db_path)
 
     app = FastAPI(title="Tournament Server")
     app.state.session_factory = session_factory
