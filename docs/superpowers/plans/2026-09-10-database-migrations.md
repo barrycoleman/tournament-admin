@@ -8,7 +8,7 @@ change can upgrade an existing deployed database instead of requiring it
 to be deleted and recreated.
 
 **Architecture:** A single baseline migration captures the current
-23-table schema exactly as it exists today (no attempt to reconstruct
+24-table schema exactly as it exists today (no attempt to reconstruct
 history — no real data exists at any prior schema shape). A new
 `ensure_schema_current(engine, db_path)` function runs automatically at
 every `create_app()` call (shared by the real server and every test
@@ -293,15 +293,18 @@ random hash prefix plus `_baseline.py`); that's fine, keep it as
 generated.
 
 **Review the generated file by hand** before moving on:
-- It should contain exactly 23 `op.create_table(...)` calls, one for
-  each of: `alliances`, `alliance_teams`, `auth_sessions`,
+- It should contain exactly 24 `op.create_table(...)` calls, one for
+  each of: `alliances`, `alliance_teams`, `audit_log`, `auth_sessions`,
   `bracket_alliances`, `bracket_alliance_teams`, `bracket_matchups`,
   `divisions`, `events`, `fields`, `field_sets`, `finals_brackets`,
   `finals_results`, `matches`, `sessions`, `session_participation`,
   `rankings`, `ranking_configurations`, `role_credentials`,
   `schedule_generations`, `score_records`, `scoring_devices`,
-  `signing_keys`, `teams`.
-- `downgrade()` should contain the corresponding 23 `op.drop_table(...)`
+  `signing_keys`, `teams`. (`audit_log` is declared on `Base` in
+  `audit.py`, outside `models/` — `env.py` must import
+  `tournament_server.audit`, not just `tournament_server.models`, for
+  autogenerate to see it.)
+- `downgrade()` should contain the corresponding 24 `op.drop_table(...)`
   calls (Alembic generates these automatically; this phase doesn't
   require them to work, per the Global Constraints' downgrade note, but
   there's no reason to strip them either).
