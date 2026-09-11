@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/server-info", tags=["server-info"])
 @router.get("", response_model=ServerInfoResponse)
 def get_server_info(
     request: Request,
-    role: str = Depends(require_admin),
+    _role: str = Depends(require_admin),
 ) -> ServerInfoResponse:
     return ServerInfoResponse(
         port=request.app.state.port,

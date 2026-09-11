@@ -39,6 +39,11 @@ from tournament_server.settings import Settings
 def create_app(
     db_path: str | None = None,
     plugins_root: str | None = None,
+    # If omitted, app.state.port falls back to the configured default
+    # (Settings.port), which may not match the process's actual bound
+    # port if a different entry point (or a port-probing step like
+    # find_free_port) binds it elsewhere. The caller owns correctness —
+    # pass the real bound port whenever one was resolved.
     port: int | None = None,
 ) -> FastAPI:
     settings = Settings.from_env()
