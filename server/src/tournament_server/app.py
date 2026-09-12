@@ -6,11 +6,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from sqlalchemy import select
 
 from tournament_server import audit, device_auth  # noqa: F401  (audit registers hooks)
 from tournament_server import models  # noqa: F401  (registers all tables)
 from tournament_server import match_control, realtime
-from tournament_server.db import make_engine, make_session_factory
+from tournament_server.db import make_engine, make_session_factory, utc_now
 from tournament_server.migrations import ensure_schema_current
 from tournament_server.plugin_registry.discovery import (
     discover_game_plugins,
@@ -41,6 +42,83 @@ from tournament_server.routers import (
 from tournament_server.settings import Settings
 
 
+async def _recover_in_flight_matches(app: FastAPI) -> None:
+    """Runs once at startup, inside the lifespan hook (so the event loop
+    Task 3's broadcaster/timers need already exists). Any match whose
+    phase is mid-lifecycle (not not_started/ended) and not paused either
+    needs its auto-advance rescheduled (deadline still ahead) or fired
+    immediately (deadline already passed while the server was down)."""
+    from tournament_server.match_control import (
+        next_auto_phase,
+        phase_duration_seconds,
+        schedule_auto_advance,
+    )
+    from tournament_server.models.event import Event
+    from tournament_server.models.match import Match
+    from tournament_server.realtime import broadcast_for_session
+
+    db = app.state.session_factory()
+    try:
+        in_flight = db.execute(
+            select(Match).where(
+                Match.phase.not_in(("not_started", "ended")),
+                Match.paused.is_(False),
+            )
+        ).scalars().all()
+        event_row = db.execute(select(Event)).scalars().first()
+        if not in_flight or event_row is None or event_row.game_plugin_name is None:
+            return
+        game_plugin = app.state.game_plugins.get(event_row.game_plugin_name)
+        if game_plugin is None:
+            return
+        match_format = game_plugin.module.match_format()
+
+        from tournament_server.routers.matches import _auto_advance_match
+
+        for match in in_flight:
+            if match.phase_deadline is None:
+                continue
+            remaining = (match.phase_deadline - utc_now()).total_seconds()
+            if remaining <= 0:
+                new_phase = next_auto_phase(match.phase)
+                if new_phase is None:
+                    continue
+                match.phase = new_phase
+                if new_phase in ("ended", "awaiting_driver"):
+                    match.phase_deadline = None
+                else:
+                    duration = phase_duration_seconds(
+                        new_phase,
+                        match_format["autonomous_seconds"],
+                        match_format["driver_seconds"],
+                    )
+                    match.phase_deadline = utc_now() + dt.timedelta(seconds=duration)
+                db.commit()
+                broadcast_for_session(
+                    app, db, match.session_id, "match_phase_changed",
+                    {
+                        "match_id": match.id,
+                        "phase": match.phase,
+                        "phase_deadline": (
+                            match.phase_deadline.isoformat()
+                            if match.phase_deadline else None
+                        ),
+                    },
+                )
+                if next_auto_phase(match.phase) is not None:
+                    schedule_auto_advance(app, match.id, _auto_advance_match(app, match.id))
+            elif next_auto_phase(match.phase) is not None:
+                # Still within this phase's original deadline — resume with
+                # only the actual remaining time, not the full phase
+                # duration, or the match would run longer than it should.
+                schedule_auto_advance(
+                    app, match.id,
+                    _auto_advance_match(app, match.id, override_sleep_seconds=remaining),
+                )
+    finally:
+        db.close()
+
+
 def create_app(
     db_path: str | None = None,
     plugins_root: str | None = None,
@@ -66,6 +144,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         realtime.set_event_loop(app, asyncio.get_running_loop())
+        await _recover_in_flight_matches(app)
         yield
 
     app = FastAPI(title="Tournament Server", lifespan=lifespan)
