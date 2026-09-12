@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 
 from tournament_server import audit, device_auth  # noqa: F401  (audit registers hooks)
 from tournament_server import models  # noqa: F401  (registers all tables)
+from tournament_server import realtime
 from tournament_server.db import make_engine, make_session_factory
 from tournament_server.migrations import ensure_schema_current
 from tournament_server.plugin_registry.discovery import (
@@ -59,7 +62,12 @@ def create_app(
     session_factory = make_session_factory(engine)
     ensure_schema_current(engine, settings.db_path)
 
-    app = FastAPI(title="Tournament Server")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        realtime.set_event_loop(app, asyncio.get_running_loop())
+        yield
+
+    app = FastAPI(title="Tournament Server", lifespan=lifespan)
     app.state.session_factory = session_factory
     app.state.plugins_root = Path(settings.plugins_root)
     app.state.game_plugins = discover_game_plugins(app.state.plugins_root)
@@ -68,6 +76,7 @@ def create_app(
         minutes=settings.device_idle_timeout_minutes
     )
     app.state.port = settings.port
+    realtime.init_realtime_state(app)
 
     @app.middleware("http")
     async def actor_middleware(request: Request, call_next):
