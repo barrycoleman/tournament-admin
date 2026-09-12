@@ -1574,11 +1574,13 @@ async def _auto_advance_match(
 ) -> None:
     """Sleeps until the current phase's deadline, then performs the
     automatic transition. `override_sleep_seconds` lets a caller sleep
-    for less than the full phase duration — used only by startup
-    recovery (app.py's `_recover_in_flight_matches`), which resumes a
-    match that was already partway through its current phase when the
-    server went down; every normal call site (start/start-driver/resume/
-    the chained reschedule below) always sleeps the full duration."""
+    for less than the full phase duration — used by `resume_match`
+    (which passes only the actual remaining time frozen at pause,
+    never the full phase duration again) and, in a later phase, by
+    startup recovery for a match that was already partway through its
+    current phase when the server went down. `start`/`start_driver`
+    and the chained reschedule below always sleep the full duration,
+    since those begin a phase from its start."""
     from tournament_server.models.event import Event as _Event
 
     db = request_app.state.session_factory()
