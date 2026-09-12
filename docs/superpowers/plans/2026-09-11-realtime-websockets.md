@@ -1831,20 +1831,32 @@ def reset_match(
 fastapi import APIRouter, Depends, HTTPException, Request` line — no
 change needed there.)
 
-- [ ] **Step 6: Run test to verify it passes**
+- [ ] **Step 6: Wire `init_match_timer_state` into `create_app()`**
+
+Task 5 defined `match_control.init_match_timer_state(app)` but nothing
+calls it yet — without this, `app.state.match_timers` never exists, and
+every endpoint above raises `AttributeError` the first time it calls
+`schedule_auto_advance`/`cancel_auto_advance`. Edit
+`src/tournament_server/app.py`: add
+`from tournament_server import match_control` to the imports (alongside
+the existing `from tournament_server import realtime` line), and add
+`match_control.init_match_timer_state(app)` immediately after the
+existing `realtime.init_realtime_state(app)` line (added in Task 3).
+
+- [ ] **Step 7: Run test to verify it passes**
 
 Run: `pytest tests/test_match_control_endpoints.py -v`
 Expected: PASS
 
-- [ ] **Step 7: Run the full suite**
+- [ ] **Step 8: Run the full suite**
 
 Run: `pytest tests/ -v`
 Expected: PASS (404 + 14 new = 418)
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/tournament_server/routers/matches.py src/tournament_server/schemas/match.py tests/test_match_control_endpoints.py tests/fixtures/plugins/games/fast-timer-game tests/fixtures/plugins/games/no-autonomous-game
+git add src/tournament_server/routers/matches.py src/tournament_server/schemas/match.py src/tournament_server/app.py tests/test_match_control_endpoints.py tests/fixtures/plugins/games/fast-timer-game tests/fixtures/plugins/games/no-autonomous-game
 git commit -m "Add match-control REST endpoints: start, start-driver, pause, resume, end, reset"
 ```
 
