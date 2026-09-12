@@ -59,18 +59,25 @@ def create_access_token(db: Session, role: str) -> str:
     return jwt.encode(payload, signing_key, algorithm=JWT_ALGORITHM)
 
 
+def decode_role_from_token(token: str, db: Session) -> str:
+    signing_key = get_signing_key(db)
+    try:
+        payload = jwt.decode(token, signing_key, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        raise ValueError("Invalid or expired token")
+    return payload["role"]
+
+
 def _decode_role(authorization: str | None, db: Session) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=401, detail="Missing or malformed Authorization header"
         )
     token = authorization.removeprefix("Bearer ")
-    signing_key = get_signing_key(db)
     try:
-        payload = jwt.decode(token, signing_key, algorithms=[JWT_ALGORITHM])
-    except jwt.PyJWTError:
+        return decode_role_from_token(token, db)
+    except ValueError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return payload["role"]
 
 
 def require_role(*allowed_roles: str):
