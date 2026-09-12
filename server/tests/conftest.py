@@ -67,7 +67,8 @@ def client(tmp_path) -> TestClient:
     shutil.copytree(BALANCED_SCHEDULER_PLUGIN, balanced_target)
 
     app = create_app(db_path=db_path, plugins_root=str(plugins_root))
-    return _AutoAuthTestClient(app)
+    with _AutoAuthTestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture()
@@ -88,7 +89,8 @@ def cooperative_client(tmp_path) -> TestClient:
     shutil.copytree(BALANCED_SCHEDULER_PLUGIN, balanced_target)
 
     app = create_app(db_path=db_path, plugins_root=str(plugins_root))
-    return _AutoAuthTestClient(app)
+    with _AutoAuthTestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture()
@@ -109,4 +111,5 @@ def captain_pick_client(tmp_path) -> TestClient:
     shutil.copytree(BALANCED_SCHEDULER_PLUGIN, balanced_target)
 
     app = create_app(db_path=db_path, plugins_root=str(plugins_root))
-    return _AutoAuthTestClient(app)
+    with _AutoAuthTestClient(app) as test_client:
+        yield test_client

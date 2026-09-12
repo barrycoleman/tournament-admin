@@ -5,8 +5,12 @@ import threading
 import time
 
 import pytest
+from fastapi.testclient import TestClient
 
 from tournament_server import realtime
+from tournament_server.app import create_app
+from tournament_server.db import init_db, make_engine, make_session_factory
+from tournament_server.models.event import Event
 
 
 class _FakeWebSocket:
@@ -123,3 +127,93 @@ def test_broadcast_survives_a_dead_subscriber_and_removes_it(running_loop):
 
     assert _wait_for(lambda: alive.received)
     assert dead not in app.state.realtime.active_session
+
+
+def test_lifespan_captures_the_event_loop_only_once_entered(tmp_path):
+    """Regression test: a bare, un-entered TestClient never runs the ASGI
+    lifespan, so app.state.realtime.event_loop stays None — only
+    `with TestClient(app) as client:` actually starts it. Every fixture in
+    conftest.py must enter the TestClient as a context manager, or every
+    broadcast_* call silently no-ops."""
+    db_path = str(tmp_path / "test.db")
+    plugins_root = str(tmp_path / "plugins")
+
+    app = create_app(db_path=db_path, plugins_root=plugins_root)
+    assert app.state.realtime.event_loop is None
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert app.state.realtime.event_loop is not None
+
+
+def _session_factory(tmp_path):
+    engine = make_engine(str(tmp_path / "test.db"))
+    init_db(engine)
+    return make_session_factory(engine)()
+
+
+def test_broadcast_for_session_also_broadcasts_active_session_when_matching(
+    tmp_path, running_loop
+):
+    db = _session_factory(tmp_path)
+    db.add(Event(name="Regional Qualifier", active_session_id=1))
+    db.commit()
+
+    app = _FakeApp()
+    realtime.init_realtime_state(app)
+    realtime.set_event_loop(app, running_loop)
+    session_subscriber = _FakeWebSocket()
+    active_subscriber = _FakeWebSocket()
+    realtime.register_session(app, 1, session_subscriber)
+    realtime.register_active_session(app, active_subscriber)
+
+    realtime.broadcast_for_session(app, db, 1, "score_saved", {"match_id": 5})
+
+    assert _wait_for(lambda: session_subscriber.received and active_subscriber.received)
+    assert session_subscriber.received == [
+        {"event": "score_saved", "data": {"match_id": 5}}
+    ]
+    assert active_subscriber.received == session_subscriber.received
+
+
+def test_broadcast_for_session_skips_active_session_when_not_the_active_one(
+    tmp_path, running_loop
+):
+    db = _session_factory(tmp_path)
+    db.add(Event(name="Regional Qualifier", active_session_id=1))
+    db.commit()
+
+    app = _FakeApp()
+    realtime.init_realtime_state(app)
+    realtime.set_event_loop(app, running_loop)
+    session_subscriber = _FakeWebSocket()
+    active_subscriber = _FakeWebSocket()
+    realtime.register_session(app, 2, session_subscriber)
+    realtime.register_active_session(app, active_subscriber)
+
+    realtime.broadcast_for_session(app, db, 2, "score_saved", {"match_id": 5})
+
+    assert _wait_for(lambda: session_subscriber.received)
+    time.sleep(0.1)
+    assert active_subscriber.received == []
+
+
+def test_broadcast_for_session_skips_active_session_when_no_event_row(
+    tmp_path, running_loop
+):
+    db = _session_factory(tmp_path)
+
+    app = _FakeApp()
+    realtime.init_realtime_state(app)
+    realtime.set_event_loop(app, running_loop)
+    session_subscriber = _FakeWebSocket()
+    active_subscriber = _FakeWebSocket()
+    realtime.register_session(app, 1, session_subscriber)
+    realtime.register_active_session(app, active_subscriber)
+
+    realtime.broadcast_for_session(app, db, 1, "score_saved", {"match_id": 5})
+
+    assert _wait_for(lambda: session_subscriber.received)
+    time.sleep(0.1)
+    assert active_subscriber.received == []
