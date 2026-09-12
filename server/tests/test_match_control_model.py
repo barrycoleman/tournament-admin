@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from tournament_server.models.match import Match
-
 
 def test_match_defaults_to_not_started_phase(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})

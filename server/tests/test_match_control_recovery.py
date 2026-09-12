@@ -45,7 +45,6 @@ def _build_app_with_stuck_match(tmp_path, phase: str, deadline_offset_seconds: f
         },
     ).json()["id"]
 
-    from sqlalchemy import select
     from tournament_server.models.match import Match
 
     session = app.state.session_factory()
@@ -98,7 +97,6 @@ def test_a_paused_match_needs_no_recovery(tmp_path):
     db_path, plugins_root, match_id = _build_app_with_stuck_match(
         tmp_path, phase="driver", deadline_offset_seconds=-10
     )
-    from sqlalchemy import select
     from tournament_server.models.match import Match
 
     _app = create_app(db_path=db_path, plugins_root=plugins_root)

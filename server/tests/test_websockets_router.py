@@ -5,16 +5,18 @@ import pytest
 from auth_helpers import login_as
 from tournament_server import realtime
 
-# NOTE: every WebSocket connection opened in this file must live on the same
-# event loop/portal that app.state.realtime.event_loop was captured from —
-# i.e. it must go through the already-entered `client` fixture itself, or
-# through a second `TestClient` that has ALSO been entered via `with
-# TestClient(client.app) as raw:`. A bare, never-entered `TestClient(...)`
-# spins up its own separate portal/loop/thread for `websocket_connect`,
-# which is a different loop than the one realtime.py's broadcast_* functions
-# schedule work onto via `asyncio.run_coroutine_threadsafe`. See Task 3's
-# fix for the same hazard in conftest.py, and the regression test at the
-# bottom of this file.
+# NOTE: what actually has to happen exactly once, from an *entered*
+# TestClient, is the ASGI lifespan run that captures
+# app.state.realtime.event_loop — a bare, never-entered `TestClient(...)`
+# never runs lifespan at all, so that stays None and every broadcast_* call
+# (and every schedule_auto_advance) silently no-ops or raises. Receiving is
+# not similarly constrained: Starlette's WebSocketTestSession hands frames
+# across a thread-safe `queue.Queue`, which is loop-agnostic, so a
+# connection opened on a *different* TestClient — even an un-entered one,
+# as test_broadcast_wiring.py does — still correctly receives a broadcast
+# scheduled onto the loop some other entered client captured. This file
+# opens everything through the entered `client` fixture anyway, which is
+# the simplest thing that is always right.
 
 
 def test_active_session_rejects_missing_token(client):
@@ -66,19 +68,37 @@ def test_session_channel_accepts_admin(client):
         pass
 
 
+def test_a_binary_frame_from_a_client_does_not_break_the_connection(client):
+    """Both channels are receive-only and never inspect what a client sends,
+    so every frame type has to be tolerated identically. `receive_text()`
+    reached for `message["text"]` unconditionally and raised a bare
+    `KeyError` — not a graceful disconnect — on a binary frame, tearing the
+    connection down and unregistering the subscriber."""
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    token = login_as(client, "scorer")
+
+    with client.websocket_connect(f"/ws/active-session?token={token}") as ws:
+        ws.send_bytes(b"\x00\x01\x02")
+        realtime.broadcast_active_session(
+            client.app, "match_phase_changed", {"match_id": 1}
+        )
+        message = ws.receive_json()
+
+    assert message == {"event": "match_phase_changed", "data": {"match_id": 1}}
+
+
 def test_broadcast_active_session_delivers_over_real_websocket_connection(client):
     """Regression test for the Task 4 review finding.
 
-    Proves the fix actually closes the gap: a connection opened through the
-    already-entered `client` fixture lives on the same loop that
-    `app.state.realtime.event_loop` was captured from, so
-    `realtime.broadcast_active_session` (which schedules delivery via
-    `asyncio.run_coroutine_threadsafe(coro, registry.event_loop)`) can
-    genuinely deliver a message to it. Before the fix, this same assertion
-    made against a connection opened via a bare, never-entered
-    `TestClient(client.app)` would hang or raise a cross-loop error instead
-    of receiving anything, because that connection's `websocket_connect`
-    spins up its own independent portal/loop/thread.
+    Proves the fix actually closes the gap: the `client` fixture is entered
+    as a context manager, so the ASGI lifespan ran and
+    `app.state.realtime.event_loop` holds a real loop — which is what lets
+    `realtime.broadcast_active_session` (scheduling via
+    `asyncio.run_coroutine_threadsafe(coro, registry.event_loop)`) deliver
+    anything at all. Before the fix the fixture was never entered, that
+    loop reference stayed `None`, and `broadcast_active_session` returned
+    without sending, so this assertion would hang waiting for a frame that
+    was never scheduled.
     """
     client.post("/api/event", json={"name": "Regional Qualifier"})
     token = login_as(client, "scorer")

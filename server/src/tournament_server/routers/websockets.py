@@ -28,6 +28,22 @@ async def _authenticate(websocket: WebSocket, allowed_roles: tuple[str, ...]) ->
     return role
 
 
+async def _drain_until_disconnect(websocket: WebSocket) -> None:
+    """Reads and discards whatever the client sends until it disconnects.
+
+    Both channels are receive-only — a client never sends application
+    messages over the socket, and the server never inspects one — so this
+    uses the raw `receive()` rather than `receive_text()`. `receive_text()`
+    raises a bare `KeyError` (not a graceful disconnect) on a binary frame,
+    since it reaches for `message["text"]` unconditionally; `receive()`
+    tolerates every frame type identically.
+    """
+    while True:
+        message = await websocket.receive()
+        if message["type"] == "websocket.disconnect":
+            return
+
+
 @router.websocket("/ws/active-session")
 async def active_session_channel(websocket: WebSocket) -> None:
     role = await _authenticate(websocket, ROLES)
@@ -36,8 +52,7 @@ async def active_session_channel(websocket: WebSocket) -> None:
     await websocket.accept()
     realtime.register_active_session(websocket.app, websocket)
     try:
-        while True:
-            await websocket.receive_text()
+        await _drain_until_disconnect(websocket)
     except WebSocketDisconnect:
         pass
     finally:
@@ -52,8 +67,7 @@ async def session_channel(websocket: WebSocket, session_id: int) -> None:
     await websocket.accept()
     realtime.register_session(websocket.app, session_id, websocket)
     try:
-        while True:
-            await websocket.receive_text()
+        await _drain_until_disconnect(websocket)
     except WebSocketDisconnect:
         pass
     finally:
