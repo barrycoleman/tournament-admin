@@ -30,6 +30,7 @@ from tournament_server.routers import (
     schedule,
     scores,
     server_info,
+    time_sync,
     sessions,
     teams,
 )
@@ -111,6 +112,7 @@ def create_app(
     app.include_router(schedule.router)
     app.include_router(finals.router)
     app.include_router(server_info.router)
+    app.include_router(time_sync.router)
 
     @app.get("/health")
     def health() -> dict[str, str]:
