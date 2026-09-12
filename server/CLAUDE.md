@@ -418,9 +418,171 @@ unchanged.
 
 `Device`/Pi-display admission (the master spec's other, separate device
 concept — admin-driven, for unattended kiosk displays) is not built —
-still a distinct, later phase once a Pi client and a WebSocket
-"active-session" push mechanism exist. See
+still a distinct, later phase. The WebSocket "active-session" push
+mechanism it needs now exists (see *Real-time channels and live match
+control* below), so a Pi client is the only remaining prerequisite. See
 `docs/superpowers/specs/2026-09-08-scoring-device-admission-design.md`.
+
+## Real-time channels and live match control
+
+See
+`docs/superpowers/specs/2026-09-11-realtime-websockets-design.md`.
+Two WebSocket channels push state to clients; everything a client *does*
+still goes through REST, and the socket only ever carries "this changed"
+events. A client that just connected (or reconnected) refetches current
+state via the existing REST endpoints — `MatchRead` already carries the
+live-timing fields, so `GET /api/matches?session_id=...` is a complete
+bootstrap and there is no bespoke snapshot message type.
+
+```
+GET /ws/active-session?token=<jwt>       — any authenticated role
+GET /ws/session/{session_id}?token=<jwt> — admin only
+```
+
+Both are **receive-only**: the server never inspects an inbound frame,
+it just drains them until the client disconnects (`routers/websockets.py`
+uses the raw `receive()`, not `receive_text()`, so a binary frame is
+tolerated identically rather than raising `KeyError`). Auth is the same
+access token `POST /api/auth/login` issues, passed as a **query
+parameter** — a browser's native `WebSocket` API cannot set custom
+handshake headers, so there is no alternative. **Known, accepted
+tradeoff**: that token therefore appears in standard access logs, proxy
+logs and browser history in a way a bearer header would not. Not
+something this phase tries to fix; a future phase wanting to close it
+would need a short-lived single-use ticket endpoint.
+
+`GET /api/time-sync` (no auth, like `/health` and
+`POST /api/devices/register`) returns `{"server_time": "<ISO-8601 UTC>"}`
+so a client can measure its own clock offset and render a countdown
+against absolute deadlines rather than trusting its local clock.
+
+### Event catalog
+
+Envelope is always `{"event": "<type>", "data": {...}}`. These names and
+payload keys are the wire contract the Admin UI, scorer/tablet and Pi
+display code against, so `tests/test_match_control_endpoints.py` and
+`tests/test_broadcast_wiring.py` assert every one of them over a real
+`TestClient` WebSocket connection — a typo in a name or key must fail a
+test, not ship silently.
+
+Match-control events (payload carries the live state directly, so a
+client never needs a REST round-trip to render a countdown tick):
+
+- `match_phase_changed` — `{match_id, phase, phase_deadline}`. Every
+  phase transition, manual or automatic, including into `ended`.
+- `match_paused` — `{match_id, phase, remaining_seconds_at_pause}`.
+- `match_resumed` — `{match_id, phase, phase_deadline}`.
+- `match_reset` — `{match_id, phase}` (`not_started` or
+  `awaiting_driver`; `phase_deadline` is implicitly null in both).
+
+Structural events (thin — identifying info only; the client refetches
+the real data from the existing REST resource, keeping one source of
+truth for that richer shape):
+
+- `score_saved` — `{match_id, alliance_id}`.
+- `new_match_created` — `{match_id, session_id, division_id, field_id}`.
+  Fired for schedule generation *and* for matches a finals bracket
+  creates as a side effect (`realtime.broadcast_new_finals_matches`,
+  which diffs the bracket's match ids before/after at each of its 4 call
+  sites in `routers/finals.py`/`routers/scores.py`).
+- `ranking_updated` — `{session_id, division_id, event_wide}`; when
+  `event_wide` is true, `session_id` is null, matching the event-wide
+  `Ranking` row's own null `session_id`.
+- `active_session_changed` — `{active_session_id}`.
+
+Routing: `realtime.broadcast_for_session` always sends on
+`session:<id>`, and additionally on `active-session` when that session
+*is* `Event.active_session_id` at the moment of the call. Two events
+never follow that rule: `active_session_changed` is active-session-only
+(it's that channel's own meaning changing), and an **event-wide**
+`ranking_updated` is likewise active-session-only — it isn't scoped to
+any one session, so it goes out via `broadcast_active_session` directly
+and an admin watching only a `session:<id>` channel will never see it.
+
+### Sync-to-async bridge
+
+Every router stays a plain sync `def` (FastAPI's implicit threadpool) —
+this phase deliberately did not introduce a mix of styles. Since sending
+over a WebSocket is async, `realtime.broadcast_*` bridges with
+`asyncio.run_coroutine_threadsafe(coro, loop)` against a loop reference
+captured in `create_app()`'s **lifespan** hook, never at `create_app()`
+construction time (that runs as plain sync code before Uvicorn's loop
+exists). A router therefore just gains one extra plain function call.
+
+The practical consequence for tests: a bare, never-entered `TestClient`
+never runs lifespan, so `app.state.realtime.event_loop` stays `None` and
+every broadcast silently no-ops. At least one `TestClient` per test must
+be entered (`with TestClient(app) as client:`). *Receiving* is not
+similarly constrained — Starlette's `WebSocketTestSession` moves frames
+through a thread-safe `queue.Queue`, so a connection opened on a second,
+even un-entered, client still receives fine.
+
+### Phase state machine and the timer registry
+
+`match_control.py` holds the machine:
+`countdown_autonomous → autonomous → awaiting_driver → countdown_driver
+→ driver → ended`, entered at `not_started`. A game plugin declaring
+`autonomous_seconds == 0` skips straight to `countdown_driver` on
+`start`. `COUNTDOWN_SECONDS` is a fixed 3s constant (not
+plugin-configurable — no need identified). Six endpoints on the existing
+`matches` router drive it, all `require_scorer_or_referee`:
+`POST /api/matches/{id}/start`, `.../start-driver`, `.../pause`,
+`.../resume`, `.../end`, `.../reset`. `reset` takes
+`{"scope": "section" | "full"}` as a `Literal`, so a typo is a 422
+rather than silently falling through to the more destructive full reset.
+
+Timed phases auto-advance via `_auto_advance_match`
+(`routers/matches.py`), scheduled onto the same captured loop and tracked
+per `match_id` in `app.state.match_timers.futures`. Three things make
+that registry safe rather than merely best-effort:
+
+- **Deadline identity.** The coroutine captures the `phase_deadline` it
+  is sleeping toward *before* sleeping, and re-checks it (alongside
+  `paused`) after waking. Anything that changes a match's phase out from
+  under a sleeping timer — reset, end, pause/resume, or a duplicate
+  transition another timer already applied — also changes or clears
+  `phase_deadline`, so every stale or duplicate timer becomes a no-op
+  whether or not cancellation fired in time. This is what closes the
+  narrow schedule/cancel race where `cancel_auto_advance` pops an
+  already-completed future just before that future installs a fresh,
+  un-cancelled one.
+- **Replacement cancels.** `schedule_auto_advance` cancels whatever
+  future it is about to overwrite, and terminal paths in
+  `_auto_advance_match` pop their own entry, so the dict doesn't grow
+  for matches that simply ran to completion.
+- **Nothing fails silently.** The `concurrent.futures.Future` gets a
+  done-callback that logs any non-cancellation exception (stdlib
+  `logging`, module logger) — nothing else ever calls `.result()` on it,
+  so without that a crash in the background coroutine would freeze the
+  match in place with no log and no trace. The lookups that could
+  plausibly crash it (missing `Event`, cleared/swapped game plugin) are
+  guarded with a warning and a clean early return, mirroring
+  `_recover_in_flight_matches`.
+
+`_auto_advance_match` opens its DB session, reads what it needs, and
+**closes it before sleeping**, then opens a fresh one after waking. A
+driver period can run 100+ seconds; holding a `Session` open across that
+happens to work on SQLite's default autocommit mode (a bare `SELECT`
+takes no lock) but isn't something to depend on.
+
+**Startup recovery** (`app.py`'s `_recover_in_flight_matches`, awaited
+inside the lifespan hook so the loop already exists): any match not in
+`not_started`/`ended` and not `paused` either gets its auto-advance
+rescheduled with only the *remaining* time (deadline still ahead) or is
+transitioned once immediately and broadcast (deadline already passed
+while the server was down). Deliberately **one** step, not a cascade
+through however many phases elapsed, and there is no "the server was
+down too long, just end it" threshold — both are spec-level judgment
+calls left open.
+
+**Migration note.** `_alembic/versions/9ee2761f45b6_*` adds the four
+`Match` columns. `phase` and `paused` are NOT NULL, and SQLite refuses
+`ALTER TABLE ... ADD COLUMN ... NOT NULL` without a default, so both
+carry a `server_default`. That `server_default` is deliberately left in
+place rather than dropped afterward: dropping it on SQLite means
+`batch_alter_table` (copy and recreate the whole table), which is more
+risk than it's worth, and the model's Python-side `default=` governs
+every ORM insert regardless of what the column's DDL default says.
 
 ## Database migrations
 
