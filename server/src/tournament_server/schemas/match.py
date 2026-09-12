@@ -36,4 +36,8 @@ class MatchRead(BaseModel):
     time_slot: int | None
     scheduled_time: dt.datetime | None
     status: str
+    phase: str
+    phase_deadline: dt.datetime | None
+    paused: bool
+    remaining_seconds_at_pause: float | None
     alliances: list[AllianceRead]

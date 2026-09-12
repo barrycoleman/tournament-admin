@@ -44,6 +44,10 @@ def _to_match_read(match: Match, db: Session) -> MatchRead:
         time_slot=match.time_slot,
         scheduled_time=match.scheduled_time,
         status=match.status,
+        phase=match.phase,
+        phase_deadline=match.phase_deadline,
+        paused=match.paused,
+        remaining_seconds_at_pause=match.remaining_seconds_at_pause,
         alliances=alliance_reads,
     )
 

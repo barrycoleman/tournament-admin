@@ -36,3 +36,9 @@ class Match(Base):
         UTCDateTime, default=None
     )
     status: Mapped[str] = mapped_column(String(20), default="scheduled")
+    phase: Mapped[str] = mapped_column(String(20), default="not_started")
+    phase_deadline: Mapped[dt.datetime | None] = mapped_column(
+        UTCDateTime, default=None
+    )
+    paused: Mapped[bool] = mapped_column(default=False)
+    remaining_seconds_at_pause: Mapped[float | None] = mapped_column(default=None)
