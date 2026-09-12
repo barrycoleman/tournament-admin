@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 
 from tournament_server import audit, device_auth  # noqa: F401  (audit registers hooks)
 from tournament_server import models  # noqa: F401  (registers all tables)
-from tournament_server import realtime
+from tournament_server import match_control, realtime
 from tournament_server.db import make_engine, make_session_factory
 from tournament_server.migrations import ensure_schema_current
 from tournament_server.plugin_registry.discovery import (
@@ -78,6 +78,7 @@ def create_app(
     )
     app.state.port = settings.port
     realtime.init_realtime_state(app)
+    match_control.init_match_timer_state(app)
 
     @app.middleware("http")
     async def actor_middleware(request: Request, call_next):

@@ -26,6 +26,10 @@ class MatchCreate(BaseModel):
     alliances: list[AllianceCreate]
 
 
+class MatchResetRequest(BaseModel):
+    scope: str
+
+
 class MatchRead(BaseModel):
     id: int
     session_id: int
