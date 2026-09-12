@@ -4,7 +4,7 @@ from pathlib import Path
 
 from alembic import command
 from migration_helpers import build_isolated_two_revision_script_dir
-from sqlalchemy import inspect
+from sqlalchemy import create_engine, inspect, text
 
 from tournament_server import migrations
 from tournament_server.db import Base, init_db, make_engine
@@ -140,3 +140,51 @@ def test_database_behind_head_gets_backed_up_and_upgraded(tmp_path, monkeypatch)
     inspector = inspect(engine)
     columns = {col["name"] for col in inspector.get_columns("widgets")}
     assert columns == {"id", "name"}
+
+
+def test_upgrade_over_pre_existing_match_row_succeeds(tmp_path):
+    """Regression test for a Critical finding on the match live-timing
+    migration (9ee2761f45b6): it originally added `phase`/`paused` as
+    NOT NULL with no `server_default`, which SQLite refuses for
+    `ALTER TABLE ... ADD COLUMN` on a table that already has rows. Any
+    self-hosted install with even one existing match row would have
+    failed to start after upgrading past that change.
+
+    This builds a throwaway database at the pre-this-task baseline
+    revision, inserts a row into `matches` directly via raw SQL
+    (bypassing the ORM/model entirely, matching how a real pre-existing
+    installation's table would look before these columns existed), then
+    runs the real upgrade to head via `ensure_schema_current` -- the
+    exact call it makes in its UPGRADED branch -- and asserts it
+    succeeds and backfills sane values onto the pre-existing row.
+    """
+    db_path = str(tmp_path / "pre_existing_match.db")
+    config = _make_alembic_config(db_path)
+    command.upgrade(config, "0c4b59d7dfca")  # baseline, before this task's migration
+
+    # Insert directly via SQL, bypassing the ORM/model entirely, using a
+    # bare connection with no FK enforcement pragma -- exactly how a real
+    # pre-existing installation's `matches` table would look before this
+    # task's columns existed.
+    raw_engine = create_engine(f"sqlite:///{db_path}")
+    with raw_engine.connect() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO matches (session_id, round_type, match_number, status) "
+                "VALUES (1, 'qualification', 1, 'scheduled')"
+            )
+        )
+        connection.commit()
+    raw_engine.dispose()
+
+    engine = make_engine(db_path)
+    outcome = ensure_schema_current(engine, db_path)
+
+    assert outcome == MigrationOutcome.UPGRADED
+
+    with engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT phase, paused FROM matches WHERE session_id = 1")
+        ).one()
+    assert row.phase == "not_started"
+    assert bool(row.paused) is False
