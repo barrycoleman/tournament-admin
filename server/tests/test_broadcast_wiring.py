@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from auth_helpers import login_as
+from test_finals import _rank_teams_directly, _setup_ranked_teams
 
 
 def test_score_saved_broadcasts_on_session_channel(client):
@@ -75,6 +75,41 @@ def test_new_match_created_broadcasts_for_schedule_generation(client):
 
     assert received["event"] == "new_match_created"
     assert received["data"]["session_id"] == session_id
+
+
+def test_new_match_created_broadcasts_for_a_finals_generated_match(cooperative_client):
+    """Covers `realtime.broadcast_new_finals_matches`.
+
+    A finals match isn't created by `POST /api/matches` or by schedule
+    generation — the bracket service creates it as a side effect, so it
+    needs its own before/after diff to announce. cooperative-game is
+    seed_pairing + score_chase, so `POST /api/finals/start` forms the
+    alliances and creates the worst seed's first run in the same call.
+    """
+    client = cooperative_client
+    session_id, team_ids = _setup_ranked_teams(client, 4)
+    _rank_teams_directly(client, session_id, team_ids)
+
+    raw = TestClient(client.app)
+    admin_token = client.headers["Authorization"].removeprefix("Bearer ")
+
+    with raw.websocket_connect(f"/ws/session/{session_id}?token={admin_token}") as ws:
+        response = client.post(
+            "/api/finals/start", json={"session_id": session_id, "bracket_size": 2}
+        )
+        assert response.status_code == 201
+        received = ws.receive_json()
+
+    assert received["event"] == "new_match_created"
+    assert received["data"]["session_id"] == session_id
+    assert received["data"]["match_id"] is not None
+
+    finals_match_ids = {
+        m["id"]
+        for m in client.get(f"/api/matches?session_id={session_id}").json()
+        if m["round_type"] == "elimination"
+    }
+    assert received["data"]["match_id"] in finals_match_ids
 
 
 def test_ranking_updated_broadcasts_after_a_completed_match(client):

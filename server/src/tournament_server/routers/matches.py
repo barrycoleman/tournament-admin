@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
@@ -32,6 +33,8 @@ from tournament_server.schemas.match import (
 )
 
 router = APIRouter(prefix="/api/matches", tags=["matches"])
+
+logger = logging.getLogger(__name__)
 
 
 def _to_match_read(match: Match, db: Session) -> MatchRead:
@@ -158,6 +161,19 @@ def get_match(
 _ACTIVE_PHASES = {"countdown_autonomous", "autonomous", "countdown_driver", "driver"}
 
 
+def _forget_timer(request_app, match_id: int) -> None:
+    """Drops this match's entry from the timer registry.
+
+    Only `cancel_auto_advance` ever removed one before, so a match that
+    ran to completion naturally left a stale-but-harmless entry behind
+    forever. Safe to call even in the (narrow) case where the entry has
+    since been replaced by a newer timer: `_auto_advance_match`'s
+    deadline-identity and `paused` guards make an un-cancelled timer a
+    no-op on its own, so cancellation is an optimization here, never the
+    thing correctness rests on."""
+    request_app.state.match_timers.futures.pop(match_id, None)
+
+
 async def _auto_advance_match(
     request_app, match_id: int, override_sleep_seconds: float | None = None
 ) -> None:
@@ -165,21 +181,55 @@ async def _auto_advance_match(
     automatic transition. `override_sleep_seconds` lets a caller sleep
     for less than the full phase duration — used by `resume_match`
     (which passes only the actual remaining time frozen at pause,
-    never the full phase duration again) and, in a later phase, by
-    startup recovery for a match that was already partway through its
-    current phase when the server went down. `start`/`start_driver`
-    and the chained reschedule below always sleep the full duration,
-    since those begin a phase from its start."""
+    never the full phase duration again) and by startup recovery for a
+    match that was already partway through its current phase when the
+    server went down. `start`/`start_driver` and the chained reschedule
+    below always sleep the full duration, since those begin a phase
+    from its start."""
     from tournament_server.models.event import Event as _Event
 
+    # Read everything needed to decide how long to sleep, then close the
+    # session *before* sleeping. A driver period can run 100+ seconds, and
+    # holding a Session open across that only works today because SQLite's
+    # default autocommit mode takes no lock for a bare SELECT — too
+    # fragile to depend on.
     db = request_app.state.session_factory()
     try:
         match = db.get(Match, match_id)
         if match is None or match.paused:
+            _forget_timer(request_app, match_id)
             return
         event_row = db.execute(select(_Event)).scalars().first()
+        if event_row is None or event_row.game_plugin_name is None:
+            # Mirrors _recover_in_flight_matches' defensive lookups in
+            # app.py: an admin clearing the event's game plugin mid-match
+            # must not blow up inside a background coroutine.
+            logger.warning(
+                "Auto-advance for match %s abandoned: no event row, or no "
+                "game plugin selected for the event",
+                match_id,
+            )
+            _forget_timer(request_app, match_id)
+            return
         game_plugin = request_app.state.game_plugins.get(event_row.game_plugin_name)
+        if game_plugin is None:
+            logger.warning(
+                "Auto-advance for match %s abandoned: game plugin %r is no "
+                "longer registered",
+                match_id,
+                event_row.game_plugin_name,
+            )
+            _forget_timer(request_app, match_id)
+            return
         match_format = game_plugin.module.match_format()
+
+        # The identity of the deadline this timer is sleeping toward.
+        # Everything that changes a match's phase out from under a sleeping
+        # timer (reset, end, pause/resume, or a duplicate transition another
+        # timer already applied) also changes or clears phase_deadline, so
+        # re-checking it after waking makes every stale or duplicate timer
+        # harmless — whether or not cancellation fired in time.
+        sleeping_toward = match.phase_deadline
 
         if override_sleep_seconds is not None:
             sleep_seconds = override_sleep_seconds
@@ -187,19 +237,25 @@ async def _auto_advance_match(
             sleep_seconds = phase_duration_seconds(
                 match.phase, match_format["autonomous_seconds"], match_format["driver_seconds"]
             )
-        if sleep_seconds is not None:
-            await asyncio.sleep(sleep_seconds)
+    finally:
+        db.close()
 
-        db.refresh(match)
-        if match.paused:
+    if sleep_seconds is not None:
+        await asyncio.sleep(sleep_seconds)
+
+    rescheduled = False
+    db = request_app.state.session_factory()
+    try:
+        match = db.get(Match, match_id)
+        if match is None or match.paused:
+            return
+        if match.phase_deadline != sleeping_toward:
             return
         new_phase = next_auto_phase(match.phase)
         if new_phase is None:
             return
         match.phase = new_phase
-        if new_phase == "ended":
-            match.phase_deadline = None
-        elif new_phase == "awaiting_driver":
+        if new_phase in ("ended", "awaiting_driver"):
             match.phase_deadline = None
         else:
             next_duration = phase_duration_seconds(
@@ -222,8 +278,11 @@ async def _auto_advance_match(
             schedule_auto_advance(
                 request_app, match.id, _auto_advance_match(request_app, match.id)
             )
+            rescheduled = True
     finally:
         db.close()
+        if not rescheduled:
+            _forget_timer(request_app, match_id)
 
 
 @router.post("/{match_id}/start", response_model=MatchRead)
@@ -301,7 +360,12 @@ def pause_match(
     match = db.get(Match, match_id)
     if match is None:
         raise HTTPException(status_code=404, detail="Match not found")
-    if match.phase not in _ACTIVE_PHASES or match.paused:
+    # phase_deadline is always set alongside an active, unpaused phase
+    # through the normal API — but a hand-edited or partially-recovered row
+    # could contradict that, and a raw TypeError (500) from the arithmetic
+    # below is a worse answer than the same clean 409 as any other
+    # not-pausable state.
+    if match.phase not in _ACTIVE_PHASES or match.paused or match.phase_deadline is None:
         raise HTTPException(status_code=409, detail="Match is not in an active, running phase")
     cancel_auto_advance(request.app, match.id)
     match.remaining_seconds_at_pause = (match.phase_deadline - utc_now()).total_seconds()

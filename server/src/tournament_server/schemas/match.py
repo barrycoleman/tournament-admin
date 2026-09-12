@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -27,7 +28,11 @@ class MatchCreate(BaseModel):
 
 
 class MatchResetRequest(BaseModel):
-    scope: str
+    # Literal, not a bare str: the reset endpoint's if/elif chain treats
+    # anything that isn't exactly "section" as a full reset, so a typo like
+    # "Section" would silently perform the *more* destructive action. This
+    # turns that into an automatic 422 instead.
+    scope: Literal["section", "full"]
 
 
 class MatchRead(BaseModel):
