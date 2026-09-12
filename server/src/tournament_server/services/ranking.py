@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,6 +15,10 @@ from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
 from tournament_server.plugin_registry.loader import LoadedPlugin
+from tournament_server.realtime import broadcast_active_session, broadcast_for_session
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 
 def suggest_exclusion_count(total_matches: int) -> int:
@@ -134,7 +138,7 @@ def _compute_cooperative_score_team_results(
 
 
 def recompute_rankings(
-    db: Session, plugin: LoadedPlugin, session_id: int, division_id: int | None
+    app: "FastAPI", db: Session, plugin: LoadedPlugin, session_id: int, division_id: int | None
 ) -> None:
     game_model = plugin.module.match_format()["game_model"]
 
@@ -196,6 +200,10 @@ def recompute_rankings(
                 existing.matches_played = entry["matches_played"]
                 existing.rank = entry["rank"]
         db.commit()
+        broadcast_for_session(
+            app, db, session_id, "ranking_updated",
+            {"session_id": session_id, "division_id": division_id, "event_wide": False},
+        )
         return
 
     win_points: dict[int, int] = {}
@@ -316,10 +324,14 @@ def recompute_rankings(
             existing.rank = entry["rank"]
 
     db.commit()
+    broadcast_for_session(
+        app, db, session_id, "ranking_updated",
+        {"session_id": session_id, "division_id": division_id, "event_wide": False},
+    )
 
 
 def recompute_event_rankings(
-    db: Session, plugin: LoadedPlugin, event_id: int, division_id: int | None
+    app: "FastAPI", db: Session, plugin: LoadedPlugin, event_id: int, division_id: int | None
 ) -> None:
     game_model = plugin.module.match_format()["game_model"]
     if game_model != "cooperative_score":
@@ -391,3 +403,7 @@ def recompute_event_rankings(
             existing.rank = entry["rank"]
 
     db.commit()
+    broadcast_active_session(
+        app, "ranking_updated",
+        {"session_id": None, "division_id": division_id, "event_wide": True},
+    )

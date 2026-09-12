@@ -22,6 +22,7 @@ from tournament_server.models.ranking import Ranking
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
+from tournament_server.realtime import broadcast_new_finals_matches
 from tournament_server.schemas.finals import (
     BracketAllianceRead,
     BracketMatchupRead,
@@ -303,10 +304,16 @@ def start_finals(
             )
         bracket.status = "in_progress"
         db.commit()
+        existing_ids = {
+            m.id for m in db.execute(
+                select(Match).where(Match.finals_bracket_id == bracket.id)
+            ).scalars().all()
+        }
         if bracket.format == "score_chase":
             start_score_chase(db, bracket)
         elif bracket.format == "single_elimination":
             generate_bracket(db, bracket)
+        broadcast_new_finals_matches(request.app, db, bracket.id, existing_ids)
     else:
         for i, ranking in enumerate(top_teams):
             alliance = BracketAlliance(bracket_id=bracket.id, seed=i + 1)
@@ -416,10 +423,16 @@ def pick_partner(
     if not remaining_pending:
         bracket.status = "in_progress"
         db.commit()
+        existing_ids = {
+            m.id for m in db.execute(
+                select(Match).where(Match.finals_bracket_id == bracket.id)
+            ).scalars().all()
+        }
         if bracket.format == "score_chase":
             start_score_chase(db, bracket)
         elif bracket.format == "single_elimination":
             generate_bracket(db, bracket)
+        broadcast_new_finals_matches(request.app, db, bracket.id, existing_ids)
 
     db.refresh(bracket)
     game_plugin = get_game_plugin_for_event(request, db)
@@ -452,7 +465,13 @@ def mark_alliance_unavailable(
     if alliance is None or alliance.bracket_id != bracket_id:
         raise HTTPException(status_code=404, detail="Alliance not found on this bracket")
 
+    existing_ids = {
+        m.id for m in db.execute(
+            select(Match).where(Match.finals_bracket_id == bracket.id)
+        ).scalars().all()
+    }
     mark_unavailable(db, bracket, alliance)
+    broadcast_new_finals_matches(request.app, db, bracket.id, existing_ids)
 
     db.refresh(bracket)
     game_plugin = get_game_plugin_for_event(request, db)

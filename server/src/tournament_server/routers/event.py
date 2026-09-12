@@ -8,6 +8,7 @@ from tournament_server.deps import get_db, get_the_event
 from tournament_server.models.event import Event
 from tournament_server.models.role_credential import RoleCredential
 from tournament_server.models.session import TournamentSession
+from tournament_server.realtime import broadcast_active_session
 from tournament_server.schemas.event import (
     ActiveSessionUpdate,
     EventCreate,
@@ -43,6 +44,7 @@ def read_event(db: Session = Depends(get_db)) -> Event:
 @router.post("/active-session", response_model=EventRead)
 def set_active_session(
     payload: ActiveSessionUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_admin),
 ) -> Event:
@@ -55,6 +57,9 @@ def set_active_session(
     event.active_session_id = session_obj.id
     db.commit()
     db.refresh(event)
+    broadcast_active_session(
+        request.app, "active_session_changed", {"active_session_id": event.active_session_id}
+    )
     return event
 
 

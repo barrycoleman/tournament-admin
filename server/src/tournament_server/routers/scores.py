@@ -15,6 +15,7 @@ from tournament_server.models.alliance import Alliance
 from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.match import Match
 from tournament_server.models.score_record import ScoreRecord
+from tournament_server.realtime import broadcast_for_session, broadcast_new_finals_matches
 from tournament_server.schemas.score_record import ScoreRecordRead, ScoreSubmit
 from tournament_server.services.finals import advance_score_chase, advance_single_elimination
 from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
@@ -116,6 +117,11 @@ def submit_score(
     db.commit()
     db.refresh(record)
 
+    broadcast_for_session(
+        request.app, db, match.session_id, "score_saved",
+        {"match_id": match_id, "alliance_id": alliance_id},
+    )
+
     game_model = plugin.module.match_format()["game_model"]
     all_alliances = db.execute(
         select(Alliance).where(Alliance.match_id == match_id)
@@ -162,15 +168,21 @@ def submit_score(
     if match.finals_bracket_id is not None:
         bracket = db.get(FinalsBracket, match.finals_bracket_id)
         if bracket is not None and match.status == "completed":
+            existing_ids = {
+                m.id for m in db.execute(
+                    select(Match).where(Match.finals_bracket_id == bracket.id)
+                ).scalars().all()
+            }
             if bracket.format == "score_chase":
                 advance_score_chase(db, bracket, plugin)
             elif bracket.format == "single_elimination":
                 advance_single_elimination(db, bracket, plugin, match)
+            broadcast_new_finals_matches(request.app, db, bracket.id, existing_ids)
         return _to_score_record_read(record, computed_score)
 
-    recompute_rankings(db, plugin, match.session_id, match.division_id)
+    recompute_rankings(request.app, db, plugin, match.session_id, match.division_id)
     event = get_the_event(db)
     if event is not None:
-        recompute_event_rankings(db, plugin, event.id, match.division_id)
+        recompute_event_rankings(request.app, db, plugin, event.id, match.division_id)
 
     return _to_score_record_read(record, computed_score)

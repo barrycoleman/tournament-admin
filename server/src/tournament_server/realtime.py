@@ -85,3 +85,27 @@ def broadcast_for_session(
     event_row = get_the_event(db)
     if event_row is not None and event_row.active_session_id == session_id:
         broadcast_active_session(app, event, data)
+
+
+def broadcast_new_finals_matches(
+    app: "FastAPI", db: "Session", bracket_id: int, match_ids_before: set[int]
+) -> None:
+    from sqlalchemy import select
+
+    from tournament_server.models.match import Match
+
+    current_matches = db.execute(
+        select(Match).where(Match.finals_bracket_id == bracket_id)
+    ).scalars().all()
+    for match in current_matches:
+        if match.id in match_ids_before:
+            continue
+        broadcast_for_session(
+            app, db, match.session_id, "new_match_created",
+            {
+                "match_id": match.id,
+                "session_id": match.session_id,
+                "division_id": match.division_id,
+                "field_id": match.field_id,
+            },
+        )

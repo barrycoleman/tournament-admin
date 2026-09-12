@@ -20,6 +20,7 @@ from tournament_server.models.schedule_generation import ScheduleGeneration
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
+from tournament_server.realtime import broadcast_for_session
 from tournament_server.schemas.schedule import (
     ResolvedTimeBlockRead,
     ScheduleGenerateRequest,
@@ -334,6 +335,17 @@ def generate_schedule(
 
     db.commit()
 
+    for created_match in created_matches:
+        broadcast_for_session(
+            request.app, db, created_match.session_id, "new_match_created",
+            {
+                "match_id": created_match.id,
+                "session_id": created_match.session_id,
+                "division_id": created_match.division_id,
+                "field_id": created_match.field_id,
+            },
+        )
+
     return ScheduleGenerateResponse(
         schedule_generation_id=generation.id,
         match_count=len(created_matches),
@@ -414,7 +426,7 @@ def clear_schedule(
     if event is not None and event.game_plugin_name is not None:
         game_plugin = request.app.state.game_plugins.get(event.game_plugin_name)
         if game_plugin is not None:
-            recompute_rankings(db, game_plugin, session_id, division_id)
+            recompute_rankings(request.app, db, game_plugin, session_id, division_id)
 
             # Delete stale event-wide rankings before recomputing them, for
             # the same reason the session-scoped rankings above are deleted
@@ -435,6 +447,6 @@ def clear_schedule(
                 db.delete(ranking)
             db.commit()
 
-            recompute_event_rankings(db, game_plugin, event.id, division_id)
+            recompute_event_rankings(request.app, db, game_plugin, event.id, division_id)
 
     return {"matches_deleted": len(matches)}
