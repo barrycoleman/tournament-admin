@@ -5,7 +5,9 @@ import datetime as dt
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from tournament_server import audit, device_auth  # noqa: F401  (audit registers hooks)
@@ -40,6 +42,11 @@ from tournament_server.routers import (
     websockets,
 )
 from tournament_server.settings import Settings
+
+# .../server/src/tournament_server/app.py -> tournament_server -> src -> server -> repo root
+_DEFAULT_STATIC_DIR = (
+    Path(__file__).resolve().parents[3] / "frontend" / "apps" / "admin" / "dist"
+)
 
 
 async def _recover_in_flight_matches(app: FastAPI) -> None:
@@ -128,6 +135,7 @@ def create_app(
     # find_free_port) binds it elsewhere. The caller owns correctness —
     # pass the real bound port whenever one was resolved.
     port: int | None = None,
+    static_dir: str | None = None,
 ) -> FastAPI:
     settings = Settings.from_env()
     if db_path is not None:
@@ -136,6 +144,8 @@ def create_app(
         settings.plugins_root = plugins_root
     if port is not None:
         settings.port = port
+    if static_dir is not None:
+        settings.static_dir = static_dir
 
     engine = make_engine(settings.db_path)
     session_factory = make_session_factory(engine)
@@ -208,5 +218,30 @@ def create_app(
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    # Registered after /health (not before, despite the earlier plan's
+    # note) because Starlette matches routes in registration order, not
+    # by specificity: a catch-all "/{full_path:path}" registered before
+    # the literal "/health" route would shadow it and never let the real
+    # handler run. The guard inside serve_admin_ui() that explicitly
+    # 404s on full_path == "health" is defense in depth for calls made
+    # directly against this route (e.g. if something is ever inserted
+    # between the two in the future); it does not, by itself, make
+    # ordering safe.
+    resolved_static_dir = (
+        Path(settings.static_dir) if settings.static_dir else _DEFAULT_STATIC_DIR
+    )
+    if resolved_static_dir.is_dir():
+        app.mount(
+            "/assets",
+            StaticFiles(directory=resolved_static_dir / "assets"),
+            name="admin-ui-assets",
+        )
+
+        @app.get("/{full_path:path}")
+        def serve_admin_ui(full_path: str) -> FileResponse:
+            if full_path.startswith(("api/", "ws/")) or full_path == "health":
+                raise HTTPException(status_code=404, detail="Not Found")
+            return FileResponse(resolved_static_dir / "index.html")
 
     return app
