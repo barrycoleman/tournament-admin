@@ -78,6 +78,7 @@ frontend/
         pages/                  # one component per route above
         components/
           AppShell.tsx
+          DebugEventPanel.tsx
         i18n/
           en/admin.json
           zh/admin.json
@@ -282,6 +283,31 @@ build):**
 - No event configured yet → landing on `/` redirects to `/events/new`.
 - Role password change takes effect (old password rejected, new password
   accepted on next login).
+- Debug event panel: with the panel open, triggering `active_session_changed`
+  via a direct API call to `POST /api/event/active-session` (this
+  sub-project's UI has no session-creation screen yet, so the test drives
+  the backend directly, as an out-of-band setup step, while asserting on
+  the browser) causes a new entry to appear in the panel showing that
+  event type and payload.
+
+## Debug event panel
+
+Since this sub-project wires up the real-time WebSocket connection
+(`shared/realtime.ts`) with no screen yet that visibly consumes its
+events, a small debug panel doubles as the first real proof the
+connection works end-to-end and as an E2E-testable signal that events
+arrive, without instrumenting internals.
+
+`DebugEventPanel` is a collapsible panel rendered inside `AppShell`,
+visible only to the `admin` role. It subscribes to the same
+`useRealtimeChannel()` hook everything else uses (no separate WebSocket
+connection) and keeps an in-memory ring buffer of the last 50 events
+received this session (cleared on refresh — no persistence). Each entry
+shows a timestamp, the event type, and its raw JSON payload
+(pretty-printed, scrollable). Collapsed by default; a badge shows the
+count of events received since last opened. This is a development/support
+aid, not a product feature — no i18n strings beyond a static "Debug
+events" toggle label, and no styling investment beyond basic legibility.
 
 ## Non-goals for this sub-project
 
