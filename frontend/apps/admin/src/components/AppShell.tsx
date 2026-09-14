@@ -2,6 +2,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@tournament-admin/shared";
 import { TransientErrorBanner } from "./TransientErrorBanner";
+import { DebugEventPanel } from "./DebugEventPanel";
 
 export function AppShell() {
   const { t } = useTranslation();
@@ -21,6 +22,7 @@ export function AppShell() {
           <NavLink to="/settings/roles">{t("shell.rolesLink")}</NavLink>
         </nav>
       )}
+      {role === "admin" && <DebugEventPanel />}
       <main>
         <Outlet />
       </main>

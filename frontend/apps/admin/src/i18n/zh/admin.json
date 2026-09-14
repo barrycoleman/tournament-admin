@@ -45,5 +45,9 @@
     "submit": "更新密码",
     "success": "密码已更新。",
     "genericError": "出错了。"
+  },
+  "debugPanel": {
+    "toggle": "调试事件",
+    "empty": "尚未收到任何事件。"
   }
 }

@@ -45,5 +45,9 @@
     "submit": "Update password",
     "success": "Password updated.",
     "genericError": "Something went wrong."
+  },
+  "debugPanel": {
+    "toggle": "Debug events",
+    "empty": "No events received yet."
   }
 }

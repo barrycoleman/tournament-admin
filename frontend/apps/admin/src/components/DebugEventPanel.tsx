@@ -1,0 +1,49 @@
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useRealtimeChannel, type RealtimeEvent } from "@tournament-admin/shared";
+
+const MAX_EVENTS = 50;
+
+interface LoggedEvent {
+  receivedAt: string;
+  event: RealtimeEvent;
+}
+
+export function DebugEventPanel() {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [events, setEvents] = useState<LoggedEvent[]>([]);
+
+  useRealtimeChannel({
+    path: "/ws/active-session",
+    onEvent: (event) => {
+      setEvents((prev) =>
+        [...prev, { receivedAt: new Date().toISOString(), event }].slice(-MAX_EVENTS)
+      );
+    },
+  });
+
+  return (
+    <section>
+      <button onClick={() => setOpen((prev) => !prev)}>
+        {t("debugPanel.toggle")} ({events.length})
+      </button>
+      {open && (
+        <div>
+          {events.length === 0 ? (
+            <p>{t("debugPanel.empty")}</p>
+          ) : (
+            <ul>
+              {events.map((entry, index) => (
+                <li key={index}>
+                  <span>{entry.receivedAt}</span>
+                  <pre>{JSON.stringify(entry.event, null, 2)}</pre>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
