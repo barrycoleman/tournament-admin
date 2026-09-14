@@ -1,0 +1,29 @@
+{
+  "app": {
+    "title": "Tournament Admin"
+  },
+  "login": {
+    "heading": "Log in",
+    "roleLabel": "Role",
+    "passwordLabel": "Password",
+    "submit": "Log in",
+    "invalidCredentials": "Invalid role or password."
+  },
+  "eventsNew": {
+    "heading": "Set up your event",
+    "nameLabel": "Event name",
+    "passwordLabel": "Initial password (used for all roles until changed)",
+    "submit": "Create event"
+  },
+  "shell": {
+    "logout": "Log out",
+    "dashboardLink": "Dashboard",
+    "eventSetupLink": "Event & plugins",
+    "rolesLink": "Role passwords",
+    "dismiss": "Dismiss"
+  },
+  "dashboard": {
+    "heading": "Dashboard",
+    "eventNameLabel": "Event"
+  }
+}
