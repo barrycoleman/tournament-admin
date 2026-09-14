@@ -25,7 +25,7 @@ export function SettingsRolesRoute() {
   }
 
   return (
-    <main>
+    <div>
       <h1>{t("settingsRoles.heading")}</h1>
       <form onSubmit={handleSubmit}>
         <div>
@@ -66,6 +66,6 @@ export function SettingsRolesRoute() {
           {t("settingsRoles.submit")}
         </button>
       </form>
-    </main>
+    </div>
   );
 }
