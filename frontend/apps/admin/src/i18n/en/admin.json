@@ -43,6 +43,7 @@
     "roleLabel": "Role",
     "newPasswordLabel": "New password",
     "submit": "Update password",
-    "success": "Password updated."
+    "success": "Password updated.",
+    "genericError": "Something went wrong."
   }
 }

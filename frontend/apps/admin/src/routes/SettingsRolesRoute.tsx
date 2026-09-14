@@ -58,7 +58,7 @@ export function SettingsRolesRoute() {
           <p id="settings-roles-error" role="alert">
             {mutation.error instanceof ApiError
               ? mutation.error.detail
-              : "Something went wrong."}
+              : t("settingsRoles.genericError")}
           </p>
         )}
         {mutation.isSuccess && <p role="status">{t("settingsRoles.success")}</p>}
