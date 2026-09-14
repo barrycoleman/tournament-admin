@@ -37,5 +37,12 @@
     "selectedLabel": "Selected",
     "serverInfoHeading": "Connect a device on this network",
     "serverInfoAddressLabel": "Address"
+  },
+  "settingsRoles": {
+    "heading": "Role passwords",
+    "roleLabel": "Role",
+    "newPasswordLabel": "New password",
+    "submit": "Update password",
+    "success": "Password updated."
   }
 }
