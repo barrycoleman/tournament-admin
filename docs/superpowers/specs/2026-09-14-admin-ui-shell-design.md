@@ -114,11 +114,19 @@ builds the client against them.
   matching session server-side.
 - `PATCH /api/auth/passwords/{role}` — body `{password}` → `204`. Admin
   only.
-- `POST /api/event` — body `{name, password}` → `EventRead`. Creates the
-  (single) event and sets its role password set. Admin only.
+- `POST /api/event` — body `{name, password}` → `EventRead`. **No auth
+  required** — necessarily, since no role credentials exist until this
+  call creates them (it seeds all 6 roles with the same initial
+  `password`). `409` if an event already exists (single-event-per-process
+  model). This is the app's bootstrap step; see "Routing & guards" below.
 - `GET /api/event` — → `EventRead {id, name, active_session_id,
-  game_plugin_name, created_at}`.
+  game_plugin_name, created_at}`. **No auth required.** `404` if no event
+  has been created yet — this is the app's "is this a fresh install"
+  signal.
 - `POST /api/event/game-plugin` — body `{name}` → `EventRead`. Admin only.
+  `409` if a game plugin has already been selected for this event (there
+  is no "change selection" endpoint — selection is one-time). `404` if
+  the named plugin isn't loaded.
 - `GET /api/plugins/games` / `POST /api/plugins/games` (multipart zip
   upload) — list / install game plugins. Admin only.
 - `GET /api/plugins/schedulers` / `POST /api/plugins/schedulers`
@@ -189,24 +197,41 @@ generates/reads a signing key at startup; no frontend concern).
 
 ## Routing & guards
 
-React Router data router with two top-level branches:
+**Bootstrap ordering constraint:** `POST /api/event` and `GET /api/event`
+are both unauthenticated on the backend — necessarily, since no
+`RoleCredential` rows (and therefore no valid login) exist until an event
+is created. Event creation seeds all 6 roles with the *same* initial
+password (`EventCreate.password`); the admin is expected to set distinct
+per-role passwords afterward via `/settings/roles`. This means the
+"is an event configured yet" check must happen **before** the
+authentication check, not nested inside it — a design that nested it the
+other way around would trap a fresh install (no event, so no valid
+login is even possible) behind a login redirect it can never satisfy.
 
+React Router data router with three top-level branches, checked in this
+order via a root `loader`:
+
+- Root `loader` (runs on every navigation to `/`, unauthenticated —
+  it does not require or check for a token): calls `GET /api/event`.
+  - `404` (no event yet) → redirect to `/events/new` (public, no guard).
+    On successful creation, redirect to `/login`.
+  - Event exists → falls through to the token check below.
 - `/login` — public, no guard. On successful login, navigates to `/`.
-- Authenticated layout route wrapping everything else, rendering
-  `AppShell`:
+- Authenticated layout route (only reachable once an event exists),
+  rendering `AppShell`:
   - `loader` redirects to `/login` if no valid token pair exists in
     `localStorage`.
-  - Nested under it, a second `loader` (on an "event configured" wrapper
-    route) checks `GET /api/event`; a 404 (no event yet) redirects to
-    `/events/new`, otherwise renders the requested child route.
   - `/` — dashboard/home (minimal for this sub-project: event name,
     active session summary placeholder, links to setup screens)
-  - `/events/new` — event creation form
   - `/events/:id/setup` — plugin install + selection, server-info QR
     display (`:id` is always the single event's id; included for route
     clarity and future-proofing rather than because multiple events
     exist)
   - `/settings/roles` — role password management
+
+`/events/new` itself redirects away (to `/`, which re-runs the root
+loader) if `GET /api/event` already succeeds — visiting it directly after
+the event is already configured is a no-op redirect, not an error.
 
 ## Data flow
 
