@@ -25,5 +25,17 @@
   "dashboard": {
     "heading": "仪表盘",
     "eventNameLabel": "赛事"
+  },
+  "eventSetup": {
+    "heading": "赛事与插件",
+    "gamePluginsHeading": "比赛插件",
+    "schedulerPluginsHeading": "排程插件",
+    "installLabel": "安装插件 (.zip)",
+    "installGameSubmit": "安装比赛插件",
+    "installSchedulerSubmit": "安装排程插件",
+    "selectSubmit": "为本赛事选择",
+    "selectedLabel": "已选择",
+    "serverInfoHeading": "在此网络上连接设备",
+    "serverInfoAddressLabel": "地址"
   }
 }

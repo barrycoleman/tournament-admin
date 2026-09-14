@@ -25,5 +25,17 @@
   "dashboard": {
     "heading": "Dashboard",
     "eventNameLabel": "Event"
+  },
+  "eventSetup": {
+    "heading": "Event & plugins",
+    "gamePluginsHeading": "Game plugins",
+    "schedulerPluginsHeading": "Scheduler plugins",
+    "installLabel": "Install a plugin (.zip)",
+    "installGameSubmit": "Install game plugin",
+    "installSchedulerSubmit": "Install scheduler plugin",
+    "selectSubmit": "Select for this event",
+    "selectedLabel": "Selected",
+    "serverInfoHeading": "Connect a device on this network",
+    "serverInfoAddressLabel": "Address"
   }
 }

@@ -5,3 +5,14 @@ export interface EventRead {
   game_plugin_name: string | null;
   created_at: string;
 }
+
+export interface PluginSummary {
+  name: string;
+  version: string;
+  display_name: string;
+}
+
+export interface ServerInfo {
+  port: number;
+  addresses: string[];
+}
