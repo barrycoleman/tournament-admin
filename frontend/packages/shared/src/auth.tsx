@@ -16,7 +16,7 @@ import {
   tokensFromLoginResponse,
   type StoredTokens,
 } from "./tokenStorage";
-import { refreshTokens } from "./refresh";
+import { invalidateRefreshes, refreshTokens } from "./refresh";
 import { decodeAccessTokenPayload } from "./jwt";
 
 /** How long before expiry the silent-refresh timer fires. */
@@ -113,6 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     const tokens = getStoredTokens();
     clearTimer();
+    // A refresh already in flight would otherwise re-store tokens (and
+    // flip isAuthenticated back on) after we clear them below.
+    invalidateRefreshes();
     if (tokens) {
       try {
         await apiRequest<void>("/api/auth/logout", {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { clearStoredTokens, getStoredTokens, storeTokens } from "../src/tokenStorage";
-import { RefreshError, refreshTokens } from "../src/refresh";
+import { RefreshError, invalidateRefreshes, refreshTokens } from "../src/refresh";
 
 beforeEach(() => {
   localStorage.clear();
@@ -49,6 +49,64 @@ describe("refreshTokens", () => {
     );
 
     await expect(refreshTokens()).rejects.toThrow(RefreshError);
+    expect(getStoredTokens()).toBeNull();
+  });
+
+  it("de-duplicates concurrent callers onto a single in-flight request", async () => {
+    storeTokens({ accessToken: "old-a", refreshToken: "old-r", expiresAt: 0 });
+    // The backend's refresh token is one-shot: a second concurrent POST
+    // with the same token would 401, so there must only ever be one.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            access_token: "new-a",
+            refresh_token: "new-r",
+            expires_in: 1800,
+          }),
+          { status: 200 }
+        )
+    );
+
+    const first = refreshTokens();
+    const second = refreshTokens();
+    const [a, b] = await Promise.all([first, second]);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(a).toEqual(b);
+    expect(a.accessToken).toBe("new-a");
+  });
+
+  it("does not re-store tokens when a logout invalidates an in-flight refresh", async () => {
+    storeTokens({ accessToken: "old-a", refreshToken: "old-r", expiresAt: 0 });
+
+    let releaseFetch!: (response: Response) => void;
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          releaseFetch = resolve;
+        })
+    );
+
+    const pending = refreshTokens();
+
+    // Simulate logout() landing while the refresh is still in flight.
+    invalidateRefreshes();
+    clearStoredTokens();
+    expect(getStoredTokens()).toBeNull();
+
+    releaseFetch(
+      new Response(
+        JSON.stringify({
+          access_token: "new-a",
+          refresh_token: "new-r",
+          expires_in: 1800,
+        }),
+        { status: 200 }
+      )
+    );
+
+    await expect(pending).rejects.toThrow(RefreshError);
     expect(getStoredTokens()).toBeNull();
   });
 });
