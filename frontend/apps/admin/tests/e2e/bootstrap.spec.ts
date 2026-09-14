@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { E2E_EVENT_NAME, E2E_EVENT_PASSWORD } from "./fixtures/testEvent";
 
 test.describe.serial("bootstrap: event creation, login, and the authenticated shell", () => {
   test("a fresh install redirects to /events/new", async ({ page }) => {
@@ -9,8 +10,8 @@ test.describe.serial("bootstrap: event creation, login, and the authenticated sh
 
   test("creating the event redirects to /login", async ({ page }) => {
     await page.goto("/events/new");
-    await page.getByLabel("Event name").fill("Regional Qualifier");
-    await page.getByLabel(/Initial password/).fill("bootstrap-pw");
+    await page.getByLabel("Event name").fill(E2E_EVENT_NAME);
+    await page.getByLabel(/Initial password/).fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Create event" }).click();
     await expect(page).toHaveURL(/\/login$/);
   });
@@ -28,10 +29,10 @@ test.describe.serial("bootstrap: event creation, login, and the authenticated sh
   }) => {
     await page.goto("/login");
     await page.getByLabel("Role").fill("admin");
-    await page.getByLabel("Password").fill("bootstrap-pw");
+    await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
     await expect(page).toHaveURL("/");
-    await expect(page.getByText("Event: Regional Qualifier")).toBeVisible();
+    await expect(page.getByText(`Event: ${E2E_EVENT_NAME}`)).toBeVisible();
   });
 
   test("a session close to expiry is silently refreshed without forcing a re-login", async ({
@@ -39,7 +40,7 @@ test.describe.serial("bootstrap: event creation, login, and the authenticated sh
   }) => {
     await page.goto("/login");
     await page.getByLabel("Role").fill("admin");
-    await page.getByLabel("Password").fill("bootstrap-pw");
+    await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
     await expect(page).toHaveURL("/");
 
@@ -53,7 +54,7 @@ test.describe.serial("bootstrap: event creation, login, and the authenticated sh
     });
 
     await page.reload();
-    await expect(page.getByText("Event: Regional Qualifier")).toBeVisible();
+    await expect(page.getByText(`Event: ${E2E_EVENT_NAME}`)).toBeVisible();
 
     // The silent-refresh timer (30s before expiresAt, so immediately for
     // a 2s-out expiry) should have rotated the refresh token by now,
@@ -76,7 +77,7 @@ test.describe.serial("bootstrap: event creation, login, and the authenticated sh
   }) => {
     await page.goto("/login");
     await page.getByLabel("Role").fill("admin");
-    await page.getByLabel("Password").fill("bootstrap-pw");
+    await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
     await expect(page).toHaveURL("/");
 

@@ -1,16 +1,17 @@
 import { test, expect } from "@playwright/test";
+import { E2E_EVENT_NAME, E2E_EVENT_PASSWORD } from "./fixtures/testEvent";
 
 test.describe.serial("debug event panel", () => {
   let accessToken = "";
 
   test.beforeAll(async ({ request }) => {
     const createResponse = await request.post("/api/event", {
-      data: { name: "Debug Panel Test Event", password: "debug-pw" },
+      data: { name: E2E_EVENT_NAME, password: E2E_EVENT_PASSWORD },
     });
     expect([201, 409]).toContain(createResponse.status());
 
     const loginResponse = await request.post("/api/auth/login", {
-      data: { role: "admin", password: "debug-pw" },
+      data: { role: "admin", password: E2E_EVENT_PASSWORD },
     });
     expect(loginResponse.status()).toBe(200);
     const body = await loginResponse.json();
@@ -29,7 +30,7 @@ test.describe.serial("debug event panel", () => {
   }) => {
     await page.goto("/login");
     await page.getByLabel("Role").fill("admin");
-    await page.getByLabel("Password").fill("debug-pw");
+    await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
     await expect(page).toHaveURL("/");
 
