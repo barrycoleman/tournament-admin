@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { I18nextProvider } from "react-i18next";
 import { initI18n } from "@tournament-admin/shared";
@@ -37,7 +37,9 @@ describe("DebugEventPanel", () => {
     });
 
     renderWithI18n(<DebugEventPanel />);
-    capturedOnEvent?.({ type: "active_session_changed", active_session_id: 7 });
+    act(() => {
+      capturedOnEvent?.({ type: "active_session_changed", active_session_id: 7 });
+    });
     fireEvent.click(screen.getByRole("button", { name: /Debug events/ }));
 
     expect(screen.getByText(/active_session_changed/)).toBeInTheDocument();
@@ -52,9 +54,11 @@ describe("DebugEventPanel", () => {
     });
 
     renderWithI18n(<DebugEventPanel />);
-    for (let i = 0; i < 60; i += 1) {
-      capturedOnEvent?.({ type: `event-${i}` });
-    }
+    act(() => {
+      for (let i = 0; i < 60; i += 1) {
+        capturedOnEvent?.({ type: `event-${i}` });
+      }
+    });
     fireEvent.click(screen.getByRole("button", { name: /Debug events/ }));
 
     expect(screen.queryByText(/event-0\b/)).not.toBeInTheDocument();

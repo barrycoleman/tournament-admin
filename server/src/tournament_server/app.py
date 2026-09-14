@@ -232,11 +232,18 @@ def create_app(
         Path(settings.static_dir) if settings.static_dir else _DEFAULT_STATIC_DIR
     )
     if resolved_static_dir.is_dir():
-        app.mount(
-            "/assets",
-            StaticFiles(directory=resolved_static_dir / "assets"),
-            name="admin-ui-assets",
-        )
+        # StaticFiles raises at construction time if the directory is
+        # missing, which would crash startup outright for a partial or
+        # custom build whose dist/ has no assets/ subdirectory. Degrade
+        # to "no static JS/CSS served" instead: the SPA fallback below
+        # still registers, so index.html keeps being served.
+        assets_dir = resolved_static_dir / "assets"
+        if assets_dir.is_dir():
+            app.mount(
+                "/assets",
+                StaticFiles(directory=assets_dir),
+                name="admin-ui-assets",
+            )
 
         @app.get("/{full_path:path}")
         def serve_admin_ui(full_path: str) -> FileResponse:
