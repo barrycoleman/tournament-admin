@@ -49,5 +49,10 @@
   "debugPanel": {
     "toggle": "Debug events",
     "empty": "No events received yet."
+  },
+  "errors": {
+    "network": "Network error.",
+    "generic": "Something went wrong.",
+    "pluginInstallFailed": "Install failed."
   }
 }

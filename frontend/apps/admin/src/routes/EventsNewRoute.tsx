@@ -51,7 +51,7 @@ export function EventsNewRoute() {
           <p id="event-create-error" role="alert">
             {mutation.error instanceof ApiError
               ? mutation.error.detail
-              : "Something went wrong."}
+              : t("errors.generic")}
           </p>
         )}
         <button type="submit" disabled={mutation.isPending}>

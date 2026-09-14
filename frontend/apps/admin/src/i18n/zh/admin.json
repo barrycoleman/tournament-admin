@@ -49,5 +49,10 @@
   "debugPanel": {
     "toggle": "调试事件",
     "empty": "尚未收到任何事件。"
+  },
+  "errors": {
+    "network": "网络错误。",
+    "generic": "出错了。",
+    "pluginInstallFailed": "安装失败。"
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, type ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import QRCode from "qrcode";
@@ -89,7 +89,7 @@ function PluginList({
         <p role="alert">
           {installMutation.error instanceof ApiError
             ? installMutation.error.detail
-            : "Install failed."}
+            : t("errors.pluginInstallFailed")}
         </p>
       )}
       <span aria-hidden="true">{t(installSubmitKey)}</span>
