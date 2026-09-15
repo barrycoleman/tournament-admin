@@ -172,6 +172,14 @@ describe("CSV formula-injection guard round trip", () => {
       ["2000B", "'Tis Automation"],
     ]);
   });
+
+  it("round-trips a name that legitimately starts with an apostrophe immediately followed by a trigger character", () => {
+    // "'=x" already needs a guard on its own (leading "'" + trigger "="),
+    // so escapeCsvCell double-guards it to "''=x" -- unescapeCsvCell must
+    // undo exactly one layer, not fail to strip either.
+    const rows = parseCsvFile(teamsToCsv([exportRow({ name: "'=x" })]));
+    expect(rows[0].name).toBe("'=x");
+  });
 });
 
 describe("BLANK_TEAM_CSV_TEMPLATE", () => {

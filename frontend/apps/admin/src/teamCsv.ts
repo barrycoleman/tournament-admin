@@ -19,7 +19,12 @@ function escapeCsvCell(value: string): string {
 }
 
 function unescapeCsvCell(value: string): string {
-  return value.startsWith("'") && FORMULA_TRIGGERS.includes(value.charAt(1))
+  // Check whether the REST of the string (after the leading apostrophe)
+  // still needs a guard, not just whether the next character is itself
+  // a trigger -- a double-guarded value ("''=x", produced when the
+  // original text was "'=x") has a second apostrophe in that position,
+  // not the trigger, so a plain charAt(1) check never strips it.
+  return value.startsWith("'") && needsFormulaGuard(value.slice(1))
     ? value.slice(1)
     : value;
 }
