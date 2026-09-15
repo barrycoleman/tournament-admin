@@ -1,5 +1,29 @@
 import Papa from "papaparse";
 
+// Excel/Sheets interpret a cell whose text begins with =, +, -, @, tab or
+// CR as a formula when the exported file is opened. Prefix the standard
+// single-quote guard on export and strip it again on import so
+// export -> hand-edit -> re-upload stays lossless.
+const FORMULA_TRIGGERS = ["=", "+", "-", "@", "\t", "\r"];
+
+function needsFormulaGuard(value: string): boolean {
+  const first = value.charAt(0);
+  if (FORMULA_TRIGGERS.includes(first)) return true;
+  // A value that legitimately starts with an apostrophe followed by a
+  // trigger must be double-guarded, or import would strip the real one.
+  return first === "'" && FORMULA_TRIGGERS.includes(value.charAt(1));
+}
+
+function escapeCsvCell(value: string): string {
+  return needsFormulaGuard(value) ? `'${value}` : value;
+}
+
+function unescapeCsvCell(value: string): string {
+  return value.startsWith("'") && FORMULA_TRIGGERS.includes(value.charAt(1))
+    ? value.slice(1)
+    : value;
+}
+
 export interface TeamGridRow {
   clientId: string;
   id: number | null;
@@ -91,7 +115,7 @@ export function expandPastedBlock(
     while (targetRowIndex >= next.length) {
       next.push(makeBlankTeamRow());
     }
-    let row: TeamGridRow = { ...next[targetRowIndex], dirty: true };
+    let row: TeamGridRow = { ...next[targetRowIndex], dirty: true, error: undefined };
     line.forEach((value, cellOffset) => {
       const key = TEAM_FIELD_KEYS[startColumnIndex + cellOffset];
       if (key) {
@@ -111,7 +135,7 @@ export function parseCsvFile(text: string): TeamGridRow[] {
   return parsed.data.map((record) => {
     const row = makeBlankTeamRow();
     for (const key of TEAM_FIELD_KEYS) {
-      row[key] = record[CSV_HEADERS[key]] ?? "";
+      row[key] = unescapeCsvCell(record[CSV_HEADERS[key]] ?? "");
     }
     return row;
   });
@@ -126,7 +150,7 @@ export function teamsToCsv(
   const data = rows.map((row) => {
     const record: Record<string, string> = {};
     for (const key of TEAM_FIELD_KEYS) {
-      record[CSV_HEADERS[key]] = row[key];
+      record[CSV_HEADERS[key]] = escapeCsvCell(row[key] ?? "");
     }
     return record;
   });

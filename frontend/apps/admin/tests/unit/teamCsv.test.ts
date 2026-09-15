@@ -120,6 +120,58 @@ describe("teamsToCsv", () => {
     ]);
     expect(csv).toContain('"Golden Gears, Inc."');
   });
+
+  it("guards a value that a spreadsheet would otherwise read as a formula", () => {
+    const csv = teamsToCsv([
+      {
+        number: "1234A",
+        name: "=SUM(1,2)",
+        robot_name: "",
+        organization: "",
+        city: "",
+        state: "",
+        country: "",
+        division: "",
+      },
+    ]);
+    // The leading apostrophe is the guard; papaparse then quotes the cell
+    // because the guarded value still contains a comma.
+    expect(csv).toContain("\"'=SUM(1,2)\"");
+  });
+});
+
+describe("CSV formula-injection guard round trip", () => {
+  function exportRow(overrides: Partial<Record<string, string>>) {
+    return {
+      number: "1234A",
+      name: "Robo Raiders",
+      robot_name: "",
+      organization: "",
+      city: "",
+      state: "",
+      country: "",
+      division: "",
+      ...overrides,
+    } as Parameters<typeof teamsToCsv>[0][number];
+  }
+
+  it("strips the guard again on import so a formula-looking name is unchanged end to end", () => {
+    const rows = parseCsvFile(teamsToCsv([exportRow({ name: "=cmd" })]));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].name).toBe("=cmd");
+  });
+
+  it("round-trips an ordinary name and a name starting with a real apostrophe unchanged", () => {
+    const csv = teamsToCsv([
+      exportRow({ number: "1000A", name: "Robo Raiders" }),
+      exportRow({ number: "2000B", name: "'Tis Automation" }),
+    ]);
+    const rows = parseCsvFile(csv);
+    expect(rows.map((r) => [r.number, r.name])).toEqual([
+      ["1000A", "Robo Raiders"],
+      ["2000B", "'Tis Automation"],
+    ]);
+  });
 });
 
 describe("BLANK_TEAM_CSV_TEMPLATE", () => {
