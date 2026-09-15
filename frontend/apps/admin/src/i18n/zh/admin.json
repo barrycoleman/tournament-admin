@@ -42,7 +42,11 @@
     "addRow": "添加行",
     "saveChanges": "保存更改",
     "saveSummary": "已保存 {{saved}} 条,{{failed}} 条需要修正",
-    "saveSummaryAllOk": "已保存 {{saved}} 条"
+    "saveSummaryAllOk": "已保存 {{saved}} 条",
+    "deleteAction": "删除",
+    "deleteConfirmHeading": "删除此队伍?",
+    "deleteConfirmBody": "此操作无法撤销。",
+    "cancelAction": "取消"
   },
   "divisions": {
     "heading": "分组",

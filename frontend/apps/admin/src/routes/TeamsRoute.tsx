@@ -170,6 +170,8 @@ export function TeamsRoute() {
   const [allRows, setAllRows] = useState<TeamGridRow[]>([]);
   const [divisionFilter, setDivisionFilter] = useState<string>("");
   const [saveSummary, setSaveSummary] = useState<{ saved: number; failed: number } | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<TeamGridRow | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const { data: divisions } = useQuery({
     queryKey: ["divisions"],
@@ -231,6 +233,22 @@ export function TeamsRoute() {
         ),
       });
     }
+    base.push({
+      key: "__delete",
+      name: "",
+      renderCell: ({ row }) => (
+        <button
+          aria-label={t("teams.deleteAction")}
+          onClick={() => {
+            setDeleteError(null);
+            setDeleteCandidate(row);
+          }}
+          disabled={row.id === null}
+        >
+          {t("teams.deleteAction")}
+        </button>
+      ),
+    });
     base.push({
       key: "__status",
       name: t("teams.columnStatus"),
@@ -329,6 +347,22 @@ export function TeamsRoute() {
     queryClient.invalidateQueries({ queryKey: ["divisions"] });
   }
 
+  async function handleConfirmDelete() {
+    if (!deleteCandidate || deleteCandidate.id === null) {
+      setDeleteCandidate(null);
+      return;
+    }
+    setDeleteError(null);
+    try {
+      await apiRequest<void>(`/api/teams/${deleteCandidate.id}`, { method: "DELETE" });
+      setAllRows((prev) => prev.filter((row) => row.clientId !== deleteCandidate.clientId));
+      setDeleteCandidate(null);
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.detail : t("errors.generic"));
+    }
+  }
+
   const hasUnsavedChanges = allRows.some((row) => row.dirty);
 
   return (
@@ -373,6 +407,23 @@ export function TeamsRoute() {
         rowKeyGetter={(row) => row.clientId}
         onRowsChange={handleRowsChange}
       />
+
+      {deleteCandidate && (
+        <div role="alertdialog" aria-labelledby="delete-team-heading">
+          <h2 id="delete-team-heading">{t("teams.deleteConfirmHeading")}</h2>
+          <p>{t("teams.deleteConfirmBody")}</p>
+          {deleteError && <p role="alert">{deleteError}</p>}
+          <button onClick={() => void handleConfirmDelete()}>{t("teams.deleteAction")}</button>
+          <button
+            onClick={() => {
+              setDeleteCandidate(null);
+              setDeleteError(null);
+            }}
+          >
+            {t("teams.cancelAction")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

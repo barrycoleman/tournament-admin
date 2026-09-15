@@ -42,7 +42,11 @@
     "addRow": "Add row",
     "saveChanges": "Save changes",
     "saveSummary": "{{saved}} saved, {{failed}} need fixing",
-    "saveSummaryAllOk": "{{saved}} saved"
+    "saveSummaryAllOk": "{{saved}} saved",
+    "deleteAction": "Delete",
+    "deleteConfirmHeading": "Delete this team?",
+    "deleteConfirmBody": "This cannot be undone.",
+    "cancelAction": "Cancel"
   },
   "divisions": {
     "heading": "Divisions",
