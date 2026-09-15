@@ -47,7 +47,9 @@
     "deleteConfirmHeading": "Delete this team?",
     "deleteConfirmBody": "This cannot be undone.",
     "cancelAction": "Cancel",
-    "uploadCsvLabel": "Upload CSV"
+    "uploadCsvLabel": "Upload CSV",
+    "downloadCsvLabel": "Download CSV",
+    "downloadTemplateLabel": "Download blank template"
   },
   "divisions": {
     "heading": "Divisions",

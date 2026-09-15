@@ -47,7 +47,9 @@
     "deleteConfirmHeading": "删除此队伍?",
     "deleteConfirmBody": "此操作无法撤销。",
     "cancelAction": "取消",
-    "uploadCsvLabel": "上传 CSV"
+    "uploadCsvLabel": "上传 CSV",
+    "downloadCsvLabel": "下载 CSV",
+    "downloadTemplateLabel": "下载空白模板"
   },
   "divisions": {
     "heading": "分组",

@@ -13,7 +13,7 @@ import "react-data-grid/lib/styles.css";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { showTransientError } from "../errorBanner";
 import type { Division } from "../types";
-import { expandPastedBlock, makeBlankTeamRow, parseCsvFile, type TeamGridRow } from "../teamCsv";
+import { BLANK_TEAM_CSV_TEMPLATE, downloadCsv, expandPastedBlock, makeBlankTeamRow, parseCsvFile, teamsToCsv, type TeamGridRow } from "../teamCsv";
 
 interface TeamApiRow {
   id: number;
@@ -286,6 +286,14 @@ export function TeamsRoute() {
     setAllRows((previous) => [...previous, blank]);
   }
 
+  function handleDownloadCsv() {
+    downloadCsv("teams.csv", teamsToCsv(visibleRows));
+  }
+
+  function handleDownloadTemplate() {
+    downloadCsv("teams-template.csv", BLANK_TEAM_CSV_TEMPLATE);
+  }
+
   // Bypasses `handleRowsChange` entirely: `expandPastedBlock` already marks
   // every row it touches `dirty: true` itself, and it can grow the row
   // count past what's currently visible (appending new blank rows), which
@@ -428,6 +436,8 @@ export function TeamsRoute() {
         </button>
         <label htmlFor="csv-upload">{t("teams.uploadCsvLabel")}</label>
         <input id="csv-upload" type="file" accept=".csv" onChange={handleCsvFileSelected} />
+        <button onClick={handleDownloadCsv}>{t("teams.downloadCsvLabel")}</button>
+        <button onClick={handleDownloadTemplate}>{t("teams.downloadTemplateLabel")}</button>
       </div>
 
       {saveSummary && (
