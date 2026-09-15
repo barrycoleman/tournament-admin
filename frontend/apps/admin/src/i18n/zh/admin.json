@@ -21,7 +21,28 @@
     "eventSetupLink": "赛事与插件",
     "rolesLink": "角色密码",
     "dismiss": "关闭",
-    "divisionsLink": "分组"
+    "divisionsLink": "分组",
+    "teamsLink": "队伍"
+  },
+  "teams": {
+    "heading": "队伍",
+    "columnNumber": "编号",
+    "columnName": "名称",
+    "columnRobotName": "机器人名称",
+    "columnOrganization": "所属机构",
+    "columnCity": "城市",
+    "columnState": "省/州",
+    "columnCountry": "国家",
+    "columnDivision": "分组",
+    "columnStatus": "状态",
+    "unassigned": "(未分配)",
+    "unsavedIndicator": "未保存",
+    "divisionFilterAll": "所有分组",
+    "divisionFilterLabel": "分组",
+    "addRow": "添加行",
+    "saveChanges": "保存更改",
+    "saveSummary": "已保存 {{saved}} 条,{{failed}} 条需要修正",
+    "saveSummaryAllOk": "已保存 {{saved}} 条"
   },
   "divisions": {
     "heading": "分组",

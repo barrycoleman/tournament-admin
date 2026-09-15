@@ -21,7 +21,28 @@
     "eventSetupLink": "Event & plugins",
     "rolesLink": "Role passwords",
     "dismiss": "Dismiss",
-    "divisionsLink": "Divisions"
+    "divisionsLink": "Divisions",
+    "teamsLink": "Teams"
+  },
+  "teams": {
+    "heading": "Teams",
+    "columnNumber": "Number",
+    "columnName": "Name",
+    "columnRobotName": "Robot Name",
+    "columnOrganization": "Organization",
+    "columnCity": "City",
+    "columnState": "State",
+    "columnCountry": "Country",
+    "columnDivision": "Division",
+    "columnStatus": "Status",
+    "unassigned": "(unassigned)",
+    "unsavedIndicator": "unsaved",
+    "divisionFilterAll": "All divisions",
+    "divisionFilterLabel": "Division",
+    "addRow": "Add row",
+    "saveChanges": "Save changes",
+    "saveSummary": "{{saved}} saved, {{failed}} need fixing",
+    "saveSummaryAllOk": "{{saved}} saved"
   },
   "divisions": {
     "heading": "Divisions",

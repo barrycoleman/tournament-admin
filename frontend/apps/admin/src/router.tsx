@@ -8,6 +8,7 @@ import { DashboardRoute } from "./routes/DashboardRoute";
 import { EventSetupRoute } from "./routes/EventSetupRoute";
 import { SettingsRolesRoute } from "./routes/SettingsRolesRoute";
 import { DivisionsRoute } from "./routes/DivisionsRoute";
+import { TeamsRoute } from "./routes/TeamsRoute";
 
 async function eventExists(): Promise<boolean> {
   try {
@@ -60,6 +61,7 @@ export const router = createBrowserRouter([
       { path: "events/setup", element: <EventSetupRoute /> },
       { path: "settings/roles", element: <SettingsRolesRoute /> },
       { path: "divisions", element: <DivisionsRoute /> },
+      { path: "teams", element: <TeamsRoute /> },
     ],
   },
 ]);

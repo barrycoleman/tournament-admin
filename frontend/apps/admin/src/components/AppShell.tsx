@@ -21,6 +21,7 @@ export function AppShell() {
           <NavLink to="/events/setup">{t("shell.eventSetupLink")}</NavLink>
           <NavLink to="/settings/roles">{t("shell.rolesLink")}</NavLink>
           <NavLink to="/divisions">{t("shell.divisionsLink")}</NavLink>
+          <NavLink to="/teams">{t("shell.teamsLink")}</NavLink>
         </nav>
       )}
       {role === "admin" && <DebugEventPanel />}
