@@ -87,6 +87,47 @@ key. This is what the conformance tool and the loader both check for;
 see `tests/fixtures/plugins/games/example-game/plugin.py` for the
 pattern every field in that fixture follows.
 
+## Teams & divisions
+
+A Team's `number` is unique within its event — a real
+`uq_teams_event_number` constraint on `(event_id, number)`, not just an
+application-level check. Every write path that can violate it (`POST
+/api/teams`, `PATCH /api/teams/{id}`, and the bulk upsert below) wraps its
+`db.commit()` in a `try/except IntegrityError` that rolls back and raises
+a `409 Team number already in use`, so a duplicate number is never a raw
+`500` — including when two concurrent requests both pass their
+pre-commit lookup and only one can actually commit.
+
+`POST /api/teams/bulk` is the roster-editing endpoint the admin UI's grid
+saves through, and its contract is deliberately per-row: it always returns
+`200`, with one result entry per submitted row (`created`, `updated`, or
+`error` plus a message) — one bad row never fails the others, and the good
+rows are still committed. It upserts by team **number**, not by id, so a
+row whose number already exists updates that team instead of creating a
+second one (`number`/`name` are stripped of surrounding whitespace before
+both the lookup and the write, so a pasted `"1234A "` matches the existing
+`"1234A"`). A row's `division` is matched to an existing division by name,
+case-insensitively; an unknown name is that row's error, not a request
+failure. A row can instead set `assign_random_division: true` to have the
+server pick a division for it.
+
+`services/team_assignment.balanced_assign` is the single implementation
+behind every random assignment — the bulk endpoint's per-row
+`assign_random_division`, and both scopes of the randomize endpoint. It is
+not round-robin: it shuffles the teams *and* the divisions, then walks the
+teams in that order assigning each to whichever division currently has the
+fewest teams, counting as it goes. Starting from an already-lopsided
+roster it therefore fills the small divisions first and converges sizes to
+within one of each other, and the division shuffle makes ties break
+randomly rather than always favoring the first-listed division.
+
+`POST /api/divisions/randomize` takes a `scope`: `"unassigned"` only
+touches teams whose `division_id` is null, leaving every existing
+placement alone (what the "randomly assign unassigned teams" button
+calls); `"all"` reassigns every team in the event from scratch, ignoring
+where they currently are (what the admin UI offers after a division is
+added or deleted).
+
 ## Match & scoring
 
 An Event selects exactly one game plugin via `POST /api/event/game-plugin`
@@ -721,6 +762,13 @@ no dedicated CI pipeline yet that pins a clean, no-`dist` checkout state.
 - A Team belongs to at most one Division (nullable `division_id`), not a
   many-to-many relationship, as a deliberate YAGNI simplification — see
   the plan's Global Constraints for why.
+- In a single-division event every team keeps `division_id = NULL`
+  forever: the admin UI hides the division column, the division filter and
+  the assignment controls entirely when only one division exists, so
+  nothing ever writes that division's id onto a team. Nothing today cares,
+  but a future scheduling sub-project will have to decide whether a null
+  `division_id` means "the event's only division" or is a data gap to
+  backfill — don't assume the former silently.
 - No automated cleanup of `.pre-migration-*.bak` backup files — they
   accumulate; an operator deletes old ones manually. `alembic downgrade`
   is not a supported, tested rollback path — the pre-migration backup is

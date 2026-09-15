@@ -19,11 +19,27 @@ below). Later UI specs (scorer/tablet, display) live in the same
 
 ## Stack
 
-TypeScript, React 18, Vite 5, React Router 6 (data routers), TanStack
+TypeScript, React 19, Vite 5, React Router 6 (data routers), TanStack
 Query 5, react-i18next (English + Chinese from day one — every
 user-facing string goes through `useTranslation()`/`t(...)`, never a bare
 string literal). Vitest + React Testing Library for unit/component
 tests. Playwright for E2E tests.
+
+The teams roster screen uses `react-data-grid` and `papaparse`, and both
+have sharp edges worth knowing before touching that screen. A
+`react-data-grid` column only becomes editable when it has an explicit
+`renderEditCell` — `editable: true` on its own is inert in the version
+this project uses, despite what the prop's name suggests (text columns
+pass the library's own `renderTextEditor`). `papaparse` does double duty:
+it parses uploaded CSV files *and* the tab-delimited text a
+spreadsheet paste puts on the clipboard, so there is one parser, not two.
+And `react-data-grid` isn't testable under jsdom as-shipped:
+`apps/admin/vitest.setup.ts` installs a `ResizeObserver` (jsdom has none,
+and the grid virtualizes every row and column away without one), a
+no-op `Element.prototype.scrollIntoView`, and a shim that rewrites the
+CSS-nesting `&` selectors the grid uses into `:scope` (jsdom's selector
+engine throws on them). Don't delete those shims to "clean up" the setup
+file — the grid's component tests stop rendering anything without them.
 
 ## Workspace layout and setup
 
