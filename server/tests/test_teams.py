@@ -1,3 +1,11 @@
+from tournament_server.models.alliance import Alliance, AllianceTeam
+from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
+from tournament_server.models.field_set import FieldSet
+from tournament_server.models.finals_bracket import FinalsBracket
+from tournament_server.models.match import Match
+from tournament_server.models.ranking import Ranking
+
+
 def test_create_team_assigns_tiebreaker_seed(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
 
@@ -188,6 +196,72 @@ def test_delete_team_409s_with_session_participation(client):
     response = client.delete(f"/api/teams/{team['id']}")
     assert response.status_code == 409
     assert "participation" in response.json()["detail"].lower()
+
+
+def test_delete_team_409s_with_ranking(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    team = client.post("/api/teams", json={"number": "1234A", "name": "Robo Raiders"}).json()
+
+    db = client.app.state.session_factory()
+    db.add(Ranking(team_id=team["id"]))
+    db.commit()
+    db.close()
+
+    response = client.delete(f"/api/teams/{team['id']}")
+    assert response.status_code == 409
+    assert "rankings" in response.json()["detail"]
+
+
+def test_delete_team_409s_with_alliance_assignment(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    team = client.post("/api/teams", json={"number": "1234A", "name": "Robo Raiders"}).json()
+    session = client.post("/api/sessions", json={"label": "Day 1"}).json()
+
+    db = client.app.state.session_factory()
+    match = Match(session_id=session["id"], round_type="qualification", match_number=1)
+    db.add(match)
+    db.flush()
+    alliance = Alliance(match_id=match.id, station="red")
+    db.add(alliance)
+    db.flush()
+    db.add(AllianceTeam(alliance_id=alliance.id, team_id=team["id"]))
+    db.commit()
+    db.close()
+
+    response = client.delete(f"/api/teams/{team['id']}")
+    assert response.status_code == 409
+    assert "alliance assignments" in response.json()["detail"]
+
+
+def test_delete_team_409s_with_bracket_alliance_assignment(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    team = client.post("/api/teams", json={"number": "1234A", "name": "Robo Raiders"}).json()
+    session = client.post("/api/sessions", json={"label": "Day 1"}).json()
+
+    db = client.app.state.session_factory()
+    field_set = FieldSet(session_id=session["id"], name="Main Fields")
+    db.add(field_set)
+    db.flush()
+    bracket = FinalsBracket(
+        session_id=session["id"],
+        field_set_id=field_set.id,
+        format="single_elimination",
+        bracket_size=2,
+    )
+    db.add(bracket)
+    db.flush()
+    bracket_alliance = BracketAlliance(bracket_id=bracket.id, seed=1)
+    db.add(bracket_alliance)
+    db.flush()
+    db.add(
+        BracketAllianceTeam(bracket_alliance_id=bracket_alliance.id, team_id=team["id"])
+    )
+    db.commit()
+    db.close()
+
+    response = client.delete(f"/api/teams/{team['id']}")
+    assert response.status_code == 409
+    assert "bracket alliance assignments" in response.json()["detail"]
 
 
 def test_bulk_upsert_creates_new_teams(client):

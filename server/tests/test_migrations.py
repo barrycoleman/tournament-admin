@@ -188,3 +188,64 @@ def test_upgrade_over_pre_existing_match_row_succeeds(tmp_path):
         ).one()
     assert row.phase == "not_started"
     assert bool(row.paused) is False
+
+
+def test_upgrade_over_pre_existing_team_rows_succeeds(tmp_path):
+    """The team/division migration (b7e4a19f6c32) doesn't just ADD COLUMN:
+    it also adds a table-level unique constraint, which SQLite can only do
+    by rebuilding the whole `teams` table via `batch_alter_table`. A table
+    rebuild is exactly where existing rows get lost and where foreign keys
+    silently disappear, so this exercises it against a populated table --
+    an event, a division, and two teams (one of them referencing the
+    division) inserted at the pre-this-task baseline revision.
+    """
+    db_path = str(tmp_path / "pre_existing_teams.db")
+    config = _make_alembic_config(db_path)
+    command.upgrade(config, "9ee2761f45b6")  # baseline, before this task's migration
+
+    raw_engine = create_engine(f"sqlite:///{db_path}")
+    with raw_engine.connect() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO events (id, name, created_at) "
+                "VALUES (1, 'Regional Qualifier', '2026-01-01 00:00:00')"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO divisions (id, event_id, name) VALUES (1, 1, 'Elementary')")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO teams (id, event_id, division_id, number, name, tiebreaker_seed) "
+                "VALUES (1, 1, 1, '1234A', 'Robo Raiders', 10)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO teams (id, event_id, division_id, number, name, tiebreaker_seed) "
+                "VALUES (2, 1, NULL, '5678B', 'Circuit Breakers', 20)"
+            )
+        )
+        connection.commit()
+    raw_engine.dispose()
+
+    engine = make_engine(db_path)
+    outcome = ensure_schema_current(engine, db_path)
+
+    assert outcome == MigrationOutcome.UPGRADED
+
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text("SELECT id, number, robot_name FROM teams ORDER BY id")
+        ).all()
+    assert [(r.id, r.number) for r in rows] == [(1, "1234A"), (2, "5678B")]
+    assert all(r.robot_name is None for r in rows)
+
+    inspector = inspect(engine)
+    unique_constraint_names = {
+        constraint["name"] for constraint in inspector.get_unique_constraints("teams")
+    }
+    assert "uq_teams_event_number" in unique_constraint_names
+
+    referred_tables = {fk["referred_table"] for fk in inspector.get_foreign_keys("teams")}
+    assert {"events", "divisions"} <= referred_tables
