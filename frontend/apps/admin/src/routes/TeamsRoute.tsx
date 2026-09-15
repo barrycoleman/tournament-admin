@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type ClipboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -156,7 +156,10 @@ function DivisionEditor(
       autoFocus
       value={row.division}
       onChange={(event) => {
-        onRowChange({ ...row, division: event.target.value, dirty: true }, true);
+        onRowChange(
+          { ...row, division: event.target.value, dirty: true, error: undefined },
+          true
+        );
         onClose(true);
       }}
       onBlur={() => onClose(true)}
@@ -181,6 +184,13 @@ export function TeamsRoute() {
   const [deleteCandidate, setDeleteCandidate] = useState<TeamGridRow | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [randomizeError, setRandomizeError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // `saving` drives the button's disabled state; `savingRef` is what the
+  // in-flight guard actually reads. A `useState` flag alone can't stop a
+  // double submit: two clicks dispatched before React re-renders run the
+  // same closure, which still sees the pre-click `saving === false`.
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   const { data: divisions } = useQuery({
     queryKey: ["divisions"],
@@ -257,7 +267,6 @@ export function TeamsRoute() {
             setDeleteError(null);
             setDeleteCandidate(row);
           }}
-          disabled={row.id === null}
         >
           {t("teams.deleteAction")}
         </button>
@@ -283,10 +292,13 @@ export function TeamsRoute() {
     // column) writes the new value straight onto the row and knows nothing
     // about our `dirty` flag, so mark the rows it reports as changed here.
     // The division column's custom editor already sets `dirty` itself; this
-    // is idempotent for it.
+    // is idempotent for it. Editing a row also clears any per-row `error`
+    // left over from a previous save -- that error described the value the
+    // user has now changed, so leaving it up would be stale and would hide
+    // the "unsaved" indicator for a row that really does have unsaved work.
     const touchedIndexes = new Set(data.indexes);
     const touched = updatedVisible.map((row, index) =>
-      touchedIndexes.has(index) ? { ...row, dirty: true } : row
+      touchedIndexes.has(index) ? { ...row, dirty: true, error: undefined } : row
     );
     setAllRows((previous) => mergeRows(previous, touched));
   }
@@ -315,7 +327,13 @@ export function TeamsRoute() {
   });
 
   function handleDownloadCsv() {
-    downloadCsv("teams.csv", teamsToCsv(visibleRows));
+    // `__random__` is a UI-only sentinel for "pick a division for me on
+    // save"; it is not a division name and must never reach the exported
+    // file (which is also a valid re-upload input).
+    const exportRows = visibleRows.map((row) =>
+      row.division === RANDOM_DIVISION_SENTINEL ? { ...row, division: "" } : row
+    );
+    downloadCsv("teams.csv", teamsToCsv(exportRows));
   }
 
   function handleDownloadTemplate() {
@@ -357,70 +375,96 @@ export function TeamsRoute() {
   }
 
   async function handleSave() {
+    // A second click while the first request is still in flight would send
+    // the same dirty rows twice; the endpoint upserts by number, so the
+    // duplicate request races the first one's row creation. Guard on a
+    // flag rather than on the mutation state because this is a plain async
+    // function, not a `useMutation`.
+    if (savingRef.current) return;
+    setSaveSummary(null);
+    setSaveError(null);
     const dirtyRows = allRows.filter((row) => row.dirty);
     if (dirtyRows.length === 0) return;
-    const body = {
-      rows: dirtyRows.map((row) => ({
-        number: row.number,
-        name: row.name,
-        robot_name: row.robot_name || null,
-        organization: row.organization || null,
-        city: row.city || null,
-        state: row.state || null,
-        country: row.country || null,
-        division: row.division === RANDOM_DIVISION_SENTINEL ? null : row.division || null,
-        assign_random_division: row.division === RANDOM_DIVISION_SENTINEL,
-      })),
-    };
-    let response: { results: TeamBulkRowResult[] };
+    savingRef.current = true;
+    setSaving(true);
     try {
-      response = await apiRequest<{ results: TeamBulkRowResult[] }>("/api/teams/bulk", {
-        method: "POST",
-        body,
-      });
-    } catch (err) {
-      // The request as a whole failed, so nothing was saved and every
-      // dirty row stays dirty. The per-row `error` column only ever
-      // carries per-row rejections from a request that did succeed, so
-      // this has to go to the shell's transient banner instead.
-      showTransientError(err instanceof ApiError ? err.detail : t("errors.network"));
-      return;
-    }
-    const byIndex = new Map(response.results.map((result) => [result.row_index, result]));
-    const updatedById = new Map<string, TeamGridRow>();
-    let saved = 0;
-    let failed = 0;
-    dirtyRows.forEach((row, index) => {
-      const result = byIndex.get(index);
-      if (!result) return;
-      if (result.status === "error") {
-        failed += 1;
-        updatedById.set(row.clientId, { ...row, error: result.error ?? undefined });
-      } else if (result.team) {
-        saved += 1;
-        updatedById.set(row.clientId, {
-          ...row,
-          clientId: `server-${result.team.id}`,
-          id: result.team.id,
-          dirty: false,
-          error: undefined,
+      const body = {
+        rows: dirtyRows.map((row) => ({
+          number: row.number,
+          name: row.name,
+          robot_name: row.robot_name || null,
+          organization: row.organization || null,
+          city: row.city || null,
+          state: row.state || null,
+          country: row.country || null,
+          division: row.division === RANDOM_DIVISION_SENTINEL ? null : row.division || null,
+          assign_random_division: row.division === RANDOM_DIVISION_SENTINEL,
+        })),
+      };
+      let response: { results: TeamBulkRowResult[] };
+      try {
+        response = await apiRequest<{ results: TeamBulkRowResult[] }>("/api/teams/bulk", {
+          method: "POST",
+          body,
         });
+      } catch (err) {
+        // The request as a whole failed, so nothing was saved and every
+        // dirty row stays dirty. A domain error the server reported gets
+        // an inline message next to the Save button, matching every other
+        // mutation on this screen; only a genuine transport failure goes
+        // to the shell's transient banner, which `errorBanner.ts` reserves
+        // for background query failures.
+        if (err instanceof ApiError) {
+          setSaveError(err.detail);
+        } else {
+          showTransientError(t("errors.network"));
+        }
+        return;
       }
-    });
-    // A row that was new locally can come back as an *update* to an
-    // existing team (the endpoint upserts by number), which stamps a
-    // `server-<id>` already held by another row onto it -- dedupe before
-    // this reaches the grid.
-    setAllRows((previous) =>
-      dedupeByClientId(previous.map((row) => updatedById.get(row.clientId) ?? row))
-    );
-    setSaveSummary({ saved, failed });
-    queryClient.invalidateQueries({ queryKey: ["teams"] });
-    queryClient.invalidateQueries({ queryKey: ["divisions"] });
+      const byIndex = new Map(response.results.map((result) => [result.row_index, result]));
+      const updatedById = new Map<string, TeamGridRow>();
+      let saved = 0;
+      let failed = 0;
+      dirtyRows.forEach((row, index) => {
+        const result = byIndex.get(index);
+        if (!result) return;
+        if (result.status === "error") {
+          failed += 1;
+          updatedById.set(row.clientId, { ...row, error: result.error ?? undefined });
+        } else if (result.team) {
+          saved += 1;
+          updatedById.set(row.clientId, {
+            ...row,
+            clientId: `server-${result.team.id}`,
+            id: result.team.id,
+            dirty: false,
+            error: undefined,
+          });
+        }
+      });
+      // A row that was new locally can come back as an *update* to an
+      // existing team (the endpoint upserts by number), which stamps a
+      // `server-<id>` already held by another row onto it -- dedupe before
+      // this reaches the grid.
+      setAllRows((previous) =>
+        dedupeByClientId(previous.map((row) => updatedById.get(row.clientId) ?? row))
+      );
+      setSaveSummary({ saved, failed });
+      setSaveError(null);
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["divisions"] });
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   }
 
   async function handleConfirmDelete() {
-    if (!deleteCandidate || deleteCandidate.id === null) {
+    if (!deleteCandidate) return;
+    // A row that was never saved only exists locally, so "delete" is just
+    // dropping it from state -- there is nothing on the server to call.
+    if (deleteCandidate.id === null) {
+      setAllRows((prev) => prev.filter((row) => row.clientId !== deleteCandidate.clientId));
       setDeleteCandidate(null);
       return;
     }
@@ -462,7 +506,7 @@ export function TeamsRoute() {
 
       <div>
         <button onClick={handleAddRow}>{t("teams.addRow")}</button>
-        <button onClick={() => void handleSave()} disabled={!hasUnsavedChanges}>
+        <button onClick={() => void handleSave()} disabled={!hasUnsavedChanges || saving}>
           {t("teams.saveChanges")}
         </button>
         <label htmlFor="csv-upload">{t("teams.uploadCsvLabel")}</label>
@@ -476,6 +520,7 @@ export function TeamsRoute() {
           {t("teams.randomizeUnassignedAction")}
         </button>
         {randomizeError && <p role="alert">{randomizeError}</p>}
+        {saveError && <p role="alert">{saveError}</p>}
       </div>
 
       {saveSummary && (
@@ -487,6 +532,7 @@ export function TeamsRoute() {
       )}
 
       <DataGrid
+        aria-label={t("teams.gridLabel")}
         columns={columns}
         rows={visibleRows}
         rowKeyGetter={(row) => row.clientId}

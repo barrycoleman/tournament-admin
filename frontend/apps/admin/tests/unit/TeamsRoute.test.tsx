@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -354,10 +354,122 @@ describe("TeamsRoute", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-    await waitFor(() => expect(getTransientError()).toBe("boom"));
+    // An ApiError is a domain failure the server described, so it shows
+    // inline next to Save (like every other mutation on this screen)
+    // rather than in the shell's background-query banner.
+    expect(await screen.findByRole("alert")).toHaveTextContent("boom");
+    expect(getTransientError()).toBeNull();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByText("unsaved")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+  });
+
+  it("clears a rejected row's error as soon as the row is edited again", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
+    renderRoute();
+
+    await screen.findByText("Alpha");
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+
+    vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+      if (path === "/api/divisions") return DIVISIONS as never;
+      if (path === "/api/teams") return [serverTeam(1, "101", "Alpha", 1)] as never;
+      if (path === "/api/teams/bulk") {
+        return {
+          results: [
+            { row_index: 0, status: "error", team: null, error: "number and name are required" },
+          ],
+        } as never;
+      }
+      throw new Error(`unexpected request: ${path}`);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText("number and name are required")).toBeInTheDocument();
+    expect(screen.queryByText("unsaved")).not.toBeInTheDocument();
+
+    // Fix the row the server rejected: its stale error must disappear and
+    // the plain "unsaved" indicator must come back.
+    const rejectedRow = screen.getAllByRole("row").slice(1)[1];
+    const numberCell = within(rejectedRow).getAllByRole("gridcell")[0];
+    fireEvent.doubleClick(numberCell);
+    const editor = await screen.findByRole("textbox");
+    fireEvent.change(editor, { target: { value: "303" } });
+    fireEvent.blur(editor);
+
+    await waitFor(() =>
+      expect(screen.queryByText("number and name are required")).not.toBeInTheDocument()
+    );
+    expect(screen.getByText("unsaved")).toBeInTheDocument();
+  });
+
+  it("discards a never-saved row locally, with no DELETE request", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
+    renderRoute();
+
+    await screen.findByText("Alpha");
+    const dataRows = () => screen.getAllByRole("row").slice(1);
+    const baseline = dataRows().length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    expect(dataRows()).toHaveLength(baseline + 1);
+
+    const addedRow = dataRows()[baseline];
+    fireEvent.click(within(addedRow).getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(dataRows()).toHaveLength(baseline));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    const deleteCalls = vi
+      .mocked(apiRequest)
+      .mock.calls.filter(
+        ([, options]) => (options as { method?: string } | undefined)?.method === "DELETE"
+      );
+    expect(deleteCalls).toEqual([]);
+  });
+
+  it("ignores a second Save click while the first request is still in flight", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
+    renderRoute();
+
+    await screen.findByText("Alpha");
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+
+    let releaseBulk: (() => void) | null = null;
+    const bulkInFlight = new Promise<void>((resolve) => {
+      releaseBulk = resolve;
+    });
+    vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+      if (path === "/api/divisions") return DIVISIONS as never;
+      if (path === "/api/teams") return [serverTeam(1, "101", "Alpha", 1)] as never;
+      if (path === "/api/teams/bulk") {
+        await bulkInFlight;
+        return {
+          results: [
+            { row_index: 0, status: "created", team: serverTeam(2, "303", "New", null), error: null },
+          ],
+        } as never;
+      }
+      throw new Error(`unexpected request: ${path}`);
+    });
+
+    // Both clicks land inside one act() block, so React has not re-rendered
+    // (and so not disabled the button) between them -- this is the genuine
+    // double-submit race, not one a disabled attribute would have caught.
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    act(() => {
+      saveButton.click();
+      saveButton.click();
+    });
+
+    const bulkCalls = () =>
+      vi.mocked(apiRequest).mock.calls.filter(([path]) => path === "/api/teams/bulk");
+    expect(bulkCalls()).toHaveLength(1);
+
+    releaseBulk!();
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    expect(bulkCalls()).toHaveLength(1);
   });
 
   it("reassigns a row's division through the division cell editor", async () => {

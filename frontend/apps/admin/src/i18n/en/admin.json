@@ -26,6 +26,7 @@
   },
   "teams": {
     "heading": "Teams",
+    "gridLabel": "Team roster",
     "columnNumber": "Number",
     "columnName": "Name",
     "columnRobotName": "Robot Name",
