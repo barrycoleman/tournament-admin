@@ -163,7 +163,7 @@ def bulk_upsert_teams(
 
     results: list[TeamBulkRowResult] = []
     for index, row in enumerate(payload.rows):
-        if not row.number.strip() or not row.name.strip():
+        if not (row.number or "").strip() or not (row.name or "").strip():
             results.append(
                 TeamBulkRowResult(
                     row_index=index, status="error", error="number and name are required"

@@ -272,6 +272,16 @@ def test_bulk_upsert_missing_required_field_is_a_row_error(client):
     assert response.json()["results"][0]["status"] == "error"
 
 
+def test_bulk_upsert_omitted_required_key_is_a_row_error_not_a_422(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post(
+        "/api/teams/bulk",
+        json={"rows": [{"name": "Robo Raiders"}]},  # no "number" key at all
+    )
+    assert response.status_code == 200
+    assert response.json()["results"][0]["status"] == "error"
+
+
 def test_bulk_upsert_assign_random_division_distributes_across_divisions(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/divisions", json={"name": "A"})
