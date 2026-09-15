@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -13,7 +13,12 @@ vi.mock("@tournament-admin/shared", async (importOriginal) => {
 
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { dismissTransientError, getTransientError } from "../../src/errorBanner";
-import { TeamsRoute, mergeRows, mergeServerRows } from "../../src/routes/TeamsRoute";
+import {
+  TeamsRoute,
+  dedupeByClientId,
+  mergeRows,
+  mergeServerRows,
+} from "../../src/routes/TeamsRoute";
 
 function row(overrides: Partial<TeamGridRow> & { clientId: string }): TeamGridRow {
   return {
@@ -92,6 +97,34 @@ describe("mergeRows", () => {
       row({ clientId: "new-1", dirty: true }),
     ]);
     expect(merged.map((r) => r.clientId)).toEqual(["server-1", "new-1"]);
+  });
+});
+
+describe("dedupeByClientId", () => {
+  it("keeps the row carrying a server error over a clean duplicate", () => {
+    const deduped = dedupeByClientId([
+      row({ clientId: "server-5", name: "clean" }),
+      row({ clientId: "server-5", name: "rejected", dirty: true, error: "Team number already in use" }),
+    ]);
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0].name).toBe("rejected");
+  });
+
+  it("keeps an unsaved edit over a clean duplicate, in the first occurrence's position", () => {
+    const deduped = dedupeByClientId([
+      row({ clientId: "server-5", name: "clean" }),
+      row({ clientId: "server-9", name: "other" }),
+      row({ clientId: "server-5", name: "edited", dirty: true }),
+    ]);
+    expect(deduped.map((r) => [r.clientId, r.name])).toEqual([
+      ["server-5", "edited"],
+      ["server-9", "other"],
+    ]);
+  });
+
+  it("leaves a roster with no collisions untouched", () => {
+    const rows = [row({ clientId: "server-1" }), row({ clientId: "new-1", dirty: true })];
+    expect(dedupeByClientId(rows)).toEqual(rows);
   });
 });
 
@@ -246,6 +279,64 @@ describe("TeamsRoute", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("0 saved, 1 need fixing");
     // The rejected row survives the post-save refetch with its error attached.
     expect(await screen.findByText("number and name are required")).toBeInTheDocument();
+  });
+
+  it("leaves no duplicate row when a new row's number turns out to belong to an existing team", async () => {
+    // /api/teams/bulk upserts by NUMBER, so a brand-new local row typed
+    // with an already-taken number comes back as an UPDATE to that team.
+    // Its clientId then becomes `server-1` -- which the original row
+    // already holds. Both must not survive: they'd share a React key and
+    // editing either would rewrite both.
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
+    renderRoute();
+
+    await screen.findByText("Alpha");
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+
+    const dataRows = () => screen.getAllByRole("row").slice(1);
+    expect(dataRows()).toHaveLength(2);
+
+    const blankRow = dataRows()[1];
+    const cells = within(blankRow).getAllByRole("gridcell");
+    const typeInto = (cell: HTMLElement, value: string) => {
+      fireEvent.doubleClick(cell);
+      const editor = screen.getByRole("textbox");
+      fireEvent.change(editor, { target: { value } });
+      fireEvent.blur(editor);
+    };
+    typeInto(cells[0], "101");
+    typeInto(within(dataRows()[1]).getAllByRole("gridcell")[1], "Alpha Renamed");
+
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
+      if (path === "/api/divisions") return DIVISIONS as never;
+      if (path === "/api/teams") return [serverTeam(1, "101", "Alpha Renamed", 1)] as never;
+      if (path === "/api/teams/bulk") {
+        const body = (options as { body: { rows: { number: string }[] } }).body;
+        expect(body.rows).toHaveLength(1);
+        expect(body.rows[0].number).toBe("101");
+        return {
+          results: [
+            {
+              row_index: 0,
+              status: "updated",
+              team: serverTeam(1, "101", "Alpha Renamed", 1),
+              error: null,
+            },
+          ],
+        } as never;
+      }
+      throw new Error(`unexpected request: ${path}`);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("1 saved");
+
+    // The two rows collapsed back into one, and the refetch reconciled its
+    // fields against the server.
+    await waitFor(() => expect(dataRows()).toHaveLength(1));
+    expect(screen.getAllByText("Alpha Renamed")).toHaveLength(1);
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+    expect(screen.queryByText("unsaved")).not.toBeInTheDocument();
   });
 
   it("keeps every row dirty and shows no summary when the bulk request itself fails", async () => {

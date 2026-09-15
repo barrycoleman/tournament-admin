@@ -50,6 +50,42 @@ function toGridRow(team: TeamApiRow, divisionNameById: Map<number, string>): Tea
 }
 
 /**
+ * `clientId` is the grid's React key AND the key every merge in this file
+ * matches on, so `allRows` must never hold two rows with the same one --
+ * if it does, editing either rewrites both.
+ *
+ * The roster can genuinely arrive at a collision, because
+ * `/api/teams/bulk` upserts by team NUMBER, not by `clientId`: type an
+ * already-taken number into a brand-new row (or, once CSV upload lands,
+ * re-upload a corrected roster that still contains an existing team) and
+ * the server reports an *update* to the existing team. `handleSave` then
+ * stamps that team's `server-<id>` onto the new row while the original
+ * row carrying the same id is still in the array.
+ *
+ * Collapse those to one row, keeping the occurrence that holds state the
+ * user would otherwise lose: a server-reported `error` first, then an
+ * unsaved edit, then whichever came first. The kept row keeps its
+ * position. When both are clean (the just-saved case) either copy is
+ * equally valid -- the refetch that follows every save reconciles the
+ * survivor's fields against the server anyway.
+ */
+export function dedupeByClientId(rows: TeamGridRow[]): TeamGridRow[] {
+  const keepPriority = (row: TeamGridRow) => (row.error ? 2 : row.dirty ? 1 : 0);
+  const positionByClientId = new Map<string, number>();
+  const result: TeamGridRow[] = [];
+  for (const row of rows) {
+    const existingPosition = positionByClientId.get(row.clientId);
+    if (existingPosition === undefined) {
+      positionByClientId.set(row.clientId, result.length);
+      result.push(row);
+    } else if (keepPriority(row) > keepPriority(result[existingPosition])) {
+      result[existingPosition] = row;
+    }
+  }
+  return result;
+}
+
+/**
  * Fold the rows react-data-grid hands back (which are only the *visible*,
  * possibly division-filtered, rows) into the full unfiltered roster.
  * Rows are matched by `clientId`; changed rows replace their counterpart
@@ -62,7 +98,7 @@ export function mergeRows(all: TeamGridRow[], updatedVisible: TeamGridRow[]): Te
   const existingIds = new Set(all.map((row) => row.clientId));
   const merged = all.map((row) => updatedById.get(row.clientId) ?? row);
   const brandNew = updatedVisible.filter((row) => !existingIds.has(row.clientId));
-  return [...merged, ...brandNew];
+  return dedupeByClientId([...merged, ...brandNew]);
 }
 
 /**
@@ -99,7 +135,9 @@ export function mergeServerRows(
       result.push(row);
     }
   }
-  return result;
+  // `previous` can already carry a collision the save round trip just
+  // created (see dedupeByClientId); don't propagate it.
+  return dedupeByClientId(result);
 }
 
 function DivisionEditor(
@@ -279,7 +317,13 @@ export function TeamsRoute() {
         });
       }
     });
-    setAllRows((previous) => previous.map((row) => updatedById.get(row.clientId) ?? row));
+    // A row that was new locally can come back as an *update* to an
+    // existing team (the endpoint upserts by number), which stamps a
+    // `server-<id>` already held by another row onto it -- dedupe before
+    // this reaches the grid.
+    setAllRows((previous) =>
+      dedupeByClientId(previous.map((row) => updatedById.get(row.clientId) ?? row))
+    );
     setSaveSummary({ saved, failed });
     queryClient.invalidateQueries({ queryKey: ["teams"] });
     queryClient.invalidateQueries({ queryKey: ["divisions"] });
