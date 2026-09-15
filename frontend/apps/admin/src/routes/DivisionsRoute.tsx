@@ -31,10 +31,12 @@ function useTeamCountsByDivision() {
 
 function RedistributeConfirmDialog({
   totalTeams,
+  error,
   onConfirm,
   onCancel,
 }: {
   totalTeams: number;
+  error: string | null;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -43,6 +45,7 @@ function RedistributeConfirmDialog({
     <div role="alertdialog" aria-labelledby="redistribute-heading">
       <h2 id="redistribute-heading">{t("divisions.redistributeConfirmHeading")}</h2>
       <p>{t("divisions.redistributeConfirmBody", { count: totalTeams })}</p>
+      {error && <p role="alert">{error}</p>}
       <button onClick={onConfirm}>{t("divisions.redistributeConfirmYes")}</button>
       <button onClick={onCancel}>{t("divisions.redistributeConfirmNo")}</button>
     </div>
@@ -55,6 +58,7 @@ export function DivisionsRoute() {
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [pendingRedistribute, setPendingRedistribute] = useState(false);
+  const [redistributeError, setRedistributeError] = useState<string | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<Division | null>(null);
 
   const { data: divisions } = useQuery({
@@ -79,6 +83,7 @@ export function DivisionsRoute() {
       setTarget("");
       invalidateAll();
       if (totalTeams > 0) {
+        setRedistributeError(null);
         setPendingRedistribute(true);
       }
     },
@@ -98,7 +103,10 @@ export function DivisionsRoute() {
     onSuccess: () => {
       setDeleteCandidate(null);
       invalidateAll();
-      setPendingRedistribute(true);
+      if (totalTeams > 0) {
+        setRedistributeError(null);
+        setPendingRedistribute(true);
+      }
     },
   });
 
@@ -110,7 +118,11 @@ export function DivisionsRoute() {
       }),
     onSuccess: () => {
       setPendingRedistribute(false);
+      setRedistributeError(null);
       invalidateAll();
+    },
+    onError: (err) => {
+      setRedistributeError(err instanceof ApiError ? err.detail : t("errors.generic"));
     },
   });
 
@@ -199,8 +211,12 @@ export function DivisionsRoute() {
       {pendingRedistribute && (
         <RedistributeConfirmDialog
           totalTeams={totalTeams}
+          error={redistributeError}
           onConfirm={() => redistributeMutation.mutate()}
-          onCancel={() => setPendingRedistribute(false)}
+          onCancel={() => {
+            setPendingRedistribute(false);
+            setRedistributeError(null);
+          }}
         />
       )}
     </div>
