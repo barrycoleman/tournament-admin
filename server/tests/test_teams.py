@@ -305,6 +305,27 @@ def test_bulk_upsert_assign_random_division_distributes_across_divisions(client)
     assert len(division_ids) == 2
 
 
+def test_bulk_upsert_matches_existing_team_despite_surrounding_whitespace(client):
+    """A pasted or CSV-sourced number can carry stray whitespace. It must
+    match the existing team rather than attempting a second team with a
+    visually identical number (which the (event_id, number) uniqueness
+    constraint would then reject with a 409 for the whole request)."""
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/teams", json={"number": "1234A", "name": "Robo Raiders"})
+
+    response = client.post(
+        "/api/teams/bulk",
+        json={"rows": [{"number": "  1234A  ", "name": "  Robo Raiders Renamed  "}]},
+    )
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results[0]["status"] == "updated"
+    assert results[0]["team"]["number"] == "1234A"
+    assert results[0]["team"]["name"] == "Robo Raiders Renamed"
+
+    assert len(client.get("/api/teams").json()) == 1  # no duplicate created
+
+
 def test_bulk_upsert_empty_rows_is_a_no_op(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     response = client.post("/api/teams/bulk", json={"rows": []})

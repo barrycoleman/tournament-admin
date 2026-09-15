@@ -171,6 +171,12 @@ def bulk_upsert_teams(
             )
             continue
 
+        # Match and store the trimmed values: a pasted or CSV-sourced
+        # "1234A " would otherwise miss the existing "1234A" and try to
+        # create a second team with a visually identical number.
+        number = row.number.strip()
+        name = row.name.strip()
+
         division_id: int | None = None
         if row.assign_random_division:
             if not division_ids:
@@ -182,7 +188,7 @@ def bulk_upsert_teams(
                     )
                 )
                 continue
-            division_id = min(division_ids, key=lambda d: running_counts[d])
+            division_id = balanced_assign([index], division_ids, running_counts)[index]
             running_counts[division_id] += 1
         elif row.division:
             matched = division_by_lower_name.get(row.division.strip().lower())
@@ -198,7 +204,7 @@ def bulk_upsert_teams(
             division_id = matched.id
 
         fields = {
-            "name": row.name,
+            "name": name,
             "robot_name": row.robot_name,
             "organization": row.organization,
             "city": row.city,
@@ -208,7 +214,7 @@ def bulk_upsert_teams(
         }
 
         existing = db.execute(
-            select(Team).where(Team.event_id == event.id, Team.number == row.number)
+            select(Team).where(Team.event_id == event.id, Team.number == number)
         ).scalars().first()
 
         if existing is not None:
@@ -221,7 +227,7 @@ def bulk_upsert_teams(
                 )
             )
         else:
-            team = Team(event_id=event.id, number=row.number, **fields)
+            team = Team(event_id=event.id, number=number, **fields)
             db.add(team)
             db.flush()
             results.append(
@@ -230,5 +236,9 @@ def bulk_upsert_teams(
                 )
             )
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Team number already in use")
     return TeamBulkResponse(results=results)
