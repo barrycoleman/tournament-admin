@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -13,7 +13,16 @@ from tournament_server.models.division import Division
 from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.ranking import Ranking
 from tournament_server.models.team import Team
-from tournament_server.schemas.team import TeamCreate, TeamRead, TeamUpdate
+from tournament_server.schemas.team import (
+    TeamBulkRequest,
+    TeamBulkResponse,
+    TeamBulkRow,
+    TeamBulkRowResult,
+    TeamCreate,
+    TeamRead,
+    TeamUpdate,
+)
+from tournament_server.services.team_assignment import balanced_assign
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
@@ -124,3 +133,102 @@ def delete_team(
     db.delete(team)
     db.commit()
     return Response(status_code=204)
+
+
+@router.post("/bulk", response_model=TeamBulkResponse)
+def bulk_upsert_teams(
+    payload: TeamBulkRequest,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> TeamBulkResponse:
+    event = get_the_event(db)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not initialized")
+
+    divisions = list(
+        db.execute(select(Division).where(Division.event_id == event.id)).scalars().all()
+    )
+    division_by_lower_name = {division.name.lower(): division for division in divisions}
+    division_ids = [division.id for division in divisions]
+
+    running_counts = dict(
+        db.execute(
+            select(Team.division_id, func.count(Team.id))
+            .where(Team.event_id == event.id, Team.division_id.is_not(None))
+            .group_by(Team.division_id)
+        ).all()
+    )
+    for division_id in division_ids:
+        running_counts.setdefault(division_id, 0)
+
+    results: list[TeamBulkRowResult] = []
+    for index, row in enumerate(payload.rows):
+        if not row.number.strip() or not row.name.strip():
+            results.append(
+                TeamBulkRowResult(
+                    row_index=index, status="error", error="number and name are required"
+                )
+            )
+            continue
+
+        division_id: int | None = None
+        if row.assign_random_division:
+            if not division_ids:
+                results.append(
+                    TeamBulkRowResult(
+                        row_index=index,
+                        status="error",
+                        error="No divisions exist to randomly assign into",
+                    )
+                )
+                continue
+            division_id = min(division_ids, key=lambda d: running_counts[d])
+            running_counts[division_id] += 1
+        elif row.division:
+            matched = division_by_lower_name.get(row.division.strip().lower())
+            if matched is None:
+                results.append(
+                    TeamBulkRowResult(
+                        row_index=index,
+                        status="error",
+                        error=f"Unknown division: {row.division!r}",
+                    )
+                )
+                continue
+            division_id = matched.id
+
+        fields = {
+            "name": row.name,
+            "robot_name": row.robot_name,
+            "organization": row.organization,
+            "city": row.city,
+            "state": row.state,
+            "country": row.country,
+            "division_id": division_id,
+        }
+
+        existing = db.execute(
+            select(Team).where(Team.event_id == event.id, Team.number == row.number)
+        ).scalars().first()
+
+        if existing is not None:
+            for key, value in fields.items():
+                setattr(existing, key, value)
+            db.flush()
+            results.append(
+                TeamBulkRowResult(
+                    row_index=index, status="updated", team=TeamRead.model_validate(existing)
+                )
+            )
+        else:
+            team = Team(event_id=event.id, number=row.number, **fields)
+            db.add(team)
+            db.flush()
+            results.append(
+                TeamBulkRowResult(
+                    row_index=index, status="created", team=TeamRead.model_validate(team)
+                )
+            )
+
+    db.commit()
+    return TeamBulkResponse(results=results)

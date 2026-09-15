@@ -188,3 +188,115 @@ def test_delete_team_409s_with_session_participation(client):
     response = client.delete(f"/api/teams/{team['id']}")
     assert response.status_code == 409
     assert "participation" in response.json()["detail"].lower()
+
+
+def test_bulk_upsert_creates_new_teams(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post(
+        "/api/teams/bulk",
+        json={
+            "rows": [
+                {"number": "1234A", "name": "Robo Raiders"},
+                {"number": "5678B", "name": "Circuit Breakers", "robot_name": "Ironclad"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert [r["status"] for r in results] == ["created", "created"]
+    assert results[1]["team"]["robot_name"] == "Ironclad"
+
+
+def test_bulk_upsert_updates_existing_team_by_number(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/teams", json={"number": "1234A", "name": "Robo Raiders"})
+
+    response = client.post(
+        "/api/teams/bulk",
+        json={"rows": [{"number": "1234A", "name": "Robo Raiders Renamed"}]},
+    )
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results[0]["status"] == "updated"
+    assert results[0]["team"]["name"] == "Robo Raiders Renamed"
+
+    list_response = client.get("/api/teams")
+    assert len(list_response.json()) == 1  # no duplicate created
+
+
+def test_bulk_upsert_partial_failure_still_commits_good_rows(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post(
+        "/api/teams/bulk",
+        json={
+            "rows": [
+                {"number": "1234A", "name": "Robo Raiders"},
+                {"number": "5678B", "name": "Circuit Breakers", "division": "Nonexistent Division"},
+                {"number": "9999C", "name": "Third Team"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results[0]["status"] == "created"
+    assert results[1]["status"] == "error"
+    assert "Nonexistent Division" in results[1]["error"]
+    assert results[2]["status"] == "created"
+
+    list_response = client.get("/api/teams")
+    numbers = {t["number"] for t in list_response.json()}
+    assert numbers == {"1234A", "9999C"}
+
+
+def test_bulk_upsert_division_name_is_case_insensitive(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    division = client.post("/api/divisions", json={"name": "Elementary"}).json()
+
+    response = client.post(
+        "/api/teams/bulk",
+        json={"rows": [{"number": "1234A", "name": "Robo Raiders", "division": "elementary"}]},
+    )
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results[0]["status"] == "created"
+    assert results[0]["team"]["division_id"] == division["id"]
+
+
+def test_bulk_upsert_missing_required_field_is_a_row_error(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post(
+        "/api/teams/bulk",
+        json={"rows": [{"number": "", "name": "Robo Raiders"}]},
+    )
+    assert response.status_code == 200
+    assert response.json()["results"][0]["status"] == "error"
+
+
+def test_bulk_upsert_assign_random_division_distributes_across_divisions(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/divisions", json={"name": "A"})
+    client.post("/api/divisions", json={"name": "B"})
+
+    response = client.post(
+        "/api/teams/bulk",
+        json={
+            "rows": [
+                {"number": "0001A", "name": "T1", "assign_random_division": True},
+                {"number": "0002A", "name": "T2", "assign_random_division": True},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    results = response.json()["results"]
+    division_ids = {r["team"]["division_id"] for r in results}
+    assert None not in division_ids
+    # With 2 teams and 2 divisions and no pre-existing teams, the
+    # balanced algorithm must put one in each.
+    assert len(division_ids) == 2
+
+
+def test_bulk_upsert_empty_rows_is_a_no_op(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post("/api/teams/bulk", json={"rows": []})
+    assert response.status_code == 200
+    assert response.json()["results"] == []
