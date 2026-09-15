@@ -46,7 +46,8 @@
     "deleteAction": "删除",
     "deleteConfirmHeading": "删除此队伍?",
     "deleteConfirmBody": "此操作无法撤销。",
-    "cancelAction": "取消"
+    "cancelAction": "取消",
+    "uploadCsvLabel": "上传 CSV"
   },
   "divisions": {
     "heading": "分组",

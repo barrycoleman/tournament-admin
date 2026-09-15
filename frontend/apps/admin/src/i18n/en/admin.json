@@ -46,7 +46,8 @@
     "deleteAction": "Delete",
     "deleteConfirmHeading": "Delete this team?",
     "deleteConfirmBody": "This cannot be undone.",
-    "cancelAction": "Cancel"
+    "cancelAction": "Cancel",
+    "uploadCsvLabel": "Upload CSV"
   },
   "divisions": {
     "heading": "Divisions",

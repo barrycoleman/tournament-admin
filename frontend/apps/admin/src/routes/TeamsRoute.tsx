@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type ClipboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   DataGrid,
   renderTextEditor,
+  type CellPasteArgs,
   type Column,
   type RenderEditCellProps,
   type RowsChangeData,
@@ -12,7 +13,7 @@ import "react-data-grid/lib/styles.css";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { showTransientError } from "../errorBanner";
 import type { Division } from "../types";
-import { makeBlankTeamRow, type TeamGridRow } from "../teamCsv";
+import { expandPastedBlock, makeBlankTeamRow, parseCsvFile, type TeamGridRow } from "../teamCsv";
 
 interface TeamApiRow {
   id: number;
@@ -285,6 +286,40 @@ export function TeamsRoute() {
     setAllRows((previous) => [...previous, blank]);
   }
 
+  // Bypasses `handleRowsChange` entirely: `expandPastedBlock` already marks
+  // every row it touches `dirty: true` itself, and it can grow the row
+  // count past what's currently visible (appending new blank rows), which
+  // `handleRowsChange` -- built for react-data-grid's own single-cell edit
+  // commits -- isn't shaped for. `mergeRows` still does the merge-not-replace
+  // fold back into `allRows` so rows outside the current division filter
+  // survive.
+  function handleCellPaste(
+    args: CellPasteArgs<TeamGridRow>,
+    event: ClipboardEvent<HTMLDivElement>
+  ): TeamGridRow {
+    const text = event.clipboardData.getData("text/plain");
+    const rowIndex = visibleRows.findIndex((row) => row.clientId === args.row.clientId);
+    if (rowIndex === -1) {
+      return args.row;
+    }
+    const expanded = expandPastedBlock(text, visibleRows, rowIndex, args.column.key);
+    setAllRows((prev) => mergeRows(prev, expanded));
+    return args.row;
+  }
+
+  function handleCsvFileSelected(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      const parsedRows = parseCsvFile(text);
+      setAllRows((prev) => [...prev, ...parsedRows]);
+    };
+    reader.readAsText(file);
+    event.target.value = "";
+  }
+
   async function handleSave() {
     const dirtyRows = allRows.filter((row) => row.dirty);
     if (dirtyRows.length === 0) return;
@@ -391,6 +426,8 @@ export function TeamsRoute() {
         <button onClick={() => void handleSave()} disabled={!hasUnsavedChanges}>
           {t("teams.saveChanges")}
         </button>
+        <label htmlFor="csv-upload">{t("teams.uploadCsvLabel")}</label>
+        <input id="csv-upload" type="file" accept=".csv" onChange={handleCsvFileSelected} />
       </div>
 
       {saveSummary && (
@@ -406,6 +443,7 @@ export function TeamsRoute() {
         rows={visibleRows}
         rowKeyGetter={(row) => row.clientId}
         onRowsChange={handleRowsChange}
+        onCellPaste={handleCellPaste}
       />
 
       {deleteCandidate && (
