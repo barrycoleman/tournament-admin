@@ -180,6 +180,7 @@ export function TeamsRoute() {
   const [saveSummary, setSaveSummary] = useState<{ saved: number; failed: number } | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<TeamGridRow | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [randomizeError, setRandomizeError] = useState<string | null>(null);
 
   const { data: divisions } = useQuery({
     queryKey: ["divisions"],
@@ -305,7 +306,11 @@ export function TeamsRoute() {
         body: { scope: "unassigned" },
       }),
     onSuccess: () => {
+      setRandomizeError(null);
       queryClient.invalidateQueries({ queryKey: ["teams"] });
+    },
+    onError: (err) => {
+      setRandomizeError(err instanceof ApiError ? err.detail : t("errors.generic"));
     },
   });
 
@@ -470,6 +475,7 @@ export function TeamsRoute() {
         >
           {t("teams.randomizeUnassignedAction")}
         </button>
+        {randomizeError && <p role="alert">{randomizeError}</p>}
       </div>
 
       {saveSummary && (
