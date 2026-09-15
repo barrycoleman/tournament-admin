@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type ClipboardEvent } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   DataGrid,
@@ -14,6 +14,8 @@ import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { showTransientError } from "../errorBanner";
 import type { Division } from "../types";
 import { BLANK_TEAM_CSV_TEMPLATE, downloadCsv, expandPastedBlock, makeBlankTeamRow, parseCsvFile, teamsToCsv, type TeamGridRow } from "../teamCsv";
+
+const RANDOM_DIVISION_SENTINEL = "__random__";
 
 interface TeamApiRow {
   id: number;
@@ -142,9 +144,13 @@ export function mergeServerRows(
 }
 
 function DivisionEditor(
-  props: RenderEditCellProps<TeamGridRow> & { divisions: Division[]; unassignedLabel: string }
+  props: RenderEditCellProps<TeamGridRow> & {
+    divisions: Division[];
+    unassignedLabel: string;
+    randomLabel: string;
+  }
 ) {
-  const { row, onRowChange, onClose, divisions, unassignedLabel } = props;
+  const { row, onRowChange, onClose, divisions, unassignedLabel, randomLabel } = props;
   return (
     <select
       autoFocus
@@ -161,6 +167,7 @@ function DivisionEditor(
           {division.name}
         </option>
       ))}
+      {row.id === null && <option value={RANDOM_DIVISION_SENTINEL}>{randomLabel}</option>}
     </select>
   );
 }
@@ -225,11 +232,16 @@ export function TeamsRoute() {
       base.push({
         key: "division",
         name: t("teams.columnDivision"),
+        renderCell: ({ row }) =>
+          row.division === RANDOM_DIVISION_SENTINEL
+            ? t("teams.randomDivisionOption")
+            : row.division,
         renderEditCell: (props) => (
           <DivisionEditor
             {...props}
             divisions={divisions ?? []}
             unassignedLabel={t("teams.unassigned")}
+            randomLabel={t("teams.randomDivisionOption")}
           />
         ),
       });
@@ -286,6 +298,17 @@ export function TeamsRoute() {
     setAllRows((previous) => [...previous, blank]);
   }
 
+  const randomizeMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<TeamApiRow[]>("/api/divisions/randomize", {
+        method: "POST",
+        body: { scope: "unassigned" },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+    },
+  });
+
   function handleDownloadCsv() {
     downloadCsv("teams.csv", teamsToCsv(visibleRows));
   }
@@ -340,7 +363,8 @@ export function TeamsRoute() {
         city: row.city || null,
         state: row.state || null,
         country: row.country || null,
-        division: row.division || null,
+        division: row.division === RANDOM_DIVISION_SENTINEL ? null : row.division || null,
+        assign_random_division: row.division === RANDOM_DIVISION_SENTINEL,
       })),
     };
     let response: { results: TeamBulkRowResult[] };
@@ -407,6 +431,8 @@ export function TeamsRoute() {
   }
 
   const hasUnsavedChanges = allRows.some((row) => row.dirty);
+  const hasUnassignedTeams = allRows.some((row) => row.id !== null && row.division === "");
+  const canRandomize = hasUnassignedTeams && (divisions?.length ?? 0) > 1;
 
   return (
     <div>
@@ -438,6 +464,12 @@ export function TeamsRoute() {
         <input id="csv-upload" type="file" accept=".csv" onChange={handleCsvFileSelected} />
         <button onClick={handleDownloadCsv}>{t("teams.downloadCsvLabel")}</button>
         <button onClick={handleDownloadTemplate}>{t("teams.downloadTemplateLabel")}</button>
+        <button
+          onClick={() => randomizeMutation.mutate()}
+          disabled={!canRandomize || randomizeMutation.isPending}
+        >
+          {t("teams.randomizeUnassignedAction")}
+        </button>
       </div>
 
       {saveSummary && (

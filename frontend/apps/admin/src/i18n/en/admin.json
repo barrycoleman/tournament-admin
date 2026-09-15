@@ -49,7 +49,9 @@
     "cancelAction": "Cancel",
     "uploadCsvLabel": "Upload CSV",
     "downloadCsvLabel": "Download CSV",
-    "downloadTemplateLabel": "Download blank template"
+    "downloadTemplateLabel": "Download blank template",
+    "randomDivisionOption": "(random)",
+    "randomizeUnassignedAction": "Randomly assign unassigned teams"
   },
   "divisions": {
     "heading": "Divisions",

@@ -49,7 +49,9 @@
     "cancelAction": "取消",
     "uploadCsvLabel": "上传 CSV",
     "downloadCsvLabel": "下载 CSV",
-    "downloadTemplateLabel": "下载空白模板"
+    "downloadTemplateLabel": "下载空白模板",
+    "randomDivisionOption": "(随机)",
+    "randomizeUnassignedAction": "随机分配未分组队伍"
   },
   "divisions": {
     "heading": "分组",
