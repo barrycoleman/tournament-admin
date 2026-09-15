@@ -156,3 +156,35 @@ def test_update_team_to_duplicate_number_returns_409(client):
     team_id = second.json()["id"]
     response = client.patch(f"/api/teams/{team_id}", json={"number": "1234A"})
     assert response.status_code == 409
+
+
+def test_delete_team(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    created = client.post("/api/teams", json={"number": "1234A", "name": "Robo Raiders"})
+    team_id = created.json()["id"]
+
+    response = client.delete(f"/api/teams/{team_id}")
+    assert response.status_code == 204
+
+    get_response = client.get(f"/api/teams/{team_id}")
+    assert get_response.status_code == 404
+
+
+def test_delete_team_404s_when_not_found(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.delete("/api/teams/999")
+    assert response.status_code == 404
+
+
+def test_delete_team_409s_with_session_participation(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    team = client.post("/api/teams", json={"number": "1234A", "name": "Robo Raiders"}).json()
+    session = client.post("/api/sessions", json={"label": "Day 1"}).json()
+    client.post(
+        f"/api/sessions/{session['id']}/participants",
+        json={"team_id": team["id"]},
+    )
+
+    response = client.delete(f"/api/teams/{team['id']}")
+    assert response.status_code == 409
+    assert "participation" in response.json()["detail"].lower()

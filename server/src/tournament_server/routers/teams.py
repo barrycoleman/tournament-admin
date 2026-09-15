@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from tournament_server.auth import require_admin, require_any_role
 from tournament_server.deps import get_db, get_the_event
+from tournament_server.models.alliance import AllianceTeam
+from tournament_server.models.bracket_alliance import BracketAllianceTeam
 from tournament_server.models.division import Division
+from tournament_server.models.participation import SessionParticipation
+from tournament_server.models.ranking import Ranking
 from tournament_server.models.team import Team
 from tournament_server.schemas.team import TeamCreate, TeamRead, TeamUpdate
 
@@ -84,3 +88,39 @@ def update_team(
         raise HTTPException(status_code=409, detail="Team number already in use")
     db.refresh(team)
     return team
+
+
+@router.delete("/{team_id}", status_code=204)
+def delete_team(
+    team_id: int,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> Response:
+    team = db.get(Team, team_id)
+    if team is None:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    blockers = []
+    if db.execute(
+        select(SessionParticipation).where(SessionParticipation.team_id == team_id)
+    ).first():
+        blockers.append("session participation")
+    if db.execute(select(Ranking).where(Ranking.team_id == team_id)).first():
+        blockers.append("rankings")
+    if db.execute(
+        select(AllianceTeam).where(AllianceTeam.team_id == team_id)
+    ).first():
+        blockers.append("alliance assignments")
+    if db.execute(
+        select(BracketAllianceTeam).where(BracketAllianceTeam.team_id == team_id)
+    ).first():
+        blockers.append("bracket alliance assignments")
+    if blockers:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete team: has existing {', '.join(blockers)}",
+        )
+
+    db.delete(team)
+    db.commit()
+    return Response(status_code=204)
