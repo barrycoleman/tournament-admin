@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -20,3 +22,7 @@ class DivisionRead(BaseModel):
 class DivisionUpdate(BaseModel):
     name: str | None = None
     target_team_count: int | None = None
+
+
+class RandomizeRequest(BaseModel):
+    scope: Literal["unassigned", "all"]
