@@ -72,7 +72,7 @@ test.describe.serial("randomize unassigned teams", () => {
 
     const row = page.getByRole("row").last();
     await row.getByRole("gridcell").nth(0).dblclick();
-    await page.getByRole("textbox").fill("8001A");
+    await page.getByRole("textbox").fill("8501A");
     await page.keyboard.press("Tab");
     await row.getByRole("gridcell").nth(1).dblclick();
     await page.getByRole("textbox").fill("Random Division Team");
@@ -95,7 +95,7 @@ test.describe.serial("randomize unassigned teams", () => {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
         const teams = await teamsResponse.json();
-        const team = teams.find((t: { number: string }) => t.number === "8001A");
+        const team = teams.find((t: { number: string }) => t.number === "8501A");
         return team?.division_id ?? null;
       })
       .not.toBeNull();
@@ -104,7 +104,7 @@ test.describe.serial("randomize unassigned teams", () => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     const teams = await teamsResponse.json();
-    const team = teams.find((t: { number: string }) => t.number === "8001A");
+    const team = teams.find((t: { number: string }) => t.number === "8501A");
     expect(divisionIds).toContain(team.division_id);
   });
 });

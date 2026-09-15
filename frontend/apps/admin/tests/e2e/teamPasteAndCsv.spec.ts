@@ -20,7 +20,10 @@ test.describe.serial("team paste and CSV upload", () => {
     await expect(page).toHaveURL(/\/teams$/);
 
     await page.getByRole("button", { name: "Add row" }).click();
-    const numberCell = page.getByRole("gridcell").first();
+    // Target the row that was just added, not the first row in the grid --
+    // every E2E spec shares one backend and one event, so by the time this
+    // runs the roster may already hold rows created by another spec.
+    const numberCell = page.getByRole("row").last().getByRole("gridcell").first();
     await numberCell.click();
 
     await page.evaluate(() => {
