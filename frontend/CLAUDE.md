@@ -117,11 +117,14 @@ needs to run before an event exists). If you add a new E2E spec file
 that needs the event to exist, import the shared constants; do not
 invent a new password.
 
-As of this writing, Playwright's browser binaries have never actually
-been downloaded/run in this repo's CI or by any Claude Code session that
-authored these tests — every E2E spec here was written and reviewed by
-careful static reading against the real components (selectors, routes,
-assertions cross-checked by hand), not by execution. Run
-`npx playwright install chromium` (add `--with-deps` if you have root
-and want the OS-level dependencies too) once per machine, then
-`npm run test:e2e`, to get the first real execution of this suite.
+`playwright.config.ts` uses `channel: "chrome"` — the machine's installed
+Google Chrome — rather than Playwright's own managed Chromium download,
+because `npx playwright install` fetches its browser build from
+`cdn.playwright.dev`, which stalls or times out on restricted-network
+sandboxes (confirmed in this project's own dev environment) even though
+small requests to the same host succeed. This means `npm run test:e2e`
+needs Google Chrome installed on whatever machine runs it, but needs no
+separate `playwright install` step. If your machine doesn't have Chrome
+and does have normal internet access, switch `channel: "chrome"` back to
+the default (remove the `channel` option, then run
+`npx playwright install chromium` once).

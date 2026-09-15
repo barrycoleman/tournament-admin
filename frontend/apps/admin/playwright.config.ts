@@ -52,5 +52,14 @@ export default defineConfig({
   ],
   use: {
     baseURL: `http://127.0.0.1:${FRONTEND_PORT}`,
+    // Use the machine's installed Google Chrome rather than Playwright's
+    // own managed Chromium download. `npx playwright install` fetches a
+    // multi-hundred-MB browser build from cdn.playwright.dev on every
+    // fresh machine/CI image, which stalls or times out on restricted
+    // networks (confirmed in this project's own dev sandbox) even though
+    // small requests to the same host succeed. Requires Google Chrome to
+    // be installed on whatever machine runs this suite — see
+    // frontend/CLAUDE.md's "Running the E2E suite" section.
+    channel: "chrome",
   },
 });
