@@ -60,6 +60,7 @@ export function DivisionsRoute() {
   const [pendingRedistribute, setPendingRedistribute] = useState(false);
   const [redistributeError, setRedistributeError] = useState<string | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<Division | null>(null);
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   const { data: divisions } = useQuery({
     queryKey: ["divisions"],
@@ -95,7 +96,13 @@ export function DivisionsRoute() {
         method: "PATCH",
         body: { name: newName },
       }),
-    onSuccess: invalidateAll,
+    onSuccess: () => {
+      setRenameError(null);
+      invalidateAll();
+    },
+    onError: (err) => {
+      setRenameError(err instanceof ApiError ? err.detail : t("errors.generic"));
+    },
   });
 
   const deleteMutation = useMutation({
@@ -163,6 +170,7 @@ export function DivisionsRoute() {
           );
         })}
       </ul>
+      {renameError && <p role="alert">{renameError}</p>}
 
       <form onSubmit={handleCreate}>
         <label htmlFor="new-division-name">{t("divisions.nameLabel")}</label>
@@ -203,7 +211,7 @@ export function DivisionsRoute() {
             {t("divisions.deleteAction")}
           </button>
           <button onClick={() => setDeleteCandidate(null)}>
-            {t("divisions.redistributeConfirmNo")}
+            {t("divisions.cancelAction")}
           </button>
         </div>
       )}

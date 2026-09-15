@@ -68,7 +68,8 @@
     "redistributeConfirmYes": "是,重新洗牌",
     "redistributeConfirmNo": "否,我自己手动分配",
     "deleteConfirmHeading": "删除此分组?",
-    "deleteConfirmBody": "其 {{count}} 支队伍将变为未分配,而不会被删除。"
+    "deleteConfirmBody": "其 {{count}} 支队伍将变为未分配,而不会被删除。",
+    "cancelAction": "取消"
   },
   "dashboard": {
     "heading": "仪表盘",

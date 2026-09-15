@@ -68,7 +68,8 @@
     "redistributeConfirmYes": "Yes, reshuffle everyone",
     "redistributeConfirmNo": "No, I'll do it manually",
     "deleteConfirmHeading": "Delete this division?",
-    "deleteConfirmBody": "Its {{count}} teams will become unassigned rather than deleted."
+    "deleteConfirmBody": "Its {{count}} teams will become unassigned rather than deleted.",
+    "cancelAction": "Cancel"
   },
   "dashboard": {
     "heading": "Dashboard",
