@@ -34,8 +34,13 @@ contributor session, not just the original author's.
   event).
 - Real-time: WebSockets (native FastAPI support), not polling.
 - Frontends: plain SPAs (admin, scorer/tablet, display) served as static
-  assets by the same server process. Framework choice is decided in the
-  UI-specific specs, not here.
+  assets by the same server process. The admin UI (the first of these to
+  be built) uses TypeScript + React + Vite + React Router (data routers)
+  + TanStack Query + react-i18next, in an npm workspace at `frontend/`
+  (`frontend/apps/<app>/`, `frontend/packages/shared/`) — see
+  `frontend/CLAUDE.md`. Later UIs (scorer/tablet, display) are expected
+  to follow the same stack and reuse `frontend/packages/shared/`, but
+  each still gets its own spec.
 - Plugins: folder-based, distributed as zip packages, discovered at
   runtime — see the design spec for the full contract.
 - Packaging: standalone executable (PyInstaller) is the primary

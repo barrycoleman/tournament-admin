@@ -659,6 +659,47 @@ QR code) so other devices on the venue network can find it — filtering
 is still best-effort and can occasionally miss or include the wrong
 interface on an unusual setup.
 
+## Serving the admin UI
+
+`create_app()` serves the built admin UI (`frontend/apps/admin/dist/`,
+built separately via `npm run build` — see `frontend/CLAUDE.md`) as
+static assets from the same process and port as the API, with an
+SPA-fallback route for client-side routing. This is entirely additive
+and gated: if the resolved static directory doesn't exist,
+`create_app()` mounts nothing extra and behaves exactly as before (no
+frontend built yet is the normal state for a fresh checkout, and every
+existing test relies on this no-op path still working).
+
+Resolution order: `static_dir` passed to `create_app()`, else
+`TOURNAMENT_STATIC_DIR` env var (`Settings.static_dir`), else the
+computed default `frontend/apps/admin/dist` (relative to the repo root,
+computed from `app.py`'s own path — see `_DEFAULT_STATIC_DIR`). The
+`/assets` `StaticFiles` mount only registers if an `assets/` subdirectory
+is also present (a `dist/` with only `index.html`, e.g. a partial or
+custom build, degrades to "no static JS/CSS served" rather than crashing
+the whole server at startup — `StaticFiles.__init__` raises if its
+directory argument doesn't exist).
+
+**Registration order matters and is not optional:** the SPA catch-all
+(`GET /{full_path:path}`) is registered strictly *after* every other
+route, including `/health` — Starlette matches routes in registration
+order, not by specificity, so a catch-all registered earlier would
+shadow `/health` and any other literal route registered after it. (An
+earlier draft of this feature's plan incorrectly assumed FastAPI
+prioritizes literal routes over path-converter catch-alls regardless of
+order; it doesn't. `test_health_still_works_with_static_dir` in
+`test_static_ui.py` pins this.) The catch-all handler also explicitly
+404s on any path starting with `api/` or `ws/`, or equal to `health`, as
+defense-in-depth — this does not by itself make ordering safe, it only
+protects a direct call against this route if something is ever inserted
+between it and the routes it must not shadow.
+
+Because `frontend/apps/admin/dist/` may already exist in a working
+checkout (from a prior `npm run build`), a plain `create_app()` call with
+no explicit override can serve the real built UI even in contexts (like
+a quick local test or REPL session) where that isn't expected — there is
+no dedicated CI pipeline yet that pins a clean, no-`dist` checkout state.
+
 ## Known, deliberate gaps in this phase
 
 - Real authentication now exists — see
