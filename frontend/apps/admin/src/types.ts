@@ -16,3 +16,10 @@ export interface ServerInfo {
   port: number;
   addresses: string[];
 }
+
+export interface Division {
+  id: number;
+  event_id: number;
+  name: string;
+  target_team_count: number | null;
+}

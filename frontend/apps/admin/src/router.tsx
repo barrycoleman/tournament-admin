@@ -7,6 +7,7 @@ import { AuthenticatedLayout } from "./routes/AuthenticatedLayout";
 import { DashboardRoute } from "./routes/DashboardRoute";
 import { EventSetupRoute } from "./routes/EventSetupRoute";
 import { SettingsRolesRoute } from "./routes/SettingsRolesRoute";
+import { DivisionsRoute } from "./routes/DivisionsRoute";
 
 async function eventExists(): Promise<boolean> {
   try {
@@ -58,6 +59,7 @@ export const router = createBrowserRouter([
       { index: true, element: <DashboardRoute /> },
       { path: "events/setup", element: <EventSetupRoute /> },
       { path: "settings/roles", element: <SettingsRolesRoute /> },
+      { path: "divisions", element: <DivisionsRoute /> },
     ],
   },
 ]);

@@ -20,7 +20,24 @@
     "dashboardLink": "仪表盘",
     "eventSetupLink": "赛事与插件",
     "rolesLink": "角色密码",
-    "dismiss": "关闭"
+    "dismiss": "关闭",
+    "divisionsLink": "分组"
+  },
+  "divisions": {
+    "heading": "分组",
+    "nameLabel": "分组名称",
+    "renameFieldLabel": "重命名 {{name}}",
+    "targetLabel": "目标队伍数(可选)",
+    "addSubmit": "添加分组",
+    "deleteAction": "删除",
+    "teamCountLabel": "{{count}} 支队伍",
+    "teamCountWithTargetLabel": "{{count}} / {{target}} 支队伍",
+    "redistributeConfirmHeading": "重新分配队伍?",
+    "redistributeConfirmBody": "这将把全部 {{count}} 支队伍随机重新分配到当前的分组中。",
+    "redistributeConfirmYes": "是,重新洗牌",
+    "redistributeConfirmNo": "否,我自己手动分配",
+    "deleteConfirmHeading": "删除此分组?",
+    "deleteConfirmBody": "其 {{count}} 支队伍将变为未分配,而不会被删除。"
   },
   "dashboard": {
     "heading": "仪表盘",

@@ -20,7 +20,24 @@
     "dashboardLink": "Dashboard",
     "eventSetupLink": "Event & plugins",
     "rolesLink": "Role passwords",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "divisionsLink": "Divisions"
+  },
+  "divisions": {
+    "heading": "Divisions",
+    "nameLabel": "Division name",
+    "renameFieldLabel": "Rename {{name}}",
+    "targetLabel": "Target team count (optional)",
+    "addSubmit": "Add division",
+    "deleteAction": "Delete",
+    "teamCountLabel": "{{count}} teams",
+    "teamCountWithTargetLabel": "{{count}} / {{target}} teams",
+    "redistributeConfirmHeading": "Redistribute teams?",
+    "redistributeConfirmBody": "This will randomly reassign all {{count}} teams across the current divisions.",
+    "redistributeConfirmYes": "Yes, reshuffle everyone",
+    "redistributeConfirmNo": "No, I'll do it manually",
+    "deleteConfirmHeading": "Delete this division?",
+    "deleteConfirmBody": "Its {{count}} teams will become unassigned rather than deleted."
   },
   "dashboard": {
     "heading": "Dashboard",
