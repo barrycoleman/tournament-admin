@@ -16,7 +16,7 @@ import { useRealtimeChannel } from "@tournament-admin/shared";
 
 function renderWithI18n(ui: React.ReactElement) {
   const i18n = initI18n({ en: { translation: { debugPanel: { toggle: "Debug events", empty: "No events received yet." } } } });
-  return render(<I18nextProvider i18n={i18n}>{ui}</I18nextProvider>);
+  return render(<I18nextProvider i18n={i18n}><>{ui}</></I18nextProvider>);
 }
 
 describe("DebugEventPanel", () => {

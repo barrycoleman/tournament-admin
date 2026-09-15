@@ -125,7 +125,7 @@ function ServerInfoPanel() {
           <p>
             {t("eventSetup.serverInfoAddressLabel")}: {address}:{data.port}
           </p>
-          <canvas ref={(node) => (canvasRefs.current[address] = node)} />
+          <canvas ref={(node) => { canvasRefs.current[address] = node; }} />
         </div>
       ))}
     </section>
