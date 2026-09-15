@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 class DivisionCreate(BaseModel):
     name: str
+    target_team_count: int | None = None
 
 
 class DivisionRead(BaseModel):
@@ -13,3 +14,4 @@ class DivisionRead(BaseModel):
     id: int
     event_id: int
     name: str
+    target_team_count: int | None

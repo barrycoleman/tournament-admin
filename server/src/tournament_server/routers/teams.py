@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from tournament_server.auth import require_admin, require_any_role
@@ -27,7 +28,11 @@ def create_team(
             raise HTTPException(status_code=404, detail="Division not found")
     team = Team(event_id=event.id, **payload.model_dump())
     db.add(team)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Team number already in use")
     db.refresh(team)
     return team
 
@@ -72,6 +77,10 @@ def update_team(
             raise HTTPException(status_code=404, detail="Division not found")
     for key, value in updates.items():
         setattr(team, key, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Team number already in use")
     db.refresh(team)
     return team

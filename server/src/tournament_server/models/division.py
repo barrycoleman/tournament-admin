@@ -12,3 +12,4 @@ class Division(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id"))
     name: Mapped[str] = mapped_column(String(200))
+    target_team_count: Mapped[int | None] = mapped_column(default=None)

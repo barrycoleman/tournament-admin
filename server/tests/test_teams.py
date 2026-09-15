@@ -130,3 +130,29 @@ def test_update_team_with_valid_name_still_returns_200(client):
     response = client.patch(f"/api/teams/{team_id}", json={"name": "New Name"})
     assert response.status_code == 200
     assert response.json()["name"] == "New Name"
+
+
+def test_create_team_with_robot_name(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post(
+        "/api/teams",
+        json={"number": "1234A", "name": "Robo Raiders", "robot_name": "Ironclad"},
+    )
+    assert response.status_code == 201
+    assert response.json()["robot_name"] == "Ironclad"
+
+
+def test_create_team_duplicate_number_returns_409(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/teams", json={"number": "1234A", "name": "Robo Raiders"})
+    response = client.post("/api/teams", json={"number": "1234A", "name": "Circuit Breakers"})
+    assert response.status_code == 409
+
+
+def test_update_team_to_duplicate_number_returns_409(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/teams", json={"number": "1234A", "name": "Robo Raiders"})
+    second = client.post("/api/teams", json={"number": "5678B", "name": "Circuit Breakers"})
+    team_id = second.json()["id"]
+    response = client.patch(f"/api/teams/{team_id}", json={"number": "1234A"})
+    assert response.status_code == 409

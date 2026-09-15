@@ -44,3 +44,17 @@ def test_list_divisions_open_to_any_authenticated_role(client):
 
     response = raw.get("/api/divisions", headers=bearer(attendee_token))
     assert response.status_code == 200
+
+
+def test_create_division_with_target_team_count(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post("/api/divisions", json={"name": "Elementary", "target_team_count": 24})
+    assert response.status_code == 201
+    assert response.json()["target_team_count"] == 24
+
+
+def test_create_division_without_target_team_count_defaults_to_none(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post("/api/divisions", json={"name": "Elementary"})
+    assert response.status_code == 201
+    assert response.json()["target_team_count"] is None

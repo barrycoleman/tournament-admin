@@ -21,7 +21,9 @@ def create_division(
     event = get_the_event(db)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not initialized")
-    division = Division(event_id=event.id, name=payload.name)
+    division = Division(
+        event_id=event.id, name=payload.name, target_team_count=payload.target_team_count
+    )
     db.add(division)
     db.commit()
     db.refresh(division)

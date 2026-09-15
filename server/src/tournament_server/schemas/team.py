@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 class TeamCreate(BaseModel):
     number: str
     name: str
+    robot_name: str | None = None
     organization: str | None = None
     city: str | None = None
     state: str | None = None
@@ -16,6 +17,7 @@ class TeamCreate(BaseModel):
 class TeamUpdate(BaseModel):
     number: str | None = None
     name: str | None = None
+    robot_name: str | None = None
     organization: str | None = None
     city: str | None = None
     state: str | None = None
@@ -31,6 +33,7 @@ class TeamRead(BaseModel):
     division_id: int | None
     number: str
     name: str
+    robot_name: str | None
     organization: str | None
     city: str | None
     state: str | None
