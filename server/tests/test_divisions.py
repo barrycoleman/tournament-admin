@@ -58,3 +58,50 @@ def test_create_division_without_target_team_count_defaults_to_none(client):
     response = client.post("/api/divisions", json={"name": "Elementary"})
     assert response.status_code == 201
     assert response.json()["target_team_count"] is None
+
+
+def test_update_division_name(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    division = client.post("/api/divisions", json={"name": "Elementary"}).json()
+
+    response = client.patch(f"/api/divisions/{division['id']}", json={"name": "Elementary School"})
+    assert response.status_code == 200
+    assert response.json()["name"] == "Elementary School"
+
+
+def test_update_division_target_team_count(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    division = client.post("/api/divisions", json={"name": "Elementary"}).json()
+
+    response = client.patch(f"/api/divisions/{division['id']}", json={"target_team_count": 30})
+    assert response.status_code == 200
+    assert response.json()["target_team_count"] == 30
+
+
+def test_update_division_404s_when_not_found(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.patch("/api/divisions/999", json={"name": "x"})
+    assert response.status_code == 404
+
+
+def test_delete_division_unassigns_its_teams(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    division = client.post("/api/divisions", json={"name": "Elementary"}).json()
+    team = client.post(
+        "/api/teams", json={"number": "1234A", "name": "Robo Raiders", "division_id": division["id"]}
+    ).json()
+
+    response = client.delete(f"/api/divisions/{division['id']}")
+    assert response.status_code == 204
+
+    team_after = client.get(f"/api/teams/{team['id']}").json()
+    assert team_after["division_id"] is None
+
+    list_response = client.get("/api/divisions")
+    assert division["id"] not in [d["id"] for d in list_response.json()]
+
+
+def test_delete_division_404s_when_not_found(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.delete("/api/divisions/999")
+    assert response.status_code == 404

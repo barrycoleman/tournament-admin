@@ -15,3 +15,8 @@ class DivisionRead(BaseModel):
     event_id: int
     name: str
     target_team_count: int | None
+
+
+class DivisionUpdate(BaseModel):
+    name: str | None = None
+    target_team_count: int | None = None
