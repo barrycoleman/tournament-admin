@@ -74,6 +74,11 @@ def delete_division(
     division = db.get(Division, division_id)
     if division is None:
         raise HTTPException(status_code=404, detail="Division not found")
+    remaining_count = db.execute(
+        select(func.count(Division.id)).where(Division.event_id == division.event_id)
+    ).scalar_one()
+    if remaining_count <= 1:
+        raise HTTPException(status_code=409, detail="At least one division is required")
     teams_in_division = list(
         db.execute(select(Team).where(Team.division_id == division_id)).scalars().all()
     )

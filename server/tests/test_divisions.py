@@ -172,3 +172,25 @@ def test_randomize_404s_with_no_divisions(client):
 
     response = client.post("/api/divisions/randomize", json={"scope": "all"})
     assert response.status_code == 404
+
+
+def test_delete_division_409s_when_it_is_the_only_one(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    only_division = client.get("/api/divisions").json()[0]  # the seeded "Division 1"
+
+    response = client.delete(f"/api/divisions/{only_division['id']}")
+    assert response.status_code == 409
+
+    list_response = client.get("/api/divisions")
+    assert only_division["id"] in [d["id"] for d in list_response.json()]
+
+
+def test_delete_division_succeeds_when_others_remain(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    second = client.post("/api/divisions", json={"name": "Elementary"}).json()
+
+    response = client.delete(f"/api/divisions/{second['id']}")
+    assert response.status_code == 204
+
+    list_response = client.get("/api/divisions")
+    assert second["id"] not in [d["id"] for d in list_response.json()]
