@@ -9,7 +9,7 @@ import { useRestartPoll } from "../useRestartPoll";
 export function AppShell() {
   const { t } = useTranslation();
   const { role, logout } = useAuth();
-  const { status: switchStatus, start: startSwitchPoll } = useRestartPoll();
+  const { status: switchStatus, start: startSwitchPoll } = useRestartPoll(undefined, "picker");
 
   const switchMutation = useMutation({
     mutationFn: () => apiRequest<unknown>("/api/picker/switch", { method: "POST" }),

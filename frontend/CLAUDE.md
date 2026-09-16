@@ -90,6 +90,36 @@ detail in the design spec's "Routing & guards" section — don't
 breaks a fresh install completely (the user could never reach the one
 screen that lets them create an event).
 
+Ahead of even the event check comes the picker check: `router.tsx`'s
+`isPickerMode()` calls `GET /api/picker/directories` and treats a 404 as
+"not in picker mode" (that route only exists in the picker app the
+backend builds when no tournament is resolved yet — see
+`server/CLAUDE.md`'s "Tournament picker" section) and any successful
+response as "still picking." Every loader that isn't the picker route
+itself checks this first and redirects to `/picker` if true, so a
+freshly-installed server with no tournament chosen at all lands on the
+picker screen before either the event check or a token check ever runs.
+
+`useRestartPoll` (`src/useRestartPoll.ts`) is what a picker action
+(create/open/switch) waits on afterward — each of those endpoints
+restarts the backend process (a real `os.execve`, not a reload the
+frontend can just await), so the hook polls `GET /api/picker/directories`
+every 500ms (15s timeout) until the *target* app state is reached, then
+calls `onReady` (default: `window.location.reload()`). Which response is
+"ready" depends on which direction the restart is going, via its second
+argument (`RestartTarget`, default `"normal"`): create/open go from
+picker mode into the normal app, so readiness is the route going back to
+404 (`PickerRoute.tsx`'s default `useRestartPoll()` call); "Switch
+Tournament" (`AppShell.tsx`) goes the other way, normal app back into
+picker mode, so it passes `"picker"` and readiness is the route
+responding successfully again instead. Reusing the `"normal"` (404)
+condition for the switch direction is a real, easy-to-reintroduce bug,
+not just a hypothetical one — the *old*, still-normal process already
+404s that route before it even restarts, so waiting on a 404 there fires
+`onReady` immediately, before the restart has actually happened, and the
+UI reloads back into the stale still-normal app instead of the
+newly-restarted picker one.
+
 ## Auth & token handling
 
 Both the access token and the rotating refresh token live in

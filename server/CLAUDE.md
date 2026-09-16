@@ -741,6 +741,66 @@ no explicit override can serve the real built UI even in contexts (like
 a quick local test or REPL session) where that isn't expected — there is
 no dedicated CI pipeline yet that pins a clean, no-`dist` checkout state.
 
+## Tournament picker
+
+Before any database is chosen, the process doesn't know which `.db` file
+to open — that's what the picker layer (`picker_config.py`,
+`picker_app.py`, `routers/picker.py`) resolves. Its own small config file
+(`PickerConfig`: `allowed_directories`, `last_opened_path`) lives at
+`resolve_config_path()` — `TOURNAMENT_CONFIG_PATH` env var if set, else
+`~/.tournament-admin/server-config.json` — and is distinct from, and
+resolved independently of, the actual tournament database path.
+
+`main.py`'s `_startup()` calls `resolve_active_db_path()` to decide which
+app to build: **explicit argument** (a CLI flag, not used by the normal
+`python -m tournament_server.main` entry point) wins first, then the
+**legacy `TOURNAMENT_DB_PATH` env var**, then the picker config's
+`last_opened_path`. That env var predates the picker feature (it's how
+every earlier phase — and `playwright.config.ts`'s shared E2E backend —
+pins a fixed temp-file database) and deliberately keeps top precedence
+over the picker for backward compatibility: a deployment that already
+sets `TOURNAMENT_DB_PATH` keeps working unchanged and never sees the
+picker at all, even after an admin uses "Switch Tournament" (that action
+clears `last_opened_path`, but if `TOURNAMENT_DB_PATH` is still set in
+the environment, the next restart resolves right back to it — the env
+var, not the picker config, is what actually needs to be unset to make
+the picker "stick"). If `resolve_active_db_path()` returns `None`
+(nothing resolves), `_startup()` builds the **picker app**
+(`create_picker_app()`, only `/api/picker/*` mounted, no event/game
+routes) instead of the normal app.
+
+Every picker endpoint that takes a client-supplied path
+(`POST /api/picker/create`, `POST /api/picker/open`,
+`GET /api/picker/tournaments`) is checked against
+`is_path_allowed()` before touching the filesystem — the actual
+path-traversal guard, not just a display convenience. It resolves the
+candidate path (symlinks followed, `..` normalized) and requires it to
+*equal or be nested inside* one of `allowed_directories`'s own resolved
+entries; a path that only looks like a prefix textually (e.g.
+`/data/tournaments-evil` against an allowed `/data/tournaments`) does not
+pass, since containment is checked via `Path.parents`, not string
+prefixing. `POST /api/picker/directories` (adding a brand-new top-level
+directory — the USB-drive case) deliberately does *not* run this check
+against existing entries; it's establishing a new allowed root, not
+validating a path against ones already established.
+
+Every action that changes which database the *next* boot should use
+(`create`, `open`, and the normal app's `POST /api/picker/switch`) ends
+the same way: write the new `last_opened_path` (or, for `switch`, clear
+it to `None`) to the picker config, then schedule
+`_delayed_restart()` as a `BackgroundTask` and return `202`. That
+function only runs after Starlette has already handed the response back
+to the client (a `BackgroundTask` starts after the response is sent,
+never before) — `os.execve(sys.executable, [sys.executable, *sys.argv],
+os.environ.copy())` replaces the running process's image in place, same
+PID, same open listening socket, which is what lets the *next* process
+boot straight back into `_startup()`'s resolution logic above and land
+on whichever app (picker or normal) the just-written config now implies.
+There's a short `asyncio.sleep(0.25)` before the `execve` call purely to
+give the response time to actually flush to the client first. The admin
+UI's `useRestartPoll` (`frontend/CLAUDE.md`) is the client-side half of
+riding out this gap.
+
 ## Known, deliberate gaps in this phase
 
 - Real authentication now exists — see
