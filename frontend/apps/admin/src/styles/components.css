@@ -235,6 +235,9 @@
 /* ---------- Buttons ---------- */
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font: inherit;
   font-size: var(--text-sm);
   font-weight: 600;
