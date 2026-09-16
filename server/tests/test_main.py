@@ -161,18 +161,31 @@ def test_main_clears_last_opened_path_on_schema_mismatch(tmp_path):
 def test_main_prefers_the_env_var_over_a_conflicting_last_opened_path(tmp_path):
     """TOURNAMENT_DB_PATH is a legacy override that always wins over the
     picker config's last_opened_path -- see resolve_active_db_path's
-    documented precedence. Proven behaviorally (not by inspecting
-    internal state): boot succeeds in normal (non-picker) mode, and the
-    config file's last_opened_path on disk is left completely untouched,
-    which could only be true if the env var path -- not the config path
-    -- was what actually got used to build the app."""
+    documented precedence. The two candidate paths must be behaviorally
+    distinguishable for this test to mean anything: the config's
+    last_opened_path points at a database with an old, incompatible
+    schema (same construction as
+    test_main_clears_last_opened_path_on_schema_mismatch), while
+    TOURNAMENT_DB_PATH points at a different, fresh, nonexistent path
+    that fresh-installs cleanly. If precedence were backwards (config
+    wins), _startup() would hit SchemaMismatchError on the bad config
+    path and exit 1 *before ever binding a port* -- so _wait_for_http
+    would time out instead of the assertions below ever running. Only a
+    correct env-var-wins precedence lets this boot succeed at all."""
+    from tournament_server.db import Base, make_engine
+
+    bad_db = tmp_path / "old.db"
+    engine = make_engine(str(bad_db))
+    tables_to_create = [
+        t for name, t in Base.metadata.tables.items() if name != "scoring_devices"
+    ]
+    Base.metadata.create_all(engine, tables=tables_to_create)
+
     port = _free_port()
     config_path = tmp_path / "server-config.json"
-    original_config = {
-        "allowed_directories": [],
-        "last_opened_path": str(tmp_path / "config-chosen.db"),
-    }
-    config_path.write_text(json.dumps(original_config))
+    config_path.write_text(
+        json.dumps({"allowed_directories": [], "last_opened_path": str(bad_db)})
+    )
 
     env = dict(os.environ)
     env["TOURNAMENT_DB_PATH"] = str(tmp_path / "env-chosen.db")
@@ -191,7 +204,7 @@ def test_main_prefers_the_env_var_over_a_conflicting_last_opened_path(tmp_path):
         assert not picker_mode
 
         updated = json.loads(config_path.read_text())
-        assert updated["last_opened_path"] == original_config["last_opened_path"]
+        assert updated["last_opened_path"] == str(bad_db)
     finally:
         process.terminate()
         process.wait(timeout=10)
