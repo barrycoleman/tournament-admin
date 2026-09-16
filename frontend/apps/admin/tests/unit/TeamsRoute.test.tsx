@@ -18,6 +18,7 @@ import {
   dedupeByClientId,
   mergeRows,
   mergeServerRows,
+  reconcileUploadedRows,
 } from "../../src/routes/TeamsRoute";
 
 function row(overrides: Partial<TeamGridRow> & { clientId: string }): TeamGridRow {
@@ -154,6 +155,75 @@ describe("mergeServerRows", () => {
       [row({ clientId: "server-1" }), row({ clientId: "server-4" })]
     );
     expect(merged.map((r) => r.clientId)).toEqual(["server-1", "server-4"]);
+  });
+});
+
+describe("reconcileUploadedRows", () => {
+  it("appends an uploaded row whose number has no existing match", () => {
+    const existing = [row({ clientId: "server-1", number: "101", name: "Alpha" })];
+    const uploaded = [row({ clientId: "new-1", number: "202", name: "Bravo", dirty: true })];
+
+    const result = reconcileUploadedRows(existing, uploaded);
+
+    expect(result.map((r) => r.clientId)).toEqual(["server-1", "new-1"]);
+    expect(result[0].dirty).toBe(false);
+  });
+
+  it("leaves the existing row completely untouched when the uploaded data is identical", () => {
+    const existing = [row({ clientId: "server-1", number: "101", name: "Alpha", division: "Red" })];
+    const uploaded = [
+      row({ clientId: "new-1", number: "101", name: "Alpha", division: "Red", dirty: true }),
+    ];
+
+    const result = reconcileUploadedRows(existing, uploaded);
+
+    expect(result).toEqual(existing);
+    expect(result[0].dirty).toBe(false);
+  });
+
+  it("merges uploaded fields onto the matching row and marks it dirty when data differs", () => {
+    const existing = [
+      row({ clientId: "server-1", id: 1, number: "101", name: "Alpha", city: "Springfield" }),
+    ];
+    const uploaded = [
+      row({ clientId: "new-1", number: "101", name: "Alpha Renamed", city: "Springfield", dirty: true }),
+    ];
+
+    const result = reconcileUploadedRows(existing, uploaded);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].clientId).toBe("server-1");
+    expect(result[0].id).toBe(1);
+    expect(result[0].name).toBe("Alpha Renamed");
+    expect(result[0].dirty).toBe(true);
+  });
+
+  it("matches numbers after trimming whitespace", () => {
+    const existing = [row({ clientId: "server-1", number: "101 ", name: "Alpha" })];
+    const uploaded = [row({ clientId: "new-1", number: " 101", name: "Alpha Two", dirty: true })];
+
+    const result = reconcileUploadedRows(existing, uploaded);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].clientId).toBe("server-1");
+    expect(result[0].name).toBe("Alpha Two");
+  });
+
+  it("clears a matched row's stale server error when the re-upload changes its data", () => {
+    const existing = [
+      row({
+        clientId: "server-1",
+        number: "101",
+        name: "Alpha",
+        dirty: true,
+        error: "Team number already in use",
+      }),
+    ];
+    const uploaded = [row({ clientId: "new-1", number: "101", name: "Alpha Two", dirty: true })];
+
+    const result = reconcileUploadedRows(existing, uploaded);
+
+    expect(result[0].error).toBeUndefined();
   });
 });
 

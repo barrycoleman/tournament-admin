@@ -13,7 +13,16 @@ import "react-data-grid/lib/styles.css";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { showTransientError } from "../errorBanner";
 import type { Division } from "../types";
-import { BLANK_TEAM_CSV_TEMPLATE, downloadCsv, expandPastedBlock, makeBlankTeamRow, parseCsvFile, teamsToCsv, type TeamGridRow } from "../teamCsv";
+import {
+  BLANK_TEAM_CSV_TEMPLATE,
+  TEAM_FIELD_KEYS,
+  downloadCsv,
+  expandPastedBlock,
+  makeBlankTeamRow,
+  parseCsvFile,
+  teamsToCsv,
+  type TeamGridRow,
+} from "../teamCsv";
 
 const RANDOM_DIVISION_SENTINEL = "__random__";
 
@@ -141,6 +150,41 @@ export function mergeServerRows(
   // `previous` can already carry a collision the save round trip just
   // created (see dedupeByClientId); don't propagate it.
   return dedupeByClientId(result);
+}
+
+/**
+ * Reconcile freshly-parsed CSV rows against the roster already in the grid,
+ * matching by team number (trimmed, same as the backend's own upsert
+ * matching) rather than blind-appending. A number with no existing match is
+ * a brand-new row. A number that already exists is merged onto that row in
+ * place -- re-uploading a roster that overlaps what's already loaded must
+ * not produce a second row for the same team, the way a plain append would.
+ * When every field is identical to what's already there (re-uploading the
+ * same file twice, or a file re-saved with no edits) the existing row is
+ * left completely alone: not marked dirty, not touched at all.
+ */
+export function reconcileUploadedRows(
+  existing: TeamGridRow[],
+  uploaded: TeamGridRow[]
+): TeamGridRow[] {
+  const indexByNumber = new Map(existing.map((row, index) => [row.number.trim(), index]));
+  const result = [...existing];
+  for (const uploadedRow of uploaded) {
+    const matchIndex = indexByNumber.get(uploadedRow.number.trim());
+    if (matchIndex === undefined) {
+      result.push(uploadedRow);
+      continue;
+    }
+    const match = result[matchIndex];
+    const changed = TEAM_FIELD_KEYS.some((key) => match[key] !== uploadedRow[key]);
+    if (!changed) continue;
+    const merged = { ...match };
+    for (const key of TEAM_FIELD_KEYS) {
+      merged[key] = uploadedRow[key];
+    }
+    result[matchIndex] = { ...merged, dirty: true, error: undefined };
+  }
+  return result;
 }
 
 function DivisionEditor(
@@ -368,7 +412,7 @@ export function TeamsRoute() {
     reader.onload = () => {
       const text = typeof reader.result === "string" ? reader.result : "";
       const parsedRows = parseCsvFile(text);
-      setAllRows((prev) => [...prev, ...parsedRows]);
+      setAllRows((prev) => reconcileUploadedRows(prev, parsedRows));
     };
     reader.readAsText(file);
     event.target.value = "";

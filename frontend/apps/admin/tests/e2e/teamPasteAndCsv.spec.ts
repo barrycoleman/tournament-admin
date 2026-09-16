@@ -68,4 +68,79 @@ test.describe.serial("team paste and CSV upload", () => {
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByRole("status")).toContainText("saved");
   });
+
+  test("re-uploading the same CSV file makes no change", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByLabel("Role").fill("admin");
+    await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
+    await page.getByRole("button", { name: "Log in" }).click();
+    await page.getByRole("link", { name: "Teams" }).click();
+    await expect(page).toHaveURL(/\/teams$/);
+
+    const csvContent =
+      "Number,Name,Robot Name,Organization,City,State,Country,Division\n" +
+      "9201A,Reupload Team,,,,,,\n";
+
+    await page.getByLabel("Upload CSV").setInputFiles({
+      name: "teams.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csvContent),
+    });
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status")).toContainText("saved");
+
+    // Re-upload the identical, unmodified file: this must not resurrect the
+    // "unsaved" indicator or add a second row for the same team.
+    await page.getByLabel("Upload CSV").setInputFiles({
+      name: "teams.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csvContent),
+    });
+
+    await expect(page.getByText("Reupload Team")).toHaveCount(1);
+    await expect(page.getByText("unsaved")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  });
+
+  test("re-uploading a CSV file with an edited row updates it instead of duplicating it", async ({
+    page,
+  }) => {
+    await page.goto("/login");
+    await page.getByLabel("Role").fill("admin");
+    await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
+    await page.getByRole("button", { name: "Log in" }).click();
+    await page.getByRole("link", { name: "Teams" }).click();
+    await expect(page).toHaveURL(/\/teams$/);
+
+    await page.getByLabel("Upload CSV").setInputFiles({
+      name: "teams.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(
+        "Number,Name,Robot Name,Organization,City,State,Country,Division\n" +
+          "9301A,Original Name,,,,,,\n"
+      ),
+    });
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status")).toContainText("saved");
+
+    // A re-saved copy of the roster with this team's name changed -- same
+    // number, different data. This must edit the one existing row, not add
+    // a second one for team 9301A.
+    await page.getByLabel("Upload CSV").setInputFiles({
+      name: "teams.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(
+        "Number,Name,Robot Name,Organization,City,State,Country,Division\n" +
+          "9301A,Edited Name,,,,,,\n"
+      ),
+    });
+
+    await expect(page.getByText("9301A")).toHaveCount(1);
+    await expect(page.getByText("Edited Name")).toBeVisible();
+    await expect(page.getByText("Original Name")).toHaveCount(0);
+    await expect(page.getByText("unsaved").first()).toBeVisible();
+
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status")).toContainText("saved");
+  });
 });
