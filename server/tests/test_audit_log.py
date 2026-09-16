@@ -84,7 +84,7 @@ def test_audit_log_supports_limit_and_offset(client):
         client.post("/api/teams", json={"number": str(i), "name": f"Team {i}"})
 
     all_entries = client.get("/api/audit-log").json()
-    assert len(all_entries) == 6  # 1 event insert + 5 team inserts
+    assert len(all_entries) == 7  # 1 event insert + 1 division insert + 5 team inserts
 
     page = client.get("/api/audit-log?limit=2&offset=1").json()
     assert len(page) == 2
@@ -96,7 +96,7 @@ def test_audit_log_default_limit_returns_all_when_under_cap(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     response = client.get("/api/audit-log")
     assert response.status_code == 200
-    assert len(response.json()) == 1
+    assert len(response.json()) == 2  # 1 event insert + 1 division insert
 
 
 def test_list_audit_log_403s_for_non_admin(client):

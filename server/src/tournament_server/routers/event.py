@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from tournament_server.auth import ROLES, hash_password, require_admin
 from tournament_server.deps import get_db, get_the_event
+from tournament_server.models.division import Division
 from tournament_server.models.event import Event
 from tournament_server.models.role_credential import RoleCredential
 from tournament_server.models.session import TournamentSession
@@ -25,6 +26,8 @@ def create_event(payload: EventCreate, db: Session = Depends(get_db)) -> Event:
         raise HTTPException(status_code=409, detail="Event already initialized")
     event = Event(name=payload.name)
     db.add(event)
+    db.flush()  # populates event.id, needed by the Division row below
+    db.add(Division(event_id=event.id, name="Division 1"))
     password_hash = hash_password(payload.password)
     for role in ROLES:
         db.add(RoleCredential(role=role, password_hash=password_hash))

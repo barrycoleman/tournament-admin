@@ -10,8 +10,8 @@ def test_create_and_list_divisions(client):
 
     list_response = client.get("/api/divisions")
     assert list_response.status_code == 200
-    assert list_response.json()[0]["id"] == division_id
-    assert list_response.json()[0]["name"] == "Elementary"
+    divisions_by_id = {d["id"]: d["name"] for d in list_response.json()}
+    assert divisions_by_id[division_id] == "Elementary"
 
 
 def test_create_division_requires_event(client):
@@ -120,8 +120,9 @@ def test_randomize_unassigned_only_touches_unassigned_teams(client):
     touched_ids = {t["id"] for t in response.json()}
     assert touched_ids == {unassigned["id"]}
 
+    all_division_ids = {d["id"] for d in client.get("/api/divisions").json()}
     unassigned_after = client.get(f"/api/teams/{unassigned['id']}").json()
-    assert unassigned_after["division_id"] == division["id"]
+    assert unassigned_after["division_id"] in all_division_ids
     assigned_after = client.get(f"/api/teams/{assigned['id']}").json()
     assert assigned_after["division_id"] == division["id"]  # untouched, was already here
 
@@ -142,14 +143,32 @@ def test_randomize_all_reassigns_every_team(client):
     touched_ids = {t["id"] for t in response.json()}
     assert touched_ids == {team1["id"], team2["id"]}
 
+    all_division_ids = {d["id"] for d in client.get("/api/divisions").json()}
     division_ids_after = {
         client.get(f"/api/teams/{team1['id']}").json()["division_id"],
         client.get(f"/api/teams/{team2['id']}").json()["division_id"],
     }
-    assert division_ids_after <= {division_a["id"], division_b["id"]}
+    assert division_ids_after <= all_division_ids
 
 
 def test_randomize_404s_with_no_divisions(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
+    # Event creation always seeds one division now (see routers/event.py).
+    # Deleting the last division through the API is blocked (see Task 2),
+    # so reach the "no divisions at all" state directly via the DB instead
+    # -- this is exercising randomize's own defensive guard, not something
+    # reachable through normal use anymore.
+    from sqlalchemy import select
+
+    from tournament_server.models.division import Division
+
+    session = client.app.state.session_factory()
+    try:
+        for division in session.execute(select(Division)).scalars().all():
+            session.delete(division)
+        session.commit()
+    finally:
+        session.close()
+
     response = client.post("/api/divisions/randomize", json={"scope": "all"})
     assert response.status_code == 404

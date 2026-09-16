@@ -85,3 +85,12 @@ def test_create_event_rejects_empty_password(tmp_path):
         "/api/event", json={"name": "Regional Qualifier", "password": ""}
     )
     assert response.status_code == 422
+
+
+def test_create_event_seeds_a_default_division(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+
+    response = client.get("/api/divisions")
+    assert response.status_code == 200
+    assert [d["name"] for d in response.json()] == ["Division 1"]
+    assert response.json()[0]["target_team_count"] is None
