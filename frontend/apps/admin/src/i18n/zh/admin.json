@@ -24,6 +24,24 @@
     "divisionsLink": "分组",
     "teamsLink": "队伍"
   },
+  "picker": {
+    "heading": "启动赛事",
+    "createAction": "创建新赛事",
+    "openAction": "打开现有赛事",
+    "directoryLabel": "目录",
+    "directoryPlaceholder": "选择一个目录...",
+    "addDirectoryAction": "添加目录...",
+    "newDirectoryLabel": "新目录路径",
+    "addDirectoryConfirm": "添加",
+    "filenameLabel": "文件名",
+    "createSubmit": "创建",
+    "tournamentFileLabel": "赛事文件",
+    "openSubmit": "打开",
+    "backAction": "返回",
+    "restartingMessage": "正在启动赛事…",
+    "restartTimedOutMessage": "赛事启动失败——请检查服务器日志。",
+    "switchAction": "切换赛事"
+  },
   "teams": {
     "heading": "队伍",
     "gridLabel": "队伍名单",

@@ -24,6 +24,24 @@
     "divisionsLink": "Divisions",
     "teamsLink": "Teams"
   },
+  "picker": {
+    "heading": "Start a tournament",
+    "createAction": "Create New Tournament",
+    "openAction": "Open Existing Tournament",
+    "directoryLabel": "Directory",
+    "directoryPlaceholder": "Choose a directory...",
+    "addDirectoryAction": "Add a directory...",
+    "newDirectoryLabel": "New directory path",
+    "addDirectoryConfirm": "Add",
+    "filenameLabel": "Filename",
+    "createSubmit": "Create",
+    "tournamentFileLabel": "Tournament file",
+    "openSubmit": "Open",
+    "backAction": "Back",
+    "restartingMessage": "Starting tournament…",
+    "restartTimedOutMessage": "Tournament failed to start — check the server logs.",
+    "switchAction": "Switch Tournament"
+  },
   "teams": {
     "heading": "Teams",
     "gridLabel": "Team roster",
