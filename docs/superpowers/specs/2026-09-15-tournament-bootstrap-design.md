@@ -1,4 +1,4 @@
-# Multi-Tournament Bootstrap Layer — Design
+# Multi-Tournament Picker Layer — Design
 
 ## Problem
 
@@ -53,7 +53,7 @@ config file before the UI is usable at all.
 
 ## Approaches considered
 
-**A — Separate minimal bootstrap FastAPI app, self-exec restart into the
+**A — Separate minimal picker FastAPI app, self-exec restart into the
 normal app once a path is chosen (recommended, and the one this spec
 follows).** When no tournament path is resolvable, `main.py` builds a
 small, distinct app exposing only the picker endpoints (list allowed
@@ -74,12 +74,12 @@ to support teardown and rebuild, for no benefit over a restart in this
 single-admin-per-event deployment model. A restart's few seconds of
 visible "reconnecting…" is an acceptable, explicitly chosen trade-off.
 
-**C — Bootstrap logic embedded in the existing app via a middleware
+**C — Picker logic embedded in the existing app via a middleware
 gate.** Rejected: keeping one `create_app()` and short-circuiting most
 routes until a tournament is resolved muddies `app.py`'s single
 responsibility, and a mistake in which routes the gate lets through
 pre-tournament is a security-relevant bug, not just a UX one. A
-dedicated bootstrap app with a small, enumerable route list is easier to
+dedicated picker app with a small, enumerable route list is easier to
 audit and gets this right by construction.
 
 ## Architecture & data flow
@@ -103,10 +103,10 @@ app to build:
 2. Else, load the JSON config. If `last_opened_path` is set and that
    file exists → use it (auto-reopen after a crash, reboot, or ordinary
    restart).
-3. Else → no tournament resolvable → build the **bootstrap app**
+3. Else → no tournament resolvable → build the **picker app**
    instead of the normal app.
 
-The bootstrap app's only job is to let the admin choose a path and then
+The picker app's only job is to let the admin choose a path and then
 get out of the way. Choosing "create" or "open" writes the resolved
 path into `last_opened_path` and calls `os.execve(sys.executable,
 sys.argv, os.environ.copy())` — the OS process image is replaced in
@@ -148,65 +148,65 @@ clear `last_opened_path`, self-exec, land back on step 3 next boot.
 - Removing a directory from the allowlist has no UI (YAGNI) — an admin
   who needs that edits the JSON file directly.
 
-## Bootstrap API surface
+## Picker API surface
 
-All endpoints live under `/api/bootstrap/`, served only by the
-bootstrap app, and unauthenticated (nothing sensitive exists
+All endpoints live under `/api/picker/`, served only by the
+picker app, and unauthenticated (nothing sensitive exists
 pre-tournament):
 
-- `GET /api/bootstrap/directories` → the current `allowed_directories`
+- `GET /api/picker/directories` → the current `allowed_directories`
   list.
-- `POST /api/bootstrap/directories` `{path}` → validates the path exists
+- `POST /api/picker/directories` `{path}` → validates the path exists
   and is a directory, appends it to the config (idempotent if already
   present), returns the updated list. `422` if it doesn't exist or
   isn't a directory.
-- `GET /api/bootstrap/tournaments?dir=<path>` → lists tournament files
+- `GET /api/picker/tournaments?dir=<path>` → lists tournament files
   in that directory. `403` if `dir` isn't inside `allowed_directories`;
   `404` if the directory doesn't exist (e.g. a USB drive was
   disconnected after being added — the allowlist entry itself is left
   in place in case it comes back).
-- `POST /api/bootstrap/create` `{directory, filename}` → `403` if
+- `POST /api/picker/create` `{directory, filename}` → `403` if
   `directory` isn't allowed; `409` if the resolved file already exists;
   otherwise writes `last_opened_path` to the resolved path, triggers the
   restart, returns `202`.
-- `POST /api/bootstrap/open` `{path}` → `403` if `path` isn't under an
+- `POST /api/picker/open` `{path}` → `403` if `path` isn't under an
   allowed directory or doesn't end in `.db` (rejecting a `.bak` file
   even if one were passed directly); `404` if it doesn't exist;
   otherwise writes `last_opened_path`, restarts, returns `202`.
 
-A new `POST /api/bootstrap/switch` endpoint is registered on the
+A new `POST /api/picker/switch` endpoint is registered on the
 *normal* (post-tournament) app instead, gated by the existing
 `require_admin` dependency: it clears `last_opened_path` and triggers
-the same restart, landing back in bootstrap mode on the next boot.
+the same restart, landing back in picker mode on the next boot.
 
-A shared module, `tournament_server/bootstrap_config.py`, owns reading
+A shared module, `tournament_server/picker_config.py`, owns reading
 and writing the JSON config and the path-containment check, imported by
-both the bootstrap app and `main.py`'s `_startup()` — the allowlist
+both the picker app and `main.py`'s `_startup()` — the allowlist
 logic is not duplicated between them.
 
 ## Frontend picker UI & reconnect mechanics
 
 The admin SPA's root loader gains a check before its existing "does an
-event exist yet?" check: a call to `GET /api/bootstrap/directories`
-behind a short timeout. A `200` means the server is in bootstrap mode,
-and the loader renders a new `/bootstrap` route instead of continuing;
+event exist yet?" check: a call to `GET /api/picker/directories`
+behind a short timeout. A `200` means the server is in picker mode,
+and the loader renders a new `/picker` route instead of continuing;
 a `404` means the server is running normally, and today's routing
 (event-check → login → app shell) proceeds untouched.
 
-The `/bootstrap` screen offers exactly two actions:
+The `/picker` screen offers exactly two actions:
 
 - **Create New Tournament** — choose a directory (the `allowed_
   directories` list, plus an "Add a directory…" option that posts to
-  `POST /api/bootstrap/directories`), type a filename, submit to `POST
-  /api/bootstrap/create`.
+  `POST /api/picker/directories`), type a filename, submit to `POST
+  /api/picker/create`.
 - **Open Existing Tournament** — choose a directory the same way, then
-  pick one of the files `GET /api/bootstrap/tournaments` returns for it,
-  submit to `POST /api/bootstrap/open`.
+  pick one of the files `GET /api/picker/tournaments` returns for it,
+  submit to `POST /api/picker/open`.
 
 Both actions, after their `202`, show a "Starting tournament…" spinner
-and poll `GET /api/bootstrap/directories` every ~500ms, waiting for it
+and poll `GET /api/picker/directories` every ~500ms, waiting for it
 to stop responding (old process gone) and then start responding again
-with a different shape (a `404`, meaning bootstrap mode has ended) —
+with a different shape (a `404`, meaning picker mode has ended) —
 at that point the screen calls `window.location.reload()`, which lands
 back at the root loader and proceeds into the normal event-check/login
 flow against the freshly-opened tournament. A ~15s timeout on this poll
@@ -215,7 +215,7 @@ logs") instead of spinning forever, covering the case where the
 restarted process's `ensure_schema_current` rejects the file and exits.
 
 **Switch Tournament** is a new admin-only menu item in the authenticated
-app shell, calling `POST /api/bootstrap/switch` and reusing the same
+app shell, calling `POST /api/picker/switch` and reusing the same
 reconnect-poll-and-reload logic.
 
 ## Error handling & edge cases
@@ -239,7 +239,7 @@ reconnect-poll-and-reload logic.
   restart. No special handling is needed — the existing poll-and-reload
   logic on both tabs converges once the new process is up.
 - **Directory becomes unavailable after being added** (e.g. a USB drive
-  is pulled): `GET /api/bootstrap/tournaments?dir=...` for it returns a
+  is pulled): `GET /api/picker/tournaments?dir=...` for it returns a
   `404` with a clear message; the allowlist entry is left in place.
 - **Concurrent config-file writes**: not a real concern — only one
   server process is ever running against a given config file by
@@ -247,12 +247,12 @@ reconnect-poll-and-reload logic.
 
 ## Testing plan
 
-- **Backend unit tests** (`test_bootstrap_config.py`): the config
+- **Backend unit tests** (`test_picker_config.py`): the config
   module's read/write/seed-on-first-run/containment-check logic,
   isolated with a temp config path — no server involved.
-- **Backend integration tests** (`test_bootstrap_api.py`): the bootstrap
+- **Backend integration tests** (`test_picker_api.py`): the picker
   app built directly against a temp config and temp directories,
-  covering every `/api/bootstrap/*` endpoint's success and error paths
+  covering every `/api/picker/*` endpoint's success and error paths
   (disallowed directory, missing directory, filename collision, backup
   files never appearing in a listing). The real `os.execve` call is
   stubbed in these tests — it can't run inside pytest — but its
@@ -260,15 +260,15 @@ reconnect-poll-and-reload logic.
 - **Backend integration test for `_startup()`'s resolution order**
   (extends the existing subprocess-based `test_main.py`): one case
   asserting that with no env var and no `last_opened_path`, the process
-  serves `/api/bootstrap/directories` (bootstrap mode); one asserting
+  serves `/api/picker/directories` (picker mode); one asserting
   that with `last_opened_path` set to a real temp DB file, it serves
   the normal app instead; one covering the `SchemaMismatchError` ->
   `last_opened_path` cleared case.
-- **Frontend unit tests**: the `/bootstrap` route component (directory
+- **Frontend unit tests**: the `/picker` route component (directory
   picker, file picker, add-directory form, the reconnect-poll state
   machine) with the API mocked, matching this app's existing
   component-test conventions.
-- **E2E test** (`tests/e2e/bootstrap.spec.ts`): this flow needs its own
+- **E2E test** (`tests/e2e/tournamentPicker.spec.ts`): this flow needs its own
   isolated backend process (its own temp config and temp directory)
   rather than joining the suite's shared single-event backend, since
   it's fundamentally a pre-tournament flow. It drives an actual
