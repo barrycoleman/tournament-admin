@@ -19,6 +19,15 @@ test.describe.serial("division management", () => {
     await page.getByRole("link", { name: "Divisions" }).click();
     await expect(page).toHaveURL(/\/divisions$/);
 
+    // Event creation always seeds one division ("Division 1"); as the
+    // only division, its delete button must not be present at all.
+    await expect(page.getByLabel("Rename Division 1")).toHaveValue("Division 1");
+    await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(0);
+
+    // The create form starts hidden behind a toggle button.
+    await expect(page.getByLabel("Division name")).not.toBeVisible();
+    await page.getByRole("button", { name: "Add a division..." }).click();
+
     await page.getByLabel("Division name").fill("Elementary");
     await page.getByRole("button", { name: "Add division" }).click();
     // The division's name only ever appears as the value of its inline
@@ -26,6 +35,9 @@ test.describe.serial("division management", () => {
     // so it must be asserted via that input's accessible name/value
     // rather than getByText.
     await expect(page.getByLabel("Rename Elementary")).toHaveValue("Elementary");
+
+    // With two divisions now, both rows show a delete button.
+    await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(2);
 
     // Each row's rename input has its own accessible name ("Rename
     // <current name>"), distinct from the add-form's "Division name"
@@ -38,5 +50,8 @@ test.describe.serial("division management", () => {
     await page.getByRole("button", { name: "Delete" }).last().click();
     await page.getByRole("button", { name: "Delete", exact: true }).last().click();
     await expect(page.getByLabel("Rename Elementary School")).not.toBeVisible();
+
+    // Back down to one division -- its delete button is hidden again.
+    await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(0);
   });
 });

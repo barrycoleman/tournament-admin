@@ -73,6 +73,7 @@ export function DivisionsRoute() {
   const [redistributeError, setRedistributeError] = useState<string | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<Division | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [addingDivision, setAddingDivision] = useState(false);
 
   const { data: divisions } = useQuery({
     queryKey: ["divisions"],
@@ -94,6 +95,7 @@ export function DivisionsRoute() {
     onSuccess: () => {
       setName("");
       setTarget("");
+      setAddingDivision(false);
       invalidateAll();
       if (totalTeams > 0) {
         setRedistributeError(null);
@@ -177,12 +179,14 @@ export function DivisionsRoute() {
                 }}
               />
               <span className="list-row__meta">{label}</span>
-              <button
-                className="btn btn-danger btn-small"
-                onClick={() => setDeleteCandidate(division)}
-              >
-                {t("divisions.deleteAction")}
-              </button>
+              {(divisions?.length ?? 0) > 1 && (
+                <button
+                  className="btn btn-danger btn-small"
+                  onClick={() => setDeleteCandidate(division)}
+                >
+                  {t("divisions.deleteAction")}
+                </button>
+              )}
             </li>
           );
         })}
@@ -193,44 +197,55 @@ export function DivisionsRoute() {
         </p>
       )}
 
-      <form className="panel" onSubmit={handleCreate}>
-        <div className="field">
-          <label className="field__label" htmlFor="new-division-name">
-            {t("divisions.nameLabel")}
-          </label>
-          <input
-            className="input"
-            id="new-division-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label className="field__label" htmlFor="new-division-target">
-            {t("divisions.targetLabel")}
-          </label>
-          <input
-            className="input"
-            id="new-division-target"
-            type="number"
-            min="0"
-            value={target}
-            onChange={(event) => setTarget(event.target.value)}
-          />
-        </div>
-        {createMutation.isError && (
-          <p className="alert alert-danger" role="alert">
-            {createMutation.error instanceof ApiError
-              ? createMutation.error.detail
-              : t("errors.generic")}
-          </p>
-        )}
-        <div className="form-actions">
-          <button className="btn btn-primary" type="submit" disabled={createMutation.isPending}>
-            {t("divisions.addSubmit")}
-          </button>
-        </div>
-      </form>
+      {!addingDivision && (
+        <button className="btn" onClick={() => setAddingDivision(true)}>
+          {t("divisions.addDivisionAction")}
+        </button>
+      )}
+
+      {addingDivision && (
+        <form className="panel" onSubmit={handleCreate}>
+          <div className="field">
+            <label className="field__label" htmlFor="new-division-name">
+              {t("divisions.nameLabel")}
+            </label>
+            <input
+              className="input"
+              id="new-division-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label className="field__label" htmlFor="new-division-target">
+              {t("divisions.targetLabel")}
+            </label>
+            <input
+              className="input"
+              id="new-division-target"
+              type="number"
+              min="0"
+              value={target}
+              onChange={(event) => setTarget(event.target.value)}
+            />
+          </div>
+          {createMutation.isError && (
+            <p className="alert alert-danger" role="alert">
+              {createMutation.error instanceof ApiError
+                ? createMutation.error.detail
+                : t("errors.generic")}
+            </p>
+          )}
+          <div className="form-actions">
+            <button className="btn btn-primary" type="submit" disabled={createMutation.isPending}>
+              {t("divisions.addSubmit")}
+            </button>
+            <button className="btn" type="button" onClick={() => setAddingDivision(false)}>
+              {t("divisions.cancelAction")}
+            </button>
+          </div>
+        </form>
+      )}
 
       {deleteCandidate && (
         <div className="dialog-overlay">

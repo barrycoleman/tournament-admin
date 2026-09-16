@@ -79,6 +79,7 @@
     "nameLabel": "分组名称",
     "renameFieldLabel": "重命名 {{name}}",
     "targetLabel": "目标队伍数(可选)",
+    "addDivisionAction": "添加分组...",
     "addSubmit": "添加分组",
     "deleteAction": "删除",
     "teamCountLabel": "{{count}} 支队伍",

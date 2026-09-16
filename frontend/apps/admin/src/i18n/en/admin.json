@@ -79,6 +79,7 @@
     "nameLabel": "Division name",
     "renameFieldLabel": "Rename {{name}}",
     "targetLabel": "Target team count (optional)",
+    "addDivisionAction": "Add a division...",
     "addSubmit": "Add division",
     "deleteAction": "Delete",
     "teamCountLabel": "{{count}} teams",
