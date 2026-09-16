@@ -249,3 +249,49 @@ def test_upgrade_over_pre_existing_team_rows_succeeds(tmp_path):
 
     referred_tables = {fk["referred_table"] for fk in inspector.get_foreign_keys("teams")}
     assert {"events", "divisions"} <= referred_tables
+
+
+def test_backfill_migration_adds_a_default_division_for_event_with_none(tmp_path):
+    """An event created before this migration existed could have zero
+    divisions (nothing seeded one at event-creation time back then).
+    Upgrading such a database must give it one, but must NOT touch an
+    event that already has divisions of its own."""
+    db_path = str(tmp_path / "pre_existing_events.db")
+    config = _make_alembic_config(db_path)
+    command.upgrade(config, "b7e4a19f6c32")  # baseline, before this task's migration
+
+    raw_engine = create_engine(f"sqlite:///{db_path}")
+    with raw_engine.connect() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO events (id, name, created_at) "
+                "VALUES (1, 'No Divisions Yet', '2026-01-01 00:00:00')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO events (id, name, created_at) "
+                "VALUES (2, 'Already Has One', '2026-01-01 00:00:00')"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO divisions (id, event_id, name) VALUES (1, 2, 'Existing Division')")
+        )
+        connection.commit()
+    raw_engine.dispose()
+
+    engine = make_engine(db_path)
+    outcome = ensure_schema_current(engine, db_path)
+
+    assert outcome == MigrationOutcome.UPGRADED
+
+    with engine.connect() as connection:
+        event_1_divisions = connection.execute(
+            text("SELECT name FROM divisions WHERE event_id = 1")
+        ).scalars().all()
+        event_2_divisions = connection.execute(
+            text("SELECT name FROM divisions WHERE event_id = 2")
+        ).scalars().all()
+
+    assert event_1_divisions == ["Division 1"]
+    assert event_2_divisions == ["Existing Division"]  # untouched -- already had one
