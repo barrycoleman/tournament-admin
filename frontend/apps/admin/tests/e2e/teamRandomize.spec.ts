@@ -17,17 +17,28 @@ test.describe.serial("randomize unassigned teams", () => {
     const body = await loginResponse.json();
     accessToken = body.access_token as string;
 
-    const divisionOneResponse = await request.post("/api/divisions", {
+    // These two divisions exist so the Teams grid renders a "Division"
+    // column (see the column-index-7 comment below) -- they are not the
+    // full set of divisions this test needs to accept, since event
+    // creation also auto-seeds a "Division 1" (see divisionIds below).
+    await request.post("/api/divisions", {
       headers: { Authorization: `Bearer ${accessToken}` },
       data: { name: "Randomize Division One" },
     });
-    const divisionTwoResponse = await request.post("/api/divisions", {
+    await request.post("/api/divisions", {
       headers: { Authorization: `Bearer ${accessToken}` },
       data: { name: "Randomize Division Two" },
     });
-    const divisionOne = await divisionOneResponse.json();
-    const divisionTwo = await divisionTwoResponse.json();
-    divisionIds = [divisionOne.id, divisionTwo.id];
+
+    // The balanced-assignment algorithm can legitimately place a
+    // randomly-assigned team into ANY of the event's divisions,
+    // including the auto-seeded default one -- so divisionIds must be
+    // the full current division list, not just the two created above.
+    const allDivisionsResponse = await request.get("/api/divisions", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const allDivisions = await allDivisionsResponse.json();
+    divisionIds = allDivisions.map((d: { id: number }) => d.id);
 
     await request.post("/api/teams", {
       headers: { Authorization: `Bearer ${accessToken}` },
