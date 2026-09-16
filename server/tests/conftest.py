@@ -66,7 +66,9 @@ def client(tmp_path) -> TestClient:
     balanced_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(BALANCED_SCHEDULER_PLUGIN, balanced_target)
 
-    app = create_app(db_path=db_path, plugins_root=str(plugins_root))
+    app = create_app(
+        db_path=db_path, plugins_root=str(plugins_root), config_path=tmp_path / "server-config.json"
+    )
     with _AutoAuthTestClient(app) as test_client:
         yield test_client
 
@@ -88,7 +90,9 @@ def cooperative_client(tmp_path) -> TestClient:
     balanced_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(BALANCED_SCHEDULER_PLUGIN, balanced_target)
 
-    app = create_app(db_path=db_path, plugins_root=str(plugins_root))
+    app = create_app(
+        db_path=db_path, plugins_root=str(plugins_root), config_path=tmp_path / "server-config.json"
+    )
     with _AutoAuthTestClient(app) as test_client:
         yield test_client
 
@@ -110,6 +114,8 @@ def captain_pick_client(tmp_path) -> TestClient:
     balanced_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(BALANCED_SCHEDULER_PLUGIN, balanced_target)
 
-    app = create_app(db_path=db_path, plugins_root=str(plugins_root))
+    app = create_app(
+        db_path=db_path, plugins_root=str(plugins_root), config_path=tmp_path / "server-config.json"
+    )
     with _AutoAuthTestClient(app) as test_client:
         yield test_client

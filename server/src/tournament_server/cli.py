@@ -57,9 +57,16 @@ def _run_migrate(db_path: str | None) -> int:
         SchemaMismatchError,
         ensure_schema_current,
     )
-    from tournament_server.settings import Settings
+    from tournament_server.picker_config import resolve_active_db_path
 
-    resolved_db_path = db_path if db_path is not None else Settings.from_env().db_path
+    resolved_db_path = resolve_active_db_path(db_path)
+    if resolved_db_path is None:
+        print(
+            "ERROR: no database path given. Pass --db-path, set "
+            "TOURNAMENT_DB_PATH, or open a tournament through the server first."
+        )
+        return 1
+
     engine = make_engine(resolved_db_path)
 
     try:

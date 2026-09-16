@@ -112,6 +112,17 @@ def test_migrate_command_reports_upgraded(tmp_path, capsys, monkeypatch):
     assert "pre-migration backup was created" in captured.out
 
 
+def test_migrate_command_reports_a_clean_error_with_no_path_resolvable(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("TOURNAMENT_DB_PATH", raising=False)
+    monkeypatch.setenv("TOURNAMENT_CONFIG_PATH", str(tmp_path / "server-config.json"))
+
+    exit_code = main(["migrate"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "ERROR" in captured.out
+
+
 def test_migrate_command_works_in_a_fresh_process(tmp_path):
     """Regression test: a real `tm migrate` invocation has no prior
     import of tournament_server.models/audit, unlike every other test in

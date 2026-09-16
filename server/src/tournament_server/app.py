@@ -28,6 +28,7 @@ from tournament_server.routers import (
     finals,
     matches,
     participation,
+    picker,
     plugins,
     ranking_configuration,
     rankings,
@@ -39,6 +40,7 @@ from tournament_server.routers import (
     teams,
     websockets,
 )
+from tournament_server.picker_config import resolve_config_path
 from tournament_server.settings import Settings
 from tournament_server.static_ui import mount_static_admin_ui
 
@@ -130,6 +132,7 @@ def create_app(
     # pass the real bound port whenever one was resolved.
     port: int | None = None,
     static_dir: str | None = None,
+    config_path: Path | None = None,
 ) -> FastAPI:
     settings = Settings.from_env()
     if db_path is not None:
@@ -140,6 +143,9 @@ def create_app(
         settings.port = port
     if static_dir is not None:
         settings.static_dir = static_dir
+
+    if settings.db_path is None:
+        raise ValueError("create_app() requires a resolved db_path")
 
     engine = make_engine(settings.db_path)
     session_factory = make_session_factory(engine)
@@ -160,6 +166,7 @@ def create_app(
         minutes=settings.device_idle_timeout_minutes
     )
     app.state.port = settings.port
+    app.state.picker_config_path = config_path if config_path is not None else resolve_config_path()
     realtime.init_realtime_state(app)
     match_control.init_match_timer_state(app)
 
@@ -206,6 +213,7 @@ def create_app(
     app.include_router(schedule.router)
     app.include_router(finals.router)
     app.include_router(server_info.router)
+    app.include_router(picker.switch_router)
     app.include_router(time_sync.router)
     app.include_router(websockets.router)
 
