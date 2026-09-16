@@ -374,8 +374,11 @@ def test_bulk_upsert_assign_random_division_distributes_across_divisions(client)
     results = response.json()["results"]
     division_ids = {r["team"]["division_id"] for r in results}
     assert None not in division_ids
-    # With 2 teams and 2 divisions and no pre-existing teams, the
-    # balanced algorithm must put one in each.
+    # The event now has 3 divisions (the 2 created above plus the
+    # auto-seeded "Division 1") and no pre-existing teams, so the
+    # balanced algorithm's fewest-count selection must still put the 2
+    # teams in 2 distinct divisions among the 3 available -- not
+    # necessarily "one in each of exactly two".
     assert len(division_ids) == 2
 
 

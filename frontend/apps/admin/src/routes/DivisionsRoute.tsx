@@ -198,7 +198,7 @@ export function DivisionsRoute() {
       )}
 
       {!addingDivision && (
-        <button className="btn" onClick={() => setAddingDivision(true)}>
+        <button className="btn" type="button" onClick={() => setAddingDivision(true)}>
           {t("divisions.addDivisionAction")}
         </button>
       )}
@@ -214,6 +214,7 @@ export function DivisionsRoute() {
               id="new-division-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
+              autoFocus
             />
           </div>
           <div className="field">
@@ -240,7 +241,16 @@ export function DivisionsRoute() {
             <button className="btn btn-primary" type="submit" disabled={createMutation.isPending}>
               {t("divisions.addSubmit")}
             </button>
-            <button className="btn" type="button" onClick={() => setAddingDivision(false)}>
+            <button
+              className="btn"
+              type="button"
+              onClick={() => {
+                setAddingDivision(false);
+                setName("");
+                setTarget("");
+                createMutation.reset();
+              }}
+            >
               {t("divisions.cancelAction")}
             </button>
           </div>

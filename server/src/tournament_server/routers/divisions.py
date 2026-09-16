@@ -74,17 +74,31 @@ def delete_division(
     division = db.get(Division, division_id)
     if division is None:
         raise HTTPException(status_code=404, detail="Division not found")
-    remaining_count = db.execute(
-        select(func.count(Division.id)).where(Division.event_id == division.event_id)
-    ).scalar_one()
-    if remaining_count <= 1:
-        raise HTTPException(status_code=409, detail="At least one division is required")
+    event_id = division.event_id
     teams_in_division = list(
         db.execute(select(Team).where(Team.division_id == division_id)).scalars().all()
     )
     for team in teams_in_division:
         team.division_id = None
     db.delete(division)
+    db.flush()
+    # This count is deliberately taken after flush (which sends this
+    # transaction's pending DELETE/UPDATEs to SQLite and acquires its
+    # single-writer lock) rather than before it. A bare SELECT under
+    # SQLite doesn't start a write transaction, so checking before flush
+    # would let two concurrent deletes for two *different* divisions in a
+    # 2-division event both read count == 2, both pass the guard, and
+    # both commit -- leaving zero divisions, the exact state this guard
+    # exists to prevent. Flushing first means a concurrent request's own
+    # flush blocks until this transaction ends, so this count sees this
+    # transaction's own pending write and accurately reflects what the
+    # database will look like if it commits.
+    remaining_count = db.execute(
+        select(func.count(Division.id)).where(Division.event_id == event_id)
+    ).scalar_one()
+    if remaining_count == 0:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="At least one division is required")
     db.commit()
     return Response(status_code=204)
 

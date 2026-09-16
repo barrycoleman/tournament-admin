@@ -22,6 +22,10 @@ test.describe.serial("division management", () => {
     // Event creation always seeds one division ("Division 1"); as the
     // only division, its delete button must not be present at all.
     await expect(page.getByLabel("Rename Division 1")).toHaveValue("Division 1");
+    // This counts every "Delete"-named button anywhere on the page, which
+    // is only correct because no other spec file that could run before
+    // this one (given this suite's fixed workers: 1 / fullyParallel: false
+    // ordering) creates a division of its own.
     await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(0);
 
     // The create form starts hidden behind a toggle button.

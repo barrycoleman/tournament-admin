@@ -128,6 +128,18 @@ calls); `"all"` reassigns every team in the event from scratch, ignoring
 where they currently are (what the admin UI offers after a division is
 added or deleted).
 
+Every event always has at least one division — `POST /api/event` seeds a
+"Division 1" in the same transaction as event creation, so there is never
+an observable window where an event exists with zero divisions.
+`DELETE /api/divisions/{id}` enforces the other half of that invariant: it
+409s rather than deleting an event's last remaining division. A database
+that reaches this state some other way (a pre-existing database migrated
+from before this invariant existed) is self-healed at server startup —
+`create_app()` gives any event with zero divisions a "Division 1" of its
+own, idempotently, independent of which migration path that database took
+to get there — so the invariant holds for every event regardless of its
+history, not just ones created after this landed.
+
 ## Match & scoring
 
 An Event selects exactly one game plugin via `POST /api/event/game-plugin`
@@ -864,10 +876,14 @@ password when a tournament already exists in the allowlist).
 - In a single-division event every team keeps `division_id = NULL`
   forever: the admin UI hides the division column, the division filter and
   the assignment controls entirely when only one division exists, so
-  nothing ever writes that division's id onto a team. Nothing today cares,
-  but a future scheduling sub-project will have to decide whether a null
-  `division_id` means "the event's only division" or is a data gap to
-  backfill — don't assume the former silently.
+  nothing ever writes that division's id onto a team. This is no longer an
+  occasional configuration some admin happens to end up in — every new
+  event now *starts* with exactly one auto-seeded division and every team
+  `NULL`, so this is the guaranteed common case, not an edge case. Nothing
+  today cares, but a future scheduling sub-project will have to decide
+  whether a null `division_id` means "the event's only division" or is a
+  data gap to backfill — don't assume the former silently, and don't
+  assume it's rare either.
 - No automated cleanup of `.pre-migration-*.bak` backup files — they
   accumulate; an operator deletes old ones manually. `alembic downgrade`
   is not a supported, tested rollback path — the pre-migration backup is

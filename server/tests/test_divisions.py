@@ -12,6 +12,7 @@ def test_create_and_list_divisions(client):
     assert list_response.status_code == 200
     divisions_by_id = {d["id"]: d["name"] for d in list_response.json()}
     assert divisions_by_id[division_id] == "Elementary"
+    assert len(list_response.json()) == 2  # the seeded division plus this one
 
 
 def test_create_division_requires_event(client):
@@ -120,9 +121,11 @@ def test_randomize_unassigned_only_touches_unassigned_teams(client):
     touched_ids = {t["id"] for t in response.json()}
     assert touched_ids == {unassigned["id"]}
 
-    all_division_ids = {d["id"] for d in client.get("/api/divisions").json()}
     unassigned_after = client.get(f"/api/teams/{unassigned['id']}").json()
-    assert unassigned_after["division_id"] in all_division_ids
+    # The seeded division starts at 0 existing teams and "Elementary" at 1,
+    # so balanced_assign's fewest-count selection must place the new team
+    # in the seeded division, not back in "Elementary".
+    assert unassigned_after["division_id"] != division["id"]
     assigned_after = client.get(f"/api/teams/{assigned['id']}").json()
     assert assigned_after["division_id"] == division["id"]  # untouched, was already here
 
@@ -149,6 +152,7 @@ def test_randomize_all_reassigns_every_team(client):
         client.get(f"/api/teams/{team2['id']}").json()["division_id"],
     }
     assert division_ids_after <= all_division_ids
+    assert len(division_ids_after) == 2
 
 
 def test_randomize_404s_with_no_divisions(client):
@@ -180,6 +184,7 @@ def test_delete_division_409s_when_it_is_the_only_one(client):
 
     response = client.delete(f"/api/divisions/{only_division['id']}")
     assert response.status_code == 409
+    assert response.json()["detail"] == "At least one division is required"
 
     list_response = client.get("/api/divisions")
     assert only_division["id"] in [d["id"] for d in list_response.json()]

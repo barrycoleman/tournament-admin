@@ -13,6 +13,8 @@ from tournament_server import models  # noqa: F401  (registers all tables)
 from tournament_server import match_control, realtime
 from tournament_server.db import make_engine, make_session_factory, utc_now
 from tournament_server.migrations import ensure_schema_current
+from tournament_server.models.division import Division
+from tournament_server.models.event import Event
 from tournament_server.plugin_registry.discovery import (
     discover_game_plugins,
     discover_scheduler_plugins,
@@ -150,6 +152,23 @@ def create_app(
     engine = make_engine(settings.db_path)
     session_factory = make_session_factory(engine)
     ensure_schema_current(engine, settings.db_path)
+
+    # Self-heal the "every event has >= 1 division" invariant at startup,
+    # independent of which ensure_schema_current path was taken above (a
+    # fresh database, a genuinely-migrated one, or one silently stamped to
+    # head without ever running a data-only migration's upgrade() body —
+    # see the backfill migration's docstring and Division's own model for
+    # the full reasoning). Idempotent and cheap: one or two indexed lookups,
+    # a no-op against a database that already has a division.
+    with session_factory() as db:
+        event_row = db.execute(select(Event)).scalars().first()
+        if event_row is not None:
+            has_division = db.execute(
+                select(Division.id).where(Division.event_id == event_row.id).limit(1)
+            ).first()
+            if has_division is None:
+                db.add(Division(event_id=event_row.id, name="Division 1"))
+                db.commit()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

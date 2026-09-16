@@ -7,6 +7,7 @@ from migration_helpers import build_isolated_two_revision_script_dir
 from sqlalchemy import create_engine, inspect, text
 
 from tournament_server import migrations
+from tournament_server.app import create_app
 from tournament_server.db import Base, init_db, make_engine
 from tournament_server.migrations import (
     MigrationOutcome,
@@ -38,6 +39,46 @@ def test_matching_pre_alembic_database_gets_stamped(tmp_path):
     assert outcome == MigrationOutcome.STAMPED_BASELINE
     inspector = inspect(engine)
     assert "alembic_version" in inspector.get_table_names()
+
+
+def test_stamped_baseline_database_with_zero_divisions_self_heals_via_create_app(tmp_path):
+    """A pre-Alembic database whose reflected schema already matches
+    today's models gets silently stamped to head by ensure_schema_current
+    -- the STAMPED_BASELINE path -- without ever running any migration's
+    upgrade(), including the data-only backfill migration
+    (d47c8e21f9a3) that would otherwise give a zero-division event its
+    "Division 1". create_app()'s own startup self-heal step is the actual
+    backstop for this path: it must give this event a division even
+    though no migration upgrade() ever ran for it."""
+    db_path = str(tmp_path / "pre_alembic_no_divisions.db")
+    engine = make_engine(db_path)
+    init_db(engine)  # simulates a database created before this phase existed
+
+    with engine.connect() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO events (id, name, created_at) "
+                "VALUES (1, 'No Divisions Yet', '2026-01-01 00:00:00')"
+            )
+        )
+        connection.commit()
+
+    outcome = ensure_schema_current(engine, db_path)
+    assert outcome == MigrationOutcome.STAMPED_BASELINE
+
+    with engine.connect() as connection:
+        division_count_before = connection.execute(
+            text("SELECT COUNT(*) FROM divisions WHERE event_id = 1")
+        ).scalar_one()
+    assert division_count_before == 0
+
+    create_app(db_path=db_path, plugins_root=str(tmp_path / "plugins"))
+
+    with engine.connect() as connection:
+        divisions_after = connection.execute(
+            text("SELECT name FROM divisions WHERE event_id = 1")
+        ).scalars().all()
+    assert divisions_after == ["Division 1"]
 
 
 def test_mismatched_pre_alembic_database_is_refused(tmp_path):

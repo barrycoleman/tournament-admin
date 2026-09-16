@@ -25,6 +25,14 @@ def upgrade() -> None:
     # but an event created before that shipped could still have zero.
     # Give any such event a "Division 1" so the invariant genuinely holds
     # for every tournament, not just ones created after this landed.
+    #
+    # This is the common-case fast path, not the sole mechanism: a
+    # pre-Alembic database whose reflected schema already matches current
+    # models gets stamped straight to head by ensure_schema_current()
+    # without this upgrade() ever running. app.py's create_app() runs its
+    # own idempotent self-heal step after ensure_schema_current() on every
+    # boot, which is the actual backstop for every code path (including
+    # this one, and any future data-only migration).
     connection = op.get_bind()
     event_ids_without_a_division = connection.execute(
         sa.text(
