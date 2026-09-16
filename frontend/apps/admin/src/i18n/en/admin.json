@@ -22,7 +22,9 @@
     "rolesLink": "Role passwords",
     "dismiss": "Dismiss",
     "divisionsLink": "Divisions",
-    "teamsLink": "Teams"
+    "teamsLink": "Teams",
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode"
   },
   "picker": {
     "heading": "Start a tournament",

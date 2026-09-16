@@ -42,12 +42,24 @@ function RedistributeConfirmDialog({
 }) {
   const { t } = useTranslation();
   return (
-    <div role="alertdialog" aria-labelledby="redistribute-heading">
-      <h2 id="redistribute-heading">{t("divisions.redistributeConfirmHeading")}</h2>
-      <p>{t("divisions.redistributeConfirmBody", { count: totalTeams })}</p>
-      {error && <p role="alert">{error}</p>}
-      <button onClick={onConfirm}>{t("divisions.redistributeConfirmYes")}</button>
-      <button onClick={onCancel}>{t("divisions.redistributeConfirmNo")}</button>
+    <div className="dialog-overlay">
+      <div className="dialog" role="alertdialog" aria-labelledby="redistribute-heading">
+        <h2 id="redistribute-heading">{t("divisions.redistributeConfirmHeading")}</h2>
+        <p>{t("divisions.redistributeConfirmBody", { count: totalTeams })}</p>
+        {error && (
+          <p className="alert alert-danger" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="dialog__actions">
+          <button className="btn btn-primary" onClick={onConfirm}>
+            {t("divisions.redistributeConfirmYes")}
+          </button>
+          <button className="btn" onClick={onCancel}>
+            {t("divisions.redistributeConfirmNo")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -141,7 +153,7 @@ export function DivisionsRoute() {
   return (
     <div>
       <h1>{t("divisions.heading")}</h1>
-      <ul>
+      <ul className="list-plain">
         {divisions?.map((division) => {
           const count = counts[division.id] ?? 0;
           const label =
@@ -152,8 +164,10 @@ export function DivisionsRoute() {
                 })
               : t("divisions.teamCountLabel", { count });
           return (
-            <li key={division.id}>
+            <li className="list-row" key={division.id}>
               <input
+                className="input"
+                style={{ flex: 1 }}
                 aria-label={t("divisions.renameFieldLabel", { name: division.name })}
                 defaultValue={division.name}
                 onBlur={(event) => {
@@ -162,57 +176,83 @@ export function DivisionsRoute() {
                   }
                 }}
               />
-              <span>{label}</span>
-              <button onClick={() => setDeleteCandidate(division)}>
+              <span className="list-row__meta">{label}</span>
+              <button
+                className="btn btn-danger btn-small"
+                onClick={() => setDeleteCandidate(division)}
+              >
                 {t("divisions.deleteAction")}
               </button>
             </li>
           );
         })}
       </ul>
-      {renameError && <p role="alert">{renameError}</p>}
+      {renameError && (
+        <p className="alert alert-danger" role="alert">
+          {renameError}
+        </p>
+      )}
 
-      <form onSubmit={handleCreate}>
-        <label htmlFor="new-division-name">{t("divisions.nameLabel")}</label>
-        <input
-          id="new-division-name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-        <label htmlFor="new-division-target">{t("divisions.targetLabel")}</label>
-        <input
-          id="new-division-target"
-          type="number"
-          min="0"
-          value={target}
-          onChange={(event) => setTarget(event.target.value)}
-        />
-        <button type="submit" disabled={createMutation.isPending}>
-          {t("divisions.addSubmit")}
-        </button>
+      <form className="panel" onSubmit={handleCreate}>
+        <div className="field">
+          <label className="field__label" htmlFor="new-division-name">
+            {t("divisions.nameLabel")}
+          </label>
+          <input
+            className="input"
+            id="new-division-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label className="field__label" htmlFor="new-division-target">
+            {t("divisions.targetLabel")}
+          </label>
+          <input
+            className="input"
+            id="new-division-target"
+            type="number"
+            min="0"
+            value={target}
+            onChange={(event) => setTarget(event.target.value)}
+          />
+        </div>
         {createMutation.isError && (
-          <p role="alert">
+          <p className="alert alert-danger" role="alert">
             {createMutation.error instanceof ApiError
               ? createMutation.error.detail
               : t("errors.generic")}
           </p>
         )}
+        <div className="form-actions">
+          <button className="btn btn-primary" type="submit" disabled={createMutation.isPending}>
+            {t("divisions.addSubmit")}
+          </button>
+        </div>
       </form>
 
       {deleteCandidate && (
-        <div role="alertdialog" aria-labelledby="delete-division-heading">
-          <h2 id="delete-division-heading">{t("divisions.deleteConfirmHeading")}</h2>
-          <p>
-            {t("divisions.deleteConfirmBody", {
-              count: counts[deleteCandidate.id] ?? 0,
-            })}
-          </p>
-          <button onClick={() => deleteMutation.mutate(deleteCandidate.id)}>
-            {t("divisions.deleteAction")}
-          </button>
-          <button onClick={() => setDeleteCandidate(null)}>
-            {t("divisions.cancelAction")}
-          </button>
+        <div className="dialog-overlay">
+          <div className="dialog" role="alertdialog" aria-labelledby="delete-division-heading">
+            <h2 id="delete-division-heading">{t("divisions.deleteConfirmHeading")}</h2>
+            <p>
+              {t("divisions.deleteConfirmBody", {
+                count: counts[deleteCandidate.id] ?? 0,
+              })}
+            </p>
+            <div className="dialog__actions">
+              <button
+                className="btn btn-danger"
+                onClick={() => deleteMutation.mutate(deleteCandidate.id)}
+              >
+                {t("divisions.deleteAction")}
+              </button>
+              <button className="btn" onClick={() => setDeleteCandidate(null)}>
+                {t("divisions.cancelAction")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

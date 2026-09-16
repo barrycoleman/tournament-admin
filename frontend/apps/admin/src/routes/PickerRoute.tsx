@@ -81,21 +81,26 @@ export function PickerRoute() {
 
   if (restartStatus === "waiting") {
     return (
-      <main>
+      <div className="picker-restarting">
         <p role="status">{t("picker.restartingMessage")}</p>
-      </main>
+      </div>
     );
   }
 
   const timedOutAlert = restartStatus === "timedOut" && (
-    <p role="alert">{t("picker.restartTimedOutMessage")}</p>
+    <p className="alert alert-danger" role="alert">
+      {t("picker.restartTimedOutMessage")}
+    </p>
   );
 
   function renderDirectoryPicker(selected: string, onSelect: (dir: string) => void) {
     return (
-      <div>
-        <label htmlFor="picker-directory">{t("picker.directoryLabel")}</label>
+      <div className="field">
+        <label className="field__label" htmlFor="picker-directory">
+          {t("picker.directoryLabel")}
+        </label>
         <select
+          className="select"
           id="picker-directory"
           value={selected}
           onChange={(event) => onSelect(event.target.value)}
@@ -108,27 +113,34 @@ export function PickerRoute() {
           ))}
         </select>
         {!addingDirectory && (
-          <button type="button" onClick={() => setAddingDirectory(true)}>
+          <button className="btn-link" type="button" onClick={() => setAddingDirectory(true)}>
             {t("picker.addDirectoryAction")}
           </button>
         )}
         {addingDirectory && (
-          <div>
-            <label htmlFor="picker-new-directory">{t("picker.newDirectoryLabel")}</label>
-            <input
-              id="picker-new-directory"
-              value={newDirectoryPath}
-              onChange={(event) => setNewDirectoryPath(event.target.value)}
-            />
-            <button
-              type="button"
-              onClick={() => addDirectoryMutation.mutate(newDirectoryPath)}
-              disabled={addDirectoryMutation.isPending}
-            >
-              {t("picker.addDirectoryConfirm")}
-            </button>
+          <div className="field" style={{ marginTop: "var(--space-2)" }}>
+            <label className="field__label" htmlFor="picker-new-directory">
+              {t("picker.newDirectoryLabel")}
+            </label>
+            <div className="form-actions" style={{ marginTop: 0 }}>
+              <input
+                className="input"
+                id="picker-new-directory"
+                value={newDirectoryPath}
+                onChange={(event) => setNewDirectoryPath(event.target.value)}
+                style={{ flex: 1 }}
+              />
+              <button
+                className="btn btn-primary btn-small"
+                type="button"
+                onClick={() => addDirectoryMutation.mutate(newDirectoryPath)}
+                disabled={addDirectoryMutation.isPending}
+              >
+                {t("picker.addDirectoryConfirm")}
+              </button>
+            </div>
             {addDirectoryMutation.isError && (
-              <p role="alert">
+              <p className="alert alert-danger" role="alert">
                 {addDirectoryMutation.error instanceof ApiError
                   ? addDirectoryMutation.error.detail
                   : t("errors.generic")}
@@ -142,80 +154,112 @@ export function PickerRoute() {
 
   if (screen === "menu") {
     return (
-      <main>
-        <h1>{t("picker.heading")}</h1>
-        {timedOutAlert}
-        <button onClick={() => setScreen("create")}>{t("picker.createAction")}</button>
-        <button onClick={() => setScreen("open")}>{t("picker.openAction")}</button>
+      <main className="auth-screen">
+        <div className="auth-card">
+          <h1>{t("picker.heading")}</h1>
+          {timedOutAlert}
+          <div className="picker-menu">
+            <button className="btn btn-primary" onClick={() => setScreen("create")}>
+              {t("picker.createAction")}
+            </button>
+            <button className="btn" onClick={() => setScreen("open")}>
+              {t("picker.openAction")}
+            </button>
+          </div>
+        </div>
       </main>
     );
   }
 
   if (screen === "create") {
     return (
-      <main>
-        <h1>{t("picker.createAction")}</h1>
-        {timedOutAlert}
-        {renderDirectoryPicker(directory, setDirectory)}
-        <label htmlFor="picker-filename">{t("picker.filenameLabel")}</label>
-        <input
-          id="picker-filename"
-          value={filename}
-          onChange={(event) => setFilename(event.target.value)}
-        />
-        <button
-          onClick={() => createMutation.mutate()}
-          disabled={createMutation.isPending || !directory || !filename}
-        >
-          {t("picker.createSubmit")}
-        </button>
-        {createMutation.isError && (
-          <p role="alert">
-            {createMutation.error instanceof ApiError
-              ? createMutation.error.detail
-              : t("errors.generic")}
-          </p>
-        )}
-        <button onClick={() => setScreen("menu")}>{t("picker.backAction")}</button>
+      <main className="auth-screen">
+        <div className="auth-card auth-card--wide">
+          <h1>{t("picker.createAction")}</h1>
+          {timedOutAlert}
+          {renderDirectoryPicker(directory, setDirectory)}
+          <div className="field">
+            <label className="field__label" htmlFor="picker-filename">
+              {t("picker.filenameLabel")}
+            </label>
+            <input
+              className="input"
+              id="picker-filename"
+              value={filename}
+              onChange={(event) => setFilename(event.target.value)}
+            />
+          </div>
+          {createMutation.isError && (
+            <p className="alert alert-danger" role="alert">
+              {createMutation.error instanceof ApiError
+                ? createMutation.error.detail
+                : t("errors.generic")}
+            </p>
+          )}
+          <div className="form-actions">
+            <button
+              className="btn btn-primary"
+              onClick={() => createMutation.mutate()}
+              disabled={createMutation.isPending || !directory || !filename}
+            >
+              {t("picker.createSubmit")}
+            </button>
+            <button className="btn" onClick={() => setScreen("menu")}>
+              {t("picker.backAction")}
+            </button>
+          </div>
+        </div>
       </main>
     );
   }
 
   return (
-    <main>
-      <h1>{t("picker.openAction")}</h1>
-      {timedOutAlert}
-      {renderDirectoryPicker(directory, (dir) => {
-        setDirectory(dir);
-        setSelectedFile("");
-      })}
-      <label htmlFor="picker-tournament-file">{t("picker.tournamentFileLabel")}</label>
-      <select
-        id="picker-tournament-file"
-        value={selectedFile}
-        onChange={(event) => setSelectedFile(event.target.value)}
-      >
-        <option value="">{t("picker.directoryPlaceholder")}</option>
-        {tournaments.map((file) => (
-          <option key={file.path} value={file.path}>
-            {file.filename}
-          </option>
-        ))}
-      </select>
-      <button
-        onClick={() => openMutation.mutate()}
-        disabled={openMutation.isPending || !selectedFile}
-      >
-        {t("picker.openSubmit")}
-      </button>
-      {openMutation.isError && (
-        <p role="alert">
-          {openMutation.error instanceof ApiError
-            ? openMutation.error.detail
-            : t("errors.generic")}
-        </p>
-      )}
-      <button onClick={() => setScreen("menu")}>{t("picker.backAction")}</button>
+    <main className="auth-screen">
+      <div className="auth-card auth-card--wide">
+        <h1>{t("picker.openAction")}</h1>
+        {timedOutAlert}
+        {renderDirectoryPicker(directory, (dir) => {
+          setDirectory(dir);
+          setSelectedFile("");
+        })}
+        <div className="field">
+          <label className="field__label" htmlFor="picker-tournament-file">
+            {t("picker.tournamentFileLabel")}
+          </label>
+          <select
+            className="select"
+            id="picker-tournament-file"
+            value={selectedFile}
+            onChange={(event) => setSelectedFile(event.target.value)}
+          >
+            <option value="">{t("picker.directoryPlaceholder")}</option>
+            {tournaments.map((file) => (
+              <option key={file.path} value={file.path}>
+                {file.filename}
+              </option>
+            ))}
+          </select>
+        </div>
+        {openMutation.isError && (
+          <p className="alert alert-danger" role="alert">
+            {openMutation.error instanceof ApiError
+              ? openMutation.error.detail
+              : t("errors.generic")}
+          </p>
+        )}
+        <div className="form-actions">
+          <button
+            className="btn btn-primary"
+            onClick={() => openMutation.mutate()}
+            disabled={openMutation.isPending || !selectedFile}
+          >
+            {t("picker.openSubmit")}
+          </button>
+          <button className="btn" onClick={() => setScreen("menu")}>
+            {t("picker.backAction")}
+          </button>
+        </div>
+      </div>
     </main>
   );
 }

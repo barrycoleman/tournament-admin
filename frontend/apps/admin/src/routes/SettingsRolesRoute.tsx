@@ -27,45 +27,57 @@ export function SettingsRolesRoute() {
   return (
     <div>
       <h1>{t("settingsRoles.heading")}</h1>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="settings-role">{t("settingsRoles.roleLabel")}</label>
-          <select
-            id="settings-role"
-            value={role}
-            onChange={(event) => setRole(event.target.value)}
-          >
-            {ROLES.map((roleOption) => (
-              <option key={roleOption} value={roleOption}>
-                {roleOption}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="settings-new-password">
-            {t("settingsRoles.newPasswordLabel")}
-          </label>
-          <input
-            id="settings-new-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            aria-describedby={mutation.isError ? "settings-roles-error" : undefined}
-          />
-        </div>
-        {mutation.isError && (
-          <p id="settings-roles-error" role="alert">
-            {mutation.error instanceof ApiError
-              ? mutation.error.detail
-              : t("settingsRoles.genericError")}
-          </p>
-        )}
-        {mutation.isSuccess && <p role="status">{t("settingsRoles.success")}</p>}
-        <button type="submit" disabled={mutation.isPending}>
-          {t("settingsRoles.submit")}
-        </button>
-      </form>
+      <div className="panel">
+        <form onSubmit={handleSubmit}>
+          <div className="field">
+            <label className="field__label" htmlFor="settings-role">
+              {t("settingsRoles.roleLabel")}
+            </label>
+            <select
+              className="select"
+              id="settings-role"
+              value={role}
+              onChange={(event) => setRole(event.target.value)}
+            >
+              {ROLES.map((roleOption) => (
+                <option key={roleOption} value={roleOption}>
+                  {roleOption}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label className="field__label" htmlFor="settings-new-password">
+              {t("settingsRoles.newPasswordLabel")}
+            </label>
+            <input
+              className="input"
+              id="settings-new-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              aria-describedby={mutation.isError ? "settings-roles-error" : undefined}
+            />
+          </div>
+          {mutation.isError && (
+            <p className="alert alert-danger" id="settings-roles-error" role="alert">
+              {mutation.error instanceof ApiError
+                ? mutation.error.detail
+                : t("settingsRoles.genericError")}
+            </p>
+          )}
+          {mutation.isSuccess && (
+            <p className="alert alert-success" role="status">
+              {t("settingsRoles.success")}
+            </p>
+          )}
+          <div className="form-actions">
+            <button className="btn btn-primary" type="submit" disabled={mutation.isPending}>
+              {t("settingsRoles.submit")}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

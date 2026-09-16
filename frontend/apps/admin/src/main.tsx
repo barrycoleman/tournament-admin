@@ -4,6 +4,8 @@ import { RouterProvider } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@tournament-admin/shared";
 import "./i18nSetup";
+import "./styles/tokens.css";
+import "./styles/components.css";
 import { router } from "./router";
 import { queryClient } from "./queryClient";
 

@@ -14,9 +14,11 @@ export function DashboardRoute() {
     <div>
       <h1>{t("dashboard.heading")}</h1>
       {data && (
-        <p>
-          {t("dashboard.eventNameLabel")}: {data.name}
-        </p>
+        <div className="panel">
+          <p>
+            {t("dashboard.eventNameLabel")}: {data.name}
+          </p>
+        </div>
       )}
     </div>
   );

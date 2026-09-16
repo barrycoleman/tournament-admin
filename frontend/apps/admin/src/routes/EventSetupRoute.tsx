@@ -58,17 +58,20 @@ function PluginList({
   }
 
   return (
-    <section>
+    <section className="panel">
       <h2>{t(headingKey)}</h2>
-      <ul>
+      <ul className="list-plain">
         {plugins?.map((plugin) => (
-          <li key={plugin.name}>
-            {plugin.display_name} ({plugin.version})
+          <li className="list-row" key={plugin.name}>
+            <span className="list-row__main">
+              {plugin.display_name} ({plugin.version})
+            </span>
             {kind === "games" &&
               (event?.game_plugin_name === plugin.name ? (
-                <span> — {t("eventSetup.selectedLabel")}</span>
+                <span className="badge badge-neutral">{t("eventSetup.selectedLabel")}</span>
               ) : (
                 <button
+                  className="btn btn-small"
                   onClick={() => selectMutation.mutate(plugin.name)}
                   disabled={Boolean(event?.game_plugin_name) || selectMutation.isPending}
                 >
@@ -78,15 +81,20 @@ function PluginList({
           </li>
         ))}
       </ul>
-      <label htmlFor={`install-${kind}`}>{t(installLabelKey)}</label>
-      <input
-        id={`install-${kind}`}
-        type="file"
-        accept=".zip"
-        onChange={handleFileChange}
-      />
+      <div className="field">
+        <label className="field__label" htmlFor={`install-${kind}`}>
+          {t(installLabelKey)}
+        </label>
+        <input
+          className="input"
+          id={`install-${kind}`}
+          type="file"
+          accept=".zip"
+          onChange={handleFileChange}
+        />
+      </div>
       {installMutation.isError && (
-        <p role="alert">
+        <p className="alert alert-danger" role="alert">
           {installMutation.error instanceof ApiError
             ? installMutation.error.detail
             : t("errors.pluginInstallFailed")}
@@ -118,16 +126,18 @@ function ServerInfoPanel() {
   if (!data) return null;
 
   return (
-    <section>
+    <section className="panel">
       <h2>{t("eventSetup.serverInfoHeading")}</h2>
-      {data.addresses.map((address) => (
-        <div key={address}>
-          <p>
-            {t("eventSetup.serverInfoAddressLabel")}: {address}:{data.port}
-          </p>
-          <canvas ref={(node) => { canvasRefs.current[address] = node; }} />
-        </div>
-      ))}
+      <div className="server-info-grid">
+        {data.addresses.map((address) => (
+          <div className="server-info-card" key={address}>
+            <canvas ref={(node) => { canvasRefs.current[address] = node; }} />
+            <p>
+              {t("eventSetup.serverInfoAddressLabel")}: {address}:{data.port}
+            </p>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

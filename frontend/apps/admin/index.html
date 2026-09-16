@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tournament Admin</title>
+    <script>
+      // Applied before first paint so the correct theme never flashes the
+      // other one on load; useTheme.ts keeps this attribute in sync
+      // afterward for the rest of the session.
+      (function () {
+        try {
+          var stored = localStorage.getItem("tournament-admin.theme.v1");
+          if (stored === "light" || stored === "dark") {
+            document.documentElement.setAttribute("data-theme", stored);
+          }
+        } catch (e) {
+          /* private-browsing or similar; fall back to system preference */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

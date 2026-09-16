@@ -22,7 +22,9 @@
     "rolesLink": "角色密码",
     "dismiss": "关闭",
     "divisionsLink": "分组",
-    "teamsLink": "队伍"
+    "teamsLink": "队伍",
+    "switchToLight": "切换到浅色模式",
+    "switchToDark": "切换到深色模式"
   },
   "picker": {
     "heading": "启动赛事",

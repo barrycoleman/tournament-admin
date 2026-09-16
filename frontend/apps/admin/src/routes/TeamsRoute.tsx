@@ -276,8 +276,8 @@ export function TeamsRoute() {
       key: "__status",
       name: t("teams.columnStatus"),
       renderCell: ({ row }) => {
-        if (row.error) return <span style={{ color: "crimson" }}>{row.error}</span>;
-        if (row.dirty) return <span>{t("teams.unsavedIndicator")}</span>;
+        if (row.error) return <span className="badge badge-danger">{row.error}</span>;
+        if (row.dirty) return <span className="badge badge-warning">{t("teams.unsavedIndicator")}</span>;
         return null;
       },
     });
@@ -487,9 +487,12 @@ export function TeamsRoute() {
     <div>
       <h1>{t("teams.heading")}</h1>
       {showDivisionColumn && (
-        <div>
-          <label htmlFor="division-filter">{t("teams.divisionFilterLabel")}</label>
+        <div className="field" style={{ maxWidth: 280 }}>
+          <label className="field__label" htmlFor="division-filter">
+            {t("teams.divisionFilterLabel")}
+          </label>
           <select
+            className="select"
             id="division-filter"
             value={divisionFilter}
             onChange={(event) => setDivisionFilter(event.target.value)}
@@ -504,27 +507,54 @@ export function TeamsRoute() {
         </div>
       )}
 
-      <div>
-        <button onClick={handleAddRow}>{t("teams.addRow")}</button>
-        <button onClick={() => void handleSave()} disabled={!hasUnsavedChanges || saving}>
+      <div className="toolbar">
+        <button className="btn" onClick={handleAddRow}>
+          {t("teams.addRow")}
+        </button>
+        <button
+          className="btn btn-primary"
+          onClick={() => void handleSave()}
+          disabled={!hasUnsavedChanges || saving}
+        >
           {t("teams.saveChanges")}
         </button>
-        <label htmlFor="csv-upload">{t("teams.uploadCsvLabel")}</label>
-        <input id="csv-upload" type="file" accept=".csv" onChange={handleCsvFileSelected} />
-        <button onClick={handleDownloadCsv}>{t("teams.downloadCsvLabel")}</button>
-        <button onClick={handleDownloadTemplate}>{t("teams.downloadTemplateLabel")}</button>
+        <label className="btn" htmlFor="csv-upload" style={{ cursor: "pointer" }}>
+          {t("teams.uploadCsvLabel")}
+        </label>
+        <input
+          id="csv-upload"
+          type="file"
+          accept=".csv"
+          onChange={handleCsvFileSelected}
+          style={{ display: "none" }}
+        />
+        <button className="btn" onClick={handleDownloadCsv}>
+          {t("teams.downloadCsvLabel")}
+        </button>
+        <button className="btn" onClick={handleDownloadTemplate}>
+          {t("teams.downloadTemplateLabel")}
+        </button>
         <button
+          className="btn"
           onClick={() => randomizeMutation.mutate()}
           disabled={!canRandomize || randomizeMutation.isPending}
         >
           {t("teams.randomizeUnassignedAction")}
         </button>
-        {randomizeError && <p role="alert">{randomizeError}</p>}
-        {saveError && <p role="alert">{saveError}</p>}
       </div>
+      {randomizeError && (
+        <p className="alert alert-danger" role="alert">
+          {randomizeError}
+        </p>
+      )}
+      {saveError && (
+        <p className="alert alert-danger" role="alert">
+          {saveError}
+        </p>
+      )}
 
       {saveSummary && (
-        <p role="status">
+        <p className="alert alert-success" role="status">
           {saveSummary.failed > 0
             ? t("teams.saveSummary", { saved: saveSummary.saved, failed: saveSummary.failed })
             : t("teams.saveSummaryAllOk", { saved: saveSummary.saved })}
@@ -541,19 +571,30 @@ export function TeamsRoute() {
       />
 
       {deleteCandidate && (
-        <div role="alertdialog" aria-labelledby="delete-team-heading">
-          <h2 id="delete-team-heading">{t("teams.deleteConfirmHeading")}</h2>
-          <p>{t("teams.deleteConfirmBody")}</p>
-          {deleteError && <p role="alert">{deleteError}</p>}
-          <button onClick={() => void handleConfirmDelete()}>{t("teams.deleteAction")}</button>
-          <button
-            onClick={() => {
-              setDeleteCandidate(null);
-              setDeleteError(null);
-            }}
-          >
-            {t("teams.cancelAction")}
-          </button>
+        <div className="dialog-overlay">
+          <div className="dialog" role="alertdialog" aria-labelledby="delete-team-heading">
+            <h2 id="delete-team-heading">{t("teams.deleteConfirmHeading")}</h2>
+            <p>{t("teams.deleteConfirmBody")}</p>
+            {deleteError && (
+              <p className="alert alert-danger" role="alert">
+                {deleteError}
+              </p>
+            )}
+            <div className="dialog__actions">
+              <button className="btn btn-danger" onClick={() => void handleConfirmDelete()}>
+                {t("teams.deleteAction")}
+              </button>
+              <button
+                className="btn"
+                onClick={() => {
+                  setDeleteCandidate(null);
+                  setDeleteError(null);
+                }}
+              >
+                {t("teams.cancelAction")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

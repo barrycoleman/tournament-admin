@@ -1,0 +1,198 @@
+/*
+ * Design tokens for the "meet-day operations ledger" direction: a warm
+ * paper ground, near-black ink, and a single marker-amber accent reserved
+ * for primary actions and live/active state. See
+ * .impeccable/surfaces/frontend-apps-admin.md for the full direction
+ * contract and DESIGN.md for the documented system.
+ *
+ * Defaults to the system's light/dark preference; :root[data-theme] (set
+ * by useTheme.ts) overrides it explicitly once the user picks a side.
+ */
+
+:root {
+  --color-bg: #faf7f1;
+  --color-bg-elevated: #ffffff;
+  --color-bg-sunken: #f1ece2;
+  --color-border: #e1dacb;
+  --color-border-strong: #c9bfa9;
+  --color-text: #211e19;
+  --color-text-secondary: #5b5548;
+  --color-text-tertiary: #8a8372;
+  /* Darkened from the direction's first-pass amber (#c6650b) -- that
+     value read at 3.7-4.0:1 against white, below the 4.5:1 AA floor
+     for both plain link text and white-on-accent button labels. This
+     shade clears it (~5.3:1) while staying the same marker-amber hue. */
+  --color-accent: #a8560a;
+  --color-accent-hover: #8c4708;
+  --color-accent-contrast: #ffffff;
+  --color-success: #2f7d4f;
+  --color-success-bg: #e7f3ec;
+  /* Darkened from #b98900 (2.8:1 on --color-warning-bg, below AA). */
+  --color-warning: #8a6300;
+  --color-warning-bg: #faf1d9;
+  --color-danger: #b23b2e;
+  --color-danger-bg: #fbeae7;
+  --color-focus-ring: #a8560a;
+  --color-selection-bg: #f6dcb8;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  --radius-sm: 4px;
+  --radius: 6px;
+
+  --shadow-hairline: 0 1px 2px rgba(33, 30, 25, 0.08);
+
+  --border-width: 1px;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #1b1815;
+    --color-bg-elevated: #242019;
+    --color-bg-sunken: #15130f;
+    --color-border: #3a342a;
+    --color-border-strong: #4e463a;
+    --color-text: #f1ece2;
+    --color-text-secondary: #c9c2b2;
+    --color-text-tertiary: #948c7a;
+    --color-accent: #e8912e;
+    --color-accent-hover: #f2a54d;
+    --color-accent-contrast: #1b1815;
+    --color-success: #4caf77;
+    --color-success-bg: #1c2f22;
+    --color-warning: #d9a93b;
+    --color-warning-bg: #332a13;
+    --color-danger: #e2685a;
+    --color-danger-bg: #33201c;
+    --color-focus-ring: #e8912e;
+    --color-selection-bg: #4a3419;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-bg: #1b1815;
+  --color-bg-elevated: #242019;
+  --color-bg-sunken: #15130f;
+  --color-border: #3a342a;
+  --color-border-strong: #4e463a;
+  --color-text: #f1ece2;
+  --color-text-secondary: #c9c2b2;
+  --color-text-tertiary: #948c7a;
+  --color-accent: #e8912e;
+  --color-accent-hover: #f2a54d;
+  --color-accent-contrast: #1b1815;
+  --color-success: #4caf77;
+  --color-success-bg: #1c2f22;
+  --color-warning: #d9a93b;
+  --color-warning-bg: #332a13;
+  --color-danger: #e2685a;
+  --color-danger-bg: #33201c;
+  --color-focus-ring: #e8912e;
+  --color-selection-bg: #4a3419;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 650;
+  line-height: 1.25;
+  margin: 0 0 var(--space-4);
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: var(--text-2xl);
+}
+
+h2 {
+  font-size: var(--text-xl);
+}
+
+h3 {
+  font-size: var(--text-lg);
+}
+
+p {
+  margin: 0 0 var(--space-3);
+}
+
+/* The accent is reserved for primary actions and live/active state, never
+   decoration -- an ordinary link reads as underlined ink, not amber. */
+a {
+  color: var(--color-text);
+}
+
+/* Browser surfaces: theme what we didn't draw, not just what we did. */
+
+::selection {
+  background: var(--color-selection-bg);
+  color: var(--color-text);
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-sunken);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  border: 3px solid var(--color-bg-sunken);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}

@@ -27,36 +27,48 @@ export function LoginRoute() {
   }
 
   return (
-    <main>
-      <h1>{t("login.heading")}</h1>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="role">{t("login.roleLabel")}</label>
-          <input
-            id="role"
-            name="role"
-            value={role}
-            onChange={(event) => setRole(event.target.value)}
-          />
-        </div>
-        <div>
-          <label htmlFor="password">{t("login.passwordLabel")}</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            aria-describedby={error ? "login-error" : undefined}
-          />
-        </div>
-        {error && (
-          <p id="login-error" role="alert">
-            {error}
-          </p>
-        )}
-        <button type="submit">{t("login.submit")}</button>
-      </form>
+    <main className="auth-screen">
+      <div className="auth-card">
+        <h1>{t("login.heading")}</h1>
+        <form onSubmit={handleSubmit}>
+          <div className="field">
+            <label className="field__label" htmlFor="role">
+              {t("login.roleLabel")}
+            </label>
+            <input
+              className="input"
+              id="role"
+              name="role"
+              value={role}
+              onChange={(event) => setRole(event.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label className="field__label" htmlFor="password">
+              {t("login.passwordLabel")}
+            </label>
+            <input
+              className="input"
+              id="password"
+              name="password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              aria-describedby={error ? "login-error" : undefined}
+            />
+          </div>
+          {error && (
+            <p className="alert alert-danger" id="login-error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="form-actions">
+            <button className="btn btn-primary" type="submit">
+              {t("login.submit")}
+            </button>
+          </div>
+        </form>
+      </div>
     </main>
   );
 }

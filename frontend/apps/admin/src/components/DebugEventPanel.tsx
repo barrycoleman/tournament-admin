@@ -24,19 +24,19 @@ export function DebugEventPanel() {
   });
 
   return (
-    <section>
-      <button onClick={() => setOpen((prev) => !prev)}>
+    <section className="debug-panel">
+      <button className="btn btn-small" onClick={() => setOpen((prev) => !prev)}>
         {t("debugPanel.toggle")} ({events.length})
       </button>
       {open && (
-        <div>
+        <div className="debug-panel__body">
           {events.length === 0 ? (
             <p>{t("debugPanel.empty")}</p>
           ) : (
-            <ul>
+            <ul className="list-plain">
               {events.map((entry, index) => (
-                <li key={index}>
-                  <span>{entry.receivedAt}</span>
+                <li key={index} className="debug-panel__entry">
+                  <time>{entry.receivedAt}</time>
                   <pre>{JSON.stringify(entry.event, null, 2)}</pre>
                 </li>
               ))}

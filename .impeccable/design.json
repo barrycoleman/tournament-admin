@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-16T00:00:00Z",
+  "title": "Design System: Tournament Admin",
+  "extensions": {
+    "colorMeta": {
+      "paper": { "role": "neutral", "displayName": "Paper", "canonical": "#faf7f1", "dark": "#1b1815" },
+      "paper-elevated": { "role": "neutral", "displayName": "Paper Elevated", "canonical": "#ffffff", "dark": "#242019" },
+      "paper-sunken": { "role": "neutral", "displayName": "Paper Sunken", "canonical": "#f1ece2", "dark": "#15130f" },
+      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "#e1dacb", "dark": "#3a342a" },
+      "hairline-strong": { "role": "neutral", "displayName": "Hairline Strong", "canonical": "#c9bfa9", "dark": "#4e463a" },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#211e19", "dark": "#f1ece2" },
+      "ink-secondary": { "role": "neutral", "displayName": "Ink Secondary", "canonical": "#5b5548", "dark": "#c9c2b2" },
+      "ink-tertiary": { "role": "neutral", "displayName": "Ink Tertiary", "canonical": "#8a8372", "dark": "#948c7a" },
+      "marker-amber": {
+        "role": "primary",
+        "displayName": "Marker Amber",
+        "canonical": "#a8560a",
+        "dark": "#e8912e",
+        "tonalRamp": ["#2e1a04", "#4a2a07", "#6b3d0a", "#8c4708", "#a8560a", "#c97a2f", "#e8912e", "#f7c98a"]
+      },
+      "status-warning": {
+        "role": "warning",
+        "displayName": "Warning",
+        "canonical": "#8a6300",
+        "dark": "#d9a93b",
+        "note": "Darkened from a #b98900 first-pass value that read 2.8:1 on its badge background, below the AA 4.5:1 floor."
+      },
+      "status-danger": { "role": "danger", "displayName": "Danger", "canonical": "#b23b2e", "dark": "#e2685a" },
+      "status-success": { "role": "success", "displayName": "Success", "canonical": "#2f7d4f", "dark": "#4caf77" },
+      "selection": { "role": "neutral", "displayName": "Selection Tint", "canonical": "#f6dcb8", "dark": "#4a3419" }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Page-level h1, one per route." },
+      "title": { "displayName": "Title", "purpose": "Section h2/h3 inside a panel or dialog." },
+      "body": { "displayName": "Body", "purpose": "Running text, form values." },
+      "label": { "displayName": "Label", "purpose": "Field labels, nav items, button text." }
+    },
+    "shadows": [
+      { "name": "hairline-lift", "value": "0 1px 2px rgba(33, 30, 25, 0.08)", "purpose": "Auth card and modal dialog only; every other surface is flat." }
+    ],
+    "breakpoints": [
+      { "name": "nav-collapse", "value": "720px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single primary action on a view; the only routine spend of the amber accent besides live/active nav state.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn { font-size: 0.875rem; font-weight: 600; cursor: pointer; border-radius: 6px; border: 1px solid; padding: 0.5rem 1rem; min-height: 40px; line-height: 1; transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out; } .ds-btn-primary { background: #a8560a; border-color: #a8560a; color: #ffffff; } .ds-btn-primary:hover { background: #8c4708; border-color: #8c4708; } .ds-btn-primary:focus-visible { outline: 2px solid #a8560a; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The default button everywhere a primary action isn't called for; deliberately ink, not amber.",
+      "html": "<button class=\"ds-btn ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { background: #ffffff; border-color: #c9bfa9; color: #211e19; } .ds-btn-secondary:hover { border-color: #8a8372; background: #f1ece2; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Outlined, transparent-background destructive action (e.g. Divisions screen Delete).",
+      "html": "<button class=\"ds-btn ds-btn-danger\">Delete</button>",
+      "css": ".ds-btn-danger { background: transparent; border-color: #b23b2e; color: #b23b2e; } .ds-btn-danger:hover { background: #fbeae7; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Standard text/select field.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Team name\" />",
+      "css": ".ds-input { font-size: 1rem; color: #211e19; background: #faf7f1; border: 1px solid #c9bfa9; border-radius: 6px; padding: 0.5rem 0.75rem; min-height: 40px; } .ds-input:hover { border-color: #8a8372; } .ds-input:focus-visible { border-color: #a8560a; outline: none; }"
+    },
+    {
+      "name": "Warning Badge",
+      "kind": "chip",
+      "refersTo": "badge-warning",
+      "description": "Status badge; AA-corrected warning color.",
+      "html": "<span class=\"ds-badge ds-badge-warning\">Pending</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; font-weight: 700; padding: 2px 0.5rem; border-radius: 4px; line-height: 1.6; } .ds-badge-warning { background: #faf1d9; color: #8a6300; }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "The primary content container; flat at rest, no shadow.",
+      "html": "<div class=\"ds-panel\"><h2>Divisions</h2><p>Panel content</p></div>",
+      "css": ".ds-panel { background: #ffffff; border: 1px solid #e1dacb; border-radius: 6px; padding: 1.5rem; }"
+    },
+    {
+      "name": "Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Left-rail nav link; active state marked by amber text plus an inset hairline, not a filled background.",
+      "html": "<a class=\"ds-nav-item ds-nav-item-active\" href=\"#\">Dashboard</a>",
+      "css": ".ds-nav-item { display: block; padding: 0.5rem 0.75rem; border-radius: 6px; color: #5b5548; text-decoration: none; font-size: 0.875rem; font-weight: 600; } .ds-nav-item:hover { background: #ffffff; color: #211e19; } .ds-nav-item-active { background: #ffffff; color: #a8560a; box-shadow: inset 0 0 0 1px #e1dacb; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Laminated Clipboard",
+    "overview": "This is the meet-day operations desk, not a broadcast scoreboard. It refuses the flashy jumbotron/LED-scoreboard default that most \"competition software\" briefs reach for, in favor of the one trustworthy laminated clipboard at the check-in table: plain, dense, and legible under gym lighting. Warm off-white paper carries near-black ink text; a single marker/highlighter amber accent is spent only on primary actions and live/active state, never on decoration, links, or secondary buttons. The system-default sans is used throughout -- no display face, no serif accent -- because the tool's job is to disappear behind the data it holds.\n\nAn organizer scans a dense list, finds the one thing needing action, acts, and trusts the result saved. Nothing else competes for attention: no gradients, no drop shadows beyond a 1px hairline lift on the few genuinely floating surfaces (auth card, modal dialog), and radius is small and consistent (4-6px) rather than either sharp-cornered or bubbly.",
+    "keyCharacteristics": [
+      "Warm paper ground + near-black ink + one reserved amber accent",
+      "One system-stack sans, tabular numerals on every numeric/data column",
+      "Hairline (1px) borders and dividers; radius capped at 6px, never 0",
+      "Flat at rest; shadow is reserved for two floating surfaces only (auth card, dialog)",
+      "Left-rail nav on desktop, collapsing to a horizontal scroll strip under 720px"
+    ],
+    "rules": [
+      { "name": "The Reserved Amber Rule", "body": "The accent exists in exactly one place per screen at most: the primary action or the thing that's live/active right now. It never appears on a link, a secondary or danger button, or as a decorative fill -- an earlier draft spent it on plain links and a secondary button and was corrected before ship.", "section": "colors" },
+      { "name": "The AA Floor Rule", "body": "Every text-on-background and control-on-background pairing that carries meaning clears 4.5:1. Two colors in this palette (marker-amber, status-warning) were darkened from their first-pass values specifically to clear this floor; the darkened values are the system, not the drafts.", "section": "colors" },
+      { "name": "The One Stack Rule", "body": "No second (display or serif) font family exists anywhere in the shipped app. Headings are the same sans as body text, distinguished only by weight (650) and size.", "section": "typography" },
+      { "name": "The Hairline-Only Rule", "body": "If a surface needs to read as \"above\" the page, the border gets a 1px hairline shadow -- nothing softer, nothing larger, and nothing on a surface that's just sitting in-flow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do reserve marker amber for the primary action and live/active state only (The Reserved Amber Rule).",
+      "Do apply tabular-nums to every numeric column, badge, or timestamp.",
+      "Do cap radius at 6px on containers and 4px on small elements nested inside them; never 0.",
+      "Do confirm any new color pairing clears 4.5:1 contrast before shipping (The AA Floor Rule) -- this system has already had to correct two colors for this once."
+    ],
+    "donts": [
+      "Don't use a gradient anywhere in the UI.",
+      "Don't add a shadow to a panel, card, list row, or badge sitting in normal document flow -- shadow is reserved for the auth card and the dialog only.",
+      "Don't spend the amber accent on a plain link or a secondary/tertiary button; links and secondary buttons stay ink-colored.",
+      "Don't introduce a second font family (display or serif) for headings or any other role."
+    ]
+  }
+}

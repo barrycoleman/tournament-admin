@@ -15,9 +15,11 @@ export function TransientErrorBanner() {
   if (!message) return null;
 
   return (
-    <div role="alert">
+    <div className="transient-banner" role="alert">
       <p>{message}</p>
-      <button onClick={dismissTransientError}>{t("shell.dismiss")}</button>
+      <button className="btn btn-small" onClick={dismissTransientError}>
+        {t("shell.dismiss")}
+      </button>
     </div>
   );
 }
