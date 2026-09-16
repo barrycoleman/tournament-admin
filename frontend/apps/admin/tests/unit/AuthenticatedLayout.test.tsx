@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@tournament-admin/shared";
 import { AuthenticatedLayout } from "../../src/routes/AuthenticatedLayout";
 import "../../src/i18nSetup";
@@ -26,17 +27,20 @@ function storeValidTokens(role = "admin"): void {
 }
 
 function renderShell() {
+  const queryClient = new QueryClient();
   return render(
-    <AuthProvider>
-      <MemoryRouter initialEntries={["/"]}>
-        <Routes>
-          <Route path="/" element={<AuthenticatedLayout />}>
-            <Route index element={<p>dashboard content</p>} />
-          </Route>
-          <Route path="/login" element={<p>login screen</p>} />
-        </Routes>
-      </MemoryRouter>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <MemoryRouter initialEntries={["/"]}>
+          <Routes>
+            <Route path="/" element={<AuthenticatedLayout />}>
+              <Route index element={<p>dashboard content</p>} />
+            </Route>
+            <Route path="/login" element={<p>login screen</p>} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 
