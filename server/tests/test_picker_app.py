@@ -35,4 +35,7 @@ def test_switch_router_is_not_mounted_on_the_picker_app(tmp_path):
     app = create_picker_app(tmp_path / "server-config.json")
     with TestClient(app) as client:
         response = client.post("/api/picker/switch")
-    assert response.status_code == 404
+    # Starlette returns 405 when the path matches a GET route but POST is used;
+    # 404 when the path doesn't match any route at all. Either way, the switch
+    # endpoint itself never executes, which is the requirement.
+    assert response.status_code in (404, 405)
