@@ -50,6 +50,15 @@ config file before the UI is usable at all.
   password contract is untouched.
 - Concurrent multi-tournament serving (still one tournament per running
   process, matching the rest of this project's architecture).
+- A dedicated "restore from backup" flow. Backups are excluded from the
+  normal listing (they don't match the `*.db` glob — see "Config file &
+  directory allowlist" below) and rejected outright if opened directly,
+  satisfying the "never appear as if they were ordinary tournaments"
+  goal without new API surface. An admin who wants to restore one
+  renames/copies the `.pre-migration-*.bak` file to end in `.db` outside
+  the app, after which it opens normally as an existing tournament. A
+  real in-app restore flow is a reasonable future addition, not part of
+  this plan.
 
 ## Approaches considered
 
