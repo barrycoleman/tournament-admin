@@ -5,9 +5,7 @@ import datetime as dt
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request
 from sqlalchemy import select
 
 from tournament_server import audit, device_auth  # noqa: F401  (audit registers hooks)
@@ -42,11 +40,7 @@ from tournament_server.routers import (
     websockets,
 )
 from tournament_server.settings import Settings
-
-# .../server/src/tournament_server/app.py -> tournament_server -> src -> server -> repo root
-_DEFAULT_STATIC_DIR = (
-    Path(__file__).resolve().parents[3] / "frontend" / "apps" / "admin" / "dist"
-)
+from tournament_server.static_ui import mount_static_admin_ui
 
 
 async def _recover_in_flight_matches(app: FastAPI) -> None:
@@ -219,36 +213,6 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    # Registered after /health (not before, despite the earlier plan's
-    # note) because Starlette matches routes in registration order, not
-    # by specificity: a catch-all "/{full_path:path}" registered before
-    # the literal "/health" route would shadow it and never let the real
-    # handler run. The guard inside serve_admin_ui() that explicitly
-    # 404s on full_path == "health" is defense in depth for calls made
-    # directly against this route (e.g. if something is ever inserted
-    # between the two in the future); it does not, by itself, make
-    # ordering safe.
-    resolved_static_dir = (
-        Path(settings.static_dir) if settings.static_dir else _DEFAULT_STATIC_DIR
-    )
-    if resolved_static_dir.is_dir():
-        # StaticFiles raises at construction time if the directory is
-        # missing, which would crash startup outright for a partial or
-        # custom build whose dist/ has no assets/ subdirectory. Degrade
-        # to "no static JS/CSS served" instead: the SPA fallback below
-        # still registers, so index.html keeps being served.
-        assets_dir = resolved_static_dir / "assets"
-        if assets_dir.is_dir():
-            app.mount(
-                "/assets",
-                StaticFiles(directory=assets_dir),
-                name="admin-ui-assets",
-            )
-
-        @app.get("/{full_path:path}")
-        def serve_admin_ui(full_path: str) -> FileResponse:
-            if full_path.startswith(("api/", "ws/")) or full_path == "health":
-                raise HTTPException(status_code=404, detail="Not Found")
-            return FileResponse(resolved_static_dir / "index.html")
+    mount_static_admin_ui(app, settings.static_dir)
 
     return app
