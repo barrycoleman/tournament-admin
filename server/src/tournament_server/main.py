@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 import uvicorn
 
 from tournament_server.app import create_app
-from tournament_server.migrations import SchemaMismatchError
 from tournament_server.network import NoFreePortError, find_free_port
 from tournament_server.picker_app import create_picker_app
 from tournament_server.picker_config import (
@@ -27,8 +26,8 @@ def _startup() -> tuple[Settings, int, "FastAPI"]:
     is yet). Isolated from module level so it's actually testable: a
     subprocess invocation of this module (see test_main.py) exercises
     the real `ERROR: ... / exit 1` clean-failure path on NoFreePortError
-    or SchemaMismatchError, and both the picker-mode and normal-mode
-    boot paths."""
+    or a create_app()/ensure_schema_current() failure (SchemaMismatchError
+    or otherwise), and both the picker-mode and normal-mode boot paths."""
     settings = Settings.from_env()
     config_path = resolve_config_path()
 
@@ -51,7 +50,20 @@ def _startup() -> tuple[Settings, int, "FastAPI"]:
             static_dir=settings.static_dir,
             config_path=config_path,
         )
-    except SchemaMismatchError as exc:
+    except Exception as exc:
+        # Broadened beyond SchemaMismatchError: create_app()/
+        # ensure_schema_current() can also raise for a bad file that
+        # isn't a schema problem -- e.g. a read-only/permission-
+        # restricted directory. Confirmed that case actually raises
+        # sqlalchemy.exc.OperationalError, which does NOT subclass
+        # OSError despite wrapping an OS-level permission failure --
+        # `except OSError` alone would miss it. Any such failure must
+        # reach this same recovery branch, or a config-sourced path that
+        # fails for a non-schema reason wedges the server permanently
+        # (every restart retries the same bad path, with no way out
+        # short of hand-editing the config file). Re-raising here has no
+        # safety upside -- the process is about to exit either way -- so
+        # this errs on the broad side and catches everything.
         if settings.db_path is None:
             # resolved_db_path came from the picker config's
             # last_opened_path (not the legacy env var override) --

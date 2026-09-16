@@ -158,6 +158,44 @@ def test_main_clears_last_opened_path_on_schema_mismatch(tmp_path):
     assert updated["last_opened_path"] is None
 
 
+def test_main_clears_last_opened_path_on_non_schema_boot_failure(tmp_path):
+    """Modeled on test_main_clears_last_opened_path_on_schema_mismatch,
+    but for a boot failure that is NOT a SchemaMismatchError -- e.g. a
+    last_opened_path whose parent directory doesn't exist, which makes
+    SQLite raise a plain "unable to open database file" error
+    (sqlalchemy.exc.OperationalError, which does not subclass
+    SchemaMismatchError). Before this fix, _startup()'s recovery branch
+    only caught SchemaMismatchError, so this kind of failure would never
+    clear last_opened_path and every subsequent restart would fail
+    identically. This pins that the broadened except now still exits
+    cleanly (no traceback) AND still clears the config."""
+    config_path = tmp_path / "server-config.json"
+    unopenable_path = tmp_path / "missing-parent-dir" / "regional.db"
+    config_path.write_text(
+        json.dumps({"allowed_directories": [], "last_opened_path": str(unopenable_path)})
+    )
+    port = _free_port()
+    env = dict(os.environ)
+    env.pop("TOURNAMENT_DB_PATH", None)
+    env["TOURNAMENT_HOST"] = "127.0.0.1"
+    env["TOURNAMENT_PORT"] = str(port)
+    env["TOURNAMENT_CONFIG_PATH"] = str(config_path)
+
+    result = subprocess.run(
+        [sys.executable, "-m", "tournament_server.main"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "ERROR:" in result.stderr
+    assert "Traceback" not in result.stderr
+    updated = json.loads(config_path.read_text())
+    assert updated["last_opened_path"] is None
+
+
 def test_main_prefers_the_env_var_over_a_conflicting_last_opened_path(tmp_path):
     """TOURNAMENT_DB_PATH is a legacy override that always wins over the
     picker config's last_opened_path -- see resolve_active_db_path's

@@ -61,10 +61,20 @@ test.describe.serial("tournament picker: fresh server bootstrap", () => {
     // the frontend spawn below for why that matters generally); combined
     // with the direct, unwrapped exec here, `backendProcess.pid` is
     // reliably the actual server process either way.
+    // A developer with TOURNAMENT_DB_PATH or TOURNAMENT_DEFAULT_DIR
+    // exported in their own shell would otherwise leak it into this
+    // isolated backend, which would then boot in normal mode (or with an
+    // unexpected pre-seeded allowlist) instead of fresh picker mode --
+    // producing a confusing first-assertion failure. Matches the same
+    // env.pop(...) pattern test_main.py's subprocess tests already use.
+    const backendEnv = { ...process.env };
+    delete backendEnv.TOURNAMENT_DB_PATH;
+    delete backendEnv.TOURNAMENT_DEFAULT_DIR;
+
     backendProcess = spawn(".venv/bin/python", ["-m", "tournament_server.main"], {
       cwd: serverRoot,
       env: {
-        ...process.env,
+        ...backendEnv,
         TOURNAMENT_CONFIG_PATH: configPath,
         TOURNAMENT_PLUGINS_ROOT: path.join(tournamentDir, "plugins"),
         TOURNAMENT_HOST: "127.0.0.1",

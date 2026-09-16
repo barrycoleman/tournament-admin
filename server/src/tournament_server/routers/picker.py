@@ -44,7 +44,11 @@ async def _delayed_restart() -> None:
     await asyncio.sleep(0.25)
     try:
         os.execve(sys.executable, [sys.executable, *sys.argv], os.environ.copy())
-    except OSError as exc:
+    except Exception as exc:
+        # Broadened from OSError: os.execve can raise other exception
+        # types too (e.g. ValueError on a malformed argv), which would
+        # otherwise vanish into Starlette's background-task handling --
+        # exactly what this try/except exists to avoid.
         print(f"ERROR: failed to restart the server process: {exc}", file=sys.stderr)
 
 
@@ -90,8 +94,16 @@ def create_tournament(
     if not is_path_allowed(directory, config.allowed_directories):
         raise HTTPException(status_code=403, detail="Directory is not allowed")
     _validate_filename(payload.filename)
+    if not os.access(directory, os.W_OK):
+        raise HTTPException(status_code=422, detail="Directory is not writable")
     resolved = directory.resolve() / payload.filename
-    if resolved.exists():
+    if resolved.exists() or resolved.is_symlink():
+        # is_symlink() also catches a dangling symlink planted at this
+        # path (e.g. allowed/x.db -> /etc/something.db): exists() alone
+        # follows symlinks, so a dangling one -- whose target doesn't
+        # exist -- would otherwise pass this check and let
+        # ensure_schema_current create a real SQLite file at the
+        # symlink's target, outside the allowlist.
         raise HTTPException(status_code=409, detail="A file with that name already exists")
 
     config.last_opened_path = str(resolved)
@@ -107,12 +119,18 @@ def open_tournament(
     config_path = request.app.state.picker_config_path
     config = load_config(config_path)
     path = Path(payload.path)
-    if not is_path_allowed(path, config.allowed_directories) or path.suffix != ".db":
+    # Check the suffix on the *resolved* path, not the raw one --
+    # is_path_allowed() itself resolves its argument, so a symlink named
+    # "regional.db" inside an allowed directory that actually points at
+    # a ".pre-migration-*.bak" file would otherwise pass both checks
+    # (the unresolved name still ends in ".db") and open a backup file.
+    resolved_path = path.resolve()
+    if not is_path_allowed(path, config.allowed_directories) or resolved_path.suffix != ".db":
         raise HTTPException(status_code=403, detail="File is not allowed")
-    if not path.is_file():
+    if not resolved_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
-    config.last_opened_path = str(path.resolve())
+    config.last_opened_path = str(resolved_path)
     save_config(config_path, config)
     background_tasks.add_task(_delayed_restart)
     return RestartingResponse(status="restarting")

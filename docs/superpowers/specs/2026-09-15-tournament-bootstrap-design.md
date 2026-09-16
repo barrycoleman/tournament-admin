@@ -253,6 +253,26 @@ reconnect-poll-and-reload logic.
 - **Concurrent config-file writes**: not a real concern — only one
   server process is ever running against a given config file by
   construction — so no file locking is added.
+- **Accepted risk: the picker is unauthenticated even after "Switch
+  Tournament".** The picker app has no auth at all, justified above by
+  "nothing sensitive exists yet" — true on a first-ever boot, but *not*
+  true after an admin uses "Switch Tournament": that action puts the
+  server back into picker mode while real tournament files (real event
+  data, real role password hashes) still sit on disk in the allowlist.
+  Combined with `POST /api/picker/directories` performing no containment
+  check (by design — it establishes new roots, see above) and
+  `TOURNAMENT_HOST` defaulting to `0.0.0.0`, anyone on the venue LAN
+  during that window can enumerate tournament filenames/sizes, add
+  arbitrary directories, and force the server to open/create a different
+  tournament — a one-request denial-of-service vector at exactly the
+  moment an admin is mid-event. This is a deliberate trade-off, not an
+  oversight: it's consistent with this project's existing
+  single-admin-per-event, trusted-LAN deployment model — the same threat
+  model already accepted for the pre-existing unauthenticated
+  `POST /api/event` bootstrap. A real mitigation (binding the picker app
+  to loopback only, or requiring the existing admin password when a
+  tournament already exists in the allowlist) is a reasonable future
+  enhancement, not implemented in this phase.
 
 ## Testing plan
 

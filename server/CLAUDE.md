@@ -714,7 +714,8 @@ existing test relies on this no-op path still working).
 Resolution order: `static_dir` passed to `create_app()`, else
 `TOURNAMENT_STATIC_DIR` env var (`Settings.static_dir`), else the
 computed default `frontend/apps/admin/dist` (relative to the repo root,
-computed from `app.py`'s own path — see `_DEFAULT_STATIC_DIR`). The
+computed from `static_ui.py`'s own path — see `DEFAULT_STATIC_DIR` in
+`static_ui.py`). The
 `/assets` `StaticFiles` mount only registers if an `assets/` subdirectory
 is also present (a `dist/` with only `index.html`, e.g. a partial or
 custom build, degrades to "no static JS/CSS served" rather than crashing
@@ -792,14 +793,52 @@ it to `None`) to the picker config, then schedule
 function only runs after Starlette has already handed the response back
 to the client (a `BackgroundTask` starts after the response is sent,
 never before) — `os.execve(sys.executable, [sys.executable, *sys.argv],
-os.environ.copy())` replaces the running process's image in place, same
-PID, same open listening socket, which is what lets the *next* process
-boot straight back into `_startup()`'s resolution logic above and land
-on whichever app (picker or normal) the just-written config now implies.
+os.environ.copy())` replaces the running process's image in place. This
+does **not** mean the new process inherits a live listening socket:
+Python marks sockets close-on-exec by default (PEP 446), so the socket
+does not survive `execve` — the restarted process gets a new PID and
+calls `find_free_port` itself, rebinding fresh (safely, since
+`find_free_port` probes with `SO_REUSEADDR`). What *does* survive is the
+picker config on disk, which is what lets the *next* process boot
+straight back into `_startup()`'s resolution logic above and land on
+whichever app (picker or normal) the just-written config now implies.
 There's a short `asyncio.sleep(0.25)` before the `execve` call purely to
 give the response time to actually flush to the client first. The admin
 UI's `useRestartPoll` (`frontend/CLAUDE.md`) is the client-side half of
 riding out this gap.
+
+`os.execve(sys.executable, [sys.executable, *sys.argv], ...)` is correct
+for today's `python -m tournament_server.main` invocation, but under a
+frozen PyInstaller build (this project's primary distribution target,
+not yet implemented in this repo) `sys.executable` and `sys.argv[0]` are
+the same path, so this construction would duplicate the first argv
+element on every restart, compounding across repeated restarts. Whoever
+implements PyInstaller packaging must account for this (e.g. by not
+duplicating `sys.argv[0]` when `sys.frozen` is set) — not handled here,
+since there's no packaging pipeline yet in this repo to test it against.
+
+`TOURNAMENT_DEFAULT_DIR`, if set, seeds `allowed_directories` with that
+one path the *first* time the picker config file is created (it has no
+effect on an already-existing config) — useful for scripted first-boot
+provisioning where an operator wants the picker to already show a known
+directory rather than requiring an admin to add one by hand.
+
+**Accepted risk: unauthenticated exposure window after "Switch
+Tournament".** The picker app is fully unauthenticated — justified on a
+first-ever boot by "nothing sensitive exists yet," but "Switch
+Tournament" re-enters picker mode with real tournament files (event
+data, role password hashes) still on disk in the allowlist, and
+`POST /api/picker/directories` performs no containment check by design.
+Combined with `TOURNAMENT_HOST` defaulting to `0.0.0.0`, anyone on the
+venue LAN during that window can enumerate tournament filenames/sizes,
+add arbitrary directories, and force the server to open/create a
+different tournament. This is a deliberate trade-off consistent with
+this project's existing single-admin-per-event, trusted-LAN deployment
+model (the same threat model already accepted for the unauthenticated
+`POST /api/event` bootstrap) — not an oversight. See the design spec's
+discussion of this window for the reasoning and possible future
+mitigations (loopback-only binding, or requiring the existing admin
+password when a tournament already exists in the allowlist).
 
 ## Known, deliberate gaps in this phase
 

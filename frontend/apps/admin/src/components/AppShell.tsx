@@ -46,6 +46,9 @@ export function AppShell() {
         </button>
       )}
       {switchMutation.isError && <p role="alert">{t("errors.generic")}</p>}
+      {switchStatus === "timedOut" && (
+        <p role="alert">{t("picker.restartTimedOutMessage")}</p>
+      )}
       {role === "admin" && <DebugEventPanel />}
       <main>
         <Outlet />

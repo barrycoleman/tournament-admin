@@ -87,6 +87,10 @@ export function PickerRoute() {
     );
   }
 
+  const timedOutAlert = restartStatus === "timedOut" && (
+    <p role="alert">{t("picker.restartTimedOutMessage")}</p>
+  );
+
   function renderDirectoryPicker(selected: string, onSelect: (dir: string) => void) {
     return (
       <div>
@@ -140,9 +144,7 @@ export function PickerRoute() {
     return (
       <main>
         <h1>{t("picker.heading")}</h1>
-        {restartStatus === "timedOut" && (
-          <p role="alert">{t("picker.restartTimedOutMessage")}</p>
-        )}
+        {timedOutAlert}
         <button onClick={() => setScreen("create")}>{t("picker.createAction")}</button>
         <button onClick={() => setScreen("open")}>{t("picker.openAction")}</button>
       </main>
@@ -153,6 +155,7 @@ export function PickerRoute() {
     return (
       <main>
         <h1>{t("picker.createAction")}</h1>
+        {timedOutAlert}
         {renderDirectoryPicker(directory, setDirectory)}
         <label htmlFor="picker-filename">{t("picker.filenameLabel")}</label>
         <input
@@ -181,6 +184,7 @@ export function PickerRoute() {
   return (
     <main>
       <h1>{t("picker.openAction")}</h1>
+      {timedOutAlert}
       {renderDirectoryPicker(directory, (dir) => {
         setDirectory(dir);
         setSelectedFile("");

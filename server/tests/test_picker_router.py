@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import stat
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -141,6 +144,85 @@ def test_create_tournament_422s_on_a_path_traversal_filename(picker_client, tmp_
 
     assert response.status_code == 422
     assert execve_calls == []
+
+
+def test_create_tournament_422s_for_an_unwritable_directory(
+    picker_client, tmp_path, execve_calls
+):
+    allowed = tmp_path / "tournaments"
+    allowed.mkdir()
+    picker_client.post("/api/picker/directories", json={"path": str(allowed)})
+
+    original_mode = stat.S_IMODE(os.stat(allowed).st_mode)
+    os.chmod(allowed, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        response = picker_client.post(
+            "/api/picker/create", json={"directory": str(allowed), "filename": "new.db"}
+        )
+    finally:
+        os.chmod(allowed, original_mode)
+
+    assert response.status_code == 422
+    assert execve_calls == []
+
+
+def test_create_tournament_409s_for_a_dangling_symlink(picker_client, tmp_path, execve_calls):
+    allowed = tmp_path / "tournaments"
+    allowed.mkdir()
+    dangling = allowed / "planted.db"
+    dangling.symlink_to(tmp_path / "does-not-exist-anywhere.db")
+    picker_client.post("/api/picker/directories", json={"path": str(allowed)})
+
+    response = picker_client.post(
+        "/api/picker/create", json={"directory": str(allowed), "filename": "planted.db"}
+    )
+
+    # exists() alone follows the symlink and would report False for a
+    # dangling target -- is_symlink() is what actually catches this.
+    assert response.status_code == 409
+    assert execve_calls == []
+
+
+def test_open_tournament_403s_for_a_symlink_pointing_at_a_backup_file(
+    picker_client, tmp_path, execve_calls
+):
+    allowed = tmp_path / "tournaments"
+    allowed.mkdir()
+    backup = allowed / "regional.db.pre-migration-20260101120000.bak"
+    backup.write_text("x")
+    disguised = allowed / "regional.db"
+    disguised.symlink_to(backup)
+    picker_client.post("/api/picker/directories", json={"path": str(allowed)})
+
+    response = picker_client.post("/api/picker/open", json={"path": str(disguised)})
+
+    # The unresolved name ends in ".db", but it resolves to a
+    # ".pre-migration-*.bak" file -- the suffix check must use the
+    # resolved path, not the symlink's own name.
+    assert response.status_code == 403
+    assert execve_calls == []
+
+
+def test_create_tournament_logs_rather_than_crashes_on_a_non_oserror_restart_failure(
+    picker_client, tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        "os.execve",
+        lambda executable, args, env: (_ for _ in ()).throw(ValueError("malformed argv")),
+    )
+    allowed = tmp_path / "tournaments"
+    allowed.mkdir()
+    picker_client.post("/api/picker/directories", json={"path": str(allowed)})
+
+    response = picker_client.post(
+        "/api/picker/create", json={"directory": str(allowed), "filename": "new.db"}
+    )
+
+    # A non-OSError exception from os.execve must be caught too, not
+    # just OSError -- otherwise it vanishes into Starlette's
+    # background-task error handling instead of being logged.
+    assert response.status_code == 202
+    assert "ERROR: failed to restart the server process" in capsys.readouterr().err
 
 
 def test_open_tournament_triggers_a_restart_and_records_the_path(
