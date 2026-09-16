@@ -37,7 +37,7 @@ describe("useRestartPoll", () => {
     expect(onReady).toHaveBeenCalledTimes(1);
   });
 
-  it('with target "picker", calls onReady once the server starts responding 200 again (picker mode) rather than on the pre-restart 404', async () => {
+  it('with target "picker", calls onReady only once the server starts responding 200 again (picker mode), not on the pre-restart 404s', async () => {
     let callCount = 0;
     vi.stubGlobal(
       "fetch",
@@ -61,12 +61,23 @@ describe("useRestartPoll", () => {
       result.current.start();
     });
 
-    for (let i = 0; i < 3; i += 1) {
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(500);
-      });
-    }
+    // `start()` above already fired the first tick synchronously
+    // (callCount === 1, a 404) before any timer advance. One more 500ms
+    // advance fires the second tick (callCount === 2, still a 404, since
+    // the mock returns 404 while callCount < 3) -- onReady must NOT fire
+    // yet, or this is the exact bug being fixed (the pre-fix code fires
+    // onReady on the very first 404 it sees, regardless of target).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(onReady).not.toHaveBeenCalled();
 
+    // The next 500ms advance fires the third tick (callCount === 3, the
+    // mock's threshold for switching to 200 -- the restarted process, now
+    // in picker mode) -- onReady must fire now.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
     expect(onReady).toHaveBeenCalledTimes(1);
   });
 
