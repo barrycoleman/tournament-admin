@@ -32,7 +32,7 @@ test.describe.serial("bootstrap: event creation, login, and the authenticated sh
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
     await expect(page).toHaveURL("/");
-    await expect(page.getByText(`Event: ${E2E_EVENT_NAME}`)).toBeVisible();
+    await expect(page.getByLabel("Event")).toHaveValue(E2E_EVENT_NAME);
   });
 
   test("a session close to expiry is silently refreshed without forcing a re-login", async ({
@@ -54,7 +54,7 @@ test.describe.serial("bootstrap: event creation, login, and the authenticated sh
     });
 
     await page.reload();
-    await expect(page.getByText(`Event: ${E2E_EVENT_NAME}`)).toBeVisible();
+    await expect(page.getByLabel("Event")).toHaveValue(E2E_EVENT_NAME);
 
     // The silent-refresh timer (30s before expiresAt, so immediately for
     // a 2s-out expiry) should have rotated the refresh token by now,

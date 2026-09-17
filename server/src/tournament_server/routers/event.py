@@ -14,6 +14,7 @@ from tournament_server.schemas.event import (
     ActiveSessionUpdate,
     EventCreate,
     EventRead,
+    EventRename,
     GamePluginSelect,
 )
 
@@ -41,6 +42,24 @@ def read_event(db: Session = Depends(get_db)) -> Event:
     event = get_the_event(db)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not initialized")
+    return event
+
+
+@router.patch("", response_model=EventRead)
+def update_event(
+    payload: EventRename,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> Event:
+    event = get_the_event(db)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not initialized")
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Event name cannot be empty")
+    event.name = name
+    db.commit()
+    db.refresh(event)
     return event
 
 

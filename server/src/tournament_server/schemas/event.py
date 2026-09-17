@@ -10,6 +10,10 @@ class EventCreate(BaseModel):
     password: str = Field(min_length=1)
 
 
+class EventRename(BaseModel):
+    name: str
+
+
 class EventRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

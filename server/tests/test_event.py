@@ -1,3 +1,6 @@
+from auth_helpers import bearer, login_as
+
+
 def test_create_event(client):
     response = client.post("/api/event", json={"name": "Regional Qualifier"})
     assert response.status_code == 201
@@ -85,6 +88,55 @@ def test_create_event_rejects_empty_password(tmp_path):
         "/api/event", json={"name": "Regional Qualifier", "password": ""}
     )
     assert response.status_code == 422
+
+
+def test_update_event_name_renames_it(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+
+    response = client.patch("/api/event", json={"name": "State Championship"})
+    assert response.status_code == 200
+    assert response.json()["name"] == "State Championship"
+
+    assert client.get("/api/event").json()["name"] == "State Championship"
+
+
+def test_update_event_name_strips_surrounding_whitespace(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+
+    response = client.patch("/api/event", json={"name": "  State Championship  "})
+    assert response.status_code == 200
+    assert response.json()["name"] == "State Championship"
+
+
+def test_update_event_name_422s_on_an_empty_name(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+
+    response = client.patch("/api/event", json={"name": "   "})
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Event name cannot be empty"
+
+
+def test_update_event_name_requires_event(client):
+    response = client.patch("/api/event", json={"name": "State Championship"})
+    assert response.status_code == 401
+
+
+def test_update_event_name_401s_without_a_token(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    raw = client.__class__(client.app)
+    response = raw.patch("/api/event", json={"name": "State Championship"})
+    assert response.status_code == 401
+
+
+def test_update_event_name_403s_for_non_admin(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    raw = client.__class__(client.app)
+    attendee_token = login_as(raw, "attendee")
+
+    response = raw.patch(
+        "/api/event", json={"name": "State Championship"}, headers=bearer(attendee_token)
+    )
+    assert response.status_code == 403
 
 
 def test_create_event_seeds_a_default_division(client):
