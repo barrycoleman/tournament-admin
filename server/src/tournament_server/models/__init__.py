@@ -10,6 +10,7 @@ from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.finals_result import FinalsResult
 from tournament_server.models.match import Match
 from tournament_server.models.participation import SessionParticipation
+from tournament_server.models.password_encryption_key import PasswordEncryptionKey
 from tournament_server.models.ranking import Ranking
 from tournament_server.models.ranking_configuration import RankingConfiguration
 from tournament_server.models.role_credential import RoleCredential
@@ -34,6 +35,7 @@ __all__ = [
     "FinalsBracket",
     "FinalsResult",
     "Match",
+    "PasswordEncryptionKey",
     "Ranking",
     "RankingConfiguration",
     "RoleCredential",

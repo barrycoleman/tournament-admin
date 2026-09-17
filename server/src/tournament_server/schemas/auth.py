@@ -23,6 +23,10 @@ class PasswordChangeRequest(BaseModel):
     password: str = Field(min_length=1)
 
 
+class RolePasswordRead(BaseModel):
+    password: str | None
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str

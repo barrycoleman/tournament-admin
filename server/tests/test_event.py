@@ -1,4 +1,4 @@
-from auth_helpers import bearer, login_as
+from auth_helpers import TEST_PASSWORD, bearer, login_as
 
 
 def test_create_event(client):
@@ -137,6 +137,18 @@ def test_update_event_name_403s_for_non_admin(client):
         "/api/event", json={"name": "State Championship"}, headers=bearer(attendee_token)
     )
     assert response.status_code == 403
+
+
+def test_create_event_seeds_a_viewable_password_for_every_role(client):
+    # `client` auto-injects TEST_PASSWORD and logs in as admin on event
+    # creation (see conftest.py's _AutoAuthTestClient) -- every role's
+    # stored password should decrypt back to that same shared password.
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+
+    for role in ("admin", "scorer", "judge", "referee", "attendee", "display_device"):
+        response = client.get(f"/api/auth/passwords/{role}")
+        assert response.status_code == 200
+        assert response.json()["password"] == TEST_PASSWORD
 
 
 def test_create_event_seeds_a_default_division(client):

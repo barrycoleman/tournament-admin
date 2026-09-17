@@ -870,6 +870,30 @@ password when a tournament already exists in the allowlist).
   `ScoringDevice` admission — an *additional* per-device admission layer
   on top of a role's session — remains a distinct, unbuilt future phase
   (design spec §7).
+- **Role passwords are also stored reversibly, not just hashed.**
+  `RoleCredential.password_hash` (bcrypt, one-way) is still what `POST
+  /api/auth/login` checks — unchanged. A second column,
+  `password_encrypted`, holds the same password encrypted with a
+  per-database Fernet key (`auth.py`'s `get_password_encryption_key`,
+  lazily created and persisted the same way `get_signing_key` persists
+  the JWT key — see `models/password_encryption_key.py`). `GET
+  /api/auth/passwords/{role}` (admin-only) decrypts and returns it, which
+  is what backs the admin UI's password-reveal eye icon: organizers
+  running sessions weeks apart otherwise have no way to recall a role's
+  password. This is a deliberate downgrade from a pure one-way-hash
+  model, accepted for this app's existing trust posture (single admin,
+  trusted LAN, low-stakes shared per-role passwords — the same posture
+  that already accepts the picker's unauthenticated bootstrap window
+  above): a leaked `.db` file now exposes recoverable plaintext
+  passwords, not just hashes. `password_encrypted` is null for any
+  credential whose password was last set before this feature shipped
+  (there is nothing to backfill it from — a bcrypt hash can't be
+  decrypted) and stays null until that role's password is next changed;
+  the admin UI shows an inline explanation rather than a blank reveal in
+  that case. Both `role_credentials` and the new
+  `password_encryption_keys` table are excluded from audit logging
+  (`audit.py`'s `_EXCLUDED_TABLES`) for the same reason `signing_keys`
+  already is.
 - A Team belongs to at most one Division (nullable `division_id`), not a
   many-to-many relationship, as a deliberate YAGNI simplification — see
   the plan's Global Constraints for why.

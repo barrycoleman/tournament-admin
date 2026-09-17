@@ -111,6 +111,10 @@
   "settingsRoles": {
     "heading": "角色密码",
     "roleLabel": "角色",
+    "currentPasswordLabel": "当前密码",
+    "showPassword": "显示密码",
+    "hidePassword": "隐藏密码",
+    "noStoredPassword": "此角色的密码是在此功能上线前设置的,无法显示——请在下方设置新密码以启用查看。",
     "newPasswordLabel": "新密码",
     "submit": "更新密码",
     "success": "密码已更新。",

@@ -6,12 +6,14 @@ import secrets
 
 import bcrypt
 import jwt
+from cryptography.fernet import Fernet
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server.db import utc_now
 from tournament_server.deps import get_db
+from tournament_server.models.password_encryption_key import PasswordEncryptionKey
 from tournament_server.models.signing_key import SigningKey
 
 ROLES = ("admin", "scorer", "judge", "referee", "attendee", "display_device")
@@ -32,6 +34,32 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def get_password_encryption_key(db: Session) -> bytes:
+    """A per-database Fernet key, lazily created and persisted the same way
+    get_signing_key() persists the JWT key -- the key must live alongside
+    the ciphertext it decrypts so a tournament's .db file stays
+    self-contained and portable to another machine. Role passwords are
+    also, and still primarily, verified via the one-way password_hash
+    below; this key only backs the *reversible* copy
+    (RoleCredential.password_encrypted) that lets an admin view a role's
+    current password rather than only ever set a new one."""
+    key_row = db.execute(select(PasswordEncryptionKey)).scalars().first()
+    if key_row is None:
+        key_row = PasswordEncryptionKey(key=Fernet.generate_key().decode("utf-8"))
+        db.add(key_row)
+        db.commit()
+        db.refresh(key_row)
+    return key_row.key.encode("utf-8")
+
+
+def encrypt_password(password: str, key: bytes) -> str:
+    return Fernet(key).encrypt(password.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_password(token: str, key: bytes) -> str:
+    return Fernet(key).decrypt(token.encode("utf-8")).decode("utf-8")
 
 
 def generate_refresh_token() -> str:

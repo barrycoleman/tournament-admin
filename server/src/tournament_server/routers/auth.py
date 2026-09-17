@@ -9,7 +9,10 @@ from tournament_server.auth import (
     REFRESH_TOKEN_LIFETIME,
     ROLES,
     create_access_token,
+    decrypt_password,
+    encrypt_password,
     generate_refresh_token,
+    get_password_encryption_key,
     hash_password,
     hash_token,
     require_admin,
@@ -26,6 +29,7 @@ from tournament_server.schemas.auth import (
     LogoutRequest,
     PasswordChangeRequest,
     RefreshRequest,
+    RolePasswordRead,
     TokenResponse,
 )
 
@@ -111,7 +115,13 @@ def change_password(
     credential = _get_credential(db, role)
     if credential is None:
         raise HTTPException(status_code=404, detail="Role credential not found")
+    # get_password_encryption_key() commits on its own the first time it
+    # lazily creates the key row -- called here, before the session
+    # revocations below are staged, so that internal commit can never
+    # split this function's own updates across two transactions.
+    key = get_password_encryption_key(db)
     credential.password_hash = hash_password(payload.password)
+    credential.password_encrypted = encrypt_password(payload.password, key)
     now = utc_now()
     active_sessions = db.execute(
         select(AuthSession).where(
@@ -122,6 +132,23 @@ def change_password(
         session_row.revoked_at = now
     db.commit()
     return Response(status_code=204)
+
+
+@router.get("/passwords/{role}", response_model=RolePasswordRead)
+def read_password(
+    role: str,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> RolePasswordRead:
+    if role not in ROLES:
+        raise HTTPException(status_code=422, detail=f"Unknown role: {role!r}")
+    credential = _get_credential(db, role)
+    if credential is None:
+        raise HTTPException(status_code=404, detail="Role credential not found")
+    if credential.password_encrypted is None:
+        return RolePasswordRead(password=None)
+    key = get_password_encryption_key(db)
+    return RolePasswordRead(password=decrypt_password(credential.password_encrypted, key))
 
 
 @router.get("/sessions", response_model=list[AuthSessionRead])

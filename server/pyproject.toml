@@ -11,6 +11,7 @@ dependencies = [
     "python-multipart>=0.0.9,<1.0",
     "pyjwt>=2.9,<3.0",
     "bcrypt>=4.2,<5.0",
+    "cryptography>=42,<45",
     "alembic>=1.13,<2.0",
     "psutil>=6.0,<8.0",
 ]

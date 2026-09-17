@@ -196,6 +196,12 @@
   color: var(--color-text-secondary);
 }
 
+.field__hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
 .input,
 .select {
   font: inherit;
@@ -431,9 +437,9 @@
   margin-top: var(--space-5);
 }
 
-/* ---------- Theme toggle ---------- */
+/* ---------- Icon button (theme toggle, password reveal) ---------- */
 
-.theme-toggle {
+.icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -448,9 +454,14 @@
   line-height: 1;
 }
 
-.theme-toggle:hover {
+.icon-btn:hover:not(:disabled) {
   border-color: var(--color-text-tertiary);
   background: var(--color-bg-sunken);
+}
+
+.icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 /* ---------- Debug panel (dev tool, understated) ---------- */

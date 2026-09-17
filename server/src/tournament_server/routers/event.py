@@ -3,7 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from tournament_server.auth import ROLES, hash_password, require_admin
+from tournament_server.auth import (
+    ROLES,
+    encrypt_password,
+    get_password_encryption_key,
+    hash_password,
+    require_admin,
+)
 from tournament_server.deps import get_db, get_the_event
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
@@ -25,13 +31,22 @@ router = APIRouter(prefix="/api/event", tags=["event"])
 def create_event(payload: EventCreate, db: Session = Depends(get_db)) -> Event:
     if get_the_event(db) is not None:
         raise HTTPException(status_code=409, detail="Event already initialized")
+    # get_password_encryption_key() commits on its own the first time it
+    # lazily creates the key row -- called here, before anything below is
+    # staged, so that internal commit can never split this function's own
+    # event+division+credentials insert across two transactions.
+    password_encrypted = encrypt_password(payload.password, get_password_encryption_key(db))
     event = Event(name=payload.name)
     db.add(event)
     db.flush()  # populates event.id, needed by the Division row below
     db.add(Division(event_id=event.id, name="Division 1"))
     password_hash = hash_password(payload.password)
     for role in ROLES:
-        db.add(RoleCredential(role=role, password_hash=password_hash))
+        db.add(
+            RoleCredential(
+                role=role, password_hash=password_hash, password_encrypted=password_encrypted
+            )
+        )
     db.commit()
     db.refresh(event)
     return event

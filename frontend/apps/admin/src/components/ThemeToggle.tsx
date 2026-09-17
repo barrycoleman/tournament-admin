@@ -39,7 +39,7 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      className="theme-toggle"
+      className="icon-btn"
       onClick={toggleTheme}
       aria-label={theme === "dark" ? t("shell.switchToLight") : t("shell.switchToDark")}
       title={theme === "dark" ? t("shell.switchToLight") : t("shell.switchToDark")}

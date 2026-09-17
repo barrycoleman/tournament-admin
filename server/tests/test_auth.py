@@ -244,6 +244,66 @@ def test_password_change_revokes_existing_sessions_for_that_role(client):
     assert new_login.status_code == 200
 
 
+def test_password_change_also_stores_the_reversible_copy(client):
+    raw = _raw_client(client)
+    admin_token = login_as(raw, "admin")
+
+    raw.patch(
+        "/api/auth/passwords/judge",
+        json={"password": "new-judge-password"},
+        headers=bearer(admin_token),
+    )
+
+    response = raw.get("/api/auth/passwords/judge", headers=bearer(admin_token))
+    assert response.status_code == 200
+    assert response.json()["password"] == "new-judge-password"
+
+
+def test_read_password_returns_the_current_plaintext(client):
+    raw = TestClient(client.app)
+    raw.post("/api/event", json={"name": "Regional Qualifier", "password": TEST_PASSWORD})
+    admin_token = login_as(raw, "admin")
+
+    response = raw.get("/api/auth/passwords/scorer", headers=bearer(admin_token))
+    assert response.status_code == 200
+    assert response.json()["password"] == TEST_PASSWORD
+
+
+def test_read_password_is_admin_only(client):
+    raw = _raw_client(client)
+    judge_token = login_as(raw, "judge")
+
+    response = raw.get("/api/auth/passwords/judge", headers=bearer(judge_token))
+    assert response.status_code == 403
+
+
+def test_read_password_401s_without_a_token(client):
+    raw = _raw_client(client)
+
+    response = raw.get("/api/auth/passwords/judge")
+    assert response.status_code == 401
+
+
+def test_read_password_422s_for_an_unknown_role(client):
+    raw = _raw_client(client)
+    admin_token = login_as(raw, "admin")
+
+    response = raw.get("/api/auth/passwords/coach", headers=bearer(admin_token))
+    assert response.status_code == 422
+
+
+def test_read_password_returns_null_for_a_credential_predating_this_feature(client):
+    # `_raw_client` seeds its event/credentials directly via
+    # `_seed_event_and_credentials`, which -- like a database migrated from
+    # before this feature existed -- never populates password_encrypted.
+    raw = _raw_client(client)
+    admin_token = login_as(raw, "admin")
+
+    response = raw.get("/api/auth/passwords/judge", headers=bearer(admin_token))
+    assert response.status_code == 200
+    assert response.json()["password"] is None
+
+
 def test_session_list_is_admin_only(client):
     raw = _raw_client(client)
     scorer_token = login_as(raw, "scorer")

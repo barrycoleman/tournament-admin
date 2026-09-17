@@ -12,7 +12,10 @@ from tournament_server.auth import (
     REFRESH_TOKEN_LIFETIME,
     ROLES,
     create_access_token,
+    decrypt_password,
+    encrypt_password,
     generate_refresh_token,
+    get_password_encryption_key,
     get_signing_key,
     hash_password,
     hash_token,
@@ -65,6 +68,40 @@ def test_get_signing_key_persists_across_calls(tmp_path):
     second = get_signing_key(db)
     assert first == second
     assert len(first) >= 32
+
+
+def test_get_password_encryption_key_persists_across_calls(tmp_path):
+    db = _db(tmp_path)
+    first = get_password_encryption_key(db)
+    second = get_password_encryption_key(db)
+    assert first == second
+
+
+def test_password_encryption_key_is_independent_of_the_signing_key(tmp_path):
+    db = _db(tmp_path)
+    assert get_password_encryption_key(db) != get_signing_key(db).encode("utf-8")
+
+
+def test_encrypt_and_decrypt_password_round_trips(tmp_path):
+    db = _db(tmp_path)
+    key = get_password_encryption_key(db)
+    ciphertext = encrypt_password("correct horse", key)
+    assert ciphertext != "correct horse"
+    assert decrypt_password(ciphertext, key) == "correct horse"
+
+
+def test_encrypt_password_is_not_decryptable_with_a_different_key(tmp_path):
+    db = _db(tmp_path)
+    key = get_password_encryption_key(db)
+    ciphertext = encrypt_password("correct horse", key)
+
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    other_db = _db(other_dir)
+    other_key = get_password_encryption_key(other_db)
+
+    with pytest.raises(Exception):
+        decrypt_password(ciphertext, other_key)
 
 
 def test_create_access_token_has_only_role_iat_exp_claims(tmp_path):

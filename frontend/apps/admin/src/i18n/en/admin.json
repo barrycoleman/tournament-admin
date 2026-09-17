@@ -111,6 +111,10 @@
   "settingsRoles": {
     "heading": "Role passwords",
     "roleLabel": "Role",
+    "currentPasswordLabel": "Current password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "noStoredPassword": "This role's password was set before this feature existed, so it can't be shown -- set a new one below to make it viewable.",
     "newPasswordLabel": "New password",
     "submit": "Update password",
     "success": "Password updated.",
