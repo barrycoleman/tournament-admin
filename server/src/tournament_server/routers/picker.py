@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -52,11 +53,23 @@ async def _delayed_restart() -> None:
         print(f"ERROR: failed to restart the server process: {exc}", file=sys.stderr)
 
 
+# The admin UI sanitizes as the organizer types (spaces -> underscore,
+# anything else disallowed dropped) and appends .db automatically, so a
+# real user essentially never hits this -- it exists for any other caller
+# of this API, since a filename lands directly on the filesystem.
+_VALID_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-]+\.db$")
+
+
 def _validate_filename(filename: str) -> None:
     if not filename or filename in (".", "..") or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=422, detail="Invalid filename")
     if not filename.endswith(".db"):
         raise HTTPException(status_code=422, detail="Filename must end in .db")
+    if not _VALID_FILENAME_RE.match(filename):
+        raise HTTPException(
+            status_code=422,
+            detail="Filename may only contain letters, numbers, underscores, and hyphens",
+        )
 
 
 @router.get("/directories", response_model=DirectoryListResponse)

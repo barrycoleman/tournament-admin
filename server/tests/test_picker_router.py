@@ -146,6 +146,57 @@ def test_create_tournament_422s_on_a_path_traversal_filename(picker_client, tmp_
     assert execve_calls == []
 
 
+def test_create_tournament_422s_on_a_space_in_the_filename(
+    picker_client, tmp_path, execve_calls
+):
+    allowed = tmp_path / "tournaments"
+    allowed.mkdir()
+    picker_client.post("/api/picker/directories", json={"path": str(allowed)})
+
+    response = picker_client.post(
+        "/api/picker/create",
+        json={"directory": str(allowed), "filename": "my tournament.db"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Filename may only contain letters, numbers, underscores, and hyphens"
+    )
+    assert execve_calls == []
+
+
+def test_create_tournament_422s_on_a_disallowed_character_in_the_filename(
+    picker_client, tmp_path, execve_calls
+):
+    allowed = tmp_path / "tournaments"
+    allowed.mkdir()
+    picker_client.post("/api/picker/directories", json={"path": str(allowed)})
+
+    response = picker_client.post(
+        "/api/picker/create",
+        json={"directory": str(allowed), "filename": "regional!.db"},
+    )
+
+    assert response.status_code == 422
+    assert execve_calls == []
+
+
+def test_create_tournament_allows_letters_numbers_underscore_and_hyphen(
+    picker_client, tmp_path, execve_calls
+):
+    allowed = tmp_path / "tournaments"
+    allowed.mkdir()
+    picker_client.post("/api/picker/directories", json={"path": str(allowed)})
+
+    response = picker_client.post(
+        "/api/picker/create",
+        json={"directory": str(allowed), "filename": "20260916T1454-Regional_2.db"},
+    )
+
+    assert response.status_code == 202
+    assert len(execve_calls) == 1
+
+
 def test_create_tournament_422s_for_an_unwritable_directory(
     picker_client, tmp_path, execve_calls
 ):

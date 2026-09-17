@@ -21,6 +21,40 @@ interface TournamentListResponse {
 
 type PickerScreen = "menu" | "create" | "open";
 
+/**
+ * Filenames land directly on the server's filesystem, so keep the field
+ * that types them constrained as the organizer edits it rather than
+ * rejecting after the fact: whitespace becomes an underscore (rather than
+ * getting silently dropped, which would jam adjacent words together) and
+ * anything else that isn't a letter, digit, underscore, hyphen, or a
+ * literal period (kept so the ".db" suffix stays editable/visible while
+ * typing) is dropped. This mirrors the backend's own filename validation
+ * in `routers/picker.py`, which stays the authoritative guard for any
+ * other API caller.
+ */
+export function sanitizeFilename(raw: string): string {
+  return raw.replace(/\s+/g, "_").replace(/[^A-Za-z0-9_.-]/g, "");
+}
+
+/** Appends the required .db extension if the organizer's edit dropped it. */
+export function withDbExtension(name: string): string {
+  return name.endsWith(".db") ? name : `${name}.db`;
+}
+
+/**
+ * A fresh, ready-to-use default so creating a tournament needs no typing at
+ * all -- the organizer can accept it as-is or replace it. Timestamped in
+ * local wall-clock time (not UTC): the label is for a human glancing at a
+ * directory listing, not a machine.
+ */
+export function generateDefaultFilename(now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}T${pad(
+    now.getHours()
+  )}${pad(now.getMinutes())}`;
+  return `${stamp}-tournament.db`;
+}
+
 export function PickerRoute() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -62,10 +96,10 @@ export function PickerRoute() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (finalFilename: string) =>
       apiRequest<unknown>("/api/picker/create", {
         method: "POST",
-        body: { directory, filename },
+        body: { directory, filename: finalFilename },
       }),
     onSuccess: () => startRestartPoll(),
   });
@@ -159,7 +193,13 @@ export function PickerRoute() {
           <h1>{t("picker.heading")}</h1>
           {timedOutAlert}
           <div className="picker-menu">
-            <button className="btn btn-primary" onClick={() => setScreen("create")}>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setFilename(generateDefaultFilename());
+                setScreen("create");
+              }}
+            >
               {t("picker.createAction")}
             </button>
             <button className="btn" onClick={() => setScreen("open")}>
@@ -186,7 +226,7 @@ export function PickerRoute() {
               className="input"
               id="picker-filename"
               value={filename}
-              onChange={(event) => setFilename(event.target.value)}
+              onChange={(event) => setFilename(sanitizeFilename(event.target.value))}
             />
           </div>
           {createMutation.isError && (
@@ -199,7 +239,11 @@ export function PickerRoute() {
           <div className="form-actions">
             <button
               className="btn btn-primary"
-              onClick={() => createMutation.mutate()}
+              onClick={() => {
+                const finalFilename = withDbExtension(filename);
+                setFilename(finalFilename);
+                createMutation.mutate(finalFilename);
+              }}
               disabled={createMutation.isPending || !directory || !filename}
             >
               {t("picker.createSubmit")}

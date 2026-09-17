@@ -166,4 +166,28 @@ test.describe.serial("tournament picker: fresh server bootstrap", () => {
       timeout: 20_000,
     });
   });
+
+  test("the filename field defaults to a timestamp, sanitizes spaces, and gets .db appended automatically", async ({
+    page,
+  }) => {
+    await page.goto(BASE_URL);
+    await expect(page.getByRole("heading", { name: "Start a tournament" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Create New Tournament" }).click();
+
+    const filenameInput = page.getByLabel("Filename");
+    await expect(filenameInput).toHaveValue(/^\d{8}T\d{4}-tournament\.db$/);
+
+    await page.getByLabel("Directory", { exact: true }).selectOption(tournamentDir);
+    await filenameInput.fill("my second tournament");
+    await expect(filenameInput).toHaveValue("my_second_tournament");
+
+    await page.getByRole("button", { name: "Create", exact: true }).click();
+
+    // No .db in what was typed -- the client appends it before submitting,
+    // so this must succeed exactly like a fully-typed ".db" filename would.
+    await expect(page.getByRole("heading", { name: "Set up your event" })).toBeVisible({
+      timeout: 20_000,
+    });
+  });
 });

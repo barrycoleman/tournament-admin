@@ -4,7 +4,12 @@ import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initI18n } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
-import { PickerRoute } from "../../src/routes/PickerRoute";
+import {
+  PickerRoute,
+  generateDefaultFilename,
+  sanitizeFilename,
+  withDbExtension,
+} from "../../src/routes/PickerRoute";
 
 function renderRoute() {
   const i18n = initI18n({ en: { translation: enAdmin } });
@@ -28,6 +33,46 @@ function renderRoute() {
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
 }
+
+describe("sanitizeFilename", () => {
+  it("converts whitespace to underscores", () => {
+    expect(sanitizeFilename("my tournament.db")).toBe("my_tournament.db");
+    expect(sanitizeFilename("a  b\tc")).toBe("a_b_c");
+  });
+
+  it("drops characters that are not letters, numbers, underscore, hyphen, or a period", () => {
+    expect(sanitizeFilename("regional!.db")).toBe("regional.db");
+    expect(sanitizeFilename("a/b\\c:d.db")).toBe("abcd.db");
+  });
+
+  it("leaves an already-valid filename untouched", () => {
+    expect(sanitizeFilename("20260916T1454-Regional_2.db")).toBe("20260916T1454-Regional_2.db");
+  });
+});
+
+describe("withDbExtension", () => {
+  it("appends .db when missing", () => {
+    expect(withDbExtension("regional")).toBe("regional.db");
+  });
+
+  it("leaves a name that already ends in .db unchanged", () => {
+    expect(withDbExtension("regional.db")).toBe("regional.db");
+  });
+});
+
+describe("generateDefaultFilename", () => {
+  it("formats a local-time timestamp as YYYYMMDDTHHMM-tournament.db", () => {
+    expect(generateDefaultFilename(new Date(2026, 8, 16, 14, 54))).toBe(
+      "20260916T1454-tournament.db"
+    );
+  });
+
+  it("zero-pads single-digit month, day, hour, and minute", () => {
+    expect(generateDefaultFilename(new Date(2026, 0, 5, 3, 7))).toBe(
+      "20260105T0307-tournament.db"
+    );
+  });
+});
 
 describe("PickerRoute", () => {
   afterEach(() => {
@@ -80,6 +125,83 @@ describe("PickerRoute", () => {
 
     await waitFor(() => expect(createCalled).toBe(true));
     expect(await screen.findByRole("status")).toHaveTextContent("Starting tournament…");
+  });
+
+  it("pre-fills the filename with a timestamped default when entering the create screen", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/picker/directories") return jsonResponse({ allowed_directories: [] });
+        throw new Error(`unexpected request: ${url}`);
+      })
+    );
+    renderRoute();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create New Tournament" }));
+
+    // Exact formatting is covered by generateDefaultFilename's own unit
+    // tests above; this only needs to confirm the field is pre-filled with
+    // a value of that shape, without coupling to the real current time.
+    const input = (await screen.findByLabelText("Filename")) as HTMLInputElement;
+    expect(input.value).toMatch(/^\d{8}T\d{4}-tournament\.db$/);
+  });
+
+  it("sanitizes a typed space into an underscore as the organizer types", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "/api/picker/directories") return jsonResponse({ allowed_directories: [] });
+        throw new Error(`unexpected request: ${url}`);
+      })
+    );
+    renderRoute();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create New Tournament" }));
+    fireEvent.change(screen.getByLabelText("Filename"), { target: { value: "my regional.db" } });
+
+    expect(screen.getByLabelText("Filename")).toHaveValue("my_regional.db");
+  });
+
+  it("appends .db automatically when the submitted filename is missing it", async () => {
+    let createBody: unknown = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (url === "/api/picker/directories" && method === "GET") {
+          return jsonResponse({ allowed_directories: ["/tournaments"] });
+        }
+        if (url === "/api/picker/create" && method === "POST") {
+          createBody = JSON.parse(init!.body as string);
+          return jsonResponse({ status: "restarting" }, 202);
+        }
+        throw new Error(`unexpected request: ${method} ${url}`);
+      })
+    );
+    renderRoute();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create New Tournament" }));
+    const directorySelect = await screen.findByLabelText("Directory");
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: "/tournaments" })).toBeInTheDocument()
+    );
+    fireEvent.change(directorySelect, { target: { value: "/tournaments" } });
+    fireEvent.change(screen.getByLabelText("Filename"), { target: { value: "regional" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    // The field is corrected to show what's actually being submitted, in
+    // the same synchronous click handler that kicks off the mutation --
+    // check it before the mutation resolves and the view switches to the
+    // restart-polling screen, which unmounts this field entirely.
+    expect(screen.getByLabelText("Filename")).toHaveValue("regional.db");
+
+    await waitFor(() =>
+      expect(createBody).toEqual({ directory: "/tournaments", filename: "regional.db" })
+    );
   });
 
   it("adds a directory successfully, updating the directory select's options", async () => {
