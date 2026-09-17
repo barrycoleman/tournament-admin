@@ -29,7 +29,7 @@ export function DashboardRoute() {
     <div>
       <h1>{t("dashboard.heading")}</h1>
       {data && (
-        <div className="panel">
+        <div className="panel panel--form">
           <div className="field">
             <label className="field__label" htmlFor="event-name">
               {t("dashboard.eventNameLabel")}

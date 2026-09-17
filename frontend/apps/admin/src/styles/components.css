@@ -181,6 +181,19 @@
   margin-top: 0;
 }
 
+/* A panel whose only content is a short form (a handful of label+input
+   fields, no list or grid) reads as an empty box when it stretches to
+   the full main-content width -- the same 480px measure `.dialog`
+   already uses for the same reason: enough room for a couple of fields
+   and a button row, not the whole viewport. A panel that mixes a list
+   or grid with an incidental field (event setup's plugin lists) keeps
+   the unconstrained default, since the list is what benefits from the
+   width. */
+.panel--form {
+  max-width: 480px;
+  width: 100%;
+}
+
 /* ---------- Forms ---------- */
 
 .field {

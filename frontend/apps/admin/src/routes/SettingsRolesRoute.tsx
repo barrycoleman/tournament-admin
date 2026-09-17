@@ -72,7 +72,7 @@ export function SettingsRolesRoute() {
   return (
     <div>
       <h1>{t("settingsRoles.heading")}</h1>
-      <div className="panel">
+      <div className="panel panel--form">
         <form onSubmit={handleSubmit}>
           <div className="field">
             <label className="field__label" htmlFor="settings-role">

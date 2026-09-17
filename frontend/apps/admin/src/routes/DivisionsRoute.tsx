@@ -204,7 +204,7 @@ export function DivisionsRoute() {
       )}
 
       {addingDivision && (
-        <form className="panel" onSubmit={handleCreate}>
+        <form className="panel panel--form" onSubmit={handleCreate}>
           <div className="field">
             <label className="field__label" htmlFor="new-division-name">
               {t("divisions.nameLabel")}
