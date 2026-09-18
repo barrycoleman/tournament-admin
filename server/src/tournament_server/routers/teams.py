@@ -22,7 +22,7 @@ from tournament_server.schemas.team import (
     TeamRead,
     TeamUpdate,
 )
-from tournament_server.services.team_assignment import balanced_assign
+from tournament_server.services.team_assignment import assign_sole_division, balanced_assign
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
@@ -42,6 +42,8 @@ def create_team(
     team = Team(event_id=event.id, **payload.model_dump())
     db.add(team)
     try:
+        db.flush()
+        assign_sole_division(db, event.id)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -162,6 +164,7 @@ def bulk_upsert_teams(
         running_counts.setdefault(division_id, 0)
 
     results: list[TeamBulkRowResult] = []
+    created_or_updated: list[tuple[int, Team]] = []
     for index, row in enumerate(payload.rows):
         if not (row.number or "").strip() or not (row.name or "").strip():
             results.append(
@@ -226,6 +229,7 @@ def bulk_upsert_teams(
                     row_index=index, status="updated", team=TeamRead.model_validate(existing)
                 )
             )
+            created_or_updated.append((len(results) - 1, existing))
         else:
             team = Team(event_id=event.id, number=number, **fields)
             db.add(team)
@@ -235,6 +239,11 @@ def bulk_upsert_teams(
                     row_index=index, status="created", team=TeamRead.model_validate(team)
                 )
             )
+            created_or_updated.append((len(results) - 1, team))
+
+    assign_sole_division(db, event.id)
+    for result_index, orm_team in created_or_updated:
+        results[result_index].team = TeamRead.model_validate(orm_team)
 
     try:
         db.commit()

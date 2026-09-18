@@ -408,3 +408,65 @@ def test_bulk_upsert_empty_rows_is_a_no_op(client):
     response = client.post("/api/teams/bulk", json={"rows": []})
     assert response.status_code == 200
     assert response.json()["results"] == []
+
+
+def test_create_team_with_no_division_specified_joins_the_sole_division(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    division_id = client.get("/api/divisions").json()[0]["id"]  # the auto-seeded "Division 1"
+
+    response = client.post("/api/teams", json={"number": "1234A", "name": "Robo Raiders"})
+    assert response.status_code == 201
+    assert response.json()["division_id"] == division_id
+
+
+def test_bulk_upsert_with_no_division_specified_joins_the_sole_division(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    division_id = client.get("/api/divisions").json()[0]["id"]  # the auto-seeded "Division 1"
+
+    response = client.post(
+        "/api/teams/bulk",
+        json={"rows": [{"number": "1234A", "name": "Robo Raiders"}]},
+    )
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results[0]["status"] == "created"
+    assert results[0]["team"]["division_id"] == division_id
+
+    # No dedicated GET /api/divisions/{id} endpoint exists to check a
+    # division's team count directly -- confirm via GET /api/teams instead,
+    # which is what the user actually observed as wrong (a team with no
+    # division_id, which is what made the Divisions page's count read 0).
+    teams = client.get("/api/teams").json()
+    assert len(teams) == 1
+    assert teams[0]["division_id"] == division_id
+
+
+def test_bulk_upsert_does_not_override_an_explicitly_named_division(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/divisions", json={"name": "Elementary"})
+    # The event now has two divisions ("Division 1" and "Elementary"), so
+    # assign_sole_division must not fire at all here.
+
+    response = client.post(
+        "/api/teams/bulk",
+        json={"rows": [{"number": "1234A", "name": "Robo Raiders", "division": "Elementary"}]},
+    )
+    assert response.status_code == 200
+    results = response.json()["results"]
+    matched_division = next(d for d in client.get("/api/divisions").json() if d["name"] == "Elementary")
+    assert results[0]["team"]["division_id"] == matched_division["id"]
+
+
+def test_bulk_upsert_with_multiple_divisions_leaves_unspecified_rows_unassigned(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/divisions", json={"name": "Elementary"})
+    # Two divisions now exist ("Division 1" plus "Elementary") -- omitting
+    # a division for a row is a genuine ambiguity here, not an implicit
+    # single choice, so the team must stay unassigned.
+
+    response = client.post(
+        "/api/teams/bulk",
+        json={"rows": [{"number": "1234A", "name": "Robo Raiders"}]},
+    )
+    assert response.status_code == 200
+    assert response.json()["results"][0]["team"]["division_id"] is None
