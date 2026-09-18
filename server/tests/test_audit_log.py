@@ -47,8 +47,11 @@ def test_updating_team_logs_before_and_after(client):
     update_entries = [
         e for e in entries if e["table_name"] == "teams" and e["action"] == "update"
     ]
-    assert len(update_entries) == 1
-    entry = update_entries[0]
+    # Creating the team in this single-division event already logs one
+    # "update" row of its own (assign_sole_division writing division_id,
+    # right after the insert) -- the PATCH above adds a second, later one.
+    assert len(update_entries) == 2
+    entry = update_entries[-1]
     assert entry["before"]["name"] == "Robo Raiders"
     assert entry["after"]["name"] == "Renamed Raiders"
     # Unrelated fields shouldn't appear in the diff.
@@ -84,7 +87,10 @@ def test_audit_log_supports_limit_and_offset(client):
         client.post("/api/teams", json={"number": str(i), "name": f"Team {i}"})
 
     all_entries = client.get("/api/audit-log").json()
-    assert len(all_entries) == 7  # 1 event insert + 1 division insert + 5 team inserts
+    # 1 event insert + 1 division insert + 5 team inserts + 5 team updates
+    # (assign_sole_division writing division_id onto each new team, since
+    # this event has exactly one division).
+    assert len(all_entries) == 12
 
     page = client.get("/api/audit-log?limit=2&offset=1").json()
     assert len(page) == 2
