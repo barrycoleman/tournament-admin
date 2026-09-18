@@ -321,14 +321,14 @@ In `server/src/tournament_server/routers/teams.py`, add the import:
 from tournament_server.services.team_assignment import assign_sole_division, balanced_assign
 ```
 
-In `create_team`, call it right before `db.commit()`:
+In `create_team`, call it inside the existing `try` block, not before it — `db.flush()` can itself raise `IntegrityError` on a duplicate team number (this is exactly what `test_create_team_duplicate_number_returns_409` already exercises today), and that flush must stay covered by the same `except IntegrityError` that turns it into a 409, or a duplicate-number request would start raising an unhandled 500 instead:
 
 ```python
     team = Team(event_id=event.id, **payload.model_dump())
     db.add(team)
-    db.flush()
-    assign_sole_division(db, event.id)
     try:
+        db.flush()
+        assign_sole_division(db, event.id)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -337,7 +337,7 @@ In `create_team`, call it right before `db.commit()`:
     return team
 ```
 
-(The `db.flush()` before `assign_sole_division` is new — it's needed so the just-added team is visible to `assign_sole_division`'s own `SELECT ... WHERE division_id IS NULL` query, which runs against the database, not Python-side state.)
+(The `db.flush()` before `assign_sole_division` is new — it's needed so the just-added team is visible to `assign_sole_division`'s own `SELECT ... WHERE division_id IS NULL` query, which runs against the database, not Python-side state. Moving it inside the `try` is the only structural change from today's code; `assign_sole_division` itself is not expected to raise `IntegrityError` — it only writes `division_id`, which has no unique constraint — but including it inside the same `try` costs nothing and keeps the block's boundary simple: "everything from the first write to the commit shares one rollback path.")
 
 In `bulk_upsert_teams`, call it once after the `for index, row in enumerate(payload.rows):` loop, right before the existing `try: db.commit()`:
 
@@ -352,7 +352,7 @@ In `bulk_upsert_teams`, call it once after the `for index, row in enumerate(payl
     return TeamBulkResponse(results=results)
 ```
 
-This works because every row in the loop already calls `db.flush()` after creating or updating its team (see the existing `db.flush()` calls inside both the `if existing is not None:` and `else:` branches), so by the time the loop finishes, every row's team is visible to `assign_sole_division`'s query regardless of whether it was newly created or updated.
+This works because every row in the loop already calls `db.flush()` after creating or updating its team (see the existing `db.flush()` calls inside both the `if existing is not None:` and `else:` branches), so by the time the loop finishes, every row's team is visible to `assign_sole_division`'s query regardless of whether it was newly created or updated. Unlike `create_team` above, this `assign_sole_division` call is fine sitting outside the `try`/`except IntegrityError` block: it only writes `division_id` (no unique constraint on that column, and `sole_division_id` was just read from the `divisions` table in this same transaction, so the FK is guaranteed valid), and the endpoint's real duplicate-number conflicts are already surfaced earlier, inside the loop's own per-row flushes (each row's `existing = db.execute(select(Team)...)` lookup already sees every earlier row in the same batch via its flush, which is what lets two same-numbered rows in one request resolve as create-then-update instead of a raw insert conflict) or, for a genuine cross-request race, at the final `db.commit()` that the `try` already wraps.
 
 One consequence worth being explicit about: `assign_sole_division` runs *after* the whole batch, so it also picks up any team that an update row left divisionless (a bulk row can carry no `division` field, which the existing code already treats as "set division_id to None" on update — see the `fields = {..., "division_id": division_id}` dict, where `division_id` defaults to `None` unless the row set `assign_random_division` or `division`). In a single-division event, that means a re-uploaded CSV that omits the division column no longer un-assigns a team that was previously assigned — it gets reassigned straight back to the sole division instead. This is the correct behavior for this plan's goal (every team belongs to the sole division), not an accidental side effect; Task 4 will not need to touch this since it falls out of Task 2's own change.
 
