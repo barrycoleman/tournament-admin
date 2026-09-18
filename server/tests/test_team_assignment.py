@@ -1,4 +1,16 @@
-from tournament_server.services.team_assignment import balanced_assign
+from __future__ import annotations
+
+from tournament_server.db import init_db, make_engine, make_session_factory
+from tournament_server.models.division import Division
+from tournament_server.models.event import Event
+from tournament_server.models.team import Team
+from tournament_server.services.team_assignment import assign_sole_division, balanced_assign
+
+
+def _db(tmp_path):
+    engine = make_engine(str(tmp_path / "test.db"))
+    init_db(engine)
+    return make_session_factory(engine)()
 
 
 def test_balanced_assign_distributes_evenly_from_zero():
@@ -34,3 +46,99 @@ def test_balanced_assign_handles_uneven_team_count():
 
 def test_balanced_assign_empty_teams_returns_empty():
     assert balanced_assign(team_ids=[], division_ids=[10, 20], current_counts={}) == {}
+
+
+def test_assign_sole_division_is_a_no_op_with_zero_divisions(tmp_path):
+    db = _db(tmp_path)
+    event = Event(name="Regional Qualifier")
+    db.add(event)
+    db.flush()
+    team = Team(event_id=event.id, number="1234A", name="Robo Raiders", division_id=None)
+    db.add(team)
+    db.commit()
+
+    updated = assign_sole_division(db, event.id)
+
+    assert updated == 0
+    db.refresh(team)
+    assert team.division_id is None
+
+
+def test_assign_sole_division_is_a_no_op_with_more_than_one_division(tmp_path):
+    db = _db(tmp_path)
+    event = Event(name="Regional Qualifier")
+    db.add(event)
+    db.flush()
+    division_a = Division(event_id=event.id, name="A")
+    division_b = Division(event_id=event.id, name="B")
+    db.add_all([division_a, division_b])
+    db.flush()
+    team = Team(event_id=event.id, number="1234A", name="Robo Raiders", division_id=None)
+    db.add(team)
+    db.commit()
+
+    updated = assign_sole_division(db, event.id)
+
+    assert updated == 0
+    db.refresh(team)
+    assert team.division_id is None
+
+
+def test_assign_sole_division_assigns_every_unassigned_team(tmp_path):
+    db = _db(tmp_path)
+    event = Event(name="Regional Qualifier")
+    db.add(event)
+    db.flush()
+    division = Division(event_id=event.id, name="Division 1")
+    db.add(division)
+    db.flush()
+    unassigned1 = Team(event_id=event.id, number="1234A", name="T1", division_id=None)
+    unassigned2 = Team(event_id=event.id, number="5678B", name="T2", division_id=None)
+    db.add_all([unassigned1, unassigned2])
+    db.commit()
+
+    updated = assign_sole_division(db, event.id)
+
+    assert updated == 2
+    db.refresh(unassigned1)
+    db.refresh(unassigned2)
+    assert unassigned1.division_id == division.id
+    assert unassigned2.division_id == division.id
+
+
+def test_assign_sole_division_leaves_already_assigned_teams_alone(tmp_path):
+    db = _db(tmp_path)
+    event = Event(name="Regional Qualifier")
+    db.add(event)
+    db.flush()
+    division = Division(event_id=event.id, name="Division 1")
+    db.add(division)
+    db.flush()
+    team = Team(
+        event_id=event.id, number="1234A", name="Already Assigned", division_id=division.id
+    )
+    db.add(team)
+    db.commit()
+
+    updated = assign_sole_division(db, event.id)
+
+    assert updated == 0
+
+
+def test_assign_sole_division_only_touches_teams_in_the_given_event(tmp_path):
+    db = _db(tmp_path)
+    event1 = Event(name="Event One")
+    db.add(event1)
+    db.flush()
+    division1 = Division(event_id=event1.id, name="Division 1")
+    db.add(division1)
+    db.flush()
+    team_in_event1 = Team(event_id=event1.id, number="1234A", name="T1", division_id=None)
+    db.add(team_in_event1)
+    db.commit()
+
+    updated = assign_sole_division(db, event1.id)
+
+    assert updated == 1
+    db.refresh(team_in_event1)
+    assert team_in_event1.division_id == division1.id
