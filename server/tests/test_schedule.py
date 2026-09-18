@@ -49,6 +49,31 @@ def test_generate_schedule_creates_matches(client):
         assert len(match["alliances"]) == 2
 
 
+def test_generate_schedule_succeeds_in_a_single_division_event(client):
+    # Regression test: before this fix, every team created via
+    # _setup_ready_session ended up with a real division_id (the event
+    # has exactly one division -- the auto-seeded "Division 1" -- and
+    # assign_sole_division, added earlier in this plan, assigns every
+    # team to it). That made the eligible-team-pool query below --
+    # which filtered for Team.division_id IS NULL when no division_id
+    # was given in the request -- find zero teams, turning this into a
+    # 422 instead of a successful schedule generation. This is the exact
+    # scenario _setup_ready_session already exercises; naming it
+    # explicitly here documents the regression this task fixes.
+    session_id, team_ids = _setup_ready_session(client)
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 201
+
+
 def test_generate_schedule_rejects_when_matches_already_exist(client):
     session_id, _ = _setup_ready_session(client)
     payload = {

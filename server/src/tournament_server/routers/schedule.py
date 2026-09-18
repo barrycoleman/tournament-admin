@@ -27,6 +27,7 @@ from tournament_server.schemas.schedule import (
     ScheduleGenerateResponse,
 )
 from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
+from tournament_server.services.team_assignment import get_sole_division_id
 from tournament_server.services.schedule_timing import (
     assign_scheduled_times,
     implicit_default_time_block,
@@ -172,7 +173,11 @@ def generate_schedule(
     ]
     team_query = select(Team).where(Team.id.in_(team_ids_in_session))
     if payload.division_id is None:
-        team_query = team_query.where(Team.division_id.is_(None))
+        sole_division_id = get_sole_division_id(db, event.id)
+        if sole_division_id is not None:
+            team_query = team_query.where(Team.division_id == sole_division_id)
+        else:
+            team_query = team_query.where(Team.division_id.is_(None))
     else:
         team_query = team_query.where(Team.division_id == payload.division_id)
     teams = db.execute(team_query).scalars().all()
