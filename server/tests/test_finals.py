@@ -1391,6 +1391,92 @@ def test_start_finals_rejects_insufficient_checked_in_teams_for_captain_pick(cap
     assert response.status_code == 422
 
 
+def test_start_finals_captain_pick_succeeds_in_a_single_division_event(captain_pick_client):
+    # Regression test: same root cause as
+    # test_generate_schedule_succeeds_in_a_single_division_event in
+    # test_schedule.py -- the captain_pick eligible-team COUNT query here
+    # has the identical Team.division_id IS NULL pattern, which finds
+    # zero teams once every team in this single-division event has a
+    # real division_id.
+    #
+    # POST /api/finals/start also requires a populated Ranking table
+    # (untouched by this task's fix -- ranking_query keys off
+    # payload.division_id directly, not Team.division_id, so it was never
+    # part of the conflict) -- this test creates and scores two matches,
+    # exactly mirroring test_captain_pick_rejects_out_of_turn_pick's own
+    # setup below, purely so ranked teams exist for that unrelated check
+    # to pass.
+    client = captain_pick_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "captain-pick-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    team_ids = [
+        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
+        for i in range(4)
+    ]
+    for team_id in team_ids:
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+
+    match1 = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [team_ids[0]]},
+                {"station": "blue", "team_ids": [team_ids[1]]},
+            ],
+        },
+    ).json()
+    red1_id = next(a["id"] for a in match1["alliances"] if a["station"] == "red")
+    blue1_id = next(a["id"] for a in match1["alliances"] if a["station"] == "blue")
+    client.post(
+        f"/api/matches/{match1['id']}/alliances/{red1_id}/score",
+        json={"data": {"high_balls": 10, "low_balls": 0, "auto_winner": "tie"}},
+    )
+    client.post(
+        f"/api/matches/{match1['id']}/alliances/{blue1_id}/score",
+        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
+    )
+
+    match2 = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "match_number": 2,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [team_ids[2]]},
+                {"station": "blue", "team_ids": [team_ids[3]]},
+            ],
+        },
+    ).json()
+    red2_id = next(a["id"] for a in match2["alliances"] if a["station"] == "red")
+    blue2_id = next(a["id"] for a in match2["alliances"] if a["station"] == "blue")
+    client.post(
+        f"/api/matches/{match2['id']}/alliances/{red2_id}/score",
+        json={"data": {"high_balls": 1, "low_balls": 0, "auto_winner": "tie"}},
+    )
+    client.post(
+        f"/api/matches/{match2['id']}/alliances/{blue2_id}/score",
+        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
+    )
+
+    response = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 2},
+    )
+    assert response.status_code == 201
+
+
 def test_unavailable_alliance_with_known_opponent_resolves_immediately(client):
     session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
     _rank_teams_directly_head_to_head(client, session_id, team_ids)

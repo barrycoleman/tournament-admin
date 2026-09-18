@@ -39,6 +39,7 @@ from tournament_server.services.finals import (
     start_score_chase,
     total_rounds_for_bracket_size,
 )
+from tournament_server.services.team_assignment import get_sole_division_id
 
 router = APIRouter(prefix="/api/finals", tags=["finals"])
 
@@ -242,7 +243,13 @@ def start_finals(
         ]
         eligible_team_query = select(Team).where(Team.id.in_(checked_in_team_ids))
         if payload.division_id is None:
-            eligible_team_query = eligible_team_query.where(Team.division_id.is_(None))
+            sole_division_id = get_sole_division_id(db, event.id)
+            if sole_division_id is not None:
+                eligible_team_query = eligible_team_query.where(
+                    Team.division_id == sole_division_id
+                )
+            else:
+                eligible_team_query = eligible_team_query.where(Team.division_id.is_(None))
         else:
             eligible_team_query = eligible_team_query.where(
                 Team.division_id == payload.division_id
