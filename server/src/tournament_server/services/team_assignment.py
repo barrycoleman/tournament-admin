@@ -41,6 +41,22 @@ def balanced_assign(
     return assignments
 
 
+def get_sole_division_id(db: Session, event_id: int) -> int | None:
+    """Returns the id of `event_id`'s only division, or None if it has
+    zero or more than one. Shared by `assign_sole_division` (which writes
+    a real division_id onto every team in that case) and by the
+    schedule/finals eligibility queries in routers/schedule.py and
+    routers/finals.py (which read it so that omitting `division_id` in a
+    request is treated as "the event's sole division" rather than only
+    "no division at all" -- necessary once every team in a single-division
+    event actually has that division's real id set, rather than staying
+    null)."""
+    division_ids = list(
+        db.execute(select(Division.id).where(Division.event_id == event_id)).scalars().all()
+    )
+    return division_ids[0] if len(division_ids) == 1 else None
+
+
 def assign_sole_division(db: Session, event_id: int) -> int:
     """No-op unless `event_id` has exactly one division, in which case
     every currently-unassigned team in that event is assigned to it.
@@ -54,12 +70,9 @@ def assign_sole_division(db: Session, event_id: int) -> int:
     of `PATCH /api/teams/{id}` handling an explicit `division_id: null`,
     which is a real admin action to unassign a team and must stick.
     """
-    division_ids = list(
-        db.execute(select(Division.id).where(Division.event_id == event_id)).scalars().all()
-    )
-    if len(division_ids) != 1:
+    sole_division_id = get_sole_division_id(db, event_id)
+    if sole_division_id is None:
         return 0
-    sole_division_id = division_ids[0]
 
     unassigned_teams = list(
         db.execute(

@@ -4,7 +4,11 @@ from tournament_server.db import init_db, make_engine, make_session_factory
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
 from tournament_server.models.team import Team
-from tournament_server.services.team_assignment import assign_sole_division, balanced_assign
+from tournament_server.services.team_assignment import (
+    assign_sole_division,
+    balanced_assign,
+    get_sole_division_id,
+)
 
 
 def _db(tmp_path):
@@ -142,3 +146,35 @@ def test_assign_sole_division_only_touches_teams_in_the_given_event(tmp_path):
     assert updated == 1
     db.refresh(team_in_event1)
     assert team_in_event1.division_id == division1.id
+
+
+def test_get_sole_division_id_returns_none_with_zero_divisions(tmp_path):
+    db = _db(tmp_path)
+    event = Event(name="Regional Qualifier")
+    db.add(event)
+    db.commit()
+
+    assert get_sole_division_id(db, event.id) is None
+
+
+def test_get_sole_division_id_returns_none_with_more_than_one_division(tmp_path):
+    db = _db(tmp_path)
+    event = Event(name="Regional Qualifier")
+    db.add(event)
+    db.flush()
+    db.add_all([Division(event_id=event.id, name="A"), Division(event_id=event.id, name="B")])
+    db.commit()
+
+    assert get_sole_division_id(db, event.id) is None
+
+
+def test_get_sole_division_id_returns_the_id_when_exactly_one_exists(tmp_path):
+    db = _db(tmp_path)
+    event = Event(name="Regional Qualifier")
+    db.add(event)
+    db.flush()
+    division = Division(event_id=event.id, name="Division 1")
+    db.add(division)
+    db.commit()
+
+    assert get_sole_division_id(db, event.id) == division.id
