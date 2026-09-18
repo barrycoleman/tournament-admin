@@ -412,7 +412,22 @@ export function TeamsRoute() {
     reader.onload = () => {
       const text = typeof reader.result === "string" ? reader.result : "";
       const parsedRows = parseCsvFile(text);
-      setAllRows((prev) => reconcileUploadedRows(prev, parsedRows));
+      // In a single-division event, an omitted Division column and that
+      // division's own name reach the exact same final state -- the bulk
+      // endpoint's own assign_sole_division reassigns any blank-division
+      // row back to the sole division regardless. Normalize here too, or
+      // re-uploading an unmodified CSV would falsely flag every existing
+      // row as changed: the grid's own rows already show the sole
+      // division's name once loaded from the server (toGridRow resolves
+      // a real division_id to its name), while a blank CSV cell parses
+      // as "" -- a byte-for-byte mismatch that isn't a real change.
+      const soleDivisionName = divisions?.length === 1 ? divisions[0].name : null;
+      const normalizedRows = soleDivisionName
+        ? parsedRows.map((row) =>
+            row.division === "" ? { ...row, division: soleDivisionName } : row
+          )
+        : parsedRows;
+      setAllRows((prev) => reconcileUploadedRows(prev, normalizedRows));
     };
     reader.readAsText(file);
     event.target.value = "";

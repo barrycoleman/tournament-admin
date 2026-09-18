@@ -250,6 +250,30 @@ describe("TeamsRoute", () => {
     expect(screen.queryByLabelText("Division")).not.toBeInTheDocument();
   });
 
+  it("re-uploading a CSV with a blank Division column does not mark an already-assigned team dirty in a single-division event", async () => {
+    // Regression test: server/CLAUDE.md's assign_sole_division means an
+    // existing team's division_id is already the sole division once
+    // saved, so toGridRow resolves it to that division's name -- but a
+    // CSV whose Division column is blank parses to "". Without
+    // normalizing that blank to the sole division's name before
+    // reconciling, this byte-for-byte mismatch would falsely flag the
+    // row as changed on every re-upload of an otherwise-unmodified file.
+    stubReads([DIVISIONS[0]], [serverTeam(1, "9201A", "Reupload Team", 1)]);
+    renderRoute();
+
+    await screen.findByText("Reupload Team");
+
+    const csvContent =
+      "Number,Name,Robot Name,Organization,City,State,Country,Division\n" +
+      "9201A,Reupload Team,,,,,,\n";
+    const file = new File([csvContent], "teams.csv", { type: "text/csv" });
+    const input = document.getElementById("csv-upload") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(screen.queryByText("unsaved")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  });
+
   it("shows the division column and filter when there is more than one division", async () => {
     stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
     renderRoute();
