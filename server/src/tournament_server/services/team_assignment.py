@@ -65,10 +65,22 @@ def assign_sole_division(db: Session, event_id: int) -> int:
     count never reads misleadingly low -- purely because nothing
     explicitly picked a division for it, in the common case where there
     is only one division to begin with and the choice is not actually a
-    choice. Does not commit; the caller's own transaction does. Deliberately
-    scoped to *implicit* divisionless-ness only: it must never run as part
-    of `PATCH /api/teams/{id}` handling an explicit `division_id: null`,
-    which is a real admin action to unassign a team and must stick.
+    choice. Does not commit; the caller's own transaction does.
+
+    This sweep is event-wide, not scoped to whatever the calling request
+    touched: it reassigns EVERY currently-unassigned team in the event,
+    not just the row(s) that request created, updated, or freed. This
+    function is never called from `PATCH /api/teams/{id}`, so an admin's
+    explicit `division_id: null` there is never immediately undone by
+    that same request -- but it is not durable: the next call to
+    `POST /api/teams`, `POST /api/teams/bulk`, `DELETE /api/divisions/{id}`,
+    or even a server restart (all of which call this sweep) silently
+    reassigns that team back to the sole division. In a single-division
+    event, "every team belongs to the sole division" and "an explicit
+    unassign stays unassigned indefinitely" are genuinely incompatible;
+    this codebase deliberately chose the former. Not reachable through
+    the admin UI today, since it hides every division control entirely
+    once only one division exists.
     """
     sole_division_id = get_sole_division_id(db, event_id)
     if sole_division_id is None:

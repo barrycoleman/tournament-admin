@@ -131,8 +131,16 @@ after a CSV upload or grid save. It is called from `POST /api/teams`,
 an event back down to exactly one division), plus once more from
 `create_app()`'s startup self-heal so an already-affected database is
 fixed on its next launch. It deliberately does not run from
-`PATCH /api/teams/{id}` — an admin's explicit `division_id: null` there is
-a real unassign action and must stick, not get silently reverted.
+`PATCH /api/teams/{id}`, so an admin's explicit `division_id: null` there
+is never immediately undone by that same request — but it is not
+durable: the next team creation, bulk upsert, division deletion, or
+server restart silently reassigns that team back to the sole division,
+since the sweep is event-wide rather than scoped to whichever request
+triggered it. In a single-division event, "every team belongs to the
+sole division" and "an explicit unassign stays unassigned indefinitely"
+are incompatible; this codebase deliberately chose the former. Not
+reachable through the admin UI today, since it hides every division
+control entirely once only one division exists.
 
 Giving every team in a single-division event a real `division_id`
 uncovered a second, separate assumption: `POST /api/schedule`'s

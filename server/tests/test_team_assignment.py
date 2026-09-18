@@ -148,6 +148,33 @@ def test_assign_sole_division_only_touches_teams_in_the_given_event(tmp_path):
     assert team_in_event1.division_id == division1.id
 
 
+def test_assign_sole_division_reassigns_a_team_that_was_explicitly_unassigned(tmp_path):
+    """Pins the branch's actual, documented behavior: the sweep is
+    event-wide, so an explicitly-unassigned team (simulating an admin's
+    PATCH .../division_id: null) does not stay unassigned once anything
+    else in the event triggers another sweep."""
+    db = _db(tmp_path)
+    event = Event(name="Regional Qualifier")
+    db.add(event)
+    db.flush()
+    division = Division(event_id=event.id, name="Division 1")
+    db.add(division)
+    db.flush()
+    team = Team(event_id=event.id, number="1234A", name="T1", division_id=division.id)
+    db.add(team)
+    db.commit()
+
+    # Simulate an admin's explicit PATCH .../division_id: null.
+    team.division_id = None
+    db.commit()
+
+    updated = assign_sole_division(db, event.id)
+
+    assert updated == 1
+    db.refresh(team)
+    assert team.division_id == division.id
+
+
 def test_get_sole_division_id_returns_none_with_zero_divisions(tmp_path):
     db = _db(tmp_path)
     event = Event(name="Regional Qualifier")
