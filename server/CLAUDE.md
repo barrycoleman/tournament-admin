@@ -121,6 +121,34 @@ roster it therefore fills the small divisions first and converges sizes to
 within one of each other, and the division shuffle makes ties break
 randomly rather than always favoring the first-listed division.
 
+The same file's `assign_sole_division(db, event_id)` handles the much
+narrower, much more common case: whenever an event has exactly one
+division, every team belongs to it — a team is never left showing as
+unassigned purely because nothing explicitly picked a division for it,
+which previously made that division's team count read misleadingly low
+after a CSV upload or grid save. It is called from `POST /api/teams`,
+`POST /api/teams/bulk`, and `DELETE /api/divisions/{id}` (which can bring
+an event back down to exactly one division), plus once more from
+`create_app()`'s startup self-heal so an already-affected database is
+fixed on its next launch. It deliberately does not run from
+`PATCH /api/teams/{id}` — an admin's explicit `division_id: null` there is
+a real unassign action and must stick, not get silently reverted.
+
+Giving every team in a single-division event a real `division_id`
+uncovered a second, separate assumption: `POST /api/schedule`'s
+eligible-team pool and `POST /api/finals/start`'s `captain_pick`
+eligible-team count both treated `Team.division_id IS NULL` as "this team
+isn't scoped to an explicit division" -- true by accident before
+`assign_sole_division` existed, false afterward. The same file's
+`get_sole_division_id(db, event_id)` (returns the event's only division's
+id, or `None` if it has zero or more than one) lets both of those queries
+treat an *omitted* `division_id` request parameter as "the event's sole
+division" specifically for `Team` rows, while leaving every other
+entity's `division_id` resolution (`Match`, `FieldSet`, `Ranking`,
+`RankingConfiguration`, `FinalsBracket` all key off their own request
+parameter, never off a team's) and every multi-division event's behavior
+completely unchanged.
+
 `POST /api/divisions/randomize` takes a `scope`: `"unassigned"` only
 touches teams whose `division_id` is null, leaving every existing
 placement alone (what the "randomly assign unassigned teams" button
@@ -897,17 +925,16 @@ password when a tournament already exists in the allowlist).
 - A Team belongs to at most one Division (nullable `division_id`), not a
   many-to-many relationship, as a deliberate YAGNI simplification — see
   the plan's Global Constraints for why.
-- In a single-division event every team keeps `division_id = NULL`
-  forever: the admin UI hides the division column, the division filter and
-  the assignment controls entirely when only one division exists, so
-  nothing ever writes that division's id onto a team. This is no longer an
-  occasional configuration some admin happens to end up in — every new
-  event now *starts* with exactly one auto-seeded division and every team
-  `NULL`, so this is the guaranteed common case, not an edge case. Nothing
-  today cares, but a future scheduling sub-project will have to decide
-  whether a null `division_id` means "the event's only division" or is a
-  data gap to backfill — don't assume the former silently, and don't
-  assume it's rare either.
+- ~~In a single-division event every team keeps `division_id = NULL`
+  forever~~ — fixed: `services/team_assignment.assign_sole_division` (see
+  "Teams & divisions" above) keeps every team assigned to an event's sole
+  division from the moment it's created (or from the moment a division's
+  deletion brings the count back down to one), and the admin UI's
+  division column/filter/assignment controls staying hidden in that case
+  is now purely a display simplification, not a sign that the underlying
+  `division_id` is meaningless. A future scheduling sub-project can safely
+  assume a non-null `division_id` in a single-division event, though the
+  admin UI itself still never surfaces it as a distinct choice.
 - No automated cleanup of `.pre-migration-*.bak` backup files — they
   accumulate; an operator deletes old ones manually. `alembic downgrade`
   is not a supported, tested rollback path — the pre-migration backup is
