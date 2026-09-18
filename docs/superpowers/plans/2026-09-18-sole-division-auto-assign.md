@@ -523,7 +523,12 @@ git commit -m "Reassign a deleted division's freed teams to the remaining sole d
 
 ### Task 4: Fix the two scheduling/finals eligibility queries Tasks 1-2 broke
 
-**Why this task exists (read this before touching anything):** `Team.division_id IS NULL` is used in exactly two other places in this codebase as a sentinel meaning "this team isn't scoped to any explicit division" — `POST /api/schedule`'s eligible-team-pool query and `POST /api/finals/start`'s `captain_pick`-only eligible-team count. Before Tasks 1-2, a single-division event's teams never had `division_id` written at all, so `IS NULL` accidentally meant both "unscoped" and "belongs to the event's only division" at once. Tasks 1-2 broke that accidental unification: once every team in a single-division event gets a real `division_id` (Task 1-2's whole point), zero teams remain with `division_id IS NULL`, so both of these queries now find zero eligible teams in a single-division event — confirmed by running the full test suite after Task 2 landed, which produced 24 failures across `test_audit_log.py`, `test_broadcast_wiring.py`, `test_finals.py`, and `test_schedule.py` (most of those 24 are various tests that happen to share a single-division event setup and hit this gap indirectly through fixture setup, not 24 independent bugs — fixing the two query sites below is expected to resolve all 24). This was investigated and confirmed via `server/CLAUDE.md`'s own documented multi-division architecture and by tracing one failure (`test_generate_schedule_creates_matches`) from its raw 422 down to `routers/schedule.py`'s exact query. No other entity (`Match`, `FieldSet`, `Ranking`, `RankingConfiguration`, `FinalsBracket`) needs any change: every one of those is created from a caller-supplied `division_id` request parameter (or propagated from another already-request-scoped row), never derived from a team's own `division_id`.
+**Why this task exists (read this before touching anything):** running the full test suite after Task 2 landed produced 24 failures across `test_audit_log.py`, `test_broadcast_wiring.py`, `test_finals.py`, and `test_schedule.py`. These have **two distinct root causes**, both introduced by Tasks 1-2, not one:
+
+1. **The eligibility-query problem (Steps 1-15, most of the 24 failures):** `Team.division_id IS NULL` is used in exactly two places in this codebase as a sentinel meaning "this team isn't scoped to any explicit division" — `POST /api/schedule`'s eligible-team-pool query and `POST /api/finals/start`'s `captain_pick`-only eligible-team count. Before Tasks 1-2, a single-division event's teams never had `division_id` written at all, so `IS NULL` accidentally meant both "unscoped" and "belongs to the event's only division" at once. Tasks 1-2 broke that accidental unification: once every team in a single-division event gets a real `division_id`, zero teams remain with `division_id IS NULL`, so both queries now find zero eligible teams. Confirmed by tracing one failure (`test_generate_schedule_creates_matches`) from its raw 422 down to `routers/schedule.py`'s exact query. No other entity (`Match`, `FieldSet`, `Ranking`, `RankingConfiguration`, `FinalsBracket`) needs any change: every one of those is created from a caller-supplied `division_id` request parameter (or propagated from another already-request-scoped row), never derived from a team's own `division_id`.
+2. **An audit-log row-count ripple (Steps 16-18, the 2 `test_audit_log.py` failures):** unrelated to eligibility entirely. `assign_sole_division` writes `Team.division_id` as a separate `UPDATE`, which this project's generic per-table audit hook logs as its own row on top of the team's `INSERT` — the same category of ripple a prior plan already hit once for `Event`+`Division` creation. Two count assertions need updating to account for it.
+
+Fixing both closes out all 24.
 
 **Files:**
 - Modify: `server/src/tournament_server/services/team_assignment.py`
@@ -532,6 +537,7 @@ git commit -m "Reassign a deleted division's freed teams to the remaining sole d
 - Modify: `server/tests/test_schedule.py`
 - Modify: `server/src/tournament_server/routers/finals.py` (`start_finals`)
 - Modify: `server/tests/test_finals.py`
+- Modify: `server/tests/test_audit_log.py` (two count assertions only — no source-code change behind this one, see Steps 16-18)
 
 **Interfaces:**
 - Produces: `get_sole_division_id(db: Session, event_id: int) -> int | None` in `services/team_assignment.py` — returns the id of `event_id`'s only division, or `None` if it has zero or more than one. Used by Tasks 4's two router fixes below, and internally by `assign_sole_division` (refactored to use it, not duplicate its logic).
@@ -732,6 +738,14 @@ def test_start_finals_captain_pick_succeeds_in_a_single_division_event(captain_p
     # has the identical Team.division_id IS NULL pattern, which finds
     # zero teams once every team in this single-division event has a
     # real division_id.
+    #
+    # POST /api/finals/start also requires a populated Ranking table
+    # (untouched by this task's fix -- ranking_query keys off
+    # payload.division_id directly, not Team.division_id, so it was never
+    # part of the conflict) -- this test creates and scores two matches,
+    # exactly mirroring test_captain_pick_rejects_out_of_turn_pick's own
+    # setup below, purely so ranked teams exist for that unrelated check
+    # to pass.
     client = captain_pick_client
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "captain-pick-game"})
@@ -747,6 +761,54 @@ def test_start_finals_captain_pick_succeeds_in_a_single_division_event(captain_p
             f"/api/sessions/{session_id}/participants",
             json={"team_id": team_id, "checked_in": True},
         )
+
+    match1 = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [team_ids[0]]},
+                {"station": "blue", "team_ids": [team_ids[1]]},
+            ],
+        },
+    ).json()
+    red1_id = next(a["id"] for a in match1["alliances"] if a["station"] == "red")
+    blue1_id = next(a["id"] for a in match1["alliances"] if a["station"] == "blue")
+    client.post(
+        f"/api/matches/{match1['id']}/alliances/{red1_id}/score",
+        json={"data": {"high_balls": 10, "low_balls": 0, "auto_winner": "tie"}},
+    )
+    client.post(
+        f"/api/matches/{match1['id']}/alliances/{blue1_id}/score",
+        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
+    )
+
+    match2 = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "match_number": 2,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [team_ids[2]]},
+                {"station": "blue", "team_ids": [team_ids[3]]},
+            ],
+        },
+    ).json()
+    red2_id = next(a["id"] for a in match2["alliances"] if a["station"] == "red")
+    blue2_id = next(a["id"] for a in match2["alliances"] if a["station"] == "blue")
+    client.post(
+        f"/api/matches/{match2['id']}/alliances/{red2_id}/score",
+        json={"data": {"high_balls": 1, "low_balls": 0, "auto_winner": "tie"}},
+    )
+    client.post(
+        f"/api/matches/{match2['id']}/alliances/{blue2_id}/score",
+        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
+    )
 
     response = client.post(
         "/api/finals/start",
@@ -799,7 +861,71 @@ git add server/src/tournament_server/routers/finals.py server/tests/test_finals.
 git commit -m "Fix POST /api/finals/start's captain_pick eligible-team count for single-division events"
 ```
 
-- [ ] **Step 16: Run the FULL backend test suite to confirm all 24 previously-failing tests are now fixed**
+- [ ] **Step 16: Fix the two `test_audit_log.py` failures — a third, separate ripple effect from Tasks 1-2 with a different root cause than Steps 1-15's fix**
+
+Two of the original 24 failures are in `server/tests/test_audit_log.py`, and neither is caused by the eligibility-query problem Steps 1-15 just fixed. Their real cause: `assign_sole_division` (Task 1, wired in by Task 2) writes `Team.division_id` as a separate `UPDATE`, which this project's generic per-table audit hook (`audit.py`, fires on every `after_update`) logs as its own audit-log row — on top of the `INSERT` a new team already logs. This is the exact same category of ripple effect a prior, unrelated plan already hit once for `Event`+`Division` creation (see `server/CLAUDE.md`'s audit-log notes) — an incidental extra write becoming an incidental extra audit row, discovered only by running the full suite, not by running the file that was actually changed.
+
+In `server/tests/test_audit_log.py`, replace `test_updating_team_logs_before_and_after`:
+
+```python
+def test_updating_team_logs_before_and_after(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    team_id = client.post(
+        "/api/teams", json={"number": "1234A", "name": "Robo Raiders"}
+    ).json()["id"]
+
+    client.patch(f"/api/teams/{team_id}", json={"name": "Renamed Raiders"})
+
+    entries = client.get("/api/audit-log").json()
+    update_entries = [
+        e for e in entries if e["table_name"] == "teams" and e["action"] == "update"
+    ]
+    # Creating the team in this single-division event already logs one
+    # "update" row of its own (assign_sole_division writing division_id,
+    # right after the insert) -- the PATCH above adds a second, later one.
+    assert len(update_entries) == 2
+    entry = update_entries[-1]
+    assert entry["before"]["name"] == "Robo Raiders"
+    assert entry["after"]["name"] == "Renamed Raiders"
+    # Unrelated fields shouldn't appear in the diff.
+    assert "number" not in entry["before"]
+```
+
+And replace `test_audit_log_supports_limit_and_offset`:
+
+```python
+def test_audit_log_supports_limit_and_offset(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    for i in range(5):
+        client.post("/api/teams", json={"number": str(i), "name": f"Team {i}"})
+
+    all_entries = client.get("/api/audit-log").json()
+    # 1 event insert + 1 division insert + 5 team inserts + 5 team updates
+    # (assign_sole_division writing division_id onto each new team, since
+    # this event has exactly one division).
+    assert len(all_entries) == 12
+
+    page = client.get("/api/audit-log?limit=2&offset=1").json()
+    assert len(page) == 2
+    assert page[0]["id"] == all_entries[1]["id"]
+    assert page[1]["id"] == all_entries[2]["id"]
+```
+
+No other test in `test_audit_log.py` needs to change — `test_creating_event_logs_insert_with_default_actor`, `test_creating_team_logs_insert_with_custom_actor`, `test_patch_with_no_changes_logs_nothing`, `test_audit_log_timestamp_is_timezone_aware`, and `test_audit_log_default_limit_returns_all_when_under_cap` either filter to `action == "insert"` only, compare two counts taken around a genuine no-op, or never create a team at all — none of them observe the extra "update" row. Confirm this by reading the file, not by assumption, before moving on.
+
+- [ ] **Step 17: Run the tests to verify they pass**
+
+Run: `cd server && .venv/bin/python -m pytest tests/test_audit_log.py -v`
+Expected: all PASS, including every pre-existing test in the file.
+
+- [ ] **Step 18: Commit**
+
+```bash
+git add server/tests/test_audit_log.py
+git commit -m "Update audit-log row-count assertions for the extra update assign_sole_division logs"
+```
+
+- [ ] **Step 19: Run the FULL backend test suite to confirm all 24 previously-failing tests are now fixed**
 
 Run: `cd server && .venv/bin/python -m pytest -q`
 Expected: 0 failures. This must show strictly more passing tests than the last full-suite run before this task (which had 24 failures) — if any of the 24 are still failing, or if this run has fewer total tests than expected, stop and report BLOCKED with the specific test names still failing rather than committing anything further.
