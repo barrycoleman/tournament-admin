@@ -95,11 +95,34 @@ def test_delete_division_unassigns_its_teams(client):
     response = client.delete(f"/api/divisions/{division['id']}")
     assert response.status_code == 204
 
+    # Exactly one division ("Division 1", auto-seeded at event creation)
+    # remains after this delete, so the freed team joins it automatically
+    # -- it does not stay unassigned. See
+    # test_delete_division_unassigns_its_teams_when_others_remain below
+    # for the case where it correctly does stay unassigned.
+    remaining_division_id = client.get("/api/divisions").json()[0]["id"]
     team_after = client.get(f"/api/teams/{team['id']}").json()
-    assert team_after["division_id"] is None
+    assert team_after["division_id"] == remaining_division_id
 
     list_response = client.get("/api/divisions")
     assert division["id"] not in [d["id"] for d in list_response.json()]
+
+
+def test_delete_division_unassigns_its_teams_when_others_remain(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/divisions", json={"name": "A"})
+    division_b = client.post("/api/divisions", json={"name": "B"}).json()
+    team = client.post(
+        "/api/teams", json={"number": "1234A", "name": "Robo Raiders", "division_id": division_b["id"]}
+    ).json()
+    # Three divisions exist now ("Division 1", "A", "B"); deleting "B"
+    # leaves two, so assign_sole_division must not fire.
+
+    response = client.delete(f"/api/divisions/{division_b['id']}")
+    assert response.status_code == 204
+
+    team_after = client.get(f"/api/teams/{team['id']}").json()
+    assert team_after["division_id"] is None
 
 
 def test_delete_division_404s_when_not_found(client):

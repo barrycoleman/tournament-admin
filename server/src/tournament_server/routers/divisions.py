@@ -15,7 +15,7 @@ from tournament_server.schemas.division import (
     RandomizeRequest,
 )
 from tournament_server.schemas.team import TeamRead
-from tournament_server.services.team_assignment import balanced_assign
+from tournament_server.services.team_assignment import assign_sole_division, balanced_assign
 
 router = APIRouter(prefix="/api/divisions", tags=["divisions"])
 
@@ -99,6 +99,7 @@ def delete_division(
     if remaining_count == 0:
         db.rollback()
         raise HTTPException(status_code=409, detail="At least one division is required")
+    assign_sole_division(db, event_id)
     db.commit()
     return Response(status_code=204)
 
