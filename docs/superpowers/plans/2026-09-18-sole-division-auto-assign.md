@@ -6,9 +6,11 @@
 
 **Architecture:** One small, reusable service function (`assign_sole_division`) that no-ops unless an event has exactly one division, in which case it assigns every currently-unassigned team in that event to it. Call it from the four places a team can end up divisionless while a sole division exists: bulk upsert (the CSV-upload/grid-save path — this is the bug the user reported), single team creation, division deletion (which can reduce a 2-division event down to exactly one), and the existing app-startup self-heal (which already exists for the "every event has ≥1 division" invariant and is the natural place to also close this gap for pre-existing databases). No schema change and no new migration are needed — this is a data-consistency fix, not a structural one, and the existing self-heal step is sufficient to fix any already-affected database on its next server launch.
 
+**Scope correction found mid-implementation (Task 4):** writing a real `division_id` onto every team in a single-division event turned out to conflict with an existing, separate convention: two query sites (`POST /api/schedule`'s eligible-team pool, `POST /api/finals/start`'s `captain_pick` eligible-team count) treat `Team.division_id IS NULL` as "this team isn't scoped to an explicit division," a sentinel that a single-division event's teams satisfied by accident before this plan (nothing ever wrote their `division_id`) and no longer satisfy once Tasks 1-2 do. Task 4 fixes exactly those two sites — a shared `get_sole_division_id` helper, used to treat an omitted `division_id` request parameter as "the event's sole division" wherever it's checked against `Team.division_id` specifically. This was investigated in full before writing Task 4: every other entity with a `division_id` column (`Match`, `FieldSet`, `Ranking`, `RankingConfiguration`, `FinalsBracket`) is created from a caller-supplied request parameter, never derived from a team's own `division_id`, so none of them needed any change.
+
 **Tech Stack:** Python 3.11+, FastAPI, SQLAlchemy (backend only — this change has no frontend component; the Divisions page's team count and the Teams grid's division column already read `division_id` directly, so once the backend sets it correctly, both displays correct themselves with no code change).
 
-**Spec:** None — this was classified as a Bounded change per the brainstorming skill (all four call sites already exist and were read directly, not designed from scratch). The agreed design was presented and approved in chat; this plan is its only written record.
+**Spec:** None — this was originally classified as a Bounded change per the brainstorming skill (all four call sites already exist and were read directly, not designed from scratch). The agreed design was presented and approved in chat; this plan is its only written record. Mid-implementation, Task 4's discovery (a real conflict with the scheduling/finals subsystem, confirmed by running the full test suite and bisecting which commit introduced 24 failures) upgraded the affected surface beyond the original four call sites; the user was presented with the conflict and the two realistic resolution paths (revert to a display-only fix, vs. extend the fix to also cover the two scheduling/finals eligibility queries it broke) and chose the latter — Task 4 is that extension, scoped exactly to what the investigation confirmed was needed, not written from scratch as a new architectural spec.
 
 ## Global Constraints
 
@@ -16,6 +18,7 @@
 - Every backend change ships with pytest unit/integration tests against a real FastAPI `TestClient` and a real temp-file SQLite database in the same change — never mocked at the HTTP boundary.
 - This fix is scoped to *implicit* divisionless-ness only (a team created with no division specified, or left divisionless by a division's deletion). It must never override an admin's *explicit* action to unassign a team via `PATCH /api/teams/{id}` with `division_id: null` — that call site is deliberately untouched by this plan.
 - `services/team_assignment.py` already holds this project's team/division assignment logic (`balanced_assign`); the new function belongs in the same file, not scattered into a router.
+- Task 4's fix must change only how the two named eligibility queries interpret an *omitted* `division_id` request parameter for `Team` rows specifically. It must not change how `Match`, `FieldSet`, `Ranking`, `RankingConfiguration`, or `FinalsBracket` resolve their own `division_id`, and must not change behavior for any event with more than one division (in a multi-division event, `get_sole_division_id` returns `None`, so every affected query falls back to its original `IS NULL` behavior, unchanged).
 
 ---
 
@@ -518,7 +521,292 @@ git commit -m "Reassign a deleted division's freed teams to the remaining sole d
 
 ---
 
-### Task 4: Extend the app-startup self-heal to fix already-affected databases
+### Task 4: Fix the two scheduling/finals eligibility queries Tasks 1-2 broke
+
+**Why this task exists (read this before touching anything):** `Team.division_id IS NULL` is used in exactly two other places in this codebase as a sentinel meaning "this team isn't scoped to any explicit division" — `POST /api/schedule`'s eligible-team-pool query and `POST /api/finals/start`'s `captain_pick`-only eligible-team count. Before Tasks 1-2, a single-division event's teams never had `division_id` written at all, so `IS NULL` accidentally meant both "unscoped" and "belongs to the event's only division" at once. Tasks 1-2 broke that accidental unification: once every team in a single-division event gets a real `division_id` (Task 1-2's whole point), zero teams remain with `division_id IS NULL`, so both of these queries now find zero eligible teams in a single-division event — confirmed by running the full test suite after Task 2 landed, which produced 24 failures across `test_audit_log.py`, `test_broadcast_wiring.py`, `test_finals.py`, and `test_schedule.py` (most of those 24 are various tests that happen to share a single-division event setup and hit this gap indirectly through fixture setup, not 24 independent bugs — fixing the two query sites below is expected to resolve all 24). This was investigated and confirmed via `server/CLAUDE.md`'s own documented multi-division architecture and by tracing one failure (`test_generate_schedule_creates_matches`) from its raw 422 down to `routers/schedule.py`'s exact query. No other entity (`Match`, `FieldSet`, `Ranking`, `RankingConfiguration`, `FinalsBracket`) needs any change: every one of those is created from a caller-supplied `division_id` request parameter (or propagated from another already-request-scoped row), never derived from a team's own `division_id`.
+
+**Files:**
+- Modify: `server/src/tournament_server/services/team_assignment.py`
+- Modify: `server/tests/test_team_assignment.py`
+- Modify: `server/src/tournament_server/routers/schedule.py` (`generate_schedule`)
+- Modify: `server/tests/test_schedule.py`
+- Modify: `server/src/tournament_server/routers/finals.py` (`start_finals`)
+- Modify: `server/tests/test_finals.py`
+
+**Interfaces:**
+- Produces: `get_sole_division_id(db: Session, event_id: int) -> int | None` in `services/team_assignment.py` — returns the id of `event_id`'s only division, or `None` if it has zero or more than one. Used by Tasks 4's two router fixes below, and internally by `assign_sole_division` (refactored to use it, not duplicate its logic).
+- Consumes: nothing new from earlier tasks beyond what's already in place.
+
+- [ ] **Step 1: Write the failing helper tests**
+
+Add to `server/tests/test_team_assignment.py`, after the existing `test_assign_sole_division_*` tests (the file's imports already include everything these need — `Division`, `Event`, `Team`, `_db`):
+
+```python
+def test_get_sole_division_id_returns_none_with_zero_divisions(tmp_path):
+    db = _db(tmp_path)
+    event = Event(name="Regional Qualifier")
+    db.add(event)
+    db.commit()
+
+    assert get_sole_division_id(db, event.id) is None
+
+
+def test_get_sole_division_id_returns_none_with_more_than_one_division(tmp_path):
+    db = _db(tmp_path)
+    event = Event(name="Regional Qualifier")
+    db.add(event)
+    db.flush()
+    db.add_all([Division(event_id=event.id, name="A"), Division(event_id=event.id, name="B")])
+    db.commit()
+
+    assert get_sole_division_id(db, event.id) is None
+
+
+def test_get_sole_division_id_returns_the_id_when_exactly_one_exists(tmp_path):
+    db = _db(tmp_path)
+    event = Event(name="Regional Qualifier")
+    db.add(event)
+    db.flush()
+    division = Division(event_id=event.id, name="Division 1")
+    db.add(division)
+    db.commit()
+
+    assert get_sole_division_id(db, event.id) == division.id
+```
+
+And change the import line to add the new name:
+
+```python
+from tournament_server.services.team_assignment import (
+    assign_sole_division,
+    balanced_assign,
+    get_sole_division_id,
+)
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `cd server && .venv/bin/python -m pytest tests/test_team_assignment.py -v`
+Expected: `ImportError` — `get_sole_division_id` does not exist yet.
+
+- [ ] **Step 3: Implement `get_sole_division_id`, refactor `assign_sole_division` to use it**
+
+In `server/src/tournament_server/services/team_assignment.py`, add the new function and refactor the existing one (this is a pure refactor of `assign_sole_division` — its behavior, docstring, and all 5 of its own existing tests must remain unchanged):
+
+```python
+def get_sole_division_id(db: Session, event_id: int) -> int | None:
+    """Returns the id of `event_id`'s only division, or None if it has
+    zero or more than one. Shared by `assign_sole_division` (which writes
+    a real division_id onto every team in that case) and by the
+    schedule/finals eligibility queries in routers/schedule.py and
+    routers/finals.py (which read it so that omitting `division_id` in a
+    request is treated as "the event's sole division" rather than only
+    "no division at all" -- necessary once every team in a single-division
+    event actually has that division's real id set, rather than staying
+    null)."""
+    division_ids = list(
+        db.execute(select(Division.id).where(Division.event_id == event_id)).scalars().all()
+    )
+    return division_ids[0] if len(division_ids) == 1 else None
+
+
+def assign_sole_division(db: Session, event_id: int) -> int:
+    """No-op unless `event_id` has exactly one division, in which case
+    every currently-unassigned team in that event is assigned to it.
+
+    Exists so a team never sits divisionless -- and that division's team
+    count never reads misleadingly low -- purely because nothing
+    explicitly picked a division for it, in the common case where there
+    is only one division to begin with and the choice is not actually a
+    choice. Does not commit; the caller's own transaction does. Deliberately
+    scoped to *implicit* divisionless-ness only: it must never run as part
+    of `PATCH /api/teams/{id}` handling an explicit `division_id: null`,
+    which is a real admin action to unassign a team and must stick.
+    """
+    sole_division_id = get_sole_division_id(db, event_id)
+    if sole_division_id is None:
+        return 0
+
+    unassigned_teams = list(
+        db.execute(
+            select(Team).where(Team.event_id == event_id, Team.division_id.is_(None))
+        ).scalars().all()
+    )
+    for team in unassigned_teams:
+        team.division_id = sole_division_id
+    db.flush()
+    return len(unassigned_teams)
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `cd server && .venv/bin/python -m pytest tests/test_team_assignment.py -v`
+Expected: all PASS (3 new + the 5 pre-existing `assign_sole_division` tests, unchanged, + the 4 pre-existing `balanced_assign` tests).
+
+- [ ] **Step 5: Commit the helper**
+
+```bash
+git add server/src/tournament_server/services/team_assignment.py server/tests/test_team_assignment.py
+git commit -m "Add get_sole_division_id, refactor assign_sole_division to use it"
+```
+
+- [ ] **Step 6: Write the failing schedule.py test**
+
+Add to `server/tests/test_schedule.py`, anywhere after `_setup_ready_session` (e.g. right after `test_generate_schedule_creates_matches`):
+
+```python
+def test_generate_schedule_succeeds_in_a_single_division_event(client):
+    # Regression test: before this fix, every team created via
+    # _setup_ready_session ended up with a real division_id (the event
+    # has exactly one division -- the auto-seeded "Division 1" -- and
+    # assign_sole_division, added earlier in this plan, assigns every
+    # team to it). That made the eligible-team-pool query below --
+    # which filtered for Team.division_id IS NULL when no division_id
+    # was given in the request -- find zero teams, turning this into a
+    # 422 instead of a successful schedule generation. This is the exact
+    # scenario _setup_ready_session already exercises; naming it
+    # explicitly here documents the regression this task fixes.
+    session_id, team_ids = _setup_ready_session(client)
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 201
+```
+
+- [ ] **Step 7: Run the test to verify it fails**
+
+Run: `cd server && .venv/bin/python -m pytest tests/test_schedule.py::test_generate_schedule_succeeds_in_a_single_division_event -v`
+Expected: FAIL with `assert 422 == 201` (same failure mode as the 8 other currently-failing tests in this file).
+
+- [ ] **Step 8: Implement the schedule.py fix**
+
+In `server/src/tournament_server/routers/schedule.py`, add the import:
+
+```python
+from tournament_server.services.team_assignment import get_sole_division_id
+```
+
+Change only the `team_query` block (leave `existing_query` for `Match` and every other filter in this function untouched — they key off `payload.division_id` directly, which stays exactly as-is):
+
+```python
+    team_query = select(Team).where(Team.id.in_(team_ids_in_session))
+    if payload.division_id is None:
+        sole_division_id = get_sole_division_id(db, event.id)
+        if sole_division_id is not None:
+            team_query = team_query.where(Team.division_id == sole_division_id)
+        else:
+            team_query = team_query.where(Team.division_id.is_(None))
+    else:
+        team_query = team_query.where(Team.division_id == payload.division_id)
+    teams = db.execute(team_query).scalars().all()
+```
+
+- [ ] **Step 9: Run the tests to verify they pass**
+
+Run: `cd server && .venv/bin/python -m pytest tests/test_schedule.py -v`
+Expected: all PASS, including every pre-existing test in the file (in particular, every test that was failing before this task started).
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add server/src/tournament_server/routers/schedule.py server/tests/test_schedule.py
+git commit -m "Fix POST /api/schedule's eligible-team query for single-division events"
+```
+
+- [ ] **Step 11: Write the failing finals.py test**
+
+Add to `server/tests/test_finals.py`, anywhere after `test_start_finals_rejects_insufficient_checked_in_teams_for_captain_pick` (reuse that test's exact setup shape, just check in every team instead of holding one back):
+
+```python
+def test_start_finals_captain_pick_succeeds_in_a_single_division_event(captain_pick_client):
+    # Regression test: same root cause as
+    # test_generate_schedule_succeeds_in_a_single_division_event in
+    # test_schedule.py -- the captain_pick eligible-team COUNT query here
+    # has the identical Team.division_id IS NULL pattern, which finds
+    # zero teams once every team in this single-division event has a
+    # real division_id.
+    client = captain_pick_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "captain-pick-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    team_ids = [
+        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
+        for i in range(4)
+    ]
+    for team_id in team_ids:
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+
+    response = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 2},
+    )
+    assert response.status_code == 201
+```
+
+- [ ] **Step 12: Run the test to verify it fails**
+
+Run: `cd server && .venv/bin/python -m pytest tests/test_finals.py::test_start_finals_captain_pick_succeeds_in_a_single_division_event -v`
+Expected: FAIL with `assert 422 == 201` (the "Only N teams checked into this session, need 4" error, where N is 0).
+
+- [ ] **Step 13: Implement the finals.py fix**
+
+In `server/src/tournament_server/routers/finals.py`, add the import:
+
+```python
+from tournament_server.services.team_assignment import get_sole_division_id
+```
+
+Change only the `eligible_team_query` block inside the `if alliance_selection == "captain_pick":` branch (leave `existing_bracket_query`, `existing_sets_query`, and `ranking_query` untouched — same reasoning as the schedule.py fix, they key off `payload.division_id` directly):
+
+```python
+        eligible_team_query = select(Team).where(Team.id.in_(checked_in_team_ids))
+        if payload.division_id is None:
+            sole_division_id = get_sole_division_id(db, event.id)
+            if sole_division_id is not None:
+                eligible_team_query = eligible_team_query.where(
+                    Team.division_id == sole_division_id
+                )
+            else:
+                eligible_team_query = eligible_team_query.where(Team.division_id.is_(None))
+        else:
+            eligible_team_query = eligible_team_query.where(
+                Team.division_id == payload.division_id
+            )
+        eligible_team_count = len(db.execute(eligible_team_query).scalars().all())
+```
+
+- [ ] **Step 14: Run the tests to verify they pass**
+
+Run: `cd server && .venv/bin/python -m pytest tests/test_finals.py -v`
+Expected: all PASS, including every pre-existing test in the file.
+
+- [ ] **Step 15: Commit**
+
+```bash
+git add server/src/tournament_server/routers/finals.py server/tests/test_finals.py
+git commit -m "Fix POST /api/finals/start's captain_pick eligible-team count for single-division events"
+```
+
+- [ ] **Step 16: Run the FULL backend test suite to confirm all 24 previously-failing tests are now fixed**
+
+Run: `cd server && .venv/bin/python -m pytest -q`
+Expected: 0 failures. This must show strictly more passing tests than the last full-suite run before this task (which had 24 failures) — if any of the 24 are still failing, or if this run has fewer total tests than expected, stop and report BLOCKED with the specific test names still failing rather than committing anything further.
+
+---
+
+### Task 5: Extend the app-startup self-heal to fix already-affected databases
 
 **Files:**
 - Modify: `server/src/tournament_server/app.py`
@@ -617,7 +905,7 @@ git commit -m "Extend the startup self-heal to also assign pre-existing unassign
 
 ---
 
-### Task 5: Update `server/CLAUDE.md`
+### Task 6: Update `server/CLAUDE.md`
 
 **Files:**
 - Modify: `server/CLAUDE.md`
@@ -658,6 +946,21 @@ an event back down to exactly one division), plus once more from
 fixed on its next launch. It deliberately does not run from
 `PATCH /api/teams/{id}` — an admin's explicit `division_id: null` there is
 a real unassign action and must stick, not get silently reverted.
+
+Giving every team in a single-division event a real `division_id`
+uncovered a second, separate assumption: `POST /api/schedule`'s
+eligible-team pool and `POST /api/finals/start`'s `captain_pick`
+eligible-team count both treated `Team.division_id IS NULL` as "this team
+isn't scoped to an explicit division" -- true by accident before
+`assign_sole_division` existed, false afterward. The same file's
+`get_sole_division_id(db, event_id)` (returns the event's only division's
+id, or `None` if it has zero or more than one) lets both of those queries
+treat an *omitted* `division_id` request parameter as "the event's sole
+division" specifically for `Team` rows, while leaving every other
+entity's `division_id` resolution (`Match`, `FieldSet`, `Ranking`,
+`RankingConfiguration`, `FinalsBracket` all key off their own request
+parameter, never off a team's) and every multi-division event's behavior
+completely unchanged.
 ```
 
 Then find, in "Known, deliberate gaps in this phase", the note that currently reads:
