@@ -81,6 +81,44 @@ def test_stamped_baseline_database_with_zero_divisions_self_heals_via_create_app
     assert divisions_after == ["Division 1"]
 
 
+def test_startup_self_heal_assigns_unassigned_teams_to_a_pre_existing_sole_division(tmp_path):
+    """A database that hit the sole-division-teams-not-assigned bug before
+    this fix existed has a real event, exactly one division, and one or
+    more teams with a null division_id -- a state this project's own
+    create_app() could produce before this task's own change existed.
+    The startup self-heal must fix it on the next launch, the same way it
+    already fixes a zero-division event."""
+    db_path = str(tmp_path / "stale_unassigned_teams.db")
+    engine = make_engine(db_path)
+    init_db(engine)
+
+    with engine.connect() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO events (id, name, created_at) "
+                "VALUES (1, 'Regional Qualifier', '2026-01-01 00:00:00')"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO divisions (id, event_id, name) VALUES (1, 1, 'Division 1')")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO teams (id, event_id, number, name, division_id, tiebreaker_seed) "
+                "VALUES (1, 1, '1234A', 'Robo Raiders', NULL, 0)"
+            )
+        )
+        connection.commit()
+
+    create_app(db_path=db_path, plugins_root=str(tmp_path / "plugins"))
+
+    with engine.connect() as connection:
+        division_id_after = connection.execute(
+            text("SELECT division_id FROM teams WHERE id = 1")
+        ).scalar_one()
+    assert division_id_after == 1
+
+
 def test_mismatched_pre_alembic_database_is_refused(tmp_path):
     db_path = str(tmp_path / "old.db")
     engine = make_engine(db_path)

@@ -15,6 +15,7 @@ from tournament_server.db import make_engine, make_session_factory, utc_now
 from tournament_server.migrations import ensure_schema_current
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
+from tournament_server.services.team_assignment import assign_sole_division
 from tournament_server.plugin_registry.discovery import (
     discover_game_plugins,
     discover_scheduler_plugins,
@@ -169,6 +170,8 @@ def create_app(
             if has_division is None:
                 db.add(Division(event_id=event_row.id, name="Division 1"))
                 db.commit()
+            assign_sole_division(db, event_row.id)
+            db.commit()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
