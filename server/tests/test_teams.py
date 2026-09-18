@@ -441,6 +441,31 @@ def test_bulk_upsert_with_no_division_specified_joins_the_sole_division(client):
     assert teams[0]["division_id"] == division_id
 
 
+def test_bulk_upsert_updated_row_with_no_division_specified_rejoins_the_sole_division(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    division_id = client.get("/api/divisions").json()[0]["id"]  # the auto-seeded "Division 1"
+    client.post(
+        "/api/teams",
+        json={"number": "1234A", "name": "Robo Raiders", "division_id": division_id},
+    )
+
+    # Re-uploading a roster CSV that omits the division column is the
+    # single most common real operation on this endpoint -- the team
+    # must rejoin the sole division, not stay unassigned, and the HTTP
+    # response itself must reflect that (not just the database).
+    response = client.post(
+        "/api/teams/bulk",
+        json={"rows": [{"number": "1234A", "name": "Robo Raiders Renamed"}]},
+    )
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results[0]["status"] == "updated"
+    assert results[0]["team"]["division_id"] == division_id
+
+    teams = client.get("/api/teams").json()
+    assert teams[0]["division_id"] == division_id
+
+
 def test_bulk_upsert_does_not_override_an_explicitly_named_division(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/divisions", json={"name": "Elementary"})
