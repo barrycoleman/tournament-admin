@@ -1,13 +1,12 @@
-import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
+import { InlineEditableText } from "../components/InlineEditableText";
 import type { EventRead } from "../types";
 
 export function DashboardRoute() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [renameError, setRenameError] = useState<string | null>(null);
   const { data } = useQuery({
     queryKey: ["event"],
     queryFn: () => apiRequest<EventRead>("/api/event"),
@@ -17,11 +16,7 @@ export function DashboardRoute() {
     mutationFn: (name: string) =>
       apiRequest<EventRead>("/api/event", { method: "PATCH", body: { name } }),
     onSuccess: (updated) => {
-      setRenameError(null);
       queryClient.setQueryData(["event"], updated);
-    },
-    onError: (err) => {
-      setRenameError(err instanceof ApiError ? err.detail : t("errors.generic"));
     },
   });
 
@@ -31,26 +26,26 @@ export function DashboardRoute() {
       {data && (
         <div className="panel panel--form">
           <div className="field">
-            <label className="field__label" htmlFor="event-name">
-              {t("dashboard.eventNameLabel")}
-            </label>
-            <input
-              className="input"
-              id="event-name"
-              defaultValue={data.name}
-              onBlur={(event) => {
-                const newName = event.target.value;
-                if (newName !== data.name) {
-                  renameMutation.mutate(newName);
-                }
-              }}
+            <span className="field__label">{t("dashboard.eventNameLabel")}</span>
+            <InlineEditableText
+              value={data.name}
+              onSave={(name) => renameMutation.mutate(name)}
+              onCancel={() => renameMutation.reset()}
+              isSaving={renameMutation.isPending}
+              error={
+                renameMutation.isError
+                  ? renameMutation.error instanceof ApiError
+                    ? renameMutation.error.detail
+                    : t("errors.generic")
+                  : null
+              }
+              editLabel={t("dashboard.editEventNameAction")}
+              saveLabel={t("dashboard.saveAction")}
+              cancelLabel={t("dashboard.cancelAction")}
+              inputLabel={t("dashboard.eventNameLabel")}
+              inputId="event-name"
             />
           </div>
-          {renameError && (
-            <p className="alert alert-danger" role="alert">
-              {renameError}
-            </p>
-          )}
         </div>
       )}
     </div>

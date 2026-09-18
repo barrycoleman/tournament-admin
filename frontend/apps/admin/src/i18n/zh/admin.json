@@ -78,6 +78,8 @@
     "heading": "分组",
     "nameLabel": "分组名称",
     "renameFieldLabel": "重命名 {{name}}",
+    "editDivisionAction": "编辑{{name}}",
+    "saveAction": "保存",
     "targetLabel": "目标队伍数(可选)",
     "addDivisionAction": "添加分组...",
     "addSubmit": "添加分组",
@@ -94,7 +96,10 @@
   },
   "dashboard": {
     "heading": "仪表盘",
-    "eventNameLabel": "赛事"
+    "eventNameLabel": "赛事",
+    "editEventNameAction": "编辑赛事名称",
+    "saveAction": "保存",
+    "cancelAction": "取消"
   },
   "eventSetup": {
     "heading": "赛事与插件",

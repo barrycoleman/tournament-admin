@@ -21,7 +21,8 @@ test.describe.serial("division management", () => {
 
     // Event creation always seeds one division ("Division 1"); as the
     // only division, its delete button must not be present at all.
-    await expect(page.getByLabel("Rename Division 1")).toHaveValue("Division 1");
+    await expect(page.getByText("Division 1")).toBeVisible();
+    await expect(page.getByLabel("Rename Division 1")).not.toBeVisible();
     // This counts every "Delete"-named button anywhere on the page, which
     // is only correct because no other spec file that could run before
     // this one (given this suite's fixed workers: 1 / fullyParallel: false
@@ -34,28 +35,49 @@ test.describe.serial("division management", () => {
 
     await page.getByLabel("Division name").fill("Elementary");
     await page.getByRole("button", { name: "Add division" }).click();
-    // The division's name only ever appears as the value of its inline
-    // rename <input> (there's no separate read-only text node for it),
-    // so it must be asserted via that input's accessible name/value
-    // rather than getByText.
-    await expect(page.getByLabel("Rename Elementary")).toHaveValue("Elementary");
+    await expect(page.getByText("Elementary", { exact: true })).toBeVisible();
 
     // With two divisions now, both rows show a delete button.
     await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(2);
 
-    // Each row's rename input has its own accessible name ("Rename
-    // <current name>"), distinct from the add-form's "Division name"
-    // label above, so this targets the new row's input specifically.
+    // Renaming requires an explicit edit -> save action; there is no
+    // save-on-blur.
+    await page.getByRole("button", { name: "Edit Elementary" }).click();
     const renameInput = page.getByLabel("Rename Elementary");
     await renameInput.fill("Elementary School");
-    await renameInput.press("Tab"); // triggers the input's onBlur handler
-    await expect(page.getByLabel("Rename Elementary School")).toHaveValue("Elementary School");
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText("Elementary School")).toBeVisible();
+    await expect(renameInput).not.toBeVisible();
 
     await page.getByRole("button", { name: "Delete" }).last().click();
     await page.getByRole("button", { name: "Delete", exact: true }).last().click();
-    await expect(page.getByLabel("Rename Elementary School")).not.toBeVisible();
+    await expect(page.getByText("Elementary School")).not.toBeVisible();
 
     // Back down to one division -- its delete button is hidden again.
     await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(0);
+  });
+
+  test("editing a division name shows Save/Cancel and Cancel discards the edit", async ({
+    page,
+  }) => {
+    await page.goto("/login");
+    await page.getByLabel("Role").fill("admin");
+    await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
+    await page.getByRole("button", { name: "Log in" }).click();
+    await expect(page).toHaveURL("/");
+
+    await page.getByRole("link", { name: "Divisions" }).click();
+    await expect(page).toHaveURL(/\/divisions$/);
+
+    await page.getByRole("button", { name: "Edit Division 1" }).click();
+    const renameInput = page.getByLabel("Rename Division 1");
+    await renameInput.fill("Should not be saved");
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    await expect(page.getByText("Division 1")).toBeVisible();
+    await expect(renameInput).not.toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText("Division 1")).toBeVisible();
   });
 });

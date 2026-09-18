@@ -18,17 +18,42 @@ test.describe.serial("dashboard: event name editing", () => {
     await page.getByRole("button", { name: "Log in" }).click();
     await expect(page).toHaveURL("/");
 
-    const nameField = page.getByLabel("Event");
-    await expect(nameField).toHaveValue(E2E_EVENT_NAME);
+    await expect(page.getByText(E2E_EVENT_NAME)).toBeVisible();
+    await expect(page.getByLabel("Event", { exact: true })).not.toBeVisible();
 
+    await page.getByRole("button", { name: "Edit event name" }).click();
+    const nameField = page.getByLabel("Event", { exact: true });
     await nameField.fill("Renamed Regional Event");
-    await nameField.blur();
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await expect(page.getByText("Renamed Regional Event")).toBeVisible();
+    await expect(nameField).not.toBeVisible();
 
     await page.reload();
-    await expect(page.getByLabel("Event")).toHaveValue("Renamed Regional Event");
+    await expect(page.getByText("Renamed Regional Event")).toBeVisible();
   });
 
-  test("clearing the event name entirely shows an inline error and keeps the last saved name", async ({
+  test("clicking Cancel discards an in-progress edit without saving", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByLabel("Role").fill("admin");
+    await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
+    await page.getByRole("button", { name: "Log in" }).click();
+    await expect(page).toHaveURL("/");
+
+    const savedName = (await page.locator(".inline-edit__value").textContent()) ?? "";
+
+    await page.getByRole("button", { name: "Edit event name" }).click();
+    await page.getByLabel("Event", { exact: true }).fill("Should not be saved");
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    await expect(page.getByText(savedName)).toBeVisible();
+    await expect(page.getByLabel("Event", { exact: true })).not.toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText(savedName)).toBeVisible();
+  });
+
+  test("clearing the event name entirely shows an inline error and stays in edit mode", async ({
     page,
   }) => {
     await page.goto("/login");
@@ -37,15 +62,17 @@ test.describe.serial("dashboard: event name editing", () => {
     await page.getByRole("button", { name: "Log in" }).click();
     await expect(page).toHaveURL("/");
 
-    const nameField = page.getByLabel("Event");
-    const savedName = await nameField.inputValue();
+    const savedName = (await page.locator(".inline-edit__value").textContent()) ?? "";
 
+    await page.getByRole("button", { name: "Edit event name" }).click();
+    const nameField = page.getByLabel("Event", { exact: true });
     await nameField.fill("   ");
-    await nameField.blur();
+    await page.getByRole("button", { name: "Save" }).click();
 
     await expect(page.getByRole("alert")).toHaveText("Event name cannot be empty");
+    await expect(nameField).toBeVisible();
 
     await page.reload();
-    await expect(page.getByLabel("Event")).toHaveValue(savedName);
+    await expect(page.getByText(savedName)).toBeVisible();
   });
 });

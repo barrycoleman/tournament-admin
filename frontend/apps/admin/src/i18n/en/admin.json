@@ -78,6 +78,8 @@
     "heading": "Divisions",
     "nameLabel": "Division name",
     "renameFieldLabel": "Rename {{name}}",
+    "editDivisionAction": "Edit {{name}}",
+    "saveAction": "Save",
     "targetLabel": "Target team count (optional)",
     "addDivisionAction": "Add a division...",
     "addSubmit": "Add division",
@@ -94,7 +96,10 @@
   },
   "dashboard": {
     "heading": "Dashboard",
-    "eventNameLabel": "Event"
+    "eventNameLabel": "Event",
+    "editEventNameAction": "Edit event name",
+    "saveAction": "Save",
+    "cancelAction": "Cancel"
   },
   "eventSetup": {
     "heading": "Event & plugins",

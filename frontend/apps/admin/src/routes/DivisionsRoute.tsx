@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
+import { InlineEditableText } from "../components/InlineEditableText";
 import type { Division } from "../types";
 
 interface DivisionTeamCounts {
@@ -72,7 +73,6 @@ export function DivisionsRoute() {
   const [pendingRedistribute, setPendingRedistribute] = useState(false);
   const [redistributeError, setRedistributeError] = useState<string | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<Division | null>(null);
-  const [renameError, setRenameError] = useState<string | null>(null);
   const [addingDivision, setAddingDivision] = useState(false);
 
   const { data: divisions } = useQuery({
@@ -111,11 +111,7 @@ export function DivisionsRoute() {
         body: { name: newName },
       }),
     onSuccess: () => {
-      setRenameError(null);
       invalidateAll();
-    },
-    onError: (err) => {
-      setRenameError(err instanceof ApiError ? err.detail : t("errors.generic"));
     },
   });
 
@@ -165,18 +161,28 @@ export function DivisionsRoute() {
                   target: division.target_team_count,
                 })
               : t("divisions.teamCountLabel", { count });
+          const isThisRowsMutation = renameMutation.variables?.id === division.id;
           return (
             <li className="list-row" key={division.id}>
-              <input
-                className="input"
-                style={{ flex: 1 }}
-                aria-label={t("divisions.renameFieldLabel", { name: division.name })}
-                defaultValue={division.name}
-                onBlur={(event) => {
-                  if (event.target.value !== division.name) {
-                    renameMutation.mutate({ id: division.id, newName: event.target.value });
-                  }
+              <InlineEditableText
+                value={division.name}
+                onSave={(newName) => renameMutation.mutate({ id: division.id, newName })}
+                onCancel={() => {
+                  if (isThisRowsMutation) renameMutation.reset();
                 }}
+                isSaving={renameMutation.isPending && isThisRowsMutation}
+                error={
+                  renameMutation.isError && isThisRowsMutation
+                    ? renameMutation.error instanceof ApiError
+                      ? renameMutation.error.detail
+                      : t("errors.generic")
+                    : null
+                }
+                editLabel={t("divisions.editDivisionAction", { name: division.name })}
+                saveLabel={t("divisions.saveAction")}
+                cancelLabel={t("divisions.cancelAction")}
+                inputLabel={t("divisions.renameFieldLabel", { name: division.name })}
+                style={{ flex: 1 }}
               />
               <span className="list-row__meta">{label}</span>
               {(divisions?.length ?? 0) > 1 && (
@@ -191,11 +197,6 @@ export function DivisionsRoute() {
           );
         })}
       </ul>
-      {renameError && (
-        <p className="alert alert-danger" role="alert">
-          {renameError}
-        </p>
-      )}
 
       {!addingDivision && (
         <button className="btn" type="button" onClick={() => setAddingDivision(true)}>

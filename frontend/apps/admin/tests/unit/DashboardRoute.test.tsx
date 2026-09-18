@@ -28,7 +28,7 @@ function renderRoute() {
 }
 
 describe("DashboardRoute", () => {
-  it("shows the event name in an editable field", async () => {
+  it("shows the event name as read-only text with an edit action", async () => {
     vi.mocked(apiRequest).mockImplementation(async (path: string) => {
       if (path === "/api/event") {
         return { id: 1, name: "Regional Qualifier", active_session_id: null, game_plugin_name: null, created_at: "2026-01-01T00:00:00Z" } as never;
@@ -37,10 +37,12 @@ describe("DashboardRoute", () => {
     });
     renderRoute();
 
-    expect(await screen.findByLabelText("Event")).toHaveValue("Regional Qualifier");
+    expect(await screen.findByText("Regional Qualifier")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit event name" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Event")).not.toBeInTheDocument();
   });
 
-  it("renames the event on blur when the value changed", async () => {
+  it("renames the event when Save is clicked after editing", async () => {
     let renameBody: unknown = null;
     vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
       if (path === "/api/event" && !options) {
@@ -54,14 +56,16 @@ describe("DashboardRoute", () => {
     });
     renderRoute();
 
-    const input = await screen.findByLabelText("Event");
-    fireEvent.change(input, { target: { value: "State Championship" } });
-    fireEvent.blur(input);
+    await screen.findByText("Regional Qualifier");
+    fireEvent.click(screen.getByRole("button", { name: "Edit event name" }));
+    fireEvent.change(screen.getByLabelText("Event"), { target: { value: "State Championship" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(renameBody).toEqual({ name: "State Championship" }));
+    expect(await screen.findByText("State Championship")).toBeInTheDocument();
   });
 
-  it("does not call the API on blur when the value did not change", async () => {
+  it("does not call the API when Save is clicked with an unchanged value", async () => {
     const calls: string[] = [];
     vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
       calls.push(path);
@@ -72,13 +76,32 @@ describe("DashboardRoute", () => {
     });
     renderRoute();
 
-    const input = await screen.findByLabelText("Event");
-    fireEvent.blur(input);
+    await screen.findByText("Regional Qualifier");
+    fireEvent.click(screen.getByRole("button", { name: "Edit event name" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(calls.filter((path) => path === "/api/event")).toHaveLength(1);
   });
 
-  it("shows an inline alert with the ApiError detail when the rename is rejected", async () => {
+  it("clicking Cancel discards the edit without calling the API", async () => {
+    vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+      if (path === "/api/event") {
+        return { id: 1, name: "Regional Qualifier", active_session_id: null, game_plugin_name: null, created_at: "2026-01-01T00:00:00Z" } as never;
+      }
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderRoute();
+
+    await screen.findByText("Regional Qualifier");
+    fireEvent.click(screen.getByRole("button", { name: "Edit event name" }));
+    fireEvent.change(screen.getByLabelText("Event"), { target: { value: "Something else" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByText("Regional Qualifier")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Event")).not.toBeInTheDocument();
+  });
+
+  it("shows an inline alert with the ApiError detail when the rename is rejected, staying in edit mode", async () => {
     vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
       if (path === "/api/event" && !options) {
         return { id: 1, name: "Regional Qualifier", active_session_id: null, game_plugin_name: null, created_at: "2026-01-01T00:00:00Z" } as never;
@@ -90,10 +113,13 @@ describe("DashboardRoute", () => {
     });
     renderRoute();
 
-    const input = await screen.findByLabelText("Event");
-    fireEvent.change(input, { target: { value: "" } });
-    fireEvent.blur(input);
+    await screen.findByText("Regional Qualifier");
+    fireEvent.click(screen.getByRole("button", { name: "Edit event name" }));
+    fireEvent.change(screen.getByLabelText("Event"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Event name cannot be empty");
+    // Stays in edit mode so the user can fix and retry.
+    expect(screen.getByLabelText("Event")).toBeInTheDocument();
   });
 });
