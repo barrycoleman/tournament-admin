@@ -280,6 +280,36 @@ def assign_scheduled_times(
     return assignments
 
 
+def block_utc_bounds(
+    block: dict, timezone_name: str
+) -> tuple[dt.datetime, dt.datetime | None]:
+    """Resolves a single time-block dict's own window to real UTC instants,
+    combining its `date` with its `start_time`/`end_time` wall-clock
+    strings against `timezone_name`. Returns (start_utc, end_utc), with
+    end_utc None for an open-ended block (no end_time) -- the caller
+    decides how "no confirmed end" should behave for its own purposes
+    (e.g. overlap-checking treats it as extending indefinitely).
+
+    This is the single place block-to-instant conversion logic lives;
+    assign_scheduled_times's per-block loop and
+    routers/schedule.py's _check_no_overlap_with_prior_generations both
+    need exactly this same date+time-of-day-against-a-timezone
+    resolution and must not each reimplement it by hand."""
+    tz = ZoneInfo(timezone_name)
+    start_utc = dt.datetime.combine(
+        block["date"], _parse_time_of_day(block["start_time"]), tzinfo=tz
+    ).astimezone(dt.UTC)
+    end_time = block.get("end_time")
+    end_utc = (
+        dt.datetime.combine(
+            block["date"], _parse_time_of_day(end_time), tzinfo=tz
+        ).astimezone(dt.UTC)
+        if end_time is not None
+        else None
+    )
+    return start_utc, end_utc
+
+
 def implicit_default_time_block(
     match_duration_seconds: int, warn_below_multiplier: float
 ) -> dict:
@@ -290,11 +320,22 @@ def implicit_default_time_block(
     }
 
 
-def serialize_time_blocks(time_blocks: list[dict]) -> str:
+def serialize_time_blocks(time_blocks: list[dict], timezone_name: str) -> str:
     """JSON-encodes a list of time-block dicts (as produced by
     ScheduleGenerateRequest.time_blocks or the implicit-default path) for
     storage in ScheduleGeneration.time_blocks_json. Each block's `date`
-    (a real dt.date) is encoded as an ISO-8601 string."""
+    (a real dt.date) is encoded as an ISO-8601 string.
+
+    Each encoded block also carries `timezone_name` -- the IANA zone its
+    own start_time/end_time wall-clock strings are meant to be
+    interpreted against. This is what lets a later, different generation
+    call's overlap check (routers/schedule.py's
+    _check_no_overlap_with_prior_generations) convert this stored block
+    back to a real UTC instant instead of comparing raw wall-clock
+    strings across generations that may have resolved against different
+    timezone frames (the implicit-default path always resolves against
+    "UTC"; the explicit time_blocks path resolves against the session's
+    own timezone) -- see this project's final-review fix wave, Finding 2."""
     return json.dumps(
         [
             {
@@ -302,6 +343,7 @@ def serialize_time_blocks(time_blocks: list[dict]) -> str:
                 "start_time": b["start_time"],
                 "end_time": b.get("end_time"),
                 "cycle_time": b.get("cycle_time"),
+                "timezone": timezone_name,
             }
             for b in time_blocks
         ]
@@ -311,7 +353,17 @@ def serialize_time_blocks(time_blocks: list[dict]) -> str:
 def deserialize_time_blocks(time_blocks_json: str) -> list[dict]:
     """Inverse of serialize_time_blocks: decodes stored JSON back into
     block dicts with a real dt.date under "date", suitable for passing to
-    validate_blocks_ordered_and_non_overlapping."""
+    validate_blocks_ordered_and_non_overlapping.
+
+    A block's "timezone" key defaults to "UTC" when absent, for rows
+    written before serialize_time_blocks started storing it: that's the
+    frame the more common no-time_blocks-given (implicit-default) call
+    path already resolved against, and this project has never had real
+    deployed event data (server/CLAUDE.md's "Database migrations"
+    section) -- so there is no genuine production row whose true
+    original frame this default could get wrong; it only affects test
+    data and generations made in the narrow window between the phases/
+    dry_run feature landing and this default being added."""
     raw = json.loads(time_blocks_json)
     return [
         {
@@ -319,6 +371,7 @@ def deserialize_time_blocks(time_blocks_json: str) -> list[dict]:
             "start_time": b["start_time"],
             "end_time": b.get("end_time"),
             "cycle_time": b.get("cycle_time"),
+            "timezone": b.get("timezone", "UTC"),
         }
         for b in raw
     ]

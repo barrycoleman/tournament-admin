@@ -1,10 +1,12 @@
 import datetime as dt
+import json
 
 import pytest
 
 from tournament_server.services.schedule_timing import (
     ResolvedBlock,
     assign_scheduled_times,
+    block_utc_bounds,
     deserialize_time_blocks,
     implicit_default_time_block,
     resolve_block_cycle_times,
@@ -253,5 +255,34 @@ def test_serialize_and_deserialize_time_blocks_round_trip():
         {"date": D1, "start_time": "10:00", "end_time": "12:00", "cycle_time": 180},
         {"date": D2, "start_time": "09:00", "end_time": None, "cycle_time": 120},
     ]
-    round_tripped = deserialize_time_blocks(serialize_time_blocks(blocks))
-    assert round_tripped == blocks
+    round_tripped = deserialize_time_blocks(
+        serialize_time_blocks(blocks, "America/Los_Angeles")
+    )
+    assert round_tripped == [
+        {**block, "timezone": "America/Los_Angeles"} for block in blocks
+    ]
+
+
+def test_deserialize_time_blocks_defaults_missing_timezone_to_utc():
+    # Rows written before serialize_time_blocks started storing
+    # "timezone" have no such key at all -- deserialize_time_blocks must
+    # default it rather than KeyError, so a pre-existing generation's
+    # blocks stay readable by the overlap check.
+    legacy_json = json.dumps(
+        [{"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": 180}]
+    )
+    round_tripped = deserialize_time_blocks(legacy_json)
+    assert round_tripped[0]["timezone"] == "UTC"
+
+
+def test_block_utc_bounds_resolves_against_given_timezone():
+    block = {"date": D1, "start_time": "10:00", "end_time": "10:10", "cycle_time": 180}
+    start_utc, end_utc = block_utc_bounds(block, "America/Los_Angeles")
+    assert start_utc == dt.datetime(2026, 9, 5, 17, 0, tzinfo=dt.UTC)
+    assert end_utc == dt.datetime(2026, 9, 5, 17, 10, tzinfo=dt.UTC)
+
+
+def test_block_utc_bounds_open_ended_has_no_end():
+    block = {"date": D1, "start_time": "10:00", "end_time": None, "cycle_time": 180}
+    _, end_utc = block_utc_bounds(block, "UTC")
+    assert end_utc is None

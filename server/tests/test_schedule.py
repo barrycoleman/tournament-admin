@@ -1,3 +1,4 @@
+import datetime as dt
 import random
 
 
@@ -1592,3 +1593,160 @@ def test_generate_schedule_combined_phases_fold_pairing_history_between_phases(c
     practice_split = partner_split(practice_matches[0])
     qualification_split = partner_split(qualification_matches[0])
     assert practice_split != qualification_split
+
+
+def test_generate_schedule_rejects_overlap_across_timezone_frames_from_implicit_and_explicit_paths(
+    client,
+):
+    # Final-review live-probe regression (Finding 2): the implicit-default
+    # generation path stores its one open-ended block against a "UTC"
+    # timezone frame, while the explicit time_blocks path stores its
+    # blocks against the session's own IANA timezone. Comparing the two
+    # sides' raw wall-clock date/start_time/end_time strings directly
+    # (the pre-fix behavior) missed overlaps like this one: the implicit
+    # block below is dated "today" (whatever the real wall clock says
+    # when this test runs) while the explicit block is dated tomorrow --
+    # different date strings, so a same-date-only comparison skips the
+    # check entirely and never notices that the implicit block is
+    # open-ended and therefore still running tomorrow in real time too.
+    # Converting both sides to real UTC instants (this fix) correctly
+    # rejects this as a genuine overlap regardless of which local date
+    # string either side happens to be stored under.
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={"label": "Session 1", "timezone": "America/Los_Angeles"},
+    ).json()["id"]
+    for i in range(8):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    # First generation: implicit-default path (no time_blocks given) --
+    # one open-ended block, starting ~5 minutes from now, stored against
+    # a "UTC" frame.
+    first = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "practice",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert first.status_code == 201
+
+    # Second generation: explicit time_blocks resolved against the
+    # session's America/Los_Angeles timezone, dated tomorrow relative to
+    # whenever this test actually runs -- a genuinely later real-world
+    # block that, because the first block is open-ended, necessarily
+    # overlaps it in real time.
+    tomorrow = (dt.datetime.now(dt.UTC) + dt.timedelta(days=1)).date().isoformat()
+    second = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {
+                    "date": tomorrow,
+                    "start_time": "09:00",
+                    "end_time": "10:00",
+                    "cycle_time": 1800,
+                }
+            ],
+        },
+    )
+    assert second.status_code == 422
+    assert "schedule_generation_id" in second.json()["detail"]
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    assert all(m["round_type"] == "practice" for m in matches)
+
+
+def test_generate_schedule_with_phases_and_explicit_multi_block_time_blocks(client):
+    # This exact combination -- phases combined with explicit,
+    # multi-block time_blocks -- is the flagship use case of this whole
+    # feature, but had no automated coverage before this fix wave
+    # (Finding 7). Confirms a combined 2-phase request with explicit,
+    # multi-day time_blocks generates correctly and phase ordering/labels
+    # are correct.
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={
+            "label": "Session 1",
+            "session_date": "2026-09-05",
+            "timezone": "America/Los_Angeles",
+        },
+    ).json()["id"]
+    for i in range(8):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "phases": [
+                {"round_type": "practice", "target_matches_per_team": 1},
+                {"round_type": "qualification", "target_matches_per_team": 2},
+            ],
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {
+                    "date": "2026-09-05",
+                    "start_time": "09:00",
+                    "end_time": "10:00",
+                    "cycle_time": None,
+                },
+                {
+                    "date": "2026-09-06",
+                    "start_time": "09:00",
+                    "end_time": "10:00",
+                    "cycle_time": None,
+                },
+            ],
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["phase_results"] is not None
+    assert [pr["round_type"] for pr in body["phase_results"]] == [
+        "practice",
+        "qualification",
+    ]
+    assert body["match_count"] == sum(pr["match_count"] for pr in body["phase_results"])
+    assert len(body["resolved_time_blocks"]) == 2
+    assert {b["date"] for b in body["resolved_time_blocks"]} == {
+        "2026-09-05",
+        "2026-09-06",
+    }
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    practice_matches = [m for m in matches if m["round_type"] == "practice"]
+    qualification_matches = [m for m in matches if m["round_type"] == "qualification"]
+    assert len(practice_matches) > 0
+    assert len(qualification_matches) > 0
+    assert all(m["label"].startswith("P") for m in practice_matches)
+    assert all(m["label"].startswith("Q") for m in qualification_matches)
+    assert max(m["scheduled_time"] for m in practice_matches) < min(
+        m["scheduled_time"] for m in qualification_matches
+    )

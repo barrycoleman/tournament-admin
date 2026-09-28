@@ -52,6 +52,7 @@ class ScheduleGenerateRequest(BaseModel):
 
 
 class ResolvedTimeBlockRead(BaseModel):
+    date: dt.date
     start_time: str
     end_time: str | None
     cycle_time_seconds: float

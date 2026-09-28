@@ -32,6 +32,7 @@ from tournament_server.services.ranking import recompute_event_rankings, recompu
 from tournament_server.services.team_assignment import get_sole_division_id
 from tournament_server.services.schedule_timing import (
     assign_scheduled_times,
+    block_utc_bounds,
     deserialize_time_blocks,
     implicit_default_time_block,
     resolve_block_cycle_times,
@@ -44,106 +45,117 @@ router = APIRouter(prefix="/api/schedule", tags=["schedule"])
 
 
 def _validate_generated_schedule(
-    generated: list, valid_field_set_ids: set[int], alliance_count: int
+    generated: list, valid_field_set_ids: set[int], alliance_count: int, round_type: str
 ) -> None:
-    if not isinstance(generated, list) or not generated:
+    """`round_type` is included in every raised HTTPException's detail so
+    a combined multi-phase request's error names which phase actually
+    failed -- mirroring the round_type context the phase loop's own
+    scheduler-plugin-exception handler already adds around its call into
+    this function."""
+
+    def _fail(status_code: int, message: str) -> None:
         raise HTTPException(
-            status_code=422, detail="Scheduler plugin returned no matches"
+            status_code=status_code, detail=f"round_type {round_type!r}: {message}"
         )
+
+    if not isinstance(generated, list) or not generated:
+        _fail(422, "Scheduler plugin returned no matches")
 
     teams_by_slot: dict[int, set[int]] = {}
     for entry in generated:
         if not isinstance(entry, dict):
-            raise HTTPException(
-                status_code=422, detail="Scheduler plugin returned a malformed match"
-            )
+            _fail(422, "Scheduler plugin returned a malformed match")
         missing = {"time_slot", "field_set_id", "alliances"} - entry.keys()
         if missing:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Scheduler plugin returned a match missing keys: {sorted(missing)}",
-            )
+            _fail(422, f"Scheduler plugin returned a match missing keys: {sorted(missing)}")
         if entry["field_set_id"] not in valid_field_set_ids:
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    f"Scheduler plugin returned an unknown field_set_id "
-                    f"{entry['field_set_id']!r}"
-                ),
+            _fail(
+                422,
+                f"Scheduler plugin returned an unknown field_set_id "
+                f"{entry['field_set_id']!r}",
             )
         alliances = entry["alliances"]
         if not isinstance(alliances, list) or len(alliances) != alliance_count:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Each match must have exactly {alliance_count} alliances",
-            )
+            _fail(422, f"Each match must have exactly {alliance_count} alliances")
         stations = set()
         slot_teams = teams_by_slot.setdefault(entry["time_slot"], set())
         for alliance in alliances:
             if "station" not in alliance or "team_ids" not in alliance:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Scheduler plugin returned an alliance missing 'station' or 'team_ids'",
+                _fail(
+                    422,
+                    "Scheduler plugin returned an alliance missing 'station' or 'team_ids'",
                 )
             station = alliance["station"]
             if not isinstance(station, str) or not station:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Scheduler plugin returned a non-string or empty station name",
-                )
+                _fail(422, "Scheduler plugin returned a non-string or empty station name")
             if not alliance["team_ids"]:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Scheduler plugin returned an alliance with no teams",
-                )
+                _fail(422, "Scheduler plugin returned an alliance with no teams")
             stations.add(station)
             for team_id in alliance["team_ids"]:
                 if team_id in slot_teams:
-                    raise HTTPException(
-                        status_code=422,
-                        detail=(
-                            f"Scheduler plugin double-booked team {team_id} in "
-                            f"time_slot {entry['time_slot']}"
-                        ),
+                    _fail(
+                        422,
+                        f"Scheduler plugin double-booked team {team_id} in "
+                        f"time_slot {entry['time_slot']}",
                     )
                 slot_teams.add(team_id)
         if len(stations) != len(alliances):
-            raise HTTPException(
-                status_code=422,
-                detail="Alliance stations must be distinct within a match",
-            )
+            _fail(422, "Alliance stations must be distinct within a match")
 
 
 def _check_no_overlap_with_prior_generations(
-    db: Session, session_id: int, division_id: int | None, new_blocks: list[dict]
+    db: Session,
+    session_id: int,
+    division_id: int | None,
+    new_blocks: list[dict],
+    new_timezone_name: str,
 ) -> None:
     """Raises ValueError if any of new_blocks overlaps any block stored by
     an earlier, still-live ScheduleGeneration for the same
     (session_id, division_id) -- checked across every round_type, not just
     the one being generated now, since two round_types sharing the same
-    physical fields must never double-book a time window."""
+    physical fields must never double-book a time window.
+
+    Both sides are converted to real UTC instants
+    (schedule_timing.block_utc_bounds) before comparing, rather than
+    comparing raw local "HH:MM" wall-clock strings (and a same-date
+    short-circuit) directly. This matters because the implicit-default
+    generation path stores its one block against a "UTC" timezone frame
+    while the explicit time_blocks path stores its blocks against the
+    session's own IANA timezone: two blocks that are the same real moment
+    (or that genuinely overlap in real time) can have wall-clock date/
+    start_time/end_time values that look identical, disjoint, or even
+    backwards depending on which path produced which side, so comparing
+    the raw strings (as an earlier version of this function did) both
+    missed real overlaps and could have flagged non-overlapping blocks as
+    conflicting. Comparing resolved UTC instants is correct regardless of
+    which path either side came from."""
     query = select(ScheduleGeneration).where(ScheduleGeneration.session_id == session_id)
     if division_id is None:
         query = query.where(ScheduleGeneration.division_id.is_(None))
     else:
         query = query.where(ScheduleGeneration.division_id == division_id)
+    new_bounds = [block_utc_bounds(b, new_timezone_name) for b in new_blocks]
     for prior in db.execute(query).scalars().all():
         if prior.time_blocks_json is None:
             continue
         prior_blocks = deserialize_time_blocks(prior.time_blocks_json)
-        for new_block in new_blocks:
-            for prior_block in prior_blocks:
-                if new_block["date"] != prior_block["date"]:
-                    continue
-                new_start, new_end = new_block["start_time"], new_block.get("end_time")
-                prior_start, prior_end = prior_block["start_time"], prior_block.get("end_time")
+        for prior_block in prior_blocks:
+            prior_start, prior_end = block_utc_bounds(
+                prior_block, prior_block["timezone"]
+            )
+            for new_block, (new_start, new_end) in zip(new_blocks, new_bounds):
                 new_ends_before_prior = new_end is not None and new_end <= prior_start
                 prior_ends_before_new = prior_end is not None and prior_end <= new_start
                 if not (new_ends_before_prior or prior_ends_before_new):
                     raise ValueError(
                         "time_blocks overlap with an existing schedule: "
                         f"schedule_generation_id {prior.id}'s block starting at "
-                        f"{prior_block['date']} {prior_start!r}"
+                        f"{prior_block['date']} {prior_block['start_time']!r} "
+                        f"({prior_block['timezone']}) overlaps the new block "
+                        f"starting at {new_block['date']} "
+                        f"{new_block['start_time']!r} ({new_timezone_name}) "
+                        "in real (UTC) time"
                     )
 
 
@@ -346,7 +358,9 @@ def generate_schedule(
                     f"round_type {phase.round_type!r}: {exc}"
                 ),
             )
-        _validate_generated_schedule(generated, {fs.id for fs in field_sets}, alliance_count)
+        _validate_generated_schedule(
+            generated, {fs.id for fs in field_sets}, alliance_count, phase.round_type
+        )
         _fold_generated_into_pairing_history(pairing_history, generated)
         phase_generated.append((phase, generated))
 
@@ -376,7 +390,8 @@ def generate_schedule(
         if payload.time_blocks is not None:
             validate_blocks_ordered_and_non_overlapping(time_blocks_input)
             _check_no_overlap_with_prior_generations(
-                db, payload.session_id, payload.division_id, time_blocks_input
+                db, payload.session_id, payload.division_id, time_blocks_input,
+                timezone_name,
             )
         resolved_blocks = resolve_block_cycle_times(
             time_blocks_input, total_time_slots_needed
@@ -402,7 +417,10 @@ def generate_schedule(
 
     resolved_time_blocks_read = [
         ResolvedTimeBlockRead(
-            start_time=b.start_time, end_time=b.end_time, cycle_time_seconds=b.cycle_time_seconds
+            date=b.date,
+            start_time=b.start_time,
+            end_time=b.end_time,
+            cycle_time_seconds=b.cycle_time_seconds,
         )
         for b in resolved_blocks
     ]
@@ -428,7 +446,7 @@ def generate_schedule(
             phase_results=phase_results_dry,
         )
 
-    stored_time_blocks_json = serialize_time_blocks(time_blocks_input)
+    stored_time_blocks_json = serialize_time_blocks(time_blocks_input, timezone_name)
     phase_results: list[PhaseResult] = []
     created_matches = []
     global_offset = 0
