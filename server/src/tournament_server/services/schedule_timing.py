@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
 
 @dataclass
 class ResolvedBlock:
+    date: dt.date
     start_time: str
     end_time: str | None
     cycle_time_seconds: float
@@ -63,25 +65,30 @@ def _apportion_time_slots(
 
 def validate_blocks_ordered_and_non_overlapping(time_blocks: list[dict]) -> None:
     """Raises ValueError unless time_blocks are given in ascending
-    start_time order with no two blocks' windows overlapping."""
+    (date, start_time) order with no two blocks' windows overlapping.
+    Two blocks on different dates never overlap regardless of their
+    time-of-day values; two blocks on the same date compare start_time/
+    end_time exactly as before this function became date-aware."""
     for i in range(len(time_blocks) - 1):
         current = time_blocks[i]
         following = time_blocks[i + 1]
-        if current["start_time"] >= following["start_time"]:
+        current_key = (current["date"], current["start_time"])
+        following_key = (following["date"], following["start_time"])
+        if current_key >= following_key:
             raise ValueError(
-                "time_blocks must be given in start_time-ascending order "
-                f"({current['start_time']!r} is not before "
-                f"{following['start_time']!r})"
+                "time_blocks must be given in (date, start_time)-ascending "
+                f"order ({current_key!r} is not before {following_key!r})"
             )
         if (
             current.get("end_time") is not None
+            and current["date"] == following["date"]
             and current["end_time"] > following["start_time"]
         ):
             raise ValueError(
                 "time_blocks must not overlap: block starting at "
-                f"{current['start_time']!r} ends at "
+                f"{current['date']} {current['start_time']!r} ends at "
                 f"{current['end_time']!r}, after the next block starts at "
-                f"{following['start_time']!r}"
+                f"{following['start_time']!r} on the same date"
             )
 
 
@@ -109,7 +116,7 @@ def resolve_block_cycle_times(
                     f"Time block end_time must be after start_time: {block}"
                 )
 
-    sorted_blocks = sorted(time_blocks, key=lambda b: b["start_time"])
+    sorted_blocks = sorted(time_blocks, key=lambda b: (b["date"], b["start_time"]))
 
     if open_ended:
         open_ended_block = open_ended[0]
@@ -141,6 +148,7 @@ def resolve_block_cycle_times(
             if block is open_ended_block:
                 resolved.append(
                     ResolvedBlock(
+                        date=block["date"],
                         start_time=block["start_time"],
                         end_time=None,
                         cycle_time_seconds=float(block["cycle_time"]),
@@ -153,6 +161,7 @@ def resolve_block_cycle_times(
                 ) // block["cycle_time"]
                 resolved.append(
                     ResolvedBlock(
+                        date=block["date"],
                         start_time=block["start_time"],
                         end_time=block["end_time"],
                         cycle_time_seconds=float(block["cycle_time"]),
@@ -184,6 +193,7 @@ def resolve_block_cycle_times(
             )
         return [
             ResolvedBlock(
+                date=b["date"],
                 start_time=b["start_time"],
                 end_time=b["end_time"],
                 cycle_time_seconds=float(b["cycle_time"]),
@@ -212,6 +222,7 @@ def resolve_block_cycle_times(
         if block.get("cycle_time") is not None:
             resolved.append(
                 ResolvedBlock(
+                    date=block["date"],
                     start_time=block["start_time"],
                     end_time=block["end_time"],
                     cycle_time_seconds=float(block["cycle_time"]),
@@ -226,6 +237,7 @@ def resolve_block_cycle_times(
             duration = _block_duration_seconds(block["start_time"], block["end_time"])
             resolved.append(
                 ResolvedBlock(
+                    date=block["date"],
                     start_time=block["start_time"],
                     end_time=block["end_time"],
                     cycle_time_seconds=duration / count,
@@ -238,17 +250,18 @@ def resolve_block_cycle_times(
 def assign_scheduled_times(
     resolved_blocks: list[ResolvedBlock],
     sorted_distinct_time_slots: list[int],
-    session_date: dt.date,
     timezone_name: str,
 ) -> dict[int, dt.datetime]:
     """Maps each time_slot to a UTC scheduled_time by walking resolved_blocks
-    in chronological order and advancing by each block's cycle_time_seconds."""
+    in chronological order and advancing by each block's cycle_time_seconds.
+    Each block combines its own `date` with its own `start_time` -- blocks
+    are not assumed to share one calendar date."""
     tz = ZoneInfo(timezone_name)
     assignments: dict[int, dt.datetime] = {}
     slot_index = 0
     for block in resolved_blocks:
         block_start_local = dt.datetime.combine(
-            session_date, _parse_time_of_day(block.start_time), tzinfo=tz
+            block.date, _parse_time_of_day(block.start_time), tzinfo=tz
         )
         block_start_utc = block_start_local.astimezone(dt.UTC)
         for offset_index in range(block.time_slot_count):
@@ -275,3 +288,37 @@ def implicit_default_time_block(
         "end_time": None,
         "cycle_time": round(match_duration_seconds * warn_below_multiplier),
     }
+
+
+def serialize_time_blocks(time_blocks: list[dict]) -> str:
+    """JSON-encodes a list of time-block dicts (as produced by
+    ScheduleGenerateRequest.time_blocks or the implicit-default path) for
+    storage in ScheduleGeneration.time_blocks_json. Each block's `date`
+    (a real dt.date) is encoded as an ISO-8601 string."""
+    return json.dumps(
+        [
+            {
+                "date": b["date"].isoformat(),
+                "start_time": b["start_time"],
+                "end_time": b.get("end_time"),
+                "cycle_time": b.get("cycle_time"),
+            }
+            for b in time_blocks
+        ]
+    )
+
+
+def deserialize_time_blocks(time_blocks_json: str) -> list[dict]:
+    """Inverse of serialize_time_blocks: decodes stored JSON back into
+    block dicts with a real dt.date under "date", suitable for passing to
+    validate_blocks_ordered_and_non_overlapping."""
+    raw = json.loads(time_blocks_json)
+    return [
+        {
+            "date": dt.date.fromisoformat(b["date"]),
+            "start_time": b["start_time"],
+            "end_time": b.get("end_time"),
+            "cycle_time": b.get("cycle_time"),
+        }
+        for b in raw
+    ]
