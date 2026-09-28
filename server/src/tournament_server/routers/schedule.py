@@ -147,6 +147,42 @@ def _check_no_overlap_with_prior_generations(
                     )
 
 
+def _fold_generated_into_pairing_history(
+    pairing_history: dict[frozenset[int], dict[str, int]], generated: list[dict]
+) -> None:
+    """Mutates pairing_history in place to include the partner/opponent
+    pairings from a phase's just-generated (not yet persisted) matches, in
+    the same {frozenset({team_a, team_b}): {"partner_count", "opponent_count"}}
+    shape build_pairing_history produces -- so a later phase in the same
+    combined /api/schedule request sees the earlier phase's own results
+    before its own scheduler-plugin call runs. This must stay purely
+    in-memory (no DB read/write) since it also needs to hold for dry_run,
+    which never persists anything for build_pairing_history to see on a
+    subsequent call."""
+
+    def bump(a: int, b: int, key: str) -> None:
+        pair = frozenset((a, b))
+        entry = pairing_history.setdefault(pair, {"partner_count": 0, "opponent_count": 0})
+        entry[key] += 1
+
+    for entry in generated:
+        alliances = entry["alliances"]
+        if len(alliances) != 2:
+            # Matches build_pairing_history's own skip for anything other
+            # than exactly two alliances (never expected once
+            # _validate_generated_schedule has already run, but kept as
+            # the same defensive no-op rather than assuming it can't happen).
+            continue
+        teams_by_alliance = [alliance["team_ids"] for alliance in alliances]
+        for team_ids in teams_by_alliance:
+            for i in range(len(team_ids)):
+                for j in range(i + 1, len(team_ids)):
+                    bump(team_ids[i], team_ids[j], "partner_count")
+        for a in teams_by_alliance[0]:
+            for b in teams_by_alliance[1]:
+                bump(a, b, "opponent_count")
+
+
 @router.post("", response_model=ScheduleGenerateResponse, status_code=201)
 def generate_schedule(
     payload: ScheduleGenerateRequest,
@@ -195,6 +231,18 @@ def generate_schedule(
             )
         ]
     )
+
+    # A request's own phases list must not repeat a round_type against
+    # itself -- each round_type is meant to own exactly one
+    # ScheduleGeneration+Match batch per (session, division), and the
+    # DB-conflict check below can't catch this since none of these
+    # round_types exist in the database yet within this request.
+    phase_round_types = [phase.round_type for phase in phases]
+    if len(set(phase_round_types)) != len(phase_round_types):
+        raise HTTPException(
+            status_code=422,
+            detail="phases must not repeat the same round_type more than once",
+        )
 
     # All-or-nothing: every phase's (session, division, round_type) must be
     # conflict-free before anything is generated for any phase.
@@ -299,6 +347,7 @@ def generate_schedule(
                 ),
             )
         _validate_generated_schedule(generated, {fs.id for fs in field_sets}, alliance_count)
+        _fold_generated_into_pairing_history(pairing_history, generated)
         phase_generated.append((phase, generated))
 
     total_time_slots_needed = sum(

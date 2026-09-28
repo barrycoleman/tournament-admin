@@ -1,3 +1,6 @@
+import random
+
+
 def _setup_ready_session(client, num_teams: int = 8) -> tuple[int, list[int]]:
     client.post("/api/event", json={"name": "Regional Qualifier"})
 
@@ -1510,3 +1513,82 @@ def test_generate_schedule_singular_shape_unaffected_by_phases_support(client):
     assert body["phase_results"] is None
     assert body["schedule_generation_id"] is not None
     assert body["match_count"] > 0
+
+
+def test_generate_schedule_rejects_duplicate_round_type_across_phases(client):
+    # A phases list repeating the same round_type against itself is a
+    # request-shape problem the DB-conflict check can't catch (nothing
+    # exists in the DB yet for either phase) -- it must still be rejected,
+    # all-or-nothing, before anything is generated or persisted.
+    session_id, team_ids = _setup_ready_session(client, num_teams=8)
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "phases": [
+                {"round_type": "qualification", "target_matches_per_team": 1},
+                {"round_type": "qualification", "target_matches_per_team": 2},
+            ],
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 422
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    assert matches == []
+
+
+def test_generate_schedule_combined_phases_fold_pairing_history_between_phases(client):
+    # Regression check for a subtler bug: cross_session_pairing_history is
+    # computed once from the DB before the phase loop runs, and nothing is
+    # persisted until the whole combined request succeeds -- so without
+    # explicitly folding each phase's own just-generated pairings into that
+    # in-memory dict before the next phase's scheduler-plugin call, a
+    # later phase in the same request never sees an earlier phase's own
+    # pairings, silently degrading a pairing-aware scheduler plugin
+    # (`balanced`) relative to issuing the same phases as separate,
+    # sequential requests.
+    #
+    # With exactly 4 teams, 1 field_set, target_matches_per_team=1 on both
+    # phases, and no pre-existing matches, `balanced`'s cost-minimization
+    # over its 20 sampling attempts is fully determined by
+    # `random`'s state once seeded, since nothing else in the request path
+    # consumes it. Folding phase 1's own partner/opponent pairings into
+    # `cross_session_pairing_history` before phase 2's call always makes
+    # phase 2's cost model rate repeating phase 1's own partner-alliance
+    # split strictly worse than at least one alternative split; without
+    # folding, phase 2 sees the same (empty) history phase 1 did, and can
+    # -- depending on the RNG state carried over from phase 1's own call,
+    # which seed=1 is confirmed to trigger -- pick the exact same
+    # partner-alliance split again. This makes the assertion below a real,
+    # falsifiable proof that the fold is happening: reverting it (restoring
+    # the pre-fix behavior) makes this specific seed fail.
+    session_id, team_ids = _setup_ready_session(client, num_teams=4)
+
+    random.seed(1)
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "phases": [
+                {"round_type": "practice", "target_matches_per_team": 1},
+                {"round_type": "qualification", "target_matches_per_team": 1},
+            ],
+            "scheduler_plugin_name": "balanced",
+        },
+    )
+    assert response.status_code == 201
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    practice_matches = [m for m in matches if m["round_type"] == "practice"]
+    qualification_matches = [m for m in matches if m["round_type"] == "qualification"]
+    assert len(practice_matches) == 1
+    assert len(qualification_matches) == 1
+
+    def partner_split(match) -> set[frozenset[int]]:
+        return {frozenset(a["team_ids"]) for a in match["alliances"]}
+
+    practice_split = partner_split(practice_matches[0])
+    qualification_split = partner_split(qualification_matches[0])
+    assert practice_split != qualification_split
