@@ -60,14 +60,27 @@ def _to_match_read(match: Match, db: Session) -> MatchRead:
     if match.bracket_matchup_id is not None:
         matchup = db.get(BracketMatchup, match.bracket_matchup_id)
         matchup_number = matchup.matchup_number if matchup is not None else None
-    label = match_label(
-        match.round_type,
-        match.match_number,
-        finals_bracket_id=match.finals_bracket_id,
-        bracket_matchup_id=match.bracket_matchup_id,
-        bracket_alliance_id=match.bracket_alliance_id,
-        matchup_number=matchup_number,
-    )
+    try:
+        label = match_label(
+            match.round_type,
+            match.match_number,
+            finals_bracket_id=match.finals_bracket_id,
+            bracket_matchup_id=match.bracket_matchup_id,
+            bracket_alliance_id=match.bracket_alliance_id,
+            matchup_number=matchup_number,
+        )
+    except ValueError:
+        # Defense in depth: match_label() is contractually strict about
+        # raising when a single_elimination series game's matchup_number
+        # can't be resolved (pinned by
+        # tests/test_match_labeling.py::test_single_elimination_without_matchup_number_raises)
+        # -- that contract stays. But this function runs once per match
+        # in GET /api/matches's list, so letting the ValueError escape
+        # here turns one bad row (e.g. a database that reached this state
+        # some other way than the c9d34b7a1f02 migration's own backfill)
+        # into a 500 for the whole match list. Degrade to a label with no
+        # matchup-number prefix rather than crash.
+        label = f"F{match.match_number}"
     return MatchRead(
         id=match.id,
         session_id=match.session_id,

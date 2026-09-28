@@ -330,6 +330,81 @@ def test_upgrade_over_pre_existing_team_rows_succeeds(tmp_path):
     assert {"events", "divisions"} <= referred_tables
 
 
+def test_backfill_migration_computes_matchup_number_from_round_and_position(tmp_path):
+    """Regression test for a Critical finding on the bracket_matchups
+    matchup_number migration (c9d34b7a1f02): it originally added the
+    column as nullable with no backfill for pre-existing rows, reasoning
+    that an already-decided bracket has no retroactive numbering *need*
+    -- true on its own, but routers/matches.py's _to_match_read feeds a
+    null matchup_number straight into match_label(), which raises
+    ValueError for any single_elimination series game lacking one,
+    500ing the *entire* GET /api/matches list for that session (since
+    _to_match_read runs once per match in the list).
+
+    This builds a throwaway database at the pre-this-revision baseline,
+    inserts bracket_matchups rows directly via raw SQL -- out of
+    (round_number, position) order, to prove the backfill sorts rather
+    than relying on insertion order -- then runs the real upgrade to
+    head and asserts matchup_number was backfilled correctly: a running
+    counter per bracket_id, ordered (round_number, position) ascending,
+    matching services/finals.py's generate_bracket.
+    """
+    db_path = str(tmp_path / "pre_existing_matchups.db")
+    config = _make_alembic_config(db_path)
+    command.upgrade(config, "a2c6f19e4d80")  # baseline, before this task's migration
+
+    raw_engine = create_engine(f"sqlite:///{db_path}")
+    with raw_engine.connect() as connection:
+        # Bracket 1: a 4-alliance bracket (2 round-1 matchups, 1 round-2
+        # final) -- inserted out of (round_number, position) order.
+        connection.execute(
+            text(
+                "INSERT INTO bracket_matchups (id, bracket_id, round_number, position) "
+                "VALUES (1, 1, 2, 0)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO bracket_matchups (id, bracket_id, round_number, position) "
+                "VALUES (2, 1, 1, 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO bracket_matchups (id, bracket_id, round_number, position) "
+                "VALUES (3, 1, 1, 0)"
+            )
+        )
+        # Bracket 2: a separate, 2-alliance bracket -- its own counter
+        # must restart at 1, not continue bracket 1's.
+        connection.execute(
+            text(
+                "INSERT INTO bracket_matchups (id, bracket_id, round_number, position) "
+                "VALUES (4, 2, 1, 0)"
+            )
+        )
+        connection.commit()
+    raw_engine.dispose()
+
+    engine = make_engine(db_path)
+    outcome = ensure_schema_current(engine, db_path)
+
+    assert outcome == MigrationOutcome.UPGRADED
+
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text("SELECT id, matchup_number FROM bracket_matchups ORDER BY id")
+        ).all()
+    matchup_number_by_id = {r.id: r.matchup_number for r in rows}
+    # Bracket 1: round 1 position 0 -> 1, round 1 position 1 -> 2,
+    # round 2 position 0 -> 3 (round ascending, then position ascending).
+    assert matchup_number_by_id[3] == 1  # round 1, position 0
+    assert matchup_number_by_id[2] == 2  # round 1, position 1
+    assert matchup_number_by_id[1] == 3  # round 2, position 0
+    # Bracket 2's own counter restarts at 1.
+    assert matchup_number_by_id[4] == 1
+
+
 def test_backfill_migration_adds_a_default_division_for_event_with_none(tmp_path):
     """An event created before this migration existed could have zero
     divisions (nothing seeded one at event-creation time back then).
