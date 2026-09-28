@@ -146,6 +146,7 @@ def recompute_rankings(
         Match.session_id == session_id,
         Match.status == "completed",
         Match.finals_bracket_id.is_(None),
+        Match.round_type != "practice",
     )
     if division_id is None:
         query = query.where(Match.division_id.is_(None))
@@ -350,6 +351,7 @@ def recompute_event_rankings(
         Match.session_id.in_(session_ids),
         Match.status == "completed",
         Match.finals_bracket_id.is_(None),
+        Match.round_type != "practice",
     )
     if division_id is None:
         query = query.where(Match.division_id.is_(None))

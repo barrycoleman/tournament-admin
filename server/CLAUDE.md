@@ -334,11 +334,11 @@ fields via `FinalsBracket.next_field_index`, the same algorithm
 `routers/schedule.py` uses for qualification, just applied one match at a
 time instead of one batch at a time.
 
-**Known, deliberate gap**: `recompute_rankings`/`recompute_event_rankings`
-now exclude finals matches (`Match.finals_bracket_id IS NOT NULL`) from
-qualification ranking — but they still don't exclude `practice`-round
-matches, a pre-existing gap from an earlier phase this plan didn't
-introduce and doesn't fix.
+**Fixed**: `recompute_rankings`/`recompute_event_rankings` exclude both
+finals matches (`Match.finals_bracket_id IS NOT NULL`) and `practice`-round
+matches (`Match.round_type == "practice"`) from qualification ranking. See
+`docs/superpowers/specs/2026-09-26-multi-round-scheduling-design.md`'s
+Phase 1.
 
 ## Scheduling
 

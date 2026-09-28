@@ -115,3 +115,101 @@ def test_rankings_default_to_active_session(client):
     response = client.get("/api/rankings")
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_practice_matches_never_count_toward_rankings(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "example-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+
+    team_ids = {}
+    for number in ["1", "2", "3", "4"]:
+        team = client.post(
+            "/api/teams", json={"number": number, "name": f"Team {number}"}
+        ).json()
+        team_ids[number] = team["id"]
+    t1, t2, t3, t4 = team_ids["1"], team_ids["2"], team_ids["3"], team_ids["4"]
+
+    # A practice match, fully scored: if it counted, T1/T2 would show up
+    # with win_points from this match alone (no qualification matches
+    # exist yet at this point).
+    practice_match = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "practice",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [t1, t2]},
+                {"station": "blue", "team_ids": [t3, t4]},
+            ],
+        },
+    ).json()
+    red = next(a["id"] for a in practice_match["alliances"] if a["station"] == "red")
+    blue = next(a["id"] for a in practice_match["alliances"] if a["station"] == "blue")
+    _score(client, practice_match["id"], red, high_balls=16, low_balls=2)
+    _score(client, practice_match["id"], blue, high_balls=6, low_balls=2)
+
+    response = client.get(f"/api/rankings?session_id={session_id}")
+    assert response.status_code == 200
+    assert response.json() == []
+
+    # A qualification match between the same teams must still count.
+    qual_match = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [t1, t2]},
+                {"station": "blue", "team_ids": [t3, t4]},
+            ],
+        },
+    ).json()
+    red = next(a["id"] for a in qual_match["alliances"] if a["station"] == "red")
+    blue = next(a["id"] for a in qual_match["alliances"] if a["station"] == "blue")
+    _score(client, qual_match["id"], red, high_balls=16, low_balls=2)
+    _score(client, qual_match["id"], blue, high_balls=6, low_balls=2)
+
+    response = client.get(f"/api/rankings?session_id={session_id}")
+    assert response.status_code == 200
+    rows = {row["team_id"]: row for row in response.json()}
+    assert rows[t1]["win_points"] == 2
+    assert rows[t3]["win_points"] == 0
+
+
+def test_practice_matches_never_count_toward_event_wide_rankings(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+
+    team_ids = []
+    for number in ["1", "2"]:
+        team = client.post(
+            "/api/teams", json={"number": number, "name": f"Team {number}"}
+        ).json()
+        team_ids.append(team["id"])
+
+    practice_match = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "practice",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [team_ids[0]]},
+                {"station": "blue", "team_ids": [team_ids[1]]},
+            ],
+        },
+    ).json()
+    red = next(a["id"] for a in practice_match["alliances"] if a["station"] == "red")
+    _score(client, practice_match["id"], red, high_balls=16, low_balls=2)
+
+    response = client.get(f"/api/rankings?session_id={session_id}&event_wide=true")
+    assert response.status_code == 200
+    assert response.json() == []
