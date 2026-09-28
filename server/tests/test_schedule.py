@@ -1283,3 +1283,35 @@ def test_delete_schedule_clears_stored_blocks_allowing_reuse(client):
         },
     )
     assert second.status_code == 201
+
+
+def test_generated_qualification_matches_have_q_prefixed_labels(client):
+    session_id, team_ids = _setup_ready_session(client)
+    client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    labels = sorted(m["label"] for m in matches)
+    assert labels == [f"Q{n}" for n in range(1, len(matches) + 1)]
+
+
+def test_generated_practice_matches_have_p_prefixed_labels(client):
+    session_id, team_ids = _setup_ready_session(client)
+    client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "practice",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    labels = sorted(m["label"] for m in matches)
+    assert labels == [f"P{n}" for n in range(1, len(matches) + 1)]

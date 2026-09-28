@@ -41,6 +41,7 @@ class MatchRead(BaseModel):
     division_id: int | None
     round_type: str
     match_number: int
+    label: str
     field_id: int | None
     time_slot: int | None
     scheduled_time: dt.datetime | None

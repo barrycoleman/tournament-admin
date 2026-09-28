@@ -1844,3 +1844,82 @@ def test_single_elimination_series_match_number_restarts_per_matchup(client):
     ]
     new_game = next(m for m in elimination_matches if m["id"] not in round_1_ids)
     assert new_game["match_number"] == 2
+
+
+def test_single_elimination_game_label_uses_matchup_and_match_number(client):
+    # example-game is captain_pick + single_elimination, so (as in
+    # test_single_elimination_bracket_never_populates_runs above) the
+    # matchups' first games aren't created until every captain has picked
+    # a partner -- bracket_size=4 with 8 checked-in teams (4 captains, 4
+    # remaining partners) gives a bye-free bracket: 4 alliances -> 2
+    # round-1 matchups, each its own matchup_number.
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+
+    bracket = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": 1},
+    ).json()
+    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
+    unclaimed = [t for t in team_ids if t not in claimed]
+    final_response = None
+    for i, alliance in enumerate(bracket["alliances"]):
+        final_response = client.post(
+            f"/api/finals/{bracket['id']}/pick",
+            json={
+                "captain_bracket_alliance_id": alliance["id"],
+                "partner_team_id": unclaimed[i],
+            },
+        )
+    assert final_response.json()["status"] == "in_progress"
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    elimination_matches = [m for m in matches if m["round_type"] == "elimination"]
+    assert len(elimination_matches) == 2
+    for match in elimination_matches:
+        assert match["label"] in ("F1-1", "F2-1")
+
+
+def test_score_chase_run_labels_are_sequential_with_no_suffix(cooperative_client):
+    # _setup_ranked_teams_for_example_game/_rank_teams_directly_head_to_head
+    # are tied to the example-game plugin (captain_pick +
+    # single_elimination), which cooperative_client never registers --
+    # this instead follows the same manual cooperative-game setup as
+    # test_starting_a_score_chase_bracket_creates_the_first_run_for_the_worst_seed
+    # above (cooperative-game declares finals_format="score_chase").
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    team_ids = [
+        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
+        for i in range(4)
+    ]
+    for i, team_id in enumerate(team_ids):
+        match = client.post(
+            "/api/matches",
+            json={
+                "session_id": session_id,
+                "round_type": "qualification",
+                "match_number": 100 + i,
+                "field_id": None,
+                "alliances": [
+                    {"station": "red", "team_ids": [team_id]},
+                    {"station": "blue", "team_ids": [team_id]},
+                ],
+            },
+        ).json()
+        red = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+        client.post(
+            f"/api/matches/{match['id']}/alliances/{red}/score",
+            json={"data": {"objects_scored": (4 - i) * 10}},
+        )
+
+    client.post("/api/finals/start", json={"session_id": session_id, "bracket_size": 2})
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    elimination_matches = [m for m in matches if m["round_type"] == "elimination"]
+    assert len(elimination_matches) == 1
+    assert elimination_matches[0]["label"] == "F1"

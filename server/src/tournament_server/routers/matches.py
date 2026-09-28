@@ -19,6 +19,7 @@ from tournament_server.match_control import (
     schedule_auto_advance,
 )
 from tournament_server.models.alliance import Alliance, AllianceTeam
+from tournament_server.models.bracket_matchup import BracketMatchup
 from tournament_server.models.division import Division
 from tournament_server.models.field import Field
 from tournament_server.models.match import Match
@@ -31,6 +32,7 @@ from tournament_server.schemas.match import (
     MatchRead,
     MatchResetRequest,
 )
+from tournament_server.services.match_labeling import match_label
 
 router = APIRouter(prefix="/api/matches", tags=["matches"])
 
@@ -54,12 +56,25 @@ def _to_match_read(match: Match, db: Session) -> MatchRead:
         alliance_reads.append(
             AllianceRead(id=alliance.id, station=alliance.station, team_ids=team_ids)
         )
+    matchup_number = None
+    if match.bracket_matchup_id is not None:
+        matchup = db.get(BracketMatchup, match.bracket_matchup_id)
+        matchup_number = matchup.matchup_number if matchup is not None else None
+    label = match_label(
+        match.round_type,
+        match.match_number,
+        finals_bracket_id=match.finals_bracket_id,
+        bracket_matchup_id=match.bracket_matchup_id,
+        bracket_alliance_id=match.bracket_alliance_id,
+        matchup_number=matchup_number,
+    )
     return MatchRead(
         id=match.id,
         session_id=match.session_id,
         division_id=match.division_id,
         round_type=match.round_type,
         match_number=match.match_number,
+        label=label,
         field_id=match.field_id,
         time_slot=match.time_slot,
         scheduled_time=match.scheduled_time,
