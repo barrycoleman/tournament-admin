@@ -1071,3 +1071,215 @@ def test_generate_schedule_with_time_blocks_spanning_multiple_days(client):
     # comparing the UTC date string directly is safe here since the
     # offset doesn't cross midnight UTC for this timezone/time.
     assert "2026-09-06" in scheduled_dates
+
+
+def test_generate_schedule_rejects_overlap_with_a_prior_generation(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={
+            "label": "Session 1",
+            "session_date": "2026-09-05",
+            "timezone": "America/Los_Angeles",
+        },
+    ).json()["id"]
+    for i in range(8):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    first = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "practice",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+            # 8 teams / 4 teams-per-match / 1 field -> 2 matches, 2 distinct
+            # time_slots needed; cycle_time must divide the 60-minute block
+            # into exactly that many slots (fixed blocks require an exact
+            # capacity match per resolve_block_cycle_times).
+            "time_blocks": [
+                {"date": "2026-09-05", "start_time": "09:00", "end_time": "10:00", "cycle_time": 1800}
+            ],
+        },
+    )
+    assert first.status_code == 201
+
+    # A second generation (different round_type, same session/division)
+    # whose block overlaps the first's must be rejected.
+    second = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {"date": "2026-09-05", "start_time": "09:30", "end_time": "11:00", "cycle_time": 60}
+            ],
+        },
+    )
+    assert second.status_code == 422
+    assert "schedule_generation_id" in second.json()["detail"]
+
+    # Matches from the first generation are untouched by the rejected call.
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    assert all(m["round_type"] == "practice" for m in matches)
+
+
+def test_generate_schedule_allows_overlap_across_different_divisions(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={
+            "label": "Session 1",
+            "session_date": "2026-09-05",
+            "timezone": "America/Los_Angeles",
+        },
+    ).json()["id"]
+    division_2_id = client.post("/api/divisions", json={"name": "Division 2"}).json()["id"]
+
+    division_1_id = client.get("/api/divisions").json()[0]["id"]
+    field_set_1 = client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Set 1", "division_id": division_1_id},
+    ).json()["id"]
+    field_set_2 = client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Set 2", "division_id": division_2_id},
+    ).json()["id"]
+    client.post(
+        "/api/fields",
+        json={"session_id": session_id, "name": "Field A", "field_set_id": field_set_1},
+    )
+    client.post(
+        "/api/fields",
+        json={"session_id": session_id, "name": "Field B", "field_set_id": field_set_2},
+    )
+
+    team_ids_div1, team_ids_div2 = [], []
+    for i in range(4):
+        team = client.post(
+            "/api/teams", json={"number": f"1{i}", "name": f"D1 Team {i}"}
+        ).json()
+        client.patch(f"/api/teams/{team['id']}", json={"division_id": division_1_id})
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team["id"], "checked_in": True},
+        )
+        team_ids_div1.append(team["id"])
+    for i in range(4):
+        team = client.post(
+            "/api/teams", json={"number": f"2{i}", "name": f"D2 Team {i}"}
+        ).json()
+        client.patch(f"/api/teams/{team['id']}", json={"division_id": division_2_id})
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team["id"], "checked_in": True},
+        )
+        team_ids_div2.append(team["id"])
+
+    # 4 teams per division / 4 teams-per-match -> 1 match, 1 time_slot
+    # needed per division; cycle_time must exactly divide the 60-minute
+    # block into that single slot (fixed blocks require an exact capacity
+    # match per resolve_block_cycle_times).
+    same_block = [
+        {"date": "2026-09-05", "start_time": "09:00", "end_time": "10:00", "cycle_time": 3600}
+    ]
+    response_1 = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "division_id": division_1_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": same_block,
+        },
+    )
+    assert response_1.status_code == 201
+
+    response_2 = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "division_id": division_2_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": same_block,
+        },
+    )
+    assert response_2.status_code == 201
+
+
+def test_delete_schedule_clears_stored_blocks_allowing_reuse(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={
+            "label": "Session 1",
+            "session_date": "2026-09-05",
+            "timezone": "America/Los_Angeles",
+        },
+    ).json()["id"]
+    for i in range(8):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    # 8 teams / 4 teams-per-match / 1 field -> 2 matches, 2 distinct
+    # time_slots needed; cycle_time must exactly divide the 60-minute
+    # block into that many slots (fixed blocks require an exact capacity
+    # match per resolve_block_cycle_times).
+    block = [
+        {"date": "2026-09-05", "start_time": "09:00", "end_time": "10:00", "cycle_time": 1800}
+    ]
+    first = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": block,
+        },
+    )
+    assert first.status_code == 201
+
+    client.delete(
+        "/api/schedule",
+        params={"session_id": session_id, "round_type": "qualification"},
+    )
+
+    # The exact same block, reused for the same round_type after a
+    # DELETE, must succeed -- the cleared generation's blocks must no
+    # longer be checked against.
+    second = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": block,
+        },
+    )
+    assert second.status_code == 201

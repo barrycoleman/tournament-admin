@@ -30,6 +30,7 @@ from tournament_server.services.ranking import recompute_event_rankings, recompu
 from tournament_server.services.team_assignment import get_sole_division_id
 from tournament_server.services.schedule_timing import (
     assign_scheduled_times,
+    deserialize_time_blocks,
     implicit_default_time_block,
     resolve_block_cycle_times,
     serialize_time_blocks,
@@ -109,6 +110,39 @@ def _validate_generated_schedule(
                 status_code=422,
                 detail="Alliance stations must be distinct within a match",
             )
+
+
+def _check_no_overlap_with_prior_generations(
+    db: Session, session_id: int, division_id: int | None, new_blocks: list[dict]
+) -> None:
+    """Raises ValueError if any of new_blocks overlaps any block stored by
+    an earlier, still-live ScheduleGeneration for the same
+    (session_id, division_id) -- checked across every round_type, not just
+    the one being generated now, since two round_types sharing the same
+    physical fields must never double-book a time window."""
+    query = select(ScheduleGeneration).where(ScheduleGeneration.session_id == session_id)
+    if division_id is None:
+        query = query.where(ScheduleGeneration.division_id.is_(None))
+    else:
+        query = query.where(ScheduleGeneration.division_id == division_id)
+    for prior in db.execute(query).scalars().all():
+        if prior.time_blocks_json is None:
+            continue
+        prior_blocks = deserialize_time_blocks(prior.time_blocks_json)
+        for new_block in new_blocks:
+            for prior_block in prior_blocks:
+                if new_block["date"] != prior_block["date"]:
+                    continue
+                new_start, new_end = new_block["start_time"], new_block.get("end_time")
+                prior_start, prior_end = prior_block["start_time"], prior_block.get("end_time")
+                new_ends_before_prior = new_end is not None and new_end <= prior_start
+                prior_ends_before_new = prior_end is not None and prior_end <= new_start
+                if not (new_ends_before_prior or prior_ends_before_new):
+                    raise ValueError(
+                        "time_blocks overlap with an existing schedule: "
+                        f"schedule_generation_id {prior.id}'s block starting at "
+                        f"{prior_block['date']} {prior_start!r}"
+                    )
 
 
 @router.post("", response_model=ScheduleGenerateResponse, status_code=201)
@@ -267,6 +301,9 @@ def generate_schedule(
     try:
         if payload.time_blocks is not None:
             validate_blocks_ordered_and_non_overlapping(time_blocks_input)
+            _check_no_overlap_with_prior_generations(
+                db, payload.session_id, payload.division_id, time_blocks_input
+            )
         resolved_blocks = resolve_block_cycle_times(
             time_blocks_input, total_time_slots_needed
         )
@@ -417,6 +454,17 @@ def clear_schedule(
             db.flush()
             db.delete(alliance)
         db.delete(match)
+
+    generation_query = select(ScheduleGeneration).where(
+        ScheduleGeneration.session_id == session_id,
+        ScheduleGeneration.round_type == round_type,
+    )
+    if division_id is None:
+        generation_query = generation_query.where(ScheduleGeneration.division_id.is_(None))
+    else:
+        generation_query = generation_query.where(ScheduleGeneration.division_id == division_id)
+    for generation in db.execute(generation_query).scalars().all():
+        db.delete(generation)
 
     db.commit()
 
