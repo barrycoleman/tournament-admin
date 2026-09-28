@@ -1315,3 +1315,43 @@ def test_generated_practice_matches_have_p_prefixed_labels(client):
     matches = client.get(f"/api/matches?session_id={session_id}").json()
     labels = sorted(m["label"] for m in matches)
     assert labels == [f"P{n}" for n in range(1, len(matches) + 1)]
+
+
+def test_generate_schedule_rejects_both_round_type_and_phases(client):
+    session_id, team_ids = _setup_ready_session(client)
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "phases": [{"round_type": "practice", "target_matches_per_team": 1}],
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_generate_schedule_rejects_neither_round_type_nor_phases(client):
+    session_id, team_ids = _setup_ready_session(client)
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_generate_schedule_rejects_empty_phases_list(client):
+    session_id, team_ids = _setup_ready_session(client)
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "phases": [],
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 422
