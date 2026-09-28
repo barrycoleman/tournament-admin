@@ -382,7 +382,7 @@ def test_generate_schedule_with_time_blocks_assigns_scheduled_time(client):
             "target_matches_per_team": 3,
             "scheduler_plugin_name": "simple_random",
             "time_blocks": [
-                {"start_time": "10:00", "end_time": "12:00", "cycle_time": None}
+                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": None}
             ],
         },
     )
@@ -419,7 +419,7 @@ def test_generate_schedule_without_time_blocks_uses_implicit_default(client):
         assert match["scheduled_time"] is not None
 
 
-def test_generate_schedule_rejects_time_blocks_without_session_date_or_timezone(client):
+def test_generate_schedule_rejects_time_blocks_without_timezone(client):
     session_id, team_ids = _setup_ready_session(client)
 
     response = client.post(
@@ -430,11 +430,48 @@ def test_generate_schedule_rejects_time_blocks_without_session_date_or_timezone(
             "target_matches_per_team": 3,
             "scheduler_plugin_name": "simple_random",
             "time_blocks": [
-                {"start_time": "10:00", "end_time": "12:00", "cycle_time": None}
+                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": None}
             ],
         },
     )
     assert response.status_code == 422
+
+
+def test_generate_schedule_allows_time_blocks_without_session_date(client):
+    # session_date is display-only now -- a session with no session_date
+    # at all, only a timezone, must still be able to use time_blocks,
+    # since each block carries its own date.
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={"label": "Session 1", "timezone": "America/Los_Angeles"},
+    ).json()["id"]
+    assert client.get(f"/api/sessions").json()[0]["session_date"] is None
+    for i in range(8):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": None}
+            ],
+        },
+    )
+    assert response.status_code == 201
 
 
 def test_generate_schedule_rejects_mismatched_time_blocks(client):
@@ -469,7 +506,7 @@ def test_generate_schedule_rejects_mismatched_time_blocks(client):
             "target_matches_per_team": 3,
             "scheduler_plugin_name": "simple_random",
             "time_blocks": [
-                {"start_time": "10:00", "end_time": "10:05", "cycle_time": 300}
+                {"date": "2026-09-05", "start_time": "10:00", "end_time": "10:05", "cycle_time": 300}
             ],
         },
     )
@@ -510,7 +547,7 @@ def test_generate_schedule_warns_when_cycle_time_too_tight(client):
             "target_matches_per_team": 1,
             "scheduler_plugin_name": "simple_random",
             "time_blocks": [
-                {"start_time": "10:00", "end_time": "10:01", "cycle_time": 60}
+                {"date": "2026-09-05", "start_time": "10:00", "end_time": "10:01", "cycle_time": 60}
             ],
         },
     )
@@ -528,7 +565,7 @@ def test_generate_schedule_rejects_zero_cycle_time(client):
             "target_matches_per_team": 3,
             "scheduler_plugin_name": "simple_random",
             "time_blocks": [
-                {"start_time": "10:00", "end_time": "12:00", "cycle_time": 0}
+                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": 0}
             ],
         },
     )
@@ -545,7 +582,7 @@ def test_generate_schedule_rejects_negative_cycle_time(client):
             "target_matches_per_team": 3,
             "scheduler_plugin_name": "simple_random",
             "time_blocks": [
-                {"start_time": "10:00", "end_time": "12:00", "cycle_time": -60}
+                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": -60}
             ],
         },
     )
@@ -562,7 +599,7 @@ def test_generate_schedule_rejects_malformed_start_time(client):
             "target_matches_per_team": 3,
             "scheduler_plugin_name": "simple_random",
             "time_blocks": [
-                {"start_time": "9:00", "end_time": "12:00", "cycle_time": 180}
+                {"date": "2026-09-05", "start_time": "9:00", "end_time": "12:00", "cycle_time": 180}
             ],
         },
     )
@@ -599,8 +636,8 @@ def test_generate_schedule_rejects_overlapping_time_blocks(client):
             "target_matches_per_team": 3,
             "scheduler_plugin_name": "simple_random",
             "time_blocks": [
-                {"start_time": "10:00", "end_time": "12:00", "cycle_time": 180},
-                {"start_time": "11:00", "end_time": "13:00", "cycle_time": 180},
+                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": 180},
+                {"date": "2026-09-05", "start_time": "11:00", "end_time": "13:00", "cycle_time": 180},
             ],
         },
     )
@@ -637,8 +674,8 @@ def test_generate_schedule_rejects_time_blocks_not_in_ascending_order(client):
             "target_matches_per_team": 3,
             "scheduler_plugin_name": "simple_random",
             "time_blocks": [
-                {"start_time": "14:00", "end_time": "16:00", "cycle_time": 180},
-                {"start_time": "10:00", "end_time": "12:00", "cycle_time": 180},
+                {"date": "2026-09-05", "start_time": "14:00", "end_time": "16:00", "cycle_time": 180},
+                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": 180},
             ],
         },
     )
@@ -746,7 +783,7 @@ def test_generate_schedule_warn_below_multiplier_override_changes_warning_outcom
         "target_matches_per_team": 1,
         "scheduler_plugin_name": "simple_random",
         "time_blocks": [
-            {"start_time": "10:00", "end_time": "10:01", "cycle_time": 60}
+            {"date": "2026-09-05", "start_time": "10:00", "end_time": "10:01", "cycle_time": 60}
         ],
     }
 
@@ -983,3 +1020,54 @@ def test_generate_schedule_without_division_only_uses_unassigned_field_sets(clie
     assert matches
     for match in matches:
         assert match["field_id"] == unassigned_field_id
+
+
+def test_generate_schedule_with_time_blocks_spanning_multiple_days(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={
+            "label": "Session 1",
+            "session_date": "2026-09-05",
+            "timezone": "America/Los_Angeles",
+        },
+    ).json()["id"]
+    for i in range(8):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 6,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [
+                # 8 teams / 4 teams-per-match / target 6 matches-per-team ->
+                # 12 total match slots for the example-game fixture plugin.
+                # This block's fixed capacity (6 min / 60s cycle = 6 slots)
+                # must not exceed that 12, leaving the remainder (6) for the
+                # open-ended day-2 block below.
+                {"date": "2026-09-05", "start_time": "09:00", "end_time": "09:06", "cycle_time": 60},
+                {"date": "2026-09-06", "start_time": "09:00", "end_time": None, "cycle_time": 60},
+            ],
+        },
+    )
+    assert response.status_code == 201
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    scheduled_dates = {m["scheduled_time"][:10] for m in matches}
+    assert "2026-09-05" in scheduled_dates
+    # America/Los_Angeles 09:00 on 2026-09-06 is 2026-09-06T16:00Z --
+    # comparing the UTC date string directly is safe here since the
+    # offset doesn't cross midnight UTC for this timezone/time.
+    assert "2026-09-06" in scheduled_dates

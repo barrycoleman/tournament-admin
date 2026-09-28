@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import datetime as dt
+
 from pydantic import BaseModel, Field
 
 
 class TimeBlock(BaseModel):
+    date: dt.date
     start_time: str = Field(pattern=r"^\d{2}:\d{2}$")
     end_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     cycle_time: int | None = Field(default=None, gt=0)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tournament_server.db import Base, UTCDateTime
@@ -21,3 +21,4 @@ class ScheduleGeneration(Base):
     scheduler_plugin_version: Mapped[str] = mapped_column(String(50))
     target_matches_per_team: Mapped[int] = mapped_column(Integer)
     generated_at: Mapped[dt.datetime] = mapped_column(UTCDateTime)
+    time_blocks_json: Mapped[str | None] = mapped_column(Text, default=None)

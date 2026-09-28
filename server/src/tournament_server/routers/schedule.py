@@ -32,6 +32,7 @@ from tournament_server.services.schedule_timing import (
     assign_scheduled_times,
     implicit_default_time_block,
     resolve_block_cycle_times,
+    serialize_time_blocks,
     validate_blocks_ordered_and_non_overlapping,
 )
 from tournament_server.services.scheduling import build_pairing_history
@@ -246,16 +247,12 @@ def generate_schedule(
 
     session_obj = db.get(TournamentSession, payload.session_id)
     if payload.time_blocks is not None:
-        if session_obj.session_date is None or session_obj.timezone is None:
+        if session_obj.timezone is None:
             raise HTTPException(
                 status_code=422,
-                detail=(
-                    "Session must have both session_date and timezone set "
-                    "to use time_blocks"
-                ),
+                detail="Session must have timezone set to use time_blocks",
             )
         time_blocks_input = [b.model_dump() for b in payload.time_blocks]
-        session_date = session_obj.session_date
         timezone_name = session_obj.timezone
     else:
         implicit_start = utc_now() + dt.timedelta(minutes=5)
@@ -263,7 +260,7 @@ def generate_schedule(
             match_duration_seconds, payload.warn_below_multiplier
         )]
         time_blocks_input[0]["start_time"] = implicit_start.strftime("%H:%M")
-        session_date = implicit_start.date()
+        time_blocks_input[0]["date"] = implicit_start.date()
         timezone_name = "UTC"
 
     sorted_distinct_time_slots = sorted({entry["time_slot"] for entry in generated})
@@ -274,7 +271,7 @@ def generate_schedule(
             time_blocks_input, total_time_slots_needed
         )
         scheduled_times = assign_scheduled_times(
-            resolved_blocks, sorted_distinct_time_slots, session_date, timezone_name
+            resolved_blocks, sorted_distinct_time_slots, timezone_name
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -300,6 +297,7 @@ def generate_schedule(
         scheduler_plugin_version=scheduler_plugin.version,
         target_matches_per_team=payload.target_matches_per_team,
         generated_at=utc_now(),
+        time_blocks_json=serialize_time_blocks(time_blocks_input),
     )
     db.add(generation)
     db.flush()
