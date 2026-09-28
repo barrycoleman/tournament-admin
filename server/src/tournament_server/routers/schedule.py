@@ -22,9 +22,11 @@ from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
 from tournament_server.realtime import broadcast_for_session
 from tournament_server.schemas.schedule import (
+    PhaseResult,
     ResolvedTimeBlockRead,
     ScheduleGenerateRequest,
     ScheduleGenerateResponse,
+    SchedulePhase,
 )
 from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
 from tournament_server.services.team_assignment import get_sole_division_id
@@ -183,21 +185,36 @@ def generate_schedule(
             detail=f"Scheduler plugin {payload.scheduler_plugin_name!r} is not installed",
         )
 
-    existing_query = select(Match).where(
-        Match.session_id == payload.session_id, Match.round_type == payload.round_type
+    phases: list[SchedulePhase] = (
+        payload.phases
+        if payload.phases is not None
+        else [
+            SchedulePhase(
+                round_type=payload.round_type,
+                target_matches_per_team=payload.target_matches_per_team,
+            )
+        ]
     )
-    if payload.division_id is None:
-        existing_query = existing_query.where(Match.division_id.is_(None))
-    else:
-        existing_query = existing_query.where(Match.division_id == payload.division_id)
-    if db.execute(existing_query).scalars().first() is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Matches already exist for this session/division/round_type; "
-                "clear them with DELETE /api/schedule before regenerating"
-            ),
+
+    # All-or-nothing: every phase's (session, division, round_type) must be
+    # conflict-free before anything is generated for any phase.
+    for phase in phases:
+        existing_query = select(Match).where(
+            Match.session_id == payload.session_id, Match.round_type == phase.round_type
         )
+        if payload.division_id is None:
+            existing_query = existing_query.where(Match.division_id.is_(None))
+        else:
+            existing_query = existing_query.where(Match.division_id == payload.division_id)
+        if db.execute(existing_query).scalars().first() is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Matches already exist for round_type {phase.round_type!r} in "
+                    "this session/division; clear them with DELETE /api/schedule "
+                    "before regenerating"
+                ),
+            )
 
     participation_query = select(SessionParticipation).where(
         SessionParticipation.session_id == payload.session_id,
@@ -242,42 +259,51 @@ def generate_schedule(
         raise HTTPException(status_code=422, detail="Session has no Fields configured")
 
     match_format = game_plugin.module.match_format()
-    if payload.round_type not in match_format["round_types"]:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"{payload.round_type!r} is not a valid round_type for this "
-                "event's game plugin"
-            ),
-        )
+    for phase in phases:
+        if phase.round_type not in match_format["round_types"]:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"{phase.round_type!r} is not a valid round_type for this "
+                    "event's game plugin"
+                ),
+            )
     teams_per_alliance = match_format["teams_per_alliance"]
     alliance_count = match_format["alliance_count"]
 
     pairing_history = build_pairing_history(db, event.id)
 
-    try:
-        generated = scheduler_plugin.module.generate_schedule(
-            teams=[{"team_id": t.id, "organization": t.organization} for t in teams],
-            target_matches_per_team=payload.target_matches_per_team,
-            teams_per_alliance=teams_per_alliance,
-            alliance_count=alliance_count,
-            fields=[{"field_id": f.id, "field_set_id": f.field_set_id} for f in fields],
-            field_sets=[{"field_set_id": fs.id, "name": fs.name} for fs in field_sets],
-            cross_session_pairing_history=pairing_history,
-            constraints={"excluded_team_ids": payload.excluded_team_ids},
-        )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Scheduler plugin could not generate a schedule: {exc}",
-        )
-
-    _validate_generated_schedule(generated, {fs.id for fs in field_sets}, alliance_count)
-
     match_duration_seconds = (
         match_format["autonomous_seconds"] + match_format["driver_seconds"]
     )
-    total_time_slots_needed = len({entry["time_slot"] for entry in generated})
+
+    phase_generated: list[tuple[SchedulePhase, list]] = []
+    for phase in phases:
+        try:
+            generated = scheduler_plugin.module.generate_schedule(
+                teams=[{"team_id": t.id, "organization": t.organization} for t in teams],
+                target_matches_per_team=phase.target_matches_per_team,
+                teams_per_alliance=teams_per_alliance,
+                alliance_count=alliance_count,
+                fields=[{"field_id": f.id, "field_set_id": f.field_set_id} for f in fields],
+                field_sets=[{"field_set_id": fs.id, "name": fs.name} for fs in field_sets],
+                cross_session_pairing_history=pairing_history,
+                constraints={"excluded_team_ids": payload.excluded_team_ids},
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Scheduler plugin could not generate a schedule for "
+                    f"round_type {phase.round_type!r}: {exc}"
+                ),
+            )
+        _validate_generated_schedule(generated, {fs.id for fs in field_sets}, alliance_count)
+        phase_generated.append((phase, generated))
+
+    total_time_slots_needed = sum(
+        len({entry["time_slot"] for entry in generated}) for _, generated in phase_generated
+    )
 
     session_obj = db.get(TournamentSession, payload.session_id)
     if payload.time_blocks is not None:
@@ -297,7 +323,6 @@ def generate_schedule(
         time_blocks_input[0]["date"] = implicit_start.date()
         timezone_name = "UTC"
 
-    sorted_distinct_time_slots = sorted({entry["time_slot"] for entry in generated})
     try:
         if payload.time_blocks is not None:
             validate_blocks_ordered_and_non_overlapping(time_blocks_input)
@@ -307,8 +332,8 @@ def generate_schedule(
         resolved_blocks = resolve_block_cycle_times(
             time_blocks_input, total_time_slots_needed
         )
-        scheduled_times = assign_scheduled_times(
-            resolved_blocks, sorted_distinct_time_slots, timezone_name
+        global_assignments = assign_scheduled_times(
+            resolved_blocks, list(range(total_time_slots_needed)), timezone_name
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -319,59 +344,111 @@ def generate_schedule(
     ]
     cycle_time_warning = None
     if tight_blocks:
-        block_names = ", ".join(b.start_time for b in tight_blocks)
+        block_names = ", ".join(f"{b.date} {b.start_time}" for b in tight_blocks)
         cycle_time_warning = (
             f"Cycle time is below {payload.warn_below_multiplier}x match "
             f"duration ({match_duration_seconds}s) in block(s) starting at "
             f"{block_names}"
         )
 
-    generation = ScheduleGeneration(
-        session_id=payload.session_id,
-        division_id=payload.division_id,
-        round_type=payload.round_type,
-        scheduler_plugin_name=scheduler_plugin.name,
-        scheduler_plugin_version=scheduler_plugin.version,
-        target_matches_per_team=payload.target_matches_per_team,
-        generated_at=utc_now(),
-        time_blocks_json=serialize_time_blocks(time_blocks_input),
-    )
-    db.add(generation)
-    db.flush()
+    resolved_time_blocks_read = [
+        ResolvedTimeBlockRead(
+            start_time=b.start_time, end_time=b.end_time, cycle_time_seconds=b.cycle_time_seconds
+        )
+        for b in resolved_blocks
+    ]
 
-    fields_by_set: dict[int, list[int]] = {}
-    for f in fields:
-        fields_by_set.setdefault(f.field_set_id, []).append(f.id)
-    for field_ids in fields_by_set.values():
-        field_ids.sort()
-    next_field_index: dict[int, int] = {fs_id: 0 for fs_id in fields_by_set}
+    if payload.dry_run:
+        phase_results_dry = (
+            [
+                PhaseResult(
+                    round_type=phase.round_type,
+                    schedule_generation_id=None,
+                    match_count=len(generated),
+                )
+                for phase, generated in phase_generated
+            ]
+            if payload.phases is not None
+            else None
+        )
+        return ScheduleGenerateResponse(
+            schedule_generation_id=None,
+            match_count=sum(len(generated) for _, generated in phase_generated),
+            resolved_time_blocks=resolved_time_blocks_read,
+            cycle_time_warning=cycle_time_warning,
+            phase_results=phase_results_dry,
+        )
 
+    stored_time_blocks_json = serialize_time_blocks(time_blocks_input)
+    phase_results: list[PhaseResult] = []
     created_matches = []
-    for match_number, entry in enumerate(generated, start=1):
-        field_set_id = entry["field_set_id"]
-        field_ids_for_set = fields_by_set[field_set_id]
-        field_id = field_ids_for_set[next_field_index[field_set_id] % len(field_ids_for_set)]
-        next_field_index[field_set_id] += 1
+    global_offset = 0
+    for phase, generated in phase_generated:
+        sorted_local_slots = sorted({entry["time_slot"] for entry in generated})
+        global_index_by_local_slot = {
+            local_slot: global_offset + rank
+            for rank, local_slot in enumerate(sorted_local_slots)
+        }
+        global_offset += len(sorted_local_slots)
 
-        match = Match(
+        generation = ScheduleGeneration(
             session_id=payload.session_id,
             division_id=payload.division_id,
-            round_type=payload.round_type,
-            match_number=match_number,
-            field_id=field_id,
-            time_slot=entry["time_slot"],
-            schedule_generation_id=generation.id,
-            scheduled_time=scheduled_times[entry["time_slot"]],
+            round_type=phase.round_type,
+            scheduler_plugin_name=scheduler_plugin.name,
+            scheduler_plugin_version=scheduler_plugin.version,
+            target_matches_per_team=phase.target_matches_per_team,
+            generated_at=utc_now(),
+            time_blocks_json=stored_time_blocks_json,
         )
-        db.add(match)
+        db.add(generation)
         db.flush()
-        for alliance_entry in entry["alliances"]:
-            alliance = Alliance(match_id=match.id, station=alliance_entry["station"])
-            db.add(alliance)
+
+        fields_by_set: dict[int, list[int]] = {}
+        for f in fields:
+            fields_by_set.setdefault(f.field_set_id, []).append(f.id)
+        for field_ids in fields_by_set.values():
+            field_ids.sort()
+        next_field_index: dict[int, int] = {fs_id: 0 for fs_id in fields_by_set}
+
+        phase_matches = []
+        for match_number, entry in enumerate(generated, start=1):
+            field_set_id = entry["field_set_id"]
+            field_ids_for_set = fields_by_set[field_set_id]
+            field_id = field_ids_for_set[
+                next_field_index[field_set_id] % len(field_ids_for_set)
+            ]
+            next_field_index[field_set_id] += 1
+
+            global_index = global_index_by_local_slot[entry["time_slot"]]
+            match = Match(
+                session_id=payload.session_id,
+                division_id=payload.division_id,
+                round_type=phase.round_type,
+                match_number=match_number,
+                field_id=field_id,
+                time_slot=entry["time_slot"],
+                schedule_generation_id=generation.id,
+                scheduled_time=global_assignments[global_index],
+            )
+            db.add(match)
             db.flush()
-            for team_id in alliance_entry["team_ids"]:
-                db.add(AllianceTeam(alliance_id=alliance.id, team_id=team_id))
-        created_matches.append(match)
+            for alliance_entry in entry["alliances"]:
+                alliance = Alliance(match_id=match.id, station=alliance_entry["station"])
+                db.add(alliance)
+                db.flush()
+                for team_id in alliance_entry["team_ids"]:
+                    db.add(AllianceTeam(alliance_id=alliance.id, team_id=team_id))
+            phase_matches.append(match)
+
+        created_matches.extend(phase_matches)
+        phase_results.append(
+            PhaseResult(
+                round_type=phase.round_type,
+                schedule_generation_id=generation.id,
+                match_count=len(phase_matches),
+            )
+        )
 
     db.commit()
 
@@ -387,17 +464,11 @@ def generate_schedule(
         )
 
     return ScheduleGenerateResponse(
-        schedule_generation_id=generation.id,
-        match_count=len(created_matches),
-        resolved_time_blocks=[
-            ResolvedTimeBlockRead(
-                start_time=b.start_time,
-                end_time=b.end_time,
-                cycle_time_seconds=b.cycle_time_seconds,
-            )
-            for b in resolved_blocks
-        ],
+        schedule_generation_id=phase_results[0].schedule_generation_id,
+        match_count=sum(pr.match_count for pr in phase_results),
+        resolved_time_blocks=resolved_time_blocks_read,
         cycle_time_warning=cycle_time_warning,
+        phase_results=phase_results if payload.phases is not None else None,
     )
 
 

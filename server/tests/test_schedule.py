@@ -1355,3 +1355,158 @@ def test_generate_schedule_rejects_empty_phases_list(client):
         },
     )
     assert response.status_code == 422
+
+
+def test_generate_schedule_with_phases_orders_matches_by_phase(client):
+    session_id, team_ids = _setup_ready_session(client, num_teams=8)
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "phases": [
+                {"round_type": "practice", "target_matches_per_team": 1},
+                {"round_type": "qualification", "target_matches_per_team": 2},
+            ],
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["phase_results"] is not None
+    assert [pr["round_type"] for pr in body["phase_results"]] == ["practice", "qualification"]
+    practice_count = next(
+        pr["match_count"] for pr in body["phase_results"] if pr["round_type"] == "practice"
+    )
+    qualification_count = next(
+        pr["match_count"] for pr in body["phase_results"] if pr["round_type"] == "qualification"
+    )
+    assert body["match_count"] == practice_count + qualification_count
+    assert body["schedule_generation_id"] == body["phase_results"][0]["schedule_generation_id"]
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    practice_times = [m["scheduled_time"] for m in matches if m["round_type"] == "practice"]
+    qualification_times = [
+        m["scheduled_time"] for m in matches if m["round_type"] == "qualification"
+    ]
+    assert max(practice_times) < min(qualification_times)
+
+
+def test_generate_schedule_phases_all_or_nothing_conflict(client):
+    session_id, team_ids = _setup_ready_session(client, num_teams=8)
+
+    # Pre-create a qualification match directly, occupying that
+    # round_type -- a subsequent combined-phase request that includes
+    # qualification must fail entirely, including for the practice phase.
+    client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [team_ids[0], team_ids[1]]},
+                {"station": "blue", "team_ids": [team_ids[2], team_ids[3]]},
+            ],
+        },
+    )
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "phases": [
+                {"round_type": "practice", "target_matches_per_team": 1},
+                {"round_type": "qualification", "target_matches_per_team": 2},
+            ],
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 409
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    assert all(m["round_type"] != "practice" for m in matches)
+
+
+def test_generate_schedule_dry_run_creates_nothing(client):
+    session_id, team_ids = _setup_ready_session(client, num_teams=8)
+
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "phases": [
+                {"round_type": "practice", "target_matches_per_team": 1},
+                {"round_type": "qualification", "target_matches_per_team": 2},
+            ],
+            "scheduler_plugin_name": "simple_random",
+            "dry_run": True,
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["schedule_generation_id"] is None
+    assert body["match_count"] > 0
+    assert all(pr["schedule_generation_id"] is None for pr in body["phase_results"])
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    assert matches == []
+
+    # Since nothing was persisted, a real (non-dry-run) request for the
+    # same phases must still succeed afterward.
+    real_response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "phases": [
+                {"round_type": "practice", "target_matches_per_team": 1},
+                {"round_type": "qualification", "target_matches_per_team": 2},
+            ],
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert real_response.status_code == 201
+
+
+def test_generate_schedule_dry_run_is_idempotent(client):
+    session_id, team_ids = _setup_ready_session(client, num_teams=8)
+    payload = {
+        "session_id": session_id,
+        "round_type": "qualification",
+        "target_matches_per_team": 3,
+        "scheduler_plugin_name": "simple_random",
+        "dry_run": True,
+    }
+
+    first = client.post("/api/schedule", json=payload).json()
+    second = client.post("/api/schedule", json=payload).json()
+
+    assert first["match_count"] == second["match_count"]
+    assert first["schedule_generation_id"] is None
+    assert second["schedule_generation_id"] is None
+    assert first["phase_results"] is None
+    assert second["phase_results"] is None
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    assert matches == []
+
+
+def test_generate_schedule_singular_shape_unaffected_by_phases_support(client):
+    # Backward-compatibility regression check for the singular-shape path
+    # now that generate_schedule's internals are phases-aware.
+    session_id, team_ids = _setup_ready_session(client)
+    response = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "target_matches_per_team": 3,
+            "scheduler_plugin_name": "simple_random",
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["phase_results"] is None
+    assert body["schedule_generation_id"] is not None
+    assert body["match_count"] > 0
