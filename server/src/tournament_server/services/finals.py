@@ -125,7 +125,7 @@ def _create_matchup_game(db: Session, bracket: FinalsBracket, matchup: BracketMa
     field_id = next_finals_field_id(db, bracket)
     existing_game_count = len(
         db.execute(
-            select(Match).where(Match.finals_bracket_id == bracket.id)
+            select(Match).where(Match.bracket_matchup_id == matchup.id)
         ).scalars().all()
     )
 
@@ -201,10 +201,15 @@ def generate_bracket(db: Session, bracket: FinalsBracket) -> None:
     order = _seed_order(capacity)
 
     matchups: dict[tuple[int, int], BracketMatchup] = {}
+    matchup_number = 0
     for round_number in range(1, total_rounds + 1):
         for position in range(capacity // (2**round_number)):
+            matchup_number += 1
             matchup = BracketMatchup(
-                bracket_id=bracket.id, round_number=round_number, position=position
+                bracket_id=bracket.id,
+                round_number=round_number,
+                position=position,
+                matchup_number=matchup_number,
             )
             db.add(matchup)
             db.flush()

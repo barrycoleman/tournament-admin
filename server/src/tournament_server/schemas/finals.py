@@ -17,6 +17,7 @@ class BracketMatchupRead(BaseModel):
     id: int
     round_number: int
     position: int
+    matchup_number: int | None
     alliance_a_id: int | None
     alliance_b_id: int | None
     winner_alliance_id: int | None

@@ -1555,18 +1555,19 @@ def test_unavailable_alliance_waiting_on_earlier_round_resolves_later(client):
     # Two incomplete elimination matches exist at this point (round-1
     # position 1's real game, and round-2 position 1's real game, both
     # created directly by generate_bracket since two round-1 byes feed
-    # round-2 position 1 immediately). match_number is assigned as a
-    # strictly-increasing per-bracket counter in the exact order
-    # generate_bracket creates matches (round 1 before round 2), so the
-    # lowest match_number deterministically identifies round-1's game
-    # regardless of the API's response ordering.
+    # round-2 position 1 immediately). match_number now restarts at 1 for
+    # every matchup's own series, so it can no longer disambiguate across
+    # matchups -- id is still a real bracket-wide creation-order counter
+    # (round 1's games are always inserted before round 2's), so the
+    # lowest id deterministically identifies round-1's game regardless of
+    # the API's response ordering.
     matches_response = client.get(f"/api/matches?session_id={session_id}")
     pending_games = sorted(
         (
             m for m in matches_response.json()
             if m["round_type"] == "elimination" and m["status"] != "completed"
         ),
-        key=lambda m: m["match_number"],
+        key=lambda m: m["id"],
     )
     game = pending_games[0]
     red_id = next(a["id"] for a in game["alliances"] if a["station"] == "red")
@@ -1619,17 +1620,20 @@ def test_unavailable_alliance_mid_series_resolves_walkover_without_extra_game(cl
     bracket = final_response.json()
     round_1_matchup = bracket["matchups"][0]  # round 1, position 0
 
-    # match_number is a strictly-increasing per-bracket counter assigned in
-    # creation order; generate_bracket creates round-1 position 0's game
-    # before position 1's (both created immediately here since bracket_size
-    # == capacity == 4, so there are no byes), so match_number 1 always
-    # belongs to round_1_matchup regardless of the API's response order.
+    # match_number now restarts at 1 for every matchup's own series (both
+    # of these round-1 games are each the first game of their own matchup,
+    # so both get match_number == 1) -- id is still a real bracket-wide
+    # creation-order counter, and generate_bracket creates round-1 position
+    # 0's game before position 1's (both created immediately here since
+    # bracket_size == capacity == 4, so there are no byes), so the lowest
+    # id always belongs to round_1_matchup (position 0) regardless of the
+    # API's response order.
     matches_response = client.get(f"/api/matches?session_id={session_id}")
     elimination_matches = [
         m for m in matches_response.json() if m["round_type"] == "elimination"
     ]
     assert len(elimination_matches) == 2  # both round-1 games created immediately
-    game_1 = next(m for m in elimination_matches if m["match_number"] == 1)
+    game_1 = min(elimination_matches, key=lambda m: m["id"])
     red_id = next(a["id"] for a in game_1["alliances"] if a["station"] == "red")
     blue_id = next(a["id"] for a in game_1["alliances"] if a["station"] == "blue")
 
@@ -1724,3 +1728,119 @@ def test_delete_finals_rejects_completed_bracket(cooperative_client):
 
     response = client.delete(f"/api/finals/{bracket['id']}")
     assert response.status_code == 409
+
+
+def test_matchup_numbers_assigned_round_then_position(client):
+    # example-game is captain_pick, which requires 2 * bracket_size teams
+    # checked in and delays forming "matchups" at all until every captain
+    # has picked a partner (see test_generate_bracket_resolves_byes_and_
+    # seeds_pairs_correctly above for the same pattern) -- bracket_size=8
+    # therefore needs 16 teams and a full pick loop, not the 8 teams/no-pick
+    # form the task brief's draft of this test used.
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 16)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+
+    bracket = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 8, "wins_to_advance": 1},
+    ).json()
+    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
+    unclaimed = [t for t in team_ids if t not in claimed]
+    final_response = None
+    for i, alliance in enumerate(bracket["alliances"]):
+        final_response = client.post(
+            f"/api/finals/{bracket['id']}/pick",
+            json={
+                "captain_bracket_alliance_id": alliance["id"],
+                "partner_team_id": unclaimed[i],
+            },
+        )
+    bracket = final_response.json()
+
+    round_1 = sorted(
+        (m for m in bracket["matchups"] if m["round_number"] == 1),
+        key=lambda m: m["position"],
+    )
+    round_2 = sorted(
+        (m for m in bracket["matchups"] if m["round_number"] == 2),
+        key=lambda m: m["position"],
+    )
+    round_3 = [m for m in bracket["matchups"] if m["round_number"] == 3]
+
+    # Round 1's four matchups get the lowest numbers (in position order),
+    # then round 2's two, then round 3's one final -- matching
+    # generate_bracket's own (round_number, position) creation loop.
+    assert [m["matchup_number"] for m in round_1] == [1, 2, 3, 4]
+    assert [m["matchup_number"] for m in round_2] == [5, 6]
+    assert [m["matchup_number"] for m in round_3] == [7]
+
+
+def test_single_elimination_series_match_number_restarts_per_matchup(client):
+    # NOTE: this deviates from the task brief's suggested polling-loop
+    # version of this test, which relied on ambiguous operator-precedence
+    # logic (`A and B and C or A and B`) that in practice matched any
+    # incomplete elimination game rather than specifically the game whose
+    # matchup had just been given a follow-up game. Since `MatchRead`
+    # doesn't expose `bracket_matchup_id`, the second game of a series is
+    # identified here by elimination (it's the one whose id wasn't among
+    # the original round-1 game ids) rather than by scoring the same
+    # series to full completion -- deterministic, and still pins both hard
+    # requirements: both round-1 games independently show
+    # `match_number == 1`, and the same matchup's second game shows
+    # `match_number == 2`.
+    # example-game is captain_pick, which requires 2 * bracket_size teams
+    # checked in and delays forming "matchups" (and thus creating any
+    # elimination Match) until every captain has picked a partner -- so
+    # bracket_size=4 needs 8 teams and a full pick loop, matching the same
+    # pattern the walkover tests above use.
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+
+    bracket = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": [2, 1]},
+    ).json()
+    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
+    unclaimed = [t for t in team_ids if t not in claimed]
+    final_response = None
+    for i, alliance in enumerate(bracket["alliances"]):
+        final_response = client.post(
+            f"/api/finals/{bracket['id']}/pick",
+            json={
+                "captain_bracket_alliance_id": alliance["id"],
+                "partner_team_id": unclaimed[i],
+            },
+        )
+    bracket = final_response.json()
+
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    round_1_games = [
+        m for m in matches_response.json() if m["round_type"] == "elimination"
+    ]
+    assert len(round_1_games) == 2  # both round-1 games created immediately (no byes)
+    round_1_ids = {g["id"] for g in round_1_games}
+    # Both round-1 games are each the first game of their own matchup.
+    assert all(g["match_number"] == 1 for g in round_1_games)
+
+    # Play ONE game of one round-1 series: red wins 10-0 -> 1 win, not
+    # enough to decide the series (wins_needed=2 for round 1), so
+    # advance_single_elimination creates a second game for that same
+    # matchup rather than deciding it.
+    game_1 = round_1_games[0]
+    red_id = next(a["id"] for a in game_1["alliances"] if a["station"] == "red")
+    blue_id = next(a["id"] for a in game_1["alliances"] if a["station"] == "blue")
+    client.post(
+        f"/api/matches/{game_1['id']}/alliances/{red_id}/score",
+        json={"data": {"high_balls": 10, "low_balls": 0, "auto_winner": "tie"}},
+    )
+    client.post(
+        f"/api/matches/{game_1['id']}/alliances/{blue_id}/score",
+        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
+    )
+
+    matches_response = client.get(f"/api/matches?session_id={session_id}")
+    elimination_matches = [
+        m for m in matches_response.json() if m["round_type"] == "elimination"
+    ]
+    new_game = next(m for m in elimination_matches if m["id"] not in round_1_ids)
+    assert new_game["match_number"] == 2

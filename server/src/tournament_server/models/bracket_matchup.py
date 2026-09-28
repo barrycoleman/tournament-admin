@@ -13,6 +13,7 @@ class BracketMatchup(Base):
     bracket_id: Mapped[int] = mapped_column(ForeignKey("finals_brackets.id"))
     round_number: Mapped[int] = mapped_column(Integer)
     position: Mapped[int] = mapped_column(Integer)
+    matchup_number: Mapped[int | None] = mapped_column(Integer, default=None)
     alliance_a_id: Mapped[int | None] = mapped_column(
         ForeignKey("bracket_alliances.id"), default=None
     )
