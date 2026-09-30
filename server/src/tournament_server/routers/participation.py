@@ -33,6 +33,19 @@ def add_participant(
     team = db.get(Team, payload.team_id)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")
+
+    participation = db.execute(
+        select(SessionParticipation).where(
+            SessionParticipation.session_id == session_id,
+            SessionParticipation.team_id == payload.team_id,
+        )
+    ).scalars().first()
+    if participation is not None:
+        participation.checked_in = payload.checked_in
+        db.commit()
+        db.refresh(participation)
+        return participation
+
     participation = SessionParticipation(
         session_id=session_id, team_id=payload.team_id, checked_in=payload.checked_in
     )
@@ -40,10 +53,19 @@ def add_participant(
     try:
         db.commit()
     except IntegrityError:
+        # A concurrent request inserted this (session_id, team_id) row
+        # between our SELECT and this INSERT -- fall back to updating the
+        # row it created, since the caller's intent (this team's
+        # checked_in state) is still achievable without a 409.
         db.rollback()
-        raise HTTPException(
-            status_code=409, detail="Team already checked in for this session"
-        )
+        participation = db.execute(
+            select(SessionParticipation).where(
+                SessionParticipation.session_id == session_id,
+                SessionParticipation.team_id == payload.team_id,
+            )
+        ).scalars().first()
+        participation.checked_in = payload.checked_in
+        db.commit()
     db.refresh(participation)
     return participation
 

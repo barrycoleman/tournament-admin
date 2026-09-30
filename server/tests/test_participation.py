@@ -53,7 +53,7 @@ def test_check_in_requires_existing_team(client):
     assert response.status_code == 404
 
 
-def test_duplicate_checkin_returns_409(client):
+def test_recheckin_updates_existing_row_instead_of_409ing(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
     team_id = client.post(
@@ -61,15 +61,27 @@ def test_duplicate_checkin_returns_409(client):
     ).json()["id"]
 
     first = client.post(
-        f"/api/sessions/{session_id}/participants", json={"team_id": team_id}
+        f"/api/sessions/{session_id}/participants",
+        json={"team_id": team_id, "checked_in": True},
     )
     assert first.status_code == 201
+    participation_id = first.json()["id"]
 
     second = client.post(
-        f"/api/sessions/{session_id}/participants", json={"team_id": team_id}
+        f"/api/sessions/{session_id}/participants",
+        json={"team_id": team_id, "checked_in": False},
     )
-    assert second.status_code == 409
+    assert second.status_code == 201
+    assert second.json()["id"] == participation_id
+    assert second.json()["checked_in"] is False
 
-    # Only one participation row should exist.
-    listed = client.get(f"/api/sessions/{session_id}/participants").json()
-    assert len(listed) == 1
+    third = client.post(
+        f"/api/sessions/{session_id}/participants",
+        json={"team_id": team_id, "checked_in": True},
+    )
+    assert third.status_code == 201
+    assert third.json()["id"] == participation_id
+    assert third.json()["checked_in"] is True
+
+    list_response = client.get(f"/api/sessions/{session_id}/participants")
+    assert len(list_response.json()) == 1
