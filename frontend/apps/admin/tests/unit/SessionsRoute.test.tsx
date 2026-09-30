@@ -93,6 +93,53 @@ describe("SessionsRoute", () => {
     );
   });
 
+  it("opening the create form while a row is being edited closes the edit form", async () => {
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
+      if (path === "/api/sessions" && !options) {
+        return [
+          { id: 1, event_id: 1, label: "Saturday", session_date: null, timezone: null },
+        ] as never;
+      }
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderRoute();
+
+    await screen.findByText("Saturday");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByDisplayValue("Saturday")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add session..." }));
+
+    expect(screen.queryByDisplayValue("Saturday")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add session" })).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Label")).toHaveLength(1);
+  });
+
+  it("opening a row's edit form while creating closes the create form", async () => {
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
+      if (path === "/api/sessions" && !options) {
+        return [
+          { id: 1, event_id: 1, label: "Saturday", session_date: null, timezone: null },
+        ] as never;
+      }
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderRoute();
+
+    await screen.findByText("Saturday");
+    fireEvent.click(screen.getByRole("button", { name: "Add session..." }));
+    expect(screen.getByRole("button", { name: "Add session" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    expect(screen.queryByRole("button", { name: "Add session" })).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("Saturday")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Label")).toHaveLength(1);
+  });
+
   it("shows an inline error on a failed create", async () => {
     vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
       if (path === "/api/sessions" && !options) return [] as never;

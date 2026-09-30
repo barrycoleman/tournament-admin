@@ -194,7 +194,13 @@ export function SessionsRoute() {
                 <td>{session.session_date ?? "—"}</td>
                 <td>{session.timezone ?? "—"}</td>
                 <td>
-                  <button className="btn btn-small" onClick={() => setEditingId(session.id)}>
+                  <button
+                    className="btn btn-small"
+                    onClick={() => {
+                      setEditingId(session.id);
+                      setCreating(false);
+                    }}
+                  >
                     {t("sessions.editAction")}
                   </button>
                 </td>
@@ -205,7 +211,14 @@ export function SessionsRoute() {
       </table>
 
       {!creating && (
-        <button className="btn" type="button" onClick={() => setCreating(true)}>
+        <button
+          className="btn"
+          type="button"
+          onClick={() => {
+            setCreating(true);
+            setEditingId(null);
+          }}
+        >
           {t("sessions.addSessionAction")}
         </button>
       )}
