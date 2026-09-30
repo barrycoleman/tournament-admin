@@ -23,3 +23,11 @@ export interface Division {
   name: string;
   target_team_count: number | null;
 }
+
+export interface SessionRead {
+  id: number;
+  event_id: number;
+  label: string;
+  session_date: string | null;
+  timezone: string | null;
+}

@@ -10,6 +10,7 @@ import { EventSetupRoute } from "./routes/EventSetupRoute";
 import { SettingsRolesRoute } from "./routes/SettingsRolesRoute";
 import { DivisionsRoute } from "./routes/DivisionsRoute";
 import { TeamsRoute } from "./routes/TeamsRoute";
+import { SessionsRoute } from "./routes/SessionsRoute";
 
 async function isPickerMode(): Promise<boolean> {
   try {
@@ -108,6 +109,7 @@ export const router = createBrowserRouter([
       { path: "settings/roles", element: <SettingsRolesRoute /> },
       { path: "divisions", element: <DivisionsRoute /> },
       { path: "teams", element: <TeamsRoute /> },
+      { path: "sessions", element: <SessionsRoute /> },
     ],
   },
 ]);

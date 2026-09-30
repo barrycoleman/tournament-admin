@@ -92,6 +92,9 @@ export function AppShell() {
             <NavLink to="/teams" className={navLinkClassName}>
               {t("shell.teamsLink")}
             </NavLink>
+            <NavLink to="/sessions" className={navLinkClassName}>
+              {t("shell.sessionsLink")}
+            </NavLink>
           </nav>
         )}
         <main className="app-main">

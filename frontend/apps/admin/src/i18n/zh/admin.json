@@ -23,6 +23,7 @@
     "dismiss": "关闭",
     "divisionsLink": "分组",
     "teamsLink": "队伍",
+    "sessionsLink": "场次",
     "switchToLight": "切换到浅色模式",
     "switchToDark": "切换到深色模式"
   },
@@ -93,6 +94,21 @@
     "deleteConfirmHeading": "删除此分组?",
     "deleteConfirmBody": "其 {{count}} 支队伍将变为未分配,而不会被删除。",
     "cancelAction": "取消"
+  },
+  "sessions": {
+    "heading": "场次",
+    "columnLabel": "名称",
+    "columnDate": "日期",
+    "columnTimezone": "时区",
+    "labelLabel": "名称",
+    "dateLabel": "日期(可选)",
+    "timezoneLabel": "时区(可选)",
+    "noTimezoneOption": "未设置时区",
+    "editAction": "编辑",
+    "saveAction": "保存",
+    "cancelAction": "取消",
+    "addSessionAction": "添加场次...",
+    "addSubmit": "添加场次"
   },
   "dashboard": {
     "heading": "仪表盘",

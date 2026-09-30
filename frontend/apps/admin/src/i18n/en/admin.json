@@ -23,6 +23,7 @@
     "dismiss": "Dismiss",
     "divisionsLink": "Divisions",
     "teamsLink": "Teams",
+    "sessionsLink": "Sessions",
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode"
   },
@@ -93,6 +94,21 @@
     "deleteConfirmHeading": "Delete this division?",
     "deleteConfirmBody": "Its {{count}} teams will become unassigned rather than deleted.",
     "cancelAction": "Cancel"
+  },
+  "sessions": {
+    "heading": "Sessions",
+    "columnLabel": "Label",
+    "columnDate": "Date",
+    "columnTimezone": "Timezone",
+    "labelLabel": "Label",
+    "dateLabel": "Date (optional)",
+    "timezoneLabel": "Timezone (optional)",
+    "noTimezoneOption": "No timezone set",
+    "editAction": "Edit",
+    "saveAction": "Save",
+    "cancelAction": "Cancel",
+    "addSessionAction": "Add session...",
+    "addSubmit": "Add session"
   },
   "dashboard": {
     "heading": "Dashboard",
