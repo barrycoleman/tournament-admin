@@ -243,6 +243,12 @@
   min-height: auto;
 }
 
+.input--large {
+  min-height: 56px;
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--text-lg);
+}
+
 .form-actions {
   display: flex;
   align-items: center;
@@ -307,6 +313,28 @@
   min-height: 32px;
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-xs);
+}
+
+/* A positive/confirmed action -- reuses the same success color the
+   `.alert-success` banner already establishes elsewhere (e.g.
+   SettingsRolesRoute's save-success message), not a new green. */
+.btn-success {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  color: var(--color-accent-contrast);
+}
+
+.btn-success:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+/* A screen meant to be operated at a glance by non-technical front-desk
+   staff: bigger touch target and type than the default `.btn`/`.input`,
+   built from the same scale rather than one-off numbers. */
+.btn-large {
+  min-height: 56px;
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--text-lg);
 }
 
 /* A secondary, inline action -- not the accent, which is reserved for
@@ -609,6 +637,45 @@
 .picker-restarting p {
   font-size: var(--text-lg);
   color: var(--color-text-secondary);
+}
+
+/* ---------- Front-desk check-in screen ---------- */
+
+/* At-a-glance, large-touch-target operation for non-technical staff:
+   generous spacing between rows wins over information density here, so
+   this deliberately doesn't reuse the denser `.list-plain`/`.list-row`
+   pair used elsewhere. */
+.front-desk-checkin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 720px;
+}
+
+.front-desk-checkin__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.front-desk-checkin__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 64px;
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-bg-elevated);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.front-desk-checkin__team {
+  font-size: var(--text-lg);
+  font-weight: 600;
 }
 
 /* ---------- react-data-grid theming ---------- */

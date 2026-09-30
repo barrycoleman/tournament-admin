@@ -13,6 +13,7 @@ import { TeamsRoute } from "./routes/TeamsRoute";
 import { SessionsRoute } from "./routes/SessionsRoute";
 import { SessionDetailLayout } from "./routes/SessionDetailLayout";
 import { SessionCheckinRoute } from "./routes/SessionCheckinRoute";
+import { FrontDeskCheckinRoute } from "./routes/FrontDeskCheckinRoute";
 
 async function isPickerMode(): Promise<boolean> {
   try {
@@ -112,6 +113,7 @@ export const router = createBrowserRouter([
       { path: "divisions", element: <DivisionsRoute /> },
       { path: "teams", element: <TeamsRoute /> },
       { path: "sessions", element: <SessionsRoute /> },
+      { path: "checkin", element: <FrontDeskCheckinRoute /> },
       {
         path: "sessions/:sessionId",
         element: <SessionDetailLayout />,

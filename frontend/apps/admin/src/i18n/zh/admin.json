@@ -126,6 +126,13 @@
       "checkOutAllVisible": "全部取消签到(当前可见)"
     }
   },
+  "frontDeskCheckin": {
+    "heading": "队伍签到",
+    "searchPlaceholder": "按队伍编号或名称搜索",
+    "noActiveSession": "当前没有激活的场次 — 请联系管理员设置。",
+    "checkInAction": "签到",
+    "checkedInState": "已签到"
+  },
   "dashboard": {
     "heading": "仪表盘",
     "eventNameLabel": "赛事",

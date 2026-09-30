@@ -126,6 +126,13 @@
       "checkOutAllVisible": "Check out all visible"
     }
   },
+  "frontDeskCheckin": {
+    "heading": "Team Check-In",
+    "searchPlaceholder": "Search by team number or name",
+    "noActiveSession": "No active session — ask an admin to set one.",
+    "checkInAction": "Check In",
+    "checkedInState": "Checked In"
+  },
   "dashboard": {
     "heading": "Dashboard",
     "eventNameLabel": "Event",
