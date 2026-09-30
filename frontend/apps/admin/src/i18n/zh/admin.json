@@ -108,7 +108,22 @@
     "saveAction": "保存",
     "cancelAction": "取消",
     "addSessionAction": "添加场次...",
-    "addSubmit": "添加场次"
+    "addSubmit": "添加场次",
+    "checkinTab": "签到",
+    "loading": "加载中…",
+    "notFound": "未找到该场次。",
+    "noDateSet": "未设置日期",
+    "noTimezoneSet": "未设置时区",
+    "checkin": {
+      "columnNumber": "编号",
+      "columnName": "名称",
+      "columnDivision": "分组",
+      "columnCheckedIn": "已签到",
+      "toggleAction": "切换 {{name}} 的签到状态",
+      "filterPlaceholder": "按编号或名称筛选",
+      "checkInAllVisible": "全部签到(当前可见)",
+      "checkOutAllVisible": "全部取消签到(当前可见)"
+    }
   },
   "dashboard": {
     "heading": "仪表盘",

@@ -108,7 +108,22 @@
     "saveAction": "Save",
     "cancelAction": "Cancel",
     "addSessionAction": "Add session...",
-    "addSubmit": "Add session"
+    "addSubmit": "Add session",
+    "checkinTab": "Check-In",
+    "loading": "Loading…",
+    "notFound": "Session not found.",
+    "noDateSet": "No date set",
+    "noTimezoneSet": "No timezone set",
+    "checkin": {
+      "columnNumber": "Number",
+      "columnName": "Name",
+      "columnDivision": "Division",
+      "columnCheckedIn": "Checked In",
+      "toggleAction": "Toggle check-in for {{name}}",
+      "filterPlaceholder": "Filter by number or name",
+      "checkInAllVisible": "Check in all visible",
+      "checkOutAllVisible": "Check out all visible"
+    }
   },
   "dashboard": {
     "heading": "Dashboard",
