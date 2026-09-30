@@ -119,6 +119,61 @@ def test_startup_self_heal_assigns_unassigned_teams_to_a_pre_existing_sole_divis
     assert division_id_after == 1
 
 
+def test_startup_self_heal_backfills_missing_role_credential(tmp_path):
+    """A database created before `front_desk` existed has RoleCredential
+    rows for the original six roles only -- the next launch must backfill
+    a front_desk row, seeded from the admin row's own password (both the
+    hash and the encrypted copy), without touching any existing row."""
+    db_path = str(tmp_path / "missing_role_credential.db")
+    engine = make_engine(db_path)
+    init_db(engine)
+
+    with engine.connect() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO events (id, name, created_at) "
+                "VALUES (1, 'Regional Qualifier', '2026-01-01 00:00:00')"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO divisions (id, event_id, name) VALUES (1, 1, 'Division 1')")
+        )
+        for role in ("admin", "scorer", "judge", "referee", "attendee", "display_device"):
+            password_hash = f"hash-for-{role}"
+            password_encrypted = f"encrypted-for-{role}" if role == "admin" else None
+            connection.execute(
+                text(
+                    "INSERT INTO role_credentials (role, password_hash, password_encrypted) "
+                    "VALUES (:role, :password_hash, :password_encrypted)"
+                ),
+                {"role": role, "password_hash": password_hash, "password_encrypted": password_encrypted},
+            )
+        connection.commit()
+
+    create_app(db_path=db_path, plugins_root=str(tmp_path / "plugins"))
+
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text("SELECT role, password_hash, password_encrypted FROM role_credentials")
+        ).all()
+    by_role = {row.role: row for row in rows}
+    assert set(by_role.keys()) == {
+        "admin", "scorer", "judge", "referee", "attendee", "display_device", "front_desk",
+    }
+    assert by_role["front_desk"].password_hash == "hash-for-admin"
+    assert by_role["front_desk"].password_encrypted == "encrypted-for-admin"
+    # Pre-existing rows are untouched.
+    assert by_role["scorer"].password_hash == "hash-for-scorer"
+
+    # Idempotence: a second startup must not create a duplicate front_desk row.
+    create_app(db_path=db_path, plugins_root=str(tmp_path / "plugins"))
+    with engine.connect() as connection:
+        front_desk_count = connection.execute(
+            text("SELECT COUNT(*) FROM role_credentials WHERE role = 'front_desk'")
+        ).scalar_one()
+    assert front_desk_count == 1
+
+
 def test_mismatched_pre_alembic_database_is_refused(tmp_path):
     db_path = str(tmp_path / "old.db")
     engine = make_engine(db_path)
