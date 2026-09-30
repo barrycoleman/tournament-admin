@@ -11,6 +11,12 @@ class SessionCreate(BaseModel):
     timezone: str | None = None
 
 
+class SessionUpdate(BaseModel):
+    label: str | None = None
+    session_date: dt.date | None = None
+    timezone: str | None = None
+
+
 class SessionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

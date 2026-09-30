@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from tournament_server.auth import require_admin, require_any_role
 from tournament_server.deps import get_db, get_the_event
 from tournament_server.models.session import TournamentSession
-from tournament_server.schemas.session import SessionCreate, SessionRead
+from tournament_server.schemas.session import SessionCreate, SessionRead, SessionUpdate
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -37,6 +37,33 @@ def create_session(
         timezone=payload.timezone,
     )
     db.add(session_obj)
+    db.commit()
+    db.refresh(session_obj)
+    return session_obj
+
+
+@router.patch("/{session_id}", response_model=SessionRead)
+def update_session(
+    session_id: int,
+    payload: SessionUpdate,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> TournamentSession:
+    session_obj = db.get(TournamentSession, session_id)
+    if session_obj is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    updates = payload.model_dump(exclude_unset=True)
+    if "label" in updates and updates["label"] is None:
+        raise HTTPException(status_code=422, detail="label cannot be null")
+    if "timezone" in updates and updates["timezone"] is not None:
+        try:
+            ZoneInfo(updates["timezone"])
+        except (ZoneInfoNotFoundError, ValueError):
+            raise HTTPException(
+                status_code=422, detail=f"Unknown timezone: {updates['timezone']!r}"
+            )
+    for key, value in updates.items():
+        setattr(session_obj, key, value)
     db.commit()
     db.refresh(session_obj)
     return session_obj
