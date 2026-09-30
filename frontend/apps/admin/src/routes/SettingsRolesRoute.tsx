@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 
-const ROLES = ["admin", "scorer", "judge", "referee", "attendee", "display_device"];
+const ROLES = ["admin", "scorer", "judge", "referee", "attendee", "display_device", "front_desk"];
 
 interface RolePasswordRead {
   password: string | null;

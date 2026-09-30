@@ -97,6 +97,13 @@ export function AppShell() {
             </NavLink>
           </nav>
         )}
+        {role === "front_desk" && (
+          <nav className="app-nav" ref={navRef}>
+            <NavLink to="/checkin" className={navLinkClassName}>
+              {t("shell.checkinLink")}
+            </NavLink>
+          </nav>
+        )}
         <main className="app-main">
           <Outlet />
           {role === "admin" && <DebugEventPanel />}
