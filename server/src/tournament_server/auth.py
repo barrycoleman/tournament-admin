@@ -16,7 +16,15 @@ from tournament_server.deps import get_db
 from tournament_server.models.password_encryption_key import PasswordEncryptionKey
 from tournament_server.models.signing_key import SigningKey
 
-ROLES = ("admin", "scorer", "judge", "referee", "attendee", "display_device")
+ROLES = (
+    "admin",
+    "scorer",
+    "judge",
+    "referee",
+    "attendee",
+    "display_device",
+    "front_desk",
+)
 
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_LIFETIME = dt.timedelta(minutes=30)
@@ -129,3 +137,4 @@ def require_role(*allowed_roles: str):
 require_admin = require_role()
 require_any_role = require_role(*ROLES)
 require_scorer_or_referee = require_role("scorer", "referee")
+require_admin_or_front_desk = require_role("front_desk")

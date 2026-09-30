@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from tournament_server.auth import require_admin, require_any_role
+from tournament_server.auth import require_admin_or_front_desk, require_any_role
 from tournament_server.deps import get_db
 from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.session import TournamentSession
@@ -25,7 +25,7 @@ def add_participant(
     session_id: int,
     payload: ParticipationCreate,
     db: Session = Depends(get_db),
-    _role: str = Depends(require_admin),
+    _role: str = Depends(require_admin_or_front_desk),
 ) -> SessionParticipation:
     session_obj = db.get(TournamentSession, session_id)
     if session_obj is None:

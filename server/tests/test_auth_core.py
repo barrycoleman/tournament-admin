@@ -42,7 +42,12 @@ def test_roles_are_the_six_fixed_names():
         "referee",
         "attendee",
         "display_device",
+        "front_desk",
     )
+
+
+def test_front_desk_role_exists():
+    assert "front_desk" in ROLES
 
 
 def test_hash_password_round_trips():
