@@ -176,6 +176,43 @@ own, idempotently, independent of which migration path that database took
 to get there — so the invariant holds for every event regardless of its
 history, not just ones created after this landed.
 
+## Sessions & check-in
+
+`PATCH /api/sessions/{id}` (`routers/sessions.py`) is a partial update —
+`label`, `session_date`, `timezone` are all optional and only the fields
+actually present in the request body are written
+(`SessionUpdate.model_dump(exclude_unset=True)`), so `{}` is a no-op
+`200`, not a validation error. `label` may not be explicitly set to
+`null` (422); `session_date`/`timezone` may, to clear them. `timezone` is
+validated as a real IANA zone via `ZoneInfo` at write time here, same as
+`POST /api/sessions` already does. `admin`-only, 404 if the session
+doesn't exist.
+
+`POST /api/sessions/{id}/participants` (`routers/participation.py`'s
+`add_participant`) is a real upsert, not a bare insert: it looks up the
+existing `(session_id, team_id)` row first and updates `checked_in` in
+place if found, inserting only if it doesn't exist yet. Checking a team
+in, then checking it in (or out) again, succeeds idempotently and leaves
+exactly one `SessionParticipation` row — it used to rely on a
+`UniqueConstraint` and 409 on any repeat call for the same team, which
+made re-checking in an already-checked-in team (the common case at a
+real check-in table) a hard error. The narrow `IntegrityError` fallback
+(a concurrent request wins the insert race between this endpoint's own
+SELECT and INSERT) re-queries and updates that row instead of 409ing
+either — see the inline comment on that fallback for the one assumption
+it still depends on (no participant-delete endpoint exists today).
+
+This endpoint is also the one place a non-admin role can write here:
+`front_desk` (see "Known, deliberate gaps" below) is gated in via
+`require_admin_or_front_desk` instead of `require_admin`, specifically
+and only on this endpoint — `GET .../participants`, `PATCH
+/api/sessions/{id}`, `POST /api/sessions`, and every other
+session/team-mutating endpoint stay `require_admin`/`require_any_role`
+exactly as before. `tests/test_participation.py` and
+`tests/test_sessions.py`/`tests/test_teams.py` pin both halves of this —
+`front_desk` succeeding here, and 403ing everywhere else an admin-only
+write lives.
+
 ## Match & scoring
 
 An Event selects exactly one game plugin via `POST /api/event/game-plugin`
@@ -1056,12 +1093,36 @@ password when a tournament already exists in the allowlist).
 ## Known, deliberate gaps in this phase
 
 - Real authentication now exists — see
-  `docs/superpowers/specs/2026-09-03-real-authentication-design.md`. Six
-  roles (`admin`, `scorer`, `judge`, `referee`, `attendee`,
-  `display_device`) share one password per event until the Admin
-  differentiates them; every endpoint requires a bearer JWT via
+  `docs/superpowers/specs/2026-09-03-real-authentication-design.md`.
+  Seven roles (`admin`, `scorer`, `judge`, `referee`, `attendee`,
+  `display_device`, `front_desk`) share one password per event until the
+  Admin differentiates them; every endpoint requires a bearer JWT via
   `tournament_server.auth.require_role(...)`, with `admin` always
   passing regardless of what a given endpoint's allowed-roles list says.
+  `front_desk` (added for the session check-in feature) has the same
+  broad *read* access every other non-admin role already has via
+  `require_any_role` — its only broadened *write* access is the single
+  `POST /api/sessions/{id}/participants` endpoint (see "Sessions &
+  check-in" above); it's `require_admin`-gated like every other role on
+  everything else (`POST /api/sessions`, `PATCH /api/sessions/{id}`,
+  `PATCH /api/teams/{id}`, etc.).
+  `services/role_credentials.backfill_role_credentials` is a generic
+  startup self-heal (called from `create_app()`, right alongside the
+  `assign_sole_division`/zero-division self-heal above) that gives any
+  event database missing a `RoleCredential` row for a role in
+  `auth.ROLES` one, idempotently — this is what an existing,
+  pre-`front_desk` database needs to gain that role without manual
+  intervention, and it's written generically (iterates `ROLES`, not
+  hardcoded to `"front_desk"`) so the *next* role this project ever adds
+  self-heals the same way for free. A backfilled role's password (both
+  `password_hash` and `password_encrypted`) is copied verbatim from that
+  event's current `admin` credential, mirroring `POST /api/event`'s own
+  original behavior of every role starting from one shared password —
+  practically, this means handing out a freshly-backfilled role's
+  password without first differentiating it via Settings > Role
+  Passwords effectively hands out the current admin password, so an
+  admin upgrading an existing event should set a real, distinct
+  `front_desk` password before relying on it to gate anything.
   The plugin-install endpoints (`POST /api/plugins/games` and
   `POST /api/plugins/schedulers`) are gated `admin`-only like every other
   write in the `plugins` router — but note this is still a

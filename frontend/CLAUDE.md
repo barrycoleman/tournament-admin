@@ -120,6 +120,41 @@ not just a hypothetical one — the *old*, still-normal process already
 UI reloads back into the stale still-normal app instead of the
 newly-restarted picker one.
 
+## Routes and role-gated nav
+
+Beyond the bootstrap/auth screens above, the authenticated app
+(`router.tsx`, under `AuthenticatedLayout`) has: `/sessions` (list +
+create/edit), `/sessions/:sessionId` (index-redirects to
+`/sessions/:sessionId/checkin`), `/sessions/:sessionId/checkin` (the
+admin check-in data grid, via `SessionDetailLayout`'s tab-strip `Outlet`
+context — see the session-checkin design spec), and `/checkin` (a
+separate, non-nested route: the dedicated `front_desk` kiosk screen,
+scoped to `Event.active_session_id` rather than a session id in the
+URL).
+
+`AppShell.tsx`'s nav is gated per role, the same pattern repeated for
+each: `role === "admin"` renders the full admin nav (Divisions, Teams,
+Sessions, …); `role === "front_desk"` renders a separate, minimal `<nav>`
+with just a Check-In link to `/checkin`. Adding a nav item for a new role
+means adding another `role === "..."` block here, not extending an
+existing one — the two blocks are deliberately not merged, since each
+role's shell is meant to show only what that role can actually use.
+
+`front_desk` additionally gets its own index-route redirect:
+`routeGuards.ts`'s `indexLoader` (attached only to the `index: true`
+child route under `/`, not the shared parent `rootLoader`) reads the
+stored JWT directly (`getStoredTokens`/`decodeAccessTokenPayload` — the
+same synchronous, context-free pattern `hasValidTokens()` already uses,
+since loaders run outside the React tree and can't call `useAuth()`) and
+redirects straight to `/checkin` if the role is `front_desk`, instead of
+landing on the admin-only Dashboard (whose "edit event name" control
+would otherwise 403 for that role). It's kept in its own module rather
+than inlined in `router.tsx` specifically so it can be unit-tested
+without importing `router.tsx` itself — that file's module-level
+`createBrowserRouter(...)` call kicks off a real navigation attempt as
+soon as it's imported, which isn't safe to trigger from a plain Vitest
+unit test under jsdom.
+
 ## Auth & token handling
 
 Both the access token and the rotating refresh token live in
