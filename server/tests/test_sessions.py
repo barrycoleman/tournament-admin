@@ -145,3 +145,21 @@ def test_patch_unknown_session_404s(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     response = client.patch("/api/sessions/999", json={"label": "Nope"})
     assert response.status_code == 404
+
+
+def test_patch_session_rejects_front_desk(client):
+    """front_desk's broadened access is scoped to exactly
+    POST /api/sessions/{id}/participants -- every other admin-only
+    session endpoint, including this one, must still 403 it."""
+    from tests.auth_helpers import bearer, login_as
+
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+
+    front_desk_token = login_as(client, "front_desk")
+    response = client.patch(
+        f"/api/sessions/{session_id}",
+        json={"label": "Nope"},
+        headers=bearer(front_desk_token),
+    )
+    assert response.status_code == 403

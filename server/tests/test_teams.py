@@ -140,6 +140,26 @@ def test_update_team_with_valid_name_still_returns_200(client):
     assert response.json()["name"] == "New Name"
 
 
+def test_patch_team_rejects_front_desk(client):
+    """front_desk's broadened access is scoped to exactly
+    POST /api/sessions/{id}/participants -- every other admin-only
+    endpoint, including this one, must still 403 it."""
+    from tests.auth_helpers import bearer, login_as
+
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    team_id = client.post(
+        "/api/teams", json={"number": "1234A", "name": "Robo Raiders"}
+    ).json()["id"]
+
+    front_desk_token = login_as(client, "front_desk")
+    response = client.patch(
+        f"/api/teams/{team_id}",
+        json={"name": "New Name"},
+        headers=bearer(front_desk_token),
+    )
+    assert response.status_code == 403
+
+
 def test_create_team_with_robot_name(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     response = client.post(

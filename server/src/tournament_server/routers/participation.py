@@ -58,6 +58,13 @@ def add_participant(
         # row it created, since the caller's intent (this team's
         # checked_in state) is still achievable without a 409.
         db.rollback()
+        # This re-query assumes the row the concurrent request just
+        # inserted is still there -- i.e. that nothing deletes a
+        # participation row between this SELECT and the one above. That
+        # assumption holds today only because no participant-delete
+        # endpoint exists anywhere in this codebase; a future one would
+        # need to re-examine this fallback (the re-queried row could come
+        # back None).
         participation = db.execute(
             select(SessionParticipation).where(
                 SessionParticipation.session_id == session_id,
