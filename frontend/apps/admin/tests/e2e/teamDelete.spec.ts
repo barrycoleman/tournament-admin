@@ -27,7 +27,17 @@ test.describe.serial("team delete", () => {
     await expect(page).toHaveURL(/\/teams$/);
 
     await expect(page.getByText("Team To Delete")).toBeVisible();
-    await page.getByRole("button", { name: "Delete" }).first().click();
+    // Scope to this team's own row rather than `.first()`: the roster is
+    // one shared table across every E2E spec file, so other specs'
+    // teams (e.g. sessionCheckin.spec.ts's "9001A"/"9002A", created
+    // earlier in the same run) can easily outnumber or sort ahead of this
+    // one -- `.first()` silently deleted the wrong row once that stopped
+    // being the only team on the grid.
+    await page
+      .getByRole("row")
+      .filter({ hasText: "Team To Delete" })
+      .getByRole("button", { name: "Delete" })
+      .click();
     await page.getByRole("button", { name: "Delete", exact: true }).last().click();
     await expect(page.getByText("Team To Delete")).not.toBeVisible();
   });
