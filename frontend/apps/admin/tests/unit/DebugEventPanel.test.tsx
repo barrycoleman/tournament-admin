@@ -30,7 +30,7 @@ describe("DebugEventPanel", () => {
   });
 
   it("lists a received event's type and payload once opened", () => {
-    let capturedOnEvent: ((event: { type: string; [key: string]: unknown }) => void) | undefined;
+    let capturedOnEvent: ((event: { event: string; data: unknown; [key: string]: unknown }) => void) | undefined;
     vi.mocked(useRealtimeChannel).mockImplementation((options) => {
       capturedOnEvent = options.onEvent;
       return { connected: true };
@@ -38,7 +38,7 @@ describe("DebugEventPanel", () => {
 
     renderWithI18n(<DebugEventPanel />);
     act(() => {
-      capturedOnEvent?.({ type: "active_session_changed", active_session_id: 7 });
+      capturedOnEvent?.({ event: "active_session_changed", data: { active_session_id: 7 } });
     });
     fireEvent.click(screen.getByRole("button", { name: /Debug events/ }));
 
@@ -47,7 +47,7 @@ describe("DebugEventPanel", () => {
   });
 
   it("keeps only the last 50 events", () => {
-    let capturedOnEvent: ((event: { type: string; [key: string]: unknown }) => void) | undefined;
+    let capturedOnEvent: ((event: { event: string; data: unknown; [key: string]: unknown }) => void) | undefined;
     vi.mocked(useRealtimeChannel).mockImplementation((options) => {
       capturedOnEvent = options.onEvent;
       return { connected: true };
@@ -56,7 +56,7 @@ describe("DebugEventPanel", () => {
     renderWithI18n(<DebugEventPanel />);
     act(() => {
       for (let i = 0; i < 60; i += 1) {
-        capturedOnEvent?.({ type: `event-${i}` });
+        capturedOnEvent?.({ event: `event-${i}`, data: null });
       }
     });
     fireEvent.click(screen.getByRole("button", { name: /Debug events/ }));

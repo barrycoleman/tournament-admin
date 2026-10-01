@@ -53,10 +53,10 @@ describe("useRealtimeChannel", () => {
     const socket = FakeWebSocket.instances[0];
 
     act(() => {
-      socket.onmessage?.({ data: JSON.stringify({ type: "active_session_changed" }) });
+      socket.onmessage?.({ data: JSON.stringify({ event: "active_session_changed", data: null }) });
     });
 
-    expect(onEvent).toHaveBeenCalledWith({ type: "active_session_changed" });
+    expect(onEvent).toHaveBeenCalledWith({ event: "active_session_changed", data: null });
   });
 
   it("reports connected after onopen and not connected after onclose", async () => {
