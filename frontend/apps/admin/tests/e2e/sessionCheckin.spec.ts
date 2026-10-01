@@ -78,12 +78,11 @@ test.describe.serial("session check-in", () => {
     await page.getByLabel("Role").fill("front_desk");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    // Login always navigates to "/" regardless of role (LoginRoute has no
-    // role-based redirect by design -- see the session-checkin design
-    // spec's Section 4) -- front_desk reaches /checkin the same way an
-    // admin reaches any other screen: via the role-gated nav link.
-    await expect(page).toHaveURL("/");
-    await page.getByRole("link", { name: "Check-In" }).click();
+    // LoginRoute always navigates to "/" after login, but the index
+    // route's own loader redirects front_desk straight on to /checkin
+    // (its shell only ever shows that one link anyway, and "/" renders
+    // the admin-only Dashboard) -- so front_desk lands on /checkin
+    // directly, without an intermediate visit to "/" or a nav click.
     await expect(page).toHaveURL("/checkin");
 
     await expect(page.getByRole("link", { name: "Check-In" })).toBeVisible();

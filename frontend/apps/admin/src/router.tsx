@@ -1,5 +1,6 @@
 import { createBrowserRouter, redirect } from "react-router-dom";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
+import { indexLoader } from "./routeGuards";
 import type { EventRead } from "./types";
 import { EventsNewRoute } from "./routes/EventsNewRoute";
 import { LoginRoute } from "./routes/LoginRoute";
@@ -107,7 +108,7 @@ export const router = createBrowserRouter([
     loader: rootLoader,
     element: <AuthenticatedLayout />,
     children: [
-      { index: true, element: <DashboardRoute /> },
+      { index: true, loader: indexLoader, element: <DashboardRoute /> },
       { path: "events/setup", element: <EventSetupRoute /> },
       { path: "settings/roles", element: <SettingsRolesRoute /> },
       { path: "divisions", element: <DivisionsRoute /> },

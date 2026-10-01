@@ -12,7 +12,7 @@ export function SessionDetailLayout() {
   const { t } = useTranslation();
   const { sessionId } = useParams<{ sessionId: string }>();
 
-  const { data: sessions, isLoading } = useQuery({
+  const { data: sessions, isLoading, isError } = useQuery({
     queryKey: ["sessions"],
     queryFn: () => apiRequest<SessionRead[]>("/api/sessions"),
   });
@@ -20,6 +20,17 @@ export function SessionDetailLayout() {
 
   if (isLoading) {
     return <p>{t("sessions.loading")}</p>;
+  }
+  if (isError) {
+    // Distinct from "session not found" below: the list fetch itself
+    // failed (network/server error), not "the id isn't in a
+    // successfully-loaded list" -- show the generic error pattern used
+    // elsewhere rather than the misleading "not found" message.
+    return (
+      <p className="alert alert-danger" role="alert">
+        {t("errors.generic")}
+      </p>
+    );
   }
   if (!session) {
     return (

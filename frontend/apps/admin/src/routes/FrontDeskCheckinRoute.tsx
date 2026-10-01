@@ -1,7 +1,12 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { apiRequest, ApiError } from "@tournament-admin/shared";
+import {
+  apiRequest,
+  ApiError,
+  useRealtimeChannel,
+  type RealtimeEvent,
+} from "@tournament-admin/shared";
 import type { EventRead } from "../types";
 
 interface TeamApiRow {
@@ -20,11 +25,37 @@ export function FrontDeskCheckinRoute() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
 
-  const { data: event } = useQuery({
+  // isLoading/isError (not just `data`) matter here: the event query
+  // being in flight or having failed both currently resolve to
+  // `sessionId === null` below, same as a genuine "no active session" --
+  // isLoading is checked explicitly further down so the empty state
+  // doesn't flash on every page load/refresh before the real
+  // active_session_id value resolves. A failed fetch still falls through
+  // to that same empty state once settled (this screen has no separate
+  // generic-error message today), which is an acceptable simplification:
+  // either way there is nothing this kiosk can do until an admin sets an
+  // active session or the transient error clears on its own retry.
+  const { data: event, isLoading: isEventLoading } = useQuery({
     queryKey: ["event"],
     queryFn: () => apiRequest<EventRead>("/api/event"),
   });
   const sessionId = event?.active_session_id ?? null;
+
+  // An admin can change the active session (POST /api/event/active-session)
+  // while this kiosk is sitting open on another device -- without this,
+  // the kiosk would keep checking teams into the now-stale session with
+  // no indication anything changed. The server broadcasts
+  // active_session_changed on /ws/active-session whenever that happens;
+  // refetching the ["event"] query on that event is enough, since every
+  // query keyed off `sessionId` here already derives from its result.
+  useRealtimeChannel({
+    path: "/ws/active-session",
+    onEvent: (realtimeEvent: RealtimeEvent) => {
+      if (realtimeEvent.event === "active_session_changed") {
+        queryClient.invalidateQueries({ queryKey: ["event"] });
+      }
+    },
+  });
 
   const { data: teams } = useQuery({
     queryKey: ["teams"],
@@ -46,11 +77,15 @@ export function FrontDeskCheckinRoute() {
 
   const visibleTeams = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return teams ?? [];
-    return (teams ?? []).filter(
-      (team) =>
-        team.number.toLowerCase().includes(normalizedQuery) ||
-        team.name.toLowerCase().includes(normalizedQuery)
+    const matching = !normalizedQuery
+      ? (teams ?? [])
+      : (teams ?? []).filter(
+          (team) =>
+            team.number.toLowerCase().includes(normalizedQuery) ||
+            team.name.toLowerCase().includes(normalizedQuery)
+        );
+    return [...matching].sort((a, b) =>
+      a.number.localeCompare(b.number, undefined, { numeric: true })
     );
   }, [teams, query]);
 
@@ -64,6 +99,14 @@ export function FrontDeskCheckinRoute() {
       queryClient.invalidateQueries({ queryKey: ["participants", sessionId] });
     },
   });
+
+  if (isEventLoading) {
+    return (
+      <div className="front-desk-checkin">
+        <p>{t("sessions.loading")}</p>
+      </div>
+    );
+  }
 
   if (sessionId === null) {
     return (

@@ -8,10 +8,10 @@ import { FrontDeskCheckinRoute } from "../../src/routes/FrontDeskCheckinRoute";
 
 vi.mock("@tournament-admin/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tournament-admin/shared")>();
-  return { ...actual, apiRequest: vi.fn() };
+  return { ...actual, apiRequest: vi.fn(), useRealtimeChannel: vi.fn() };
 });
 
-import { apiRequest } from "@tournament-admin/shared";
+import { apiRequest, useRealtimeChannel } from "@tournament-admin/shared";
 
 function renderRoute() {
   const i18n = initI18n({ en: { translation: enAdmin } });
@@ -110,5 +110,51 @@ describe("FrontDeskCheckinRoute", () => {
 
     expect(screen.queryByText(/1234A/)).not.toBeInTheDocument();
     expect(screen.getByText(/5678B/)).toBeInTheDocument();
+  });
+
+  it("re-fetches the active session when the realtime channel reports it changed", async () => {
+    let capturedOnEvent: ((event: { event: string; data: unknown }) => void) | undefined;
+    vi.mocked(useRealtimeChannel).mockImplementation((options) => {
+      capturedOnEvent = options.onEvent as typeof capturedOnEvent;
+      return { connected: true };
+    });
+
+    let eventCallCount = 0;
+    vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+      if (path === "/api/event") {
+        eventCallCount += 1;
+        const activeSessionId = eventCallCount === 1 ? 5 : 9;
+        return {
+          id: 1,
+          name: "Regional Qualifier",
+          active_session_id: activeSessionId,
+          game_plugin_name: null,
+          created_at: "2026-01-01T00:00:00Z",
+        } as never;
+      }
+      if (path === "/api/teams") {
+        return [{ id: 1, number: "1234A", name: "Robo Raiders" }] as never;
+      }
+      if (path === "/api/sessions/5/participants" || path === "/api/sessions/9/participants") {
+        return [] as never;
+      }
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderRoute();
+
+    await screen.findByText(/1234A/);
+    expect(eventCallCount).toBe(1);
+
+    expect(capturedOnEvent).toBeDefined();
+    fireEvent.change(screen.getByLabelText("Search by team number or name"), {
+      target: { value: "" },
+    });
+    // Firing an unrelated event type must NOT trigger a re-fetch.
+    capturedOnEvent?.({ event: "something_else", data: {} });
+    await waitFor(() => expect(eventCallCount).toBe(1));
+
+    capturedOnEvent?.({ event: "active_session_changed", data: { active_session_id: 9 } });
+
+    await waitFor(() => expect(eventCallCount).toBe(2));
   });
 });

@@ -99,4 +99,69 @@ describe("SessionCheckinRoute", () => {
     await screen.findByText("Number");
     expect(screen.queryByText("Division")).not.toBeInTheDocument();
   });
+
+  it("narrows visible rows when filtering by number or name", async () => {
+    vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+      if (path === "/api/teams") {
+        return [
+          { id: 1, number: "1234A", name: "Robo Raiders", division_id: null },
+          { id: 2, number: "5678B", name: "Circuit Breakers", division_id: null },
+        ] as never;
+      }
+      if (path === "/api/divisions") return [] as never;
+      if (path === "/api/sessions/1/participants") return [] as never;
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderRoute();
+
+    await screen.findByText("1234A");
+    expect(screen.getByText("5678B")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Filter by number or name"), {
+      target: { value: "5678B" },
+    });
+
+    expect(screen.queryByText("1234A")).not.toBeInTheDocument();
+    expect(screen.getByText("5678B")).toBeInTheDocument();
+  });
+
+  it("checking in all visible posts only for teams matching the active filter", async () => {
+    const postedTeamIds: number[] = [];
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
+      if (path === "/api/teams") {
+        return [
+          { id: 1, number: "1234A", name: "Robo Raiders", division_id: null },
+          { id: 2, number: "5678B", name: "Circuit Breakers", division_id: null },
+        ] as never;
+      }
+      if (path === "/api/divisions") return [] as never;
+      if (path === "/api/sessions/1/participants" && !options) return [] as never;
+      if (
+        path === "/api/sessions/1/participants" &&
+        (options as { method?: string })?.method === "POST"
+      ) {
+        const body = (options as { body: { team_id: number; checked_in: boolean } }).body;
+        postedTeamIds.push(body.team_id);
+        return {
+          id: body.team_id,
+          session_id: 1,
+          team_id: body.team_id,
+          checked_in: body.checked_in,
+        } as never;
+      }
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderRoute();
+
+    await screen.findByText("1234A");
+    fireEvent.change(screen.getByPlaceholderText("Filter by number or name"), {
+      target: { value: "5678B" },
+    });
+    await waitFor(() => expect(screen.queryByText("1234A")).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Check in all visible" }));
+
+    await waitFor(() => expect(postedTeamIds).toEqual([2]));
+    expect(postedTeamIds).not.toContain(1);
+  });
 });

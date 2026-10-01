@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { getStoredTokens } from "./tokenStorage";
 
+/**
+ * Matches the server's actual WebSocket envelope exactly
+ * (`{"event": "<type>", "data": {...}}` -- see
+ * `tournament_server.realtime._send_to_all`): the event's type lives
+ * under the `event` key, not `type`. Consumers that need to branch on
+ * the event type should compare `event.event`, e.g.
+ * `event.event === "active_session_changed"`.
+ */
 export interface RealtimeEvent {
-  type: string;
-  [key: string]: unknown;
+  event: string;
+  data: unknown;
 }
 
 export interface UseRealtimeChannelOptions {

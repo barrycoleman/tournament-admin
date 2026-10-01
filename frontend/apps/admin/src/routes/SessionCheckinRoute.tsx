@@ -88,7 +88,7 @@ export function SessionCheckinRoute() {
       [...filteredRows].sort((a, b) =>
         a.division !== b.division
           ? a.division.localeCompare(b.division)
-          : a.number.localeCompare(b.number)
+          : a.number.localeCompare(b.number, undefined, { numeric: true })
       ),
     [filteredRows]
   );
@@ -106,7 +106,13 @@ export function SessionCheckinRoute() {
 
   const bulkMutation = useMutation({
     mutationFn: async (checkedIn: boolean) => {
-      await Promise.all(
+      // Promise.allSettled, not Promise.all: Promise.all rejects (and
+      // stops waiting) on the FIRST failure, abandoning whatever writes
+      // already succeeded with no cache refresh for them. Settling every
+      // request first, then invalidating in onSettled below (not
+      // onSuccess), means rows that did succeed are still reflected even
+      // if one of the others failed.
+      const results = await Promise.allSettled(
         sortedRows.map((row) =>
           apiRequest(`/api/sessions/${session.id}/participants`, {
             method: "POST",
@@ -114,8 +120,14 @@ export function SessionCheckinRoute() {
           })
         )
       );
+      const firstFailure = results.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected"
+      );
+      if (firstFailure) {
+        throw firstFailure.reason;
+      }
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["participants", session.id] });
     },
   });
@@ -167,6 +179,11 @@ export function SessionCheckinRoute() {
       {bulkMutation.isError && (
         <p className="alert alert-danger" role="alert">
           {bulkMutation.error instanceof ApiError ? bulkMutation.error.detail : t("errors.generic")}
+        </p>
+      )}
+      {toggleMutation.isError && (
+        <p className="alert alert-danger" role="alert">
+          {toggleMutation.error instanceof ApiError ? toggleMutation.error.detail : t("errors.generic")}
         </p>
       )}
       <DataGrid columns={columns} rows={sortedRows} rowKeyGetter={(row) => row.id} />
