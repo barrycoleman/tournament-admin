@@ -115,6 +115,9 @@
     "notFound": "未找到该场次。",
     "noDateSet": "未设置日期",
     "noTimezoneSet": "未设置时区",
+    "activeBadge": "当前场次",
+    "setActiveAction": "设为当前场次",
+    "setActiveHint": "前台签到终端和现场显示屏会跟随当前场次。",
     "checkin": {
       "columnNumber": "编号",
       "columnName": "名称",

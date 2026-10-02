@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -72,5 +72,53 @@ describe("SessionDetailLayout", () => {
     renderAt("/sessions/1/checkin");
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Something went wrong.");
+  });
+
+  const SATURDAY = {
+    id: 1,
+    event_id: 1,
+    label: "Saturday",
+    session_date: "2026-09-05",
+    timezone: "America/Los_Angeles",
+  };
+
+  function eventWithActiveSession(activeSessionId: number | null) {
+    return {
+      id: 1,
+      name: "Demo Event",
+      active_session_id: activeSessionId,
+      game_plugin_name: null,
+      created_at: "2026-09-01T00:00:00Z",
+    };
+  }
+
+  it("shows the Active session badge when this session is the event's active session", async () => {
+    vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+      if (path === "/api/sessions") return [SATURDAY] as never;
+      if (path === "/api/event") return eventWithActiveSession(1) as never;
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderAt("/sessions/1/checkin");
+
+    expect(await screen.findByText("Active session")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Set as active session" })).not.toBeInTheDocument();
+  });
+
+  it("offers Set as active session otherwise and makes it active", async () => {
+    let activeSessionId: number | null = 2;
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
+      if (path === "/api/sessions") return [SATURDAY] as never;
+      if (path === "/api/event") return eventWithActiveSession(activeSessionId) as never;
+      if (path === "/api/event/active-session") {
+        expect(options).toEqual({ method: "POST", body: { session_id: 1 } });
+        activeSessionId = 1;
+        return eventWithActiveSession(1) as never;
+      }
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderAt("/sessions/1/checkin");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Set as active session" }));
+    expect(await screen.findByText("Active session")).toBeInTheDocument();
   });
 });

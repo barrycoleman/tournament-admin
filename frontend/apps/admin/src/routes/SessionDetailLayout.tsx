@@ -1,8 +1,9 @@
 import { NavLink, Outlet, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest } from "@tournament-admin/shared";
-import type { SessionRead } from "../types";
+import { apiErrorMessage } from "../apiErrorMessage";
+import type { EventRead, SessionRead } from "../types";
 
 function tabLinkClassName({ isActive }: { isActive: boolean }): string | undefined {
   return isActive ? "active" : undefined;
@@ -11,10 +12,25 @@ function tabLinkClassName({ isActive }: { isActive: boolean }): string | undefin
 export function SessionDetailLayout() {
   const { t } = useTranslation();
   const { sessionId } = useParams<{ sessionId: string }>();
+  const queryClient = useQueryClient();
 
   const { data: sessions, isLoading, isError } = useQuery({
     queryKey: ["sessions"],
     queryFn: () => apiRequest<SessionRead[]>("/api/sessions"),
+  });
+  const { data: event } = useQuery({
+    queryKey: ["event"],
+    queryFn: () => apiRequest<EventRead>("/api/event"),
+  });
+  const activateMutation = useMutation({
+    mutationFn: (id: number) =>
+      apiRequest<EventRead>("/api/event/active-session", {
+        method: "POST",
+        body: { session_id: id },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event"] });
+    },
   });
   const session = sessions?.find((candidate) => candidate.id === Number(sessionId));
 
@@ -24,8 +40,7 @@ export function SessionDetailLayout() {
   if (isError) {
     // Distinct from "session not found" below: the list fetch itself
     // failed (network/server error), not "the id isn't in a
-    // successfully-loaded list" -- show the generic error pattern used
-    // elsewhere rather than the misleading "not found" message.
+    // successfully-loaded list".
     return (
       <p className="alert alert-danger" role="alert">
         {t("errors.generic")}
@@ -49,6 +64,27 @@ export function SessionDetailLayout() {
           {" · "}
           {session.timezone ?? t("sessions.noTimezoneSet")}
         </p>
+        {event &&
+          (event.active_session_id === session.id ? (
+            <span className="badge badge-success">{t("sessions.activeBadge")}</span>
+          ) : (
+            <div className="session-detail__activate">
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={() => activateMutation.mutate(session.id)}
+                disabled={activateMutation.isPending}
+              >
+                {t("sessions.setActiveAction")}
+              </button>
+              <span className="field__hint">{t("sessions.setActiveHint")}</span>
+            </div>
+          ))}
+        {activateMutation.isError && (
+          <p className="alert alert-danger" role="alert">
+            {apiErrorMessage(activateMutation.error, t("errors.generic"))}
+          </p>
+        )}
       </div>
       <nav className="app-nav app-nav--sub">
         <NavLink to={`/sessions/${session.id}/checkin`} className={tabLinkClassName}>

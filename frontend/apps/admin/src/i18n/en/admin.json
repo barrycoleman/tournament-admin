@@ -115,6 +115,9 @@
     "notFound": "Session not found.",
     "noDateSet": "No date set",
     "noTimezoneSet": "No timezone set",
+    "activeBadge": "Active session",
+    "setActiveAction": "Set as active session",
+    "setActiveHint": "The front-desk kiosk and live displays follow the active session.",
     "checkin": {
       "columnNumber": "Number",
       "columnName": "Name",
