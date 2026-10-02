@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { useOutletContext } from "react-router-dom";
+import { Link, useOutletContext } from "react-router-dom";
 import { apiRequest } from "@tournament-admin/shared";
 import { ReadinessChecklist } from "../schedule/ReadinessChecklist";
 import { CurrentRounds } from "../schedule/CurrentRounds";
+import { ScheduleForm } from "../schedule/ScheduleForm";
 import { checkReadiness, countCheckedInTeams, countUsableFields } from "../schedule/readiness";
 import { summarizeRounds } from "../schedule/roundSummary";
 import { useSessionMatches } from "../useSessionMatches";
@@ -15,6 +16,7 @@ import type {
   FieldSetRead,
   MatchFormat,
   ParticipationRead,
+  ScheduleGenerateResponse,
   SessionRead,
   TeamSummary,
 } from "../types";
@@ -23,6 +25,8 @@ export function SessionScheduleRoute() {
   const { t } = useTranslation();
   const { session } = useOutletContext<{ session: SessionRead }>();
   const [selectedDivisionId, setSelectedDivisionId] = useState<number | null>(null);
+  const queryClient = useQueryClient();
+  const [lastGenerated, setLastGenerated] = useState<ScheduleGenerateResponse | null>(null);
 
   const { data: divisions } = useQuery({
     queryKey: ["divisions"],
@@ -72,6 +76,8 @@ export function SessionScheduleRoute() {
     teamsNeeded: matchFormat ? matchFormat.teams_per_alliance * matchFormat.alliance_count : 0,
     usableFieldCount: countUsableFields(fieldSets ?? [], fields ?? [], divisionId),
   });
+  const ready = readiness.every((item) => item.ok);
+  const existingRoundTypes = rounds.map((round) => round.roundType);
 
   return (
     <div className="session-schedule">
@@ -98,6 +104,32 @@ export function SessionScheduleRoute() {
         sessionTimezone={session.timezone}
         rounds={rounds}
       />
+      {lastGenerated && (
+        <p className="alert alert-success" role="status">
+          {t("sessions.schedule.form.generated", { count: lastGenerated.match_count })}{" "}
+          <Link to={`/sessions/${session.id}/matches`}>{t("sessions.schedule.form.viewMatches")}</Link>
+        </p>
+      )}
+      {matchFormat ? (
+        <ScheduleForm
+          // Remounting on the existing round types (and division) resets
+          // the form after a Generate or Clear lands, so it never offers a
+          // round type that now has a schedule.
+          key={`${divisionId ?? "none"}:${existingRoundTypes.join(",")}`}
+          sessionId={session.id}
+          divisionId={divisionId}
+          session={session}
+          matchFormat={matchFormat}
+          existingRoundTypes={existingRoundTypes}
+          ready={ready}
+          onGenerated={(response) => {
+            setLastGenerated(response);
+            queryClient.invalidateQueries({ queryKey: ["matches", session.id] });
+          }}
+        />
+      ) : (
+        <p className="field__hint">{t("sessions.schedule.form.needsGamePlugin")}</p>
+      )}
     </div>
   );
 }

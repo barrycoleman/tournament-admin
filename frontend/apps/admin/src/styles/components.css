@@ -809,3 +809,18 @@
   padding: var(--space-2) var(--space-3);
   border-bottom: var(--border-width) solid var(--color-border);
 }
+
+.schedule-form__group {
+  border: none;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+}
+
+.schedule-form__group legend {
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+
+.schedule-form__number {
+  width: 6rem;
+}

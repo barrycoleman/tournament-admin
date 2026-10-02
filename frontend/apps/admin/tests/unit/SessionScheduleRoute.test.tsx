@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
-import { initI18n } from "@tournament-admin/shared";
+import { ApiError, initI18n } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
 import { SessionScheduleRoute } from "../../src/routes/SessionScheduleRoute";
 import type { Division, FieldRead, FieldSetRead, MatchRead, SessionRead } from "../../src/types";
@@ -226,5 +226,145 @@ describe("SessionScheduleRoute — readiness and rounds", () => {
     await waitFor(() =>
       expect(deleteCalls()).toEqual(["/api/schedule?session_id=1&round_type=qualification&division_id=2"])
     );
+  });
+});
+
+const PREVIEW_RESPONSE = {
+  schedule_generation_id: null,
+  match_count: 14,
+  resolved_time_blocks: [
+    { date: "2026-11-07", start_time: "09:00", end_time: "12:00", cycle_time_seconds: 771.4, time_slot_count: 14 },
+  ],
+  cycle_time_warning: null,
+  phase_results: [
+    { round_type: "practice", schedule_generation_id: null, match_count: 2 },
+    { round_type: "qualification", schedule_generation_id: null, match_count: 12 },
+  ],
+};
+
+function scheduleBodies(): unknown[] {
+  return vi
+    .mocked(apiRequest)
+    .mock.calls.filter(([path, options]) => path === "/api/schedule" && (options as { method?: string })?.method === "POST")
+    .map(([, options]) => (options as { body: unknown }).body);
+}
+
+describe("SessionScheduleRoute — generate form", () => {
+  it("pre-fills practice x1 then qualification x6 and previews with a fit-mode request", async () => {
+    stub({ onWrite: () => PREVIEW_RESPONSE });
+    renderSchedule();
+
+    const preview = await screen.findByRole("button", { name: "Preview" });
+    await waitFor(() => expect(preview).toBeEnabled());
+    fireEvent.click(preview);
+
+    await waitFor(() =>
+      expect(scheduleBodies()).toEqual([
+        {
+          session_id: 1,
+          scheduler_plugin_name: "balanced",
+          phases: [
+            { round_type: "practice", target_matches_per_team: 1 },
+            { round_type: "qualification", target_matches_per_team: 6 },
+          ],
+          time_blocks: [{ date: "2026-11-07", start_time: "09:00", end_time: "12:00", cycle_time: null }],
+          dry_run: true,
+        },
+      ])
+    );
+    const panel = await screen.findByRole("region", { name: "Preview" });
+    expect(within(panel).getByText("practice: 2 matches")).toBeInTheDocument();
+    expect(within(panel).getByText("12:51")).toBeInTheDocument();
+  });
+
+  it("does not offer round types that already have a schedule", async () => {
+    stub({ matches: [scheduleMatch({})] });
+    renderSchedule();
+
+    const roundType = await screen.findByLabelText("Round type for phase 1");
+    expect((roundType as HTMLSelectElement).value).toBe("qualification");
+    expect(within(roundType).queryByRole("option", { name: "practice" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Round type for phase 2")).not.toBeInTheDocument();
+  });
+
+  it("fixed cycle mode sends cycle_time on every block and allows an open-ended last block", async () => {
+    stub({ onWrite: () => PREVIEW_RESPONSE });
+    renderSchedule();
+
+    fireEvent.click(await screen.findByLabelText("Fixed cycle time"));
+    fireEvent.change(screen.getByLabelText("Cycle time (minutes)"), { target: { value: "8" } });
+    fireEvent.change(screen.getByLabelText("End time for block 1"), { target: { value: "" } });
+    const preview = screen.getByRole("button", { name: "Preview" });
+    await waitFor(() => expect(preview).toBeEnabled());
+    fireEvent.click(preview);
+
+    await waitFor(() =>
+      expect((scheduleBodies()[0] as { time_blocks: unknown }).time_blocks).toEqual([
+        { date: "2026-11-07", start_time: "09:00", end_time: null, cycle_time: 480 },
+      ])
+    );
+  });
+
+  it("marks the preview out of date once an input changes", async () => {
+    stub({ onWrite: () => PREVIEW_RESPONSE });
+    renderSchedule();
+
+    const preview = await screen.findByRole("button", { name: "Preview" });
+    await waitFor(() => expect(preview).toBeEnabled());
+    fireEvent.click(preview);
+    await screen.findByRole("region", { name: "Preview" });
+    expect(screen.queryByText("Out of date — preview again")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Matches per team for phase 2"), { target: { value: "4" } });
+    expect(screen.getByText("Out of date — preview again")).toBeInTheDocument();
+  });
+
+  it("shows a server rejection verbatim", async () => {
+    stub({ onWrite: () => new ApiError(422, "round_type 'qualification': Scheduler plugin returned no matches") });
+    renderSchedule();
+
+    const generate = await screen.findByRole("button", { name: "Generate" });
+    await waitFor(() => expect(generate).toBeEnabled());
+    fireEvent.click(generate);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "round_type 'qualification': Scheduler plugin returned no matches"
+    );
+  });
+
+  it("keeps Preview and Generate disabled until every readiness item passes", async () => {
+    stub({ fields: [] });
+    renderSchedule();
+
+    await screen.findByRole("link", { name: "Add fields" });
+    expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeDisabled();
+  });
+
+  it("after Generate, links to Matches and stops offering the generated round types", async () => {
+    let generated = false;
+    stub({
+      matches: () =>
+        generated
+          ? [
+              scheduleMatch({ id: 1 }),
+              scheduleMatch({ id: 2, round_type: "qualification", label: "Q1", scheduled_time: "2026-11-07T18:00:00Z" }),
+            ]
+          : [],
+      onWrite: () => {
+        generated = true;
+        return { ...PREVIEW_RESPONSE, schedule_generation_id: 7 };
+      },
+    });
+    renderSchedule();
+
+    const generate = await screen.findByRole("button", { name: "Generate" });
+    await waitFor(() => expect(generate).toBeEnabled());
+    fireEvent.click(generate);
+
+    expect(await screen.findByText("Generated 14 matches.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View matches" })).toHaveAttribute("href", "/sessions/1/matches");
+    const roundType = await screen.findByLabelText("Round type for phase 1");
+    await waitFor(() => expect((roundType as HTMLSelectElement).value).toBe("elimination"));
   });
 });
