@@ -102,9 +102,13 @@ pre-commit lookup and only one can actually commit.
 saves through, and its contract is deliberately per-row: it always returns
 `200`, with one result entry per submitted row (`created`, `updated`, or
 `error` plus a message) — one bad row never fails the others, and the good
-rows are still committed. It upserts by team **number**, not by id, so a
-row whose number already exists updates that team instead of creating a
-second one (`number`/`name` are stripped of surrounding whitespace before
+rows are still committed. A row carrying an `id` updates exactly that team
+— including its `number`, so renumbering an existing team edits it in
+place; the row errors if that `id` doesn't exist or its new number already
+belongs to a different team. A row with no `id` (a new grid row, a CSV
+upload) upserts by team **number**, so a row whose number already exists
+updates that team instead of creating a second one (`number`/`name` are
+stripped of surrounding whitespace before
 both the lookup and the write, so a pasted `"1234A "` matches the existing
 `"1234A"`). A row's `division` is matched to an existing division by name,
 case-insensitively; an unknown name is that row's error, not a request

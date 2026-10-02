@@ -44,6 +44,7 @@ class TeamRead(BaseModel):
 
 
 class TeamBulkRow(BaseModel):
+    id: int | None = None
     number: str | None = None
     name: str | None = None
     robot_name: str | None = None

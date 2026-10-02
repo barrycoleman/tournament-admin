@@ -341,6 +341,35 @@ describe("TeamsRoute", () => {
     await waitFor(() => expect(screen.queryByText("unsaved")).not.toBeInTheDocument());
   });
 
+  it("sends the team id when an existing team's number is edited, so it updates in place", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
+    renderRoute();
+
+    fireEvent.doubleClick(await screen.findByText("101"));
+    const editor = await screen.findByRole("textbox");
+    fireEvent.change(editor, { target: { value: "101F" } });
+    fireEvent.blur(editor);
+    await screen.findByText("101F");
+
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
+      if (path === "/api/divisions") return DIVISIONS as never;
+      if (path === "/api/teams") return [serverTeam(1, "101F", "Alpha", 1)] as never;
+      if (path === "/api/teams/bulk") {
+        const body = (options as { body: { rows: unknown[] } }).body;
+        expect(body.rows[0]).toMatchObject({ id: 1, number: "101F", name: "Alpha" });
+        return {
+          results: [
+            { row_index: 0, status: "updated", team: serverTeam(1, "101F", "Alpha", 1), error: null },
+          ],
+        } as never;
+      }
+      throw new Error(`unexpected request: ${path}`);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("1 saved");
+  });
+
   it("adds a blank row, pre-filled with the active division filter", async () => {
     stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
     renderRoute();

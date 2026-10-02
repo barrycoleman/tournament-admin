@@ -318,6 +318,51 @@ def test_bulk_upsert_updates_existing_team_by_number(client):
     assert len(list_response.json()) == 1  # no duplicate created
 
 
+def test_bulk_upsert_with_id_changes_number_in_place(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    team_id = client.post("/api/teams", json={"number": "101", "name": "Robo Raiders"}).json()["id"]
+
+    response = client.post(
+        "/api/teams/bulk",
+        json={"rows": [{"id": team_id, "number": "101F", "name": "Robo Raiders"}]},
+    )
+    result = response.json()["results"][0]
+    assert result["status"] == "updated"
+    assert result["team"]["id"] == team_id
+    assert result["team"]["number"] == "101F"
+
+    teams = client.get("/api/teams").json()
+    assert [(t["id"], t["number"]) for t in teams] == [(team_id, "101F")]
+
+
+def test_bulk_upsert_with_id_rejects_number_taken_by_another_team(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    first_id = client.post("/api/teams", json={"number": "101", "name": "A"}).json()["id"]
+    client.post("/api/teams", json={"number": "202", "name": "B"})
+
+    response = client.post(
+        "/api/teams/bulk",
+        json={"rows": [{"id": first_id, "number": "202", "name": "A"}]},
+    )
+    result = response.json()["results"][0]
+    assert result["status"] == "error"
+    assert "202" in result["error"]
+
+    numbers = sorted(t["number"] for t in client.get("/api/teams").json())
+    assert numbers == ["101", "202"]
+
+
+def test_bulk_upsert_with_unknown_id_is_a_row_error(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    response = client.post(
+        "/api/teams/bulk",
+        json={"rows": [{"id": 9999, "number": "101", "name": "A"}]},
+    )
+    result = response.json()["results"][0]
+    assert result["status"] == "error"
+    assert client.get("/api/teams").json() == []
+
+
 def test_bulk_upsert_partial_failure_still_commits_good_rows(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     response = client.post(

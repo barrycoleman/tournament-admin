@@ -216,9 +216,29 @@ def bulk_upsert_teams(
             "division_id": division_id,
         }
 
-        existing = db.execute(
+        number_owner = db.execute(
             select(Team).where(Team.event_id == event.id, Team.number == number)
         ).scalars().first()
+
+        if row.id is not None:
+            existing = db.get(Team, row.id)
+            if existing is None or existing.event_id != event.id:
+                results.append(
+                    TeamBulkRowResult(row_index=index, status="error", error="Team not found")
+                )
+                continue
+            if number_owner is not None and number_owner.id != existing.id:
+                results.append(
+                    TeamBulkRowResult(
+                        row_index=index,
+                        status="error",
+                        error=f"Team number {number!r} is already used by another team",
+                    )
+                )
+                continue
+            existing.number = number
+        else:
+            existing = number_owner
 
         if existing is not None:
             for key, value in fields.items():

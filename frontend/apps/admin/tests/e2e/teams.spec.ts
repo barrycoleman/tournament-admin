@@ -42,6 +42,17 @@ test.describe.serial("team roster grid", () => {
     await page.reload();
     await expect(page.getByText("Grid Test Team")).toBeVisible();
 
+    // Renumbering an existing team edits it in place rather than creating a duplicate.
+    await page.getByRole("gridcell", { name: "9001", exact: true }).dblclick();
+    await page.getByRole("textbox").fill("9001F");
+    await page.keyboard.press("Tab");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status")).toHaveText("1 saved");
+    await page.reload();
+    await expect(page.getByRole("gridcell", { name: "9001F", exact: true })).toBeVisible();
+    await expect(page.getByRole("gridcell", { name: "9001", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("gridcell", { name: "Grid Test Team", exact: true })).toHaveCount(1);
+
     // An invalid row surfaces its per-row error inline.
     await page.getByRole("button", { name: "Add row" }).click();
     await page.getByRole("button", { name: "Save changes" }).click();

@@ -67,8 +67,8 @@ function toGridRow(team: TeamApiRow, divisionNameById: Map<number, string>): Tea
  * if it does, editing either rewrites both.
  *
  * The roster can genuinely arrive at a collision, because
- * `/api/teams/bulk` upserts by team NUMBER, not by `clientId`: type an
- * already-taken number into a brand-new row (or, once CSV upload lands,
+ * `/api/teams/bulk` upserts rows that carry no `id` by team NUMBER, not by
+ * `clientId`: type an already-taken number into a brand-new row (or
  * re-upload a corrected roster that still contains an existing team) and
  * the server reports an *update* to the existing team. `handleSave` then
  * stamps that team's `server-<id>` onto the new row while the original
@@ -449,6 +449,7 @@ export function TeamsRoute() {
     try {
       const body = {
         rows: dirtyRows.map((row) => ({
+          id: row.id,
           number: row.number,
           name: row.name,
           robot_name: row.robot_name || null,
