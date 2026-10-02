@@ -9,6 +9,7 @@ from tournament_server.auth import (
     get_password_encryption_key,
     hash_password,
     require_admin,
+    require_any_role,
 )
 from tournament_server.deps import get_db, get_the_event
 from tournament_server.models.division import Division
@@ -22,6 +23,7 @@ from tournament_server.schemas.event import (
     EventRead,
     EventRename,
     GamePluginSelect,
+    MatchFormatRead,
 )
 
 router = APIRouter(prefix="/api/event", tags=["event"])
@@ -58,6 +60,39 @@ def read_event(db: Session = Depends(get_db)) -> Event:
     if event is None:
         raise HTTPException(status_code=404, detail="Event not initialized")
     return event
+
+
+@router.get("/match-format", response_model=MatchFormatRead)
+def read_match_format(
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
+) -> MatchFormatRead:
+    event = get_the_event(db)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not initialized")
+    if event.game_plugin_name is None:
+        raise HTTPException(
+            status_code=422, detail="No game plugin has been selected for this event"
+        )
+    game_plugin = request.app.state.game_plugins.get(event.game_plugin_name)
+    if game_plugin is None:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Event's selected game plugin {event.game_plugin_name!r} is not "
+                "currently loaded"
+            ),
+        )
+    match_format = game_plugin.module.match_format()
+    return MatchFormatRead(
+        round_types=list(match_format["round_types"]),
+        teams_per_alliance=match_format["teams_per_alliance"],
+        alliance_count=match_format["alliance_count"],
+        match_duration_seconds=(
+            match_format["autonomous_seconds"] + match_format["driver_seconds"]
+        ),
+    )
 
 
 @router.patch("", response_model=EventRead)

@@ -158,3 +158,36 @@ def test_create_event_seeds_a_default_division(client):
     assert response.status_code == 200
     assert [d["name"] for d in response.json()] == ["Division 1"]
     assert response.json()[0]["target_team_count"] is None
+
+
+def test_match_format_reports_the_selected_game_plugin(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "example-game"})
+
+    response = client.get("/api/event/match-format")
+    assert response.status_code == 200
+    assert response.json() == {
+        "round_types": ["practice", "qualification", "elimination"],
+        "teams_per_alliance": 2,
+        "alliance_count": 2,
+        "match_duration_seconds": 120,
+    }
+
+
+def test_match_format_without_a_game_plugin_is_422(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+
+    response = client.get("/api/event/match-format")
+    assert response.status_code == 422
+    assert response.json()["detail"] == "No game plugin has been selected for this event"
+
+
+def test_match_format_is_readable_by_non_admin_roles(client):
+    from tests.auth_helpers import bearer, login_as
+
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "example-game"})
+
+    token = login_as(client, "front_desk")
+    response = client.get("/api/event/match-format", headers=bearer(token))
+    assert response.status_code == 200

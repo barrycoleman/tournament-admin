@@ -30,3 +30,10 @@ class ActiveSessionUpdate(BaseModel):
 
 class GamePluginSelect(BaseModel):
     name: str
+
+
+class MatchFormatRead(BaseModel):
+    round_types: list[str]
+    teams_per_alliance: int
+    alliance_count: int
+    match_duration_seconds: int

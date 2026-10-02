@@ -408,6 +408,15 @@ active per FieldSet at a time. `POST /api/fields` auto-creates a default
 explicit `field_set_id` once a session has more than one (ambiguous
 otherwise).
 
+`GET /api/event/match-format` (any authenticated role) exposes the
+selected game plugin's scheduling-relevant format — `round_types`,
+`teams_per_alliance`, `alliance_count`, and `match_duration_seconds`
+(`autonomous_seconds + driver_seconds`, the same value `POST
+/api/schedule` uses for its cycle-time warning) — so the admin UI's
+schedule form can offer real round types and warn about tight cycle
+times before previewing. 422 with the same message `POST /api/schedule`
+uses when no game plugin is selected.
+
 `POST /api/schedule` generates matches for a `(session_id, division_id)`
 via a scheduler plugin's `generate_schedule()`, in one of two mutually
 exclusive request shapes (`schemas/schedule.py`'s
