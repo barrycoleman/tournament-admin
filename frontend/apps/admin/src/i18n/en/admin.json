@@ -112,6 +112,7 @@
     "addSubmit": "Add session",
     "checkinTab": "Check-In",
     "fieldsTab": "Fields",
+    "matchesTab": "Matches",
     "loading": "Loading…",
     "notFound": "Session not found.",
     "noDateSet": "No date set",
@@ -128,6 +129,24 @@
       "filterPlaceholder": "Filter by number or name",
       "checkInAllVisible": "Check in all visible",
       "checkOutAllVisible": "Check out all visible"
+    },
+    "matches": {
+      "columnMatch": "Match",
+      "columnTime": "Time",
+      "columnField": "Field",
+      "columnStatus": "Status",
+      "status": {
+        "scheduled": "Scheduled",
+        "completed": "Completed"
+      },
+      "noTime": "—",
+      "divisionFilterLabel": "Division",
+      "allDivisions": "All divisions",
+      "roundFilterLabel": "Round",
+      "allRounds": "All rounds",
+      "teamSearchLabel": "Search by team number or name",
+      "empty": "No matches yet.",
+      "goToSchedule": "Go to Schedule"
     },
     "fields": {
       "empty": "This session has no fields yet.",

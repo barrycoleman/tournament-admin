@@ -112,6 +112,7 @@
     "addSubmit": "添加场次",
     "checkinTab": "签到",
     "fieldsTab": "场地",
+    "matchesTab": "比赛",
     "loading": "加载中…",
     "notFound": "未找到该场次。",
     "noDateSet": "未设置日期",
@@ -128,6 +129,24 @@
       "filterPlaceholder": "按编号或名称筛选",
       "checkInAllVisible": "全部签到(当前可见)",
       "checkOutAllVisible": "全部取消签到(当前可见)"
+    },
+    "matches": {
+      "columnMatch": "比赛",
+      "columnTime": "时间",
+      "columnField": "场地",
+      "columnStatus": "状态",
+      "status": {
+        "scheduled": "已排定",
+        "completed": "已完成"
+      },
+      "noTime": "—",
+      "divisionFilterLabel": "组别",
+      "allDivisions": "所有组别",
+      "roundFilterLabel": "轮次",
+      "allRounds": "所有轮次",
+      "teamSearchLabel": "按队伍编号或名称搜索",
+      "empty": "还没有比赛。",
+      "goToSchedule": "前往赛程"
     },
     "fields": {
       "empty": "该场次还没有场地。",

@@ -53,6 +53,7 @@ describe("SessionDetailLayout", () => {
     expect(screen.getByText(/America\/Los_Angeles/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Check-In" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Fields" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Matches" })).toBeInTheDocument();
   });
 
   it("shows the not-found message when the id isn't in a successfully-loaded list", async () => {
