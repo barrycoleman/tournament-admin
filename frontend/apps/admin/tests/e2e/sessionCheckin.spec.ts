@@ -33,7 +33,7 @@ test.describe.serial("session check-in", () => {
     await expect(page).toHaveURL(/\/sessions$/);
 
     await page.getByRole("button", { name: "Add session..." }).click();
-    await page.getByLabel("Label").fill("Check-In Day");
+    await page.getByLabel("Session name").fill("Check-In Day");
     await page.getByRole("button", { name: "Add session", exact: true }).click();
     await expect(page.getByText("Check-In Day")).toBeVisible();
 

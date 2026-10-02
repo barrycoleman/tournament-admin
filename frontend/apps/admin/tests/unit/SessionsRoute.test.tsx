@@ -45,6 +45,34 @@ describe("SessionsRoute", () => {
     expect(screen.getByText("America/Los_Angeles")).toBeInTheDocument();
   });
 
+  it("marks only the event's active session with a badge", async () => {
+    vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+      if (path === "/api/sessions") {
+        return [
+          { id: 1, event_id: 1, label: "Saturday", session_date: null, timezone: null },
+          { id: 2, event_id: 1, label: "Sunday", session_date: null, timezone: null },
+        ] as never;
+      }
+      if (path === "/api/event") return { id: 1, name: "Event", active_session_id: 2 } as never;
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderRoute();
+
+    const badge = await screen.findByText("Active session");
+    expect(badge.closest("tr")).toHaveTextContent("Sunday");
+    expect(screen.getAllByText("Active session")).toHaveLength(1);
+  });
+
+  it("shows an empty-state message when there are no sessions", async () => {
+    vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+      if (path === "/api/sessions") return [] as never;
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderRoute();
+
+    expect(await screen.findByText(/No sessions yet/)).toBeInTheDocument();
+  });
+
   it("creates a new session", async () => {
     let createBody: unknown = null;
     vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
@@ -59,7 +87,7 @@ describe("SessionsRoute", () => {
 
     await screen.findByRole("button", { name: "Add session..." });
     fireEvent.click(screen.getByRole("button", { name: "Add session..." }));
-    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "Sunday" } });
+    fireEvent.change(screen.getByLabelText("Session name"), { target: { value: "Sunday" } });
     fireEvent.click(screen.getByRole("button", { name: "Add session" }));
 
     await waitFor(() =>
@@ -85,7 +113,7 @@ describe("SessionsRoute", () => {
 
     await screen.findByText("Saturday");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "Renamed" } });
+    fireEvent.change(screen.getByLabelText("Session name"), { target: { value: "Renamed" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
@@ -114,7 +142,7 @@ describe("SessionsRoute", () => {
     expect(screen.queryByDisplayValue("Saturday")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add session" })).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Label")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Session name")).toHaveLength(1);
   });
 
   it("opening a row's edit form while creating closes the create form", async () => {
@@ -137,7 +165,7 @@ describe("SessionsRoute", () => {
     expect(screen.queryByRole("button", { name: "Add session" })).not.toBeInTheDocument();
     expect(screen.getByDisplayValue("Saturday")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Label")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Session name")).toHaveLength(1);
   });
 
   it("shows an inline error on a failed create", async () => {

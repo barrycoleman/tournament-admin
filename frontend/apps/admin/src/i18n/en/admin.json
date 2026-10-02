@@ -98,10 +98,11 @@
   },
   "sessions": {
     "heading": "Sessions",
-    "columnLabel": "Label",
+    "columnLabel": "Session name",
     "columnDate": "Date",
     "columnTimezone": "Timezone",
-    "labelLabel": "Label",
+    "empty": "No sessions yet. Add one to start checking teams in and building a schedule.",
+    "labelLabel": "Session name",
     "dateLabel": "Date (optional)",
     "timezoneLabel": "Timezone (optional)",
     "noTimezoneOption": "No timezone set",

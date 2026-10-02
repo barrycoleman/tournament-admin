@@ -98,10 +98,11 @@
   },
   "sessions": {
     "heading": "场次",
-    "columnLabel": "名称",
+    "columnLabel": "场次名称",
     "columnDate": "日期",
     "columnTimezone": "时区",
-    "labelLabel": "名称",
+    "empty": "还没有场次。添加一个场次后即可开始签到和生成赛程。",
+    "labelLabel": "场次名称",
     "dateLabel": "日期(可选)",
     "timezoneLabel": "时区(可选)",
     "noTimezoneOption": "未设置时区",

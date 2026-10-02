@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
-import type { SessionRead } from "../types";
+import type { EventRead, SessionRead } from "../types";
 
 function listTimezones(): string[] {
   const intlWithZones = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] };
@@ -25,6 +25,7 @@ function SessionForm({
   submitLabel,
   isSaving,
   error,
+  inline = false,
 }: {
   initial: SessionFormValues;
   onSubmit: (values: SessionFormValues) => void;
@@ -32,6 +33,8 @@ function SessionForm({
   submitLabel: string;
   isSaving: boolean;
   error: string | null;
+  /** Inside a table row: the row already frames it, so skip the panel box. */
+  inline?: boolean;
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState(initial);
@@ -43,7 +46,7 @@ function SessionForm({
   }
 
   return (
-    <form className="panel panel--form" onSubmit={handleSubmit}>
+    <form className={inline ? "panel--form" : "panel panel--form"} onSubmit={handleSubmit}>
       <div className="field">
         <label className="field__label" htmlFor="session-label">
           {t("sessions.labelLabel")}
@@ -114,6 +117,11 @@ export function SessionsRoute() {
     queryFn: () => apiRequest<SessionRead[]>("/api/sessions"),
   });
 
+  const { data: event } = useQuery({
+    queryKey: ["event"],
+    queryFn: () => apiRequest<EventRead>("/api/event"),
+  });
+
   const createMutation = useMutation({
     mutationFn: (values: SessionFormValues) =>
       apiRequest<SessionRead>("/api/sessions", {
@@ -149,66 +157,85 @@ export function SessionsRoute() {
   return (
     <div>
       <h1>{t("sessions.heading")}</h1>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>{t("sessions.columnLabel")}</th>
-            <th>{t("sessions.columnDate")}</th>
-            <th>{t("sessions.columnTimezone")}</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {sessions?.map((session) =>
-            editingId === session.id ? (
-              <tr key={session.id}>
-                <td colSpan={4}>
-                  <SessionForm
-                    initial={{
-                      label: session.label,
-                      sessionDate: session.session_date ?? "",
-                      timezone: session.timezone ?? "",
-                    }}
-                    onSubmit={(values) => updateMutation.mutate({ id: session.id, values })}
-                    onCancel={() => {
-                      setEditingId(null);
-                      updateMutation.reset();
-                    }}
-                    submitLabel={t("sessions.saveAction")}
-                    isSaving={updateMutation.isPending && updateMutation.variables?.id === session.id}
-                    error={
-                      updateMutation.isError && updateMutation.variables?.id === session.id
-                        ? updateMutation.error instanceof ApiError
-                          ? updateMutation.error.detail
-                          : t("errors.generic")
-                        : null
-                    }
-                  />
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t("sessions.columnLabel")}</th>
+              <th>{t("sessions.columnDate")}</th>
+              <th className="table__col--detail">{t("sessions.columnTimezone")}</th>
+              <th className="table__actions" />
+            </tr>
+          </thead>
+          <tbody>
+            {sessions?.length === 0 && (
+              <tr>
+                <td className="table__empty" colSpan={4}>
+                  {t("sessions.empty")}
                 </td>
               </tr>
-            ) : (
-              <tr key={session.id}>
-                <td>
-                  <Link to={`/sessions/${session.id}`}>{session.label}</Link>
-                </td>
-                <td>{session.session_date ?? "—"}</td>
-                <td>{session.timezone ?? "—"}</td>
-                <td>
-                  <button
-                    className="btn btn-small"
-                    onClick={() => {
-                      setEditingId(session.id);
-                      setCreating(false);
-                    }}
-                  >
-                    {t("sessions.editAction")}
-                  </button>
-                </td>
-              </tr>
-            )
-          )}
-        </tbody>
-      </table>
+            )}
+            {sessions?.map((session) =>
+              editingId === session.id ? (
+                <tr key={session.id} className="table__row--editing">
+                  <td colSpan={4}>
+                    <SessionForm
+                      inline
+                      initial={{
+                        label: session.label,
+                        sessionDate: session.session_date ?? "",
+                        timezone: session.timezone ?? "",
+                      }}
+                      onSubmit={(values) => updateMutation.mutate({ id: session.id, values })}
+                      onCancel={() => {
+                        setEditingId(null);
+                        updateMutation.reset();
+                      }}
+                      submitLabel={t("sessions.saveAction")}
+                      isSaving={updateMutation.isPending && updateMutation.variables?.id === session.id}
+                      error={
+                        updateMutation.isError && updateMutation.variables?.id === session.id
+                          ? updateMutation.error instanceof ApiError
+                            ? updateMutation.error.detail
+                            : t("errors.generic")
+                          : null
+                      }
+                    />
+                  </td>
+                </tr>
+              ) : (
+                <tr key={session.id}>
+                  <td>
+                    <span className="table__title">
+                      <Link to={`/sessions/${session.id}`}>{session.label}</Link>
+                      {event?.active_session_id === session.id && (
+                        <span className="badge badge-success">{t("sessions.activeBadge")}</span>
+                      )}
+                    </span>
+                  </td>
+                  <td className="table__nowrap">
+                    {session.session_date ?? <span className="table__missing">—</span>}
+                  </td>
+                  <td className="table__secondary table__col--detail">
+                    {session.timezone ?? <span className="table__missing">—</span>}
+                  </td>
+                  <td className="table__actions">
+                    <button
+                      className="btn btn-small"
+                      onClick={() => {
+                        setEditingId(session.id);
+                        setCreating(false);
+                      }}
+                    >
+                      {t("sessions.editAction")}
+                    </button>
+                  </td>
+                </tr>
+              )
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {!creating && (
         <button

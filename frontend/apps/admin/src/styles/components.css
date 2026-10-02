@@ -503,6 +503,110 @@
   gap: var(--space-2);
 }
 
+/* ---------- Tables (short static lists; editable rosters use the data grid) ----------
+   Themed to match the data grid: sunken header, elevated rows with a
+   sunken hover, hairline dividers, tabular numerals. The wrapper owns the
+   border and radius (a collapsed table can't round its own corners) and
+   scrolls sideways on a narrow screen instead of squeezing columns. */
+
+.table-wrap {
+  background: var(--color-bg-elevated);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  margin-bottom: var(--space-4);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th {
+  text-align: left;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-sunken);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: var(--border-width) solid var(--color-border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--space-3) var(--space-4);
+  border-top: var(--border-width) solid var(--color-border);
+  vertical-align: middle;
+}
+
+.table tbody tr:first-child td {
+  border-top: none;
+}
+
+.table tbody tr:not(.table__row--editing):hover td {
+  background: var(--color-bg-sunken);
+}
+
+.table a {
+  font-weight: 600;
+  text-decoration-color: var(--color-border-strong);
+  text-underline-offset: 3px;
+}
+
+.table a:hover {
+  text-decoration-color: currentColor;
+}
+
+.table__title {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.table__nowrap {
+  white-space: nowrap;
+}
+
+.table__secondary {
+  color: var(--color-text-secondary);
+}
+
+.table__missing {
+  color: var(--color-text-tertiary);
+}
+
+.table__actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.table__empty {
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: var(--space-6) var(--space-4);
+}
+
+.table__row--editing td {
+  padding: var(--space-4);
+}
+
+/* On a phone, drop the columns marked as detail (shown again on the row's
+   own page) so the row's action button stays on screen without scrolling. */
+@media (max-width: 720px) {
+  .table th,
+  .table td {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+
+  .table__col--detail {
+    display: none;
+  }
+}
+
 /* ---------- Toolbars (buttons above a grid/table) ---------- */
 
 .toolbar {
