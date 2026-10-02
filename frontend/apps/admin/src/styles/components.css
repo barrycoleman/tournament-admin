@@ -372,6 +372,27 @@
 /* A positive/confirmed action -- reuses the same success color the
    `.alert-success` banner already establishes elsewhere (e.g.
    SettingsRolesRoute's save-success message), not a new green. */
+/* A per-row action inside a data grid. Grid rows are 35px and cells clip
+   their overflow, so the button stays short enough for its focus ring to
+   fit inside the cell. Its border stays hidden until hover, so a long
+   column of row actions reads as quiet text rather than a stack of boxes. */
+.btn-grid {
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  border-color: transparent;
+  vertical-align: middle;
+}
+
+.btn-danger.btn-grid {
+  background: transparent;
+}
+
+.btn-danger.btn-grid:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
 .btn-success {
   background: var(--color-success);
   border-color: var(--color-success);

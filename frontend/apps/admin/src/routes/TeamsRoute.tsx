@@ -309,6 +309,7 @@ export function TeamsRoute() {
       // cell is active, so arrowing onto the cell focuses the button itself.
       renderCell: ({ row, tabIndex }) => (
         <button
+          className="btn btn-danger btn-grid"
           tabIndex={tabIndex}
           aria-label={t("teams.deleteAction")}
           onClick={() => {

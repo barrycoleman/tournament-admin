@@ -77,6 +77,24 @@ test.describe.serial("team delete", () => {
     await page.keyboard.press("ArrowLeft");
     await expect(row.getByRole("button", { name: "Delete" })).toBeFocused();
 
+    // The cell clips its overflow, so the button plus its focus ring
+    // (outline width + offset on every side) must fit inside the cell.
+    const fit = await page.evaluate(() => {
+      const button = document.activeElement as HTMLElement;
+      const cell = button.closest(".rdg-cell") as HTMLElement;
+      const style = getComputedStyle(button);
+      const ring = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+      const b = button.getBoundingClientRect();
+      const c = cell.getBoundingClientRect();
+      return {
+        top: b.top - ring >= c.top,
+        bottom: b.bottom + ring <= c.bottom,
+        left: b.left - ring >= c.left,
+        right: b.right + ring <= c.right,
+      };
+    });
+    expect(fit).toEqual({ top: true, bottom: true, left: true, right: true });
+
     // Opening the dialog moves focus into it, onto the safe choice.
     const deleteButton = row.getByRole("button", { name: "Delete" });
     await page.keyboard.press("Enter");
