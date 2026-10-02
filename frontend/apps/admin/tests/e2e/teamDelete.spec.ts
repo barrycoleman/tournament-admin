@@ -41,4 +41,60 @@ test.describe.serial("team delete", () => {
     await page.getByRole("button", { name: "Delete", exact: true }).last().click();
     await expect(page.getByText("Team To Delete")).not.toBeVisible();
   });
+
+  test("the Delete button is reachable and usable from the keyboard", async ({ page, request }) => {
+    const loginResponse = await request.post("/api/auth/login", {
+      data: { role: "admin", password: E2E_EVENT_PASSWORD },
+    });
+    const { access_token: accessToken } = await loginResponse.json();
+    await request.post("/api/teams", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      data: { number: "9998K", name: "Keyboard Delete Team" },
+    });
+
+    await page.goto("/login");
+    await page.getByLabel("Role").fill("admin");
+    await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
+    await page.getByRole("button", { name: "Log in" }).click();
+    await page.getByRole("link", { name: "Teams" }).click();
+    await expect(page).toHaveURL(/\/teams$/);
+
+    const row = page.getByRole("row").filter({ hasText: "Keyboard Delete Team" });
+    await row.getByRole("gridcell").first().click();
+
+    // End lands on the last column (status). Measured after a key press,
+    // since only keyboard focus matches :focus-visible: the active cell's
+    // outline must sit inside the cell, or the neighbouring cells to the
+    // right and below paint over it.
+    await page.keyboard.press("End");
+    const outlineOffset = await page.evaluate(
+      () => getComputedStyle(document.activeElement as Element).outlineOffset
+    );
+    expect(parseFloat(outlineOffset)).toBeLessThan(0);
+
+    // One step left is the Delete column; the grid should hand focus to
+    // the button inside it.
+    await page.keyboard.press("ArrowLeft");
+    await expect(row.getByRole("button", { name: "Delete" })).toBeFocused();
+
+    // Opening the dialog moves focus into it, onto the safe choice.
+    const deleteButton = row.getByRole("button", { name: "Delete" });
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+
+    // Escape cancels and puts focus back on the button that opened it.
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    await expect(deleteButton).toBeFocused();
+
+    // Reopen and confirm, still keyboard only: Shift+Tab from Cancel to Delete.
+    await page.keyboard.press("Enter");
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(dialog.getByRole("button", { name: "Delete", exact: true })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("Keyboard Delete Team")).not.toBeVisible();
+  });
 });

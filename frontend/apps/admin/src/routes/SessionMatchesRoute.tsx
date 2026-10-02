@@ -139,7 +139,7 @@ export function SessionMatchesRoute() {
 
   return (
     <div>
-      <div className="form-actions">
+      <div className="toolbar toolbar--filters">
         {multiDivision && (
           <label className="field">
             <span className="field__label">{t("sessions.matches.divisionFilterLabel")}</span>

@@ -11,6 +11,7 @@ import {
 } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
+import { Modal } from "../components/Modal";
 import { showTransientError } from "../errorBanner";
 import type { Division } from "../types";
 import {
@@ -304,8 +305,11 @@ export function TeamsRoute() {
     base.push({
       key: "__delete",
       name: "",
-      renderCell: ({ row }) => (
+      // `tabIndex` comes from the grid's roving focus: 0 only while this
+      // cell is active, so arrowing onto the cell focuses the button itself.
+      renderCell: ({ row, tabIndex }) => (
         <button
+          tabIndex={tabIndex}
           aria-label={t("teams.deleteAction")}
           onClick={() => {
             setDeleteError(null);
@@ -519,6 +523,11 @@ export function TeamsRoute() {
     }
   }
 
+  function closeDeleteDialog() {
+    setDeleteCandidate(null);
+    setDeleteError(null);
+  }
+
   async function handleConfirmDelete() {
     if (!deleteCandidate) return;
     // A row that was never saved only exists locally, so "delete" is just
@@ -631,31 +640,23 @@ export function TeamsRoute() {
       />
 
       {deleteCandidate && (
-        <div className="dialog-overlay">
-          <div className="dialog" role="alertdialog" aria-labelledby="delete-team-heading">
-            <h2 id="delete-team-heading">{t("teams.deleteConfirmHeading")}</h2>
-            <p>{t("teams.deleteConfirmBody")}</p>
-            {deleteError && (
-              <p className="alert alert-danger" role="alert">
-                {deleteError}
-              </p>
-            )}
-            <div className="dialog__actions">
-              <button className="btn btn-danger" onClick={() => void handleConfirmDelete()}>
-                {t("teams.deleteAction")}
-              </button>
-              <button
-                className="btn"
-                onClick={() => {
-                  setDeleteCandidate(null);
-                  setDeleteError(null);
-                }}
-              >
-                {t("teams.cancelAction")}
-              </button>
-            </div>
+        <Modal labelledBy="delete-team-heading" onCancel={closeDeleteDialog}>
+          <h2 id="delete-team-heading">{t("teams.deleteConfirmHeading")}</h2>
+          <p>{t("teams.deleteConfirmBody")}</p>
+          {deleteError && (
+            <p className="alert alert-danger" role="alert">
+              {deleteError}
+            </p>
+          )}
+          <div className="dialog__actions">
+            <button className="btn btn-danger" onClick={() => void handleConfirmDelete()}>
+              {t("teams.deleteAction")}
+            </button>
+            <button className="btn" onClick={closeDeleteDialog} data-autofocus>
+              {t("teams.cancelAction")}
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

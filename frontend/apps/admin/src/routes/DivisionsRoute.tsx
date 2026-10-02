@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { InlineEditableText } from "../components/InlineEditableText";
+import { Modal } from "../components/Modal";
 import type { Division } from "../types";
 
 interface DivisionTeamCounts {
@@ -43,25 +44,24 @@ function RedistributeConfirmDialog({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="dialog-overlay">
-      <div className="dialog" role="alertdialog" aria-labelledby="redistribute-heading">
-        <h2 id="redistribute-heading">{t("divisions.redistributeConfirmHeading")}</h2>
-        <p>{t("divisions.redistributeConfirmBody", { count: totalTeams })}</p>
-        {error && (
-          <p className="alert alert-danger" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="dialog__actions">
-          <button className="btn btn-primary" onClick={onConfirm}>
-            {t("divisions.redistributeConfirmYes")}
-          </button>
-          <button className="btn" onClick={onCancel}>
-            {t("divisions.redistributeConfirmNo")}
-          </button>
-        </div>
+    <Modal labelledBy="redistribute-heading" onCancel={onCancel}>
+      <h2 id="redistribute-heading">{t("divisions.redistributeConfirmHeading")}</h2>
+      <p>{t("divisions.redistributeConfirmBody", { count: totalTeams })}</p>
+      {error && (
+        <p className="alert alert-danger" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="dialog__actions">
+        <button className="btn btn-primary" onClick={onConfirm}>
+          {t("divisions.redistributeConfirmYes")}
+        </button>
+        {/* Reshuffles every team's division: start on the choice that changes nothing. */}
+        <button className="btn" onClick={onCancel} data-autofocus>
+          {t("divisions.redistributeConfirmNo")}
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -259,27 +259,25 @@ export function DivisionsRoute() {
       )}
 
       {deleteCandidate && (
-        <div className="dialog-overlay">
-          <div className="dialog" role="alertdialog" aria-labelledby="delete-division-heading">
-            <h2 id="delete-division-heading">{t("divisions.deleteConfirmHeading")}</h2>
-            <p>
-              {t("divisions.deleteConfirmBody", {
-                count: counts[deleteCandidate.id] ?? 0,
-              })}
-            </p>
-            <div className="dialog__actions">
-              <button
-                className="btn btn-danger"
-                onClick={() => deleteMutation.mutate(deleteCandidate.id)}
-              >
-                {t("divisions.deleteAction")}
-              </button>
-              <button className="btn" onClick={() => setDeleteCandidate(null)}>
-                {t("divisions.cancelAction")}
-              </button>
-            </div>
+        <Modal labelledBy="delete-division-heading" onCancel={() => setDeleteCandidate(null)}>
+          <h2 id="delete-division-heading">{t("divisions.deleteConfirmHeading")}</h2>
+          <p>
+            {t("divisions.deleteConfirmBody", {
+              count: counts[deleteCandidate.id] ?? 0,
+            })}
+          </p>
+          <div className="dialog__actions">
+            <button
+              className="btn btn-danger"
+              onClick={() => deleteMutation.mutate(deleteCandidate.id)}
+            >
+              {t("divisions.deleteAction")}
+            </button>
+            <button className="btn" onClick={() => setDeleteCandidate(null)} data-autofocus>
+              {t("divisions.cancelAction")}
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {pendingRedistribute && (

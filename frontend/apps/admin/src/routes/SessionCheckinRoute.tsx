@@ -145,9 +145,13 @@ export function SessionCheckinRoute() {
     base.push({
       key: "checkedIn",
       name: t("sessions.checkin.columnCheckedIn"),
-      renderCell: ({ row }) => (
+      // `tabIndex` comes from the grid's roving focus: 0 only while this
+      // cell is active, so arrowing onto the cell focuses the checkbox and
+      // Space toggles it.
+      renderCell: ({ row, tabIndex }) => (
         <input
           type="checkbox"
+          tabIndex={tabIndex}
           aria-label={t("sessions.checkin.toggleAction", { name: row.name })}
           checked={row.checkedIn}
           onChange={(event) =>
@@ -161,7 +165,7 @@ export function SessionCheckinRoute() {
 
   return (
     <div>
-      <div className="form-actions">
+      <div className="toolbar">
         <input
           className="input"
           placeholder={t("sessions.checkin.filterPlaceholder")}

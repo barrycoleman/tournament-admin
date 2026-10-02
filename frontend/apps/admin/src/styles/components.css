@@ -187,7 +187,7 @@
 }
 
 .session-detail__meta {
-  margin: 0;
+  margin: 0 0 var(--space-3);
   color: var(--color-text-secondary);
   font-size: var(--text-sm);
 }
@@ -621,27 +621,36 @@
   flex: 1;
 }
 
-/* ---------- Dialogs (native-feeling, no backdrop-blur decoration) ---------- */
-
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(20, 18, 14, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-5);
-  z-index: 100;
+/* A filter row mixing labeled selects with an unlabeled search box:
+   align the controls along their bottom edge, and drop each field's own
+   bottom margin so the toolbar's margin is the only gap above the grid. */
+.toolbar--filters {
+  align-items: flex-end;
 }
 
+.toolbar--filters .field {
+  margin-bottom: 0;
+}
+
+/* ---------- Dialogs (native-feeling, no backdrop-blur decoration) ---------- */
+
+/* A native <dialog> opened with showModal() (components/Modal.tsx): the
+   browser centers it in the top layer and dims the page through
+   ::backdrop. Override the user-agent box (its own border, padding,
+   colors, and a max-width that ignores ours). */
 .dialog {
   background: var(--color-bg-elevated);
+  color: var(--color-text);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-hairline);
   padding: var(--space-5);
-  max-width: 480px;
-  width: 100%;
+  width: min(480px, calc(100% - 2 * var(--space-5)));
+  max-width: none;
+}
+
+.dialog::backdrop {
+  background: rgba(20, 18, 14, 0.4);
 }
 
 .dialog h2 {
@@ -859,6 +868,23 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The grid's own styles live in a cascade layer, and any unlayered rule
+   beats a layered one -- so the global :focus-visible rule (2px outside,
+   rounded) wins over the grid's active-cell ring, which it draws 2px
+   inside. Outside the cell, the neighbouring cells to the right and below
+   paint over it. Put the ring back inside, square like the cell. */
+.rdg-cell:focus-visible {
+  outline: var(--rdg-selection-width, 2px) solid var(--color-focus-ring);
+  outline-offset: calc(var(--rdg-selection-width, 2px) * -1);
+  border-radius: 0;
+}
+
+/* Cells clip their overflow, so a focused control inside one keeps its
+   ring close enough to stay within the cell's padding. */
+.rdg-cell :focus-visible {
+  outline-offset: 1px;
+}
+
 .badge-success {
   background: var(--color-success-bg);
   color: var(--color-success);
@@ -881,6 +907,9 @@
   align-items: center;
   gap: var(--space-3);
   flex-wrap: wrap;
+  /* Room for the controls' focus rings, and a clear break between the
+     set's own controls and the field rows it owns. */
+  margin-bottom: var(--space-4);
 }
 
 .field-set-card__header .inline-edit {

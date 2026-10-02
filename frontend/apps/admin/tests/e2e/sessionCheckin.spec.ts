@@ -108,5 +108,16 @@ test.describe.serial("session check-in", () => {
     await page.goto(`/sessions/${sessionId}/checkin`);
 
     await expect(page.getByLabel(/Toggle check-in for Checkin Team 9002A/)).toBeChecked();
+
+    // Keyboard only: arrow to the row's check-in checkbox (the last column)
+    // and toggle it with Space, then back, leaving the team checked in.
+    const checkbox = page.getByLabel(/Toggle check-in for Checkin Team 9002A/);
+    await page.getByRole("row").filter({ hasText: "9002A" }).getByRole("gridcell").first().click();
+    await page.keyboard.press("End");
+    await expect(checkbox).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(checkbox).not.toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(checkbox).toBeChecked();
   });
 });

@@ -18,6 +18,19 @@ if (!Element.prototype.scrollIntoView) {
   } as typeof Element.prototype.querySelector;
 }
 
+// jsdom has the <dialog> element but not showModal()/close(). Modal.tsx
+// opens every dialog with showModal(); stand in with the open/close state
+// alone (no inert background or focus trapping -- the Playwright tests
+// cover those in a real browser).
+if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    this.setAttribute("open", "");
+  };
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    this.removeAttribute("open");
+  };
+}
+
 // jsdom has no layout engine and ships no ResizeObserver. react-data-grid
 // sizes its viewport from one (falling back to clientWidth/clientHeight,
 // which jsdom always reports as 0) and virtualizes away every column and
