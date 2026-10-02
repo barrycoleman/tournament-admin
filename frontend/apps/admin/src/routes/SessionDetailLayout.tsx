@@ -90,6 +90,9 @@ export function SessionDetailLayout() {
         <NavLink to={`/sessions/${session.id}/checkin`} className={tabLinkClassName}>
           {t("sessions.checkinTab")}
         </NavLink>
+        <NavLink to={`/sessions/${session.id}/fields`} className={tabLinkClassName}>
+          {t("sessions.fieldsTab")}
+        </NavLink>
       </nav>
       <Outlet context={{ session }} />
     </div>

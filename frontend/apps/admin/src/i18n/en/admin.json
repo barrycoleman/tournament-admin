@@ -111,6 +111,7 @@
     "addSessionAction": "Add session...",
     "addSubmit": "Add session",
     "checkinTab": "Check-In",
+    "fieldsTab": "Fields",
     "loading": "Loading…",
     "notFound": "Session not found.",
     "noDateSet": "No date set",
@@ -127,6 +128,30 @@
       "filterPlaceholder": "Filter by number or name",
       "checkInAllVisible": "Check in all visible",
       "checkOutAllVisible": "Check out all visible"
+    },
+    "fields": {
+      "empty": "This session has no fields yet.",
+      "firstFieldLabel": "Add your first field",
+      "addFieldAction": "Add field",
+      "newFieldLabel": "New field name for {{name}}",
+      "newFieldPlaceholder": "Field name",
+      "setNameLabel": "Field set name",
+      "renameSetAction": "Rename field set {{name}}",
+      "fieldNameLabel": "Field name",
+      "renameFieldAction": "Rename field {{name}}",
+      "removeFieldAction": "Remove",
+      "removeFieldAriaLabel": "Remove field {{name}}",
+      "divisionLabel": "Division",
+      "unassignedOption": "Unassigned",
+      "unassignedNote": "Not used for scheduling until assigned to a division.",
+      "deleteSetAction": "Delete set",
+      "newSetLabel": "New field set name",
+      "addSetAction": "Add field set",
+      "deleteFieldHeading": "Remove field {{name}}?",
+      "deleteFieldBody": "The field is removed from this session.",
+      "deleteSetHeading": "Delete field set {{name}}?",
+      "deleteSetBody": "The set and all of its fields are removed from this session.",
+      "confirmDelete": "Delete"
     }
   },
   "frontDeskCheckin": {

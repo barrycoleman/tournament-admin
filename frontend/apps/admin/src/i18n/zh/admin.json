@@ -111,6 +111,7 @@
     "addSessionAction": "添加场次...",
     "addSubmit": "添加场次",
     "checkinTab": "签到",
+    "fieldsTab": "场地",
     "loading": "加载中…",
     "notFound": "未找到该场次。",
     "noDateSet": "未设置日期",
@@ -127,6 +128,30 @@
       "filterPlaceholder": "按编号或名称筛选",
       "checkInAllVisible": "全部签到(当前可见)",
       "checkOutAllVisible": "全部取消签到(当前可见)"
+    },
+    "fields": {
+      "empty": "该场次还没有场地。",
+      "firstFieldLabel": "添加第一个场地",
+      "addFieldAction": "添加场地",
+      "newFieldLabel": "{{name}} 的新场地名称",
+      "newFieldPlaceholder": "场地名称",
+      "setNameLabel": "场地组名称",
+      "renameSetAction": "重命名场地组 {{name}}",
+      "fieldNameLabel": "场地名称",
+      "renameFieldAction": "重命名场地 {{name}}",
+      "removeFieldAction": "移除",
+      "removeFieldAriaLabel": "移除场地 {{name}}",
+      "divisionLabel": "组别",
+      "unassignedOption": "未分配",
+      "unassignedNote": "分配到组别之前不会用于排赛程。",
+      "deleteSetAction": "删除场地组",
+      "newSetLabel": "新场地组名称",
+      "addSetAction": "添加场地组",
+      "deleteFieldHeading": "移除场地 {{name}}？",
+      "deleteFieldBody": "该场地将从此场次中移除。",
+      "deleteSetHeading": "删除场地组 {{name}}？",
+      "deleteSetBody": "该场地组及其所有场地将从此场次中移除。",
+      "confirmDelete": "删除"
     }
   },
   "frontDeskCheckin": {

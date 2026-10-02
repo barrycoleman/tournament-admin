@@ -14,6 +14,7 @@ import { TeamsRoute } from "./routes/TeamsRoute";
 import { SessionsRoute } from "./routes/SessionsRoute";
 import { SessionDetailLayout } from "./routes/SessionDetailLayout";
 import { SessionCheckinRoute } from "./routes/SessionCheckinRoute";
+import { SessionFieldsRoute } from "./routes/SessionFieldsRoute";
 import { FrontDeskCheckinRoute } from "./routes/FrontDeskCheckinRoute";
 
 async function isPickerMode(): Promise<boolean> {
@@ -124,6 +125,7 @@ export const router = createBrowserRouter([
             loader: ({ params }) => redirect(`/sessions/${params.sessionId}/checkin`),
           },
           { path: "checkin", element: <SessionCheckinRoute /> },
+          { path: "fields", element: <SessionFieldsRoute /> },
         ],
       },
     ],
