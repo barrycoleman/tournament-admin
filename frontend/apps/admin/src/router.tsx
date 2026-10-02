@@ -15,6 +15,7 @@ import { SessionsRoute } from "./routes/SessionsRoute";
 import { SessionDetailLayout } from "./routes/SessionDetailLayout";
 import { SessionCheckinRoute } from "./routes/SessionCheckinRoute";
 import { SessionFieldsRoute } from "./routes/SessionFieldsRoute";
+import { SessionScheduleRoute } from "./routes/SessionScheduleRoute";
 import { SessionMatchesRoute } from "./routes/SessionMatchesRoute";
 import { FrontDeskCheckinRoute } from "./routes/FrontDeskCheckinRoute";
 
@@ -127,6 +128,7 @@ export const router = createBrowserRouter([
           },
           { path: "checkin", element: <SessionCheckinRoute /> },
           { path: "fields", element: <SessionFieldsRoute /> },
+          { path: "schedule", element: <SessionScheduleRoute /> },
           { path: "matches", element: <SessionMatchesRoute /> },
         ],
       },

@@ -53,6 +53,7 @@ describe("SessionDetailLayout", () => {
     expect(screen.getByText(/America\/Los_Angeles/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Check-In" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Fields" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Schedule" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Matches" })).toBeInTheDocument();
   });
 
