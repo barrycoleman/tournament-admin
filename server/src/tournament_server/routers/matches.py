@@ -96,6 +96,7 @@ def _to_match_read(match: Match, db: Session) -> MatchRead:
         phase_deadline=match.phase_deadline,
         paused=match.paused,
         remaining_seconds_at_pause=match.remaining_seconds_at_pause,
+        is_finals=match.finals_bracket_id is not None,
         alliances=alliance_reads,
     )
 

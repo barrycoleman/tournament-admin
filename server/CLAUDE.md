@@ -523,6 +523,12 @@ matchup-number-less `f"F{match_number}"` label instead of letting it
 escape and 500 the *entire* `GET /api/matches` list (which calls
 `_to_match_read` once per match in the session).
 
+`MatchRead.is_finals` is `true` exactly when the match belongs to a
+finals bracket (`finals_bracket_id` set). Finals games share the game
+plugin's ordinary `"elimination"` round type, so `round_type` alone can't
+tell a schedule-generated round (which `DELETE /api/schedule` clears)
+from a finals game (which it never touches); the admin UI uses this flag.
+
 Two scheduler plugins ship in this repo, at `plugins/schedulers/`:
 `simple_random` (random, no optimization) and `balanced` (avoids repeat
 partner/opponent pairings and same-organization pairings using pairing
@@ -570,9 +576,11 @@ matches — several matches can share one `time_slot` when multiple
 `FieldSet`s run concurrently, and they all get the identical
 `scheduled_time`. Each block in the response's `resolved_time_blocks`
 (`ResolvedTimeBlockRead`: `date`, `start_time`, `end_time`,
-`cycle_time_seconds`) carries its own resolved `date`, which is what lets
-a multi-day `dry_run` preview tell an organizer which calendar day each
-resolved block actually falls on.
+`cycle_time_seconds`, `time_slot_count` — the slots allocated to that
+block, which lets a client project an open-ended block's finish time)
+carries its own resolved `date`, which is what lets a multi-day `dry_run`
+preview tell an organizer which calendar day each resolved block actually
+falls on.
 
 Omitting `time_blocks` entirely synthesizes one implicit open-ended block
 starting five minutes from `utc_now()` (today's real UTC date), at a

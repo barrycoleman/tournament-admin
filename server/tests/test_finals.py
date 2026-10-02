@@ -1998,3 +1998,24 @@ def test_delete_field_set_used_by_a_finals_bracket_is_refused(cooperative_client
     response = client.delete(f"/api/field-sets/{field_set_id}")
     assert response.status_code == 409
     assert response.json()["detail"] == "Field set is used by a finals bracket"
+
+
+def test_match_read_flags_finals_matches(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+    team_ids = [
+        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
+        for i in range(4)
+    ]
+    _rank_teams_directly(client, session_id, team_ids)
+    client.post("/api/finals/start", json={"session_id": session_id, "bracket_size": 2})
+
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    finals = [m for m in matches if m["is_finals"]]
+    qualification = [m for m in matches if m["round_type"] == "qualification"]
+    assert finals, "starting a score-chase bracket creates its first run"
+    assert all(m["label"].startswith("F") for m in finals)
+    assert qualification and all(m["is_finals"] is False for m in qualification)

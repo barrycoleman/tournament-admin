@@ -1750,3 +1750,27 @@ def test_generate_schedule_with_phases_and_explicit_multi_block_time_blocks(clie
     assert max(m["scheduled_time"] for m in practice_matches) < min(
         m["scheduled_time"] for m in qualification_matches
     )
+
+
+def test_resolved_time_blocks_report_their_time_slot_count(client):
+    session_id, _ = _setup_ready_session(client, num_teams=8)
+    client.patch(f"/api/sessions/{session_id}", json={"timezone": "America/Los_Angeles"})
+    payload = {
+        "session_id": session_id,
+        "phases": [{"round_type": "qualification", "target_matches_per_team": 3}],
+        "scheduler_plugin_name": "simple_random",
+        "time_blocks": [
+            {"date": "2026-09-05", "start_time": "09:00", "end_time": "10:00", "cycle_time": None},
+            {"date": "2026-09-05", "start_time": "11:00", "end_time": "12:00", "cycle_time": None},
+        ],
+    }
+
+    dry = client.post("/api/schedule", json={**payload, "dry_run": True})
+    assert dry.status_code == 201, dry.text
+    assert all(b["time_slot_count"] > 0 for b in dry.json()["resolved_time_blocks"])
+
+    real = client.post("/api/schedule", json=payload)
+    assert real.status_code == 201, real.text
+    counts = [b["time_slot_count"] for b in real.json()["resolved_time_blocks"]]
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    assert sum(counts) == len({m["time_slot"] for m in matches})

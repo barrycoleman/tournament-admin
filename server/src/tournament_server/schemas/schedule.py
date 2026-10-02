@@ -56,6 +56,7 @@ class ResolvedTimeBlockRead(BaseModel):
     start_time: str
     end_time: str | None
     cycle_time_seconds: float
+    time_slot_count: int
 
 
 class PhaseResult(BaseModel):

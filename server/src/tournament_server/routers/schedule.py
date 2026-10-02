@@ -421,6 +421,7 @@ def generate_schedule(
             start_time=b.start_time,
             end_time=b.end_time,
             cycle_time_seconds=b.cycle_time_seconds,
+            time_slot_count=b.time_slot_count,
         )
         for b in resolved_blocks
     ]

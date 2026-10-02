@@ -50,4 +50,5 @@ class MatchRead(BaseModel):
     phase_deadline: dt.datetime | None
     paused: bool
     remaining_seconds_at_pause: float | None
+    is_finals: bool
     alliances: list[AllianceRead]
