@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { E2E_EVENT_NAME, E2E_EVENT_PASSWORD } from "./fixtures/testEvent";
 
 test.describe.serial("randomize unassigned teams", () => {
@@ -117,5 +117,106 @@ test.describe.serial("randomize unassigned teams", () => {
     const teams = await teamsResponse.json();
     const team = teams.find((t: { number: string }) => t.number === "8501A");
     expect(divisionIds).toContain(team.division_id);
+  });
+
+  // Columns are sized from their data: team numbers stay whole, division
+  // names keep enough to tell them apart, empty columns shrink to their
+  // header, and the rest of the width goes to columns that have data.
+  test.describe("column widths", () => {
+    test.beforeAll(async ({ request }) => {
+      const divisionsResponse = await request.get("/api/divisions", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const divisions: { id: number; name: string }[] = await divisionsResponse.json();
+      const divisionTwo = divisions.find((d) => d.name === "Randomize Division Two");
+      await request.post("/api/teams", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        data: { number: "7002A", name: "Long Division Team", division_id: divisionTwo!.id },
+      });
+    });
+
+    async function openTeams(page: Page) {
+      await page.goto("/login");
+      await page.getByLabel("Role").fill("admin");
+      await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
+      await page.getByRole("button", { name: "Log in" }).click();
+      await page.getByRole("link", { name: "Teams" }).click();
+      await expect(page).toHaveURL(/\/teams$/);
+      const row = page.getByRole("row").filter({ hasText: "Long Division Team" });
+      await expect(row).toBeVisible();
+      return row;
+    }
+
+    // How far the cell's text runs past its content box, to the sub-pixel:
+    // scrollWidth rounds to whole pixels and hides an overflow small enough
+    // to still draw the ellipsis.
+    const overflow = (cell: Locator) =>
+      cell.evaluate((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const style = getComputedStyle(el);
+        const content =
+          el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        return range.getBoundingClientRect().width - content;
+      });
+    const width = (cell: Locator) => cell.evaluate((el) => el.getBoundingClientRect().width);
+
+    test("a wide window shows names in full and gives empty columns less room", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      const row = await openTeams(page);
+      // number, name, robot_name, organization, city, state, country, division
+      const cells = row.getByRole("gridcell");
+
+      // Names that share a long prefix are only distinguishable by their
+      // endings, so an ellipsis after the prefix would make them unreadable.
+      await expect(cells.nth(7)).toHaveText("Randomize Division Two");
+      expect(await overflow(cells.nth(7))).toBeLessThanOrEqual(0);
+      expect(await overflow(cells.nth(1))).toBeLessThanOrEqual(0);
+
+      // No team in this event has a robot name: that column keeps just its
+      // header, which stays readable, while Name gets more.
+      for (const header of ["Robot Name", "Organization", "City", "State", "Country"]) {
+        const cell = page.getByRole("columnheader", { name: header, exact: true });
+        expect(await overflow(cell), header).toBeLessThanOrEqual(0);
+      }
+      expect(await width(cells.nth(2))).toBeLessThan(await width(cells.nth(1)));
+
+      // Everything fits, so the grid doesn't scroll sideways.
+      const grid = page.getByRole("grid");
+      expect(await grid.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+    });
+
+    test("a narrow window keeps numbers whole and divisions distinguishable", async ({ page }) => {
+      await page.setViewportSize({ width: 480, height: 800 });
+      const row = await openTeams(page);
+      const cells = row.getByRole("gridcell");
+
+      // The minimums don't fit a phone: the grid scrolls instead of
+      // squeezing the columns that identify a team.
+      const grid = page.getByRole("grid");
+      expect(await grid.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeGreaterThan(0);
+      expect(await overflow(cells.nth(0))).toBeLessThanOrEqual(0);
+      for (const header of ["Number", "Name", "Robot Name", "City"]) {
+        const cell = page.getByRole("columnheader", { name: header, exact: true });
+        expect(await overflow(cell), header).toBeLessThanOrEqual(0);
+      }
+
+      // "Randomize Division One" and "...Two" differ at the "T", so the
+      // cell must show at least "Randomize Division T…" -- measured in the
+      // cell's own font.
+      const division = cells.nth(7);
+      await division.scrollIntoViewIfNeeded();
+      const fits = await division.evaluate((el) => {
+        const style = getComputedStyle(el);
+        const context = document.createElement("canvas").getContext("2d")!;
+        context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        const needed = context.measureText("Randomize Division T…").width;
+        const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+        return el.clientWidth - padding >= needed;
+      });
+      expect(fits).toBe(true);
+    });
   });
 });

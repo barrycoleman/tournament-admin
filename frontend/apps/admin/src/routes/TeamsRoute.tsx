@@ -6,6 +6,7 @@ import {
   renderTextEditor,
   type CellPasteArgs,
   type Column,
+  type DataGridHandle,
   type RenderEditCellProps,
   type RowsChangeData,
 } from "react-data-grid";
@@ -13,6 +14,15 @@ import "react-data-grid/lib/styles.css";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { Modal } from "../components/Modal";
 import { showTransientError } from "../errorBanner";
+import {
+  allocateColumnWidths,
+  fixedColumn,
+  measureGridText,
+  sizeColumn,
+  type ColumnSizing,
+  type SizeColumnOptions,
+} from "../gridColumnWidth";
+import { useContentWidth } from "../useContentWidth";
 import type { Division } from "../types";
 import {
   BLANK_TEAM_CSV_TEMPLATE,
@@ -26,6 +36,32 @@ import {
 } from "../teamCsv";
 
 const RANDOM_DIVISION_SENTINEL = "__random__";
+
+/**
+ * Space a grid cell takes beyond its text: 8px of padding on each side and
+ * a 1px border on its trailing edge, plus 1px so text measured to the
+ * sub-pixel never lands a fraction short and draws the ellipsis anyway.
+ */
+const CELL_PADDING = 18;
+
+type TeamFieldKeyWithText =
+  | "number"
+  | "name"
+  | "robot_name"
+  | "organization"
+  | "city"
+  | "state"
+  | "country";
+
+const COLUMN_HEADER_KEYS: Record<TeamFieldKeyWithText, string> = {
+  number: "teams.columnNumber",
+  name: "teams.columnName",
+  robot_name: "teams.columnRobotName",
+  organization: "teams.columnOrganization",
+  city: "teams.columnCity",
+  state: "teams.columnState",
+  country: "teams.columnCountry",
+};
 
 interface TeamApiRow {
   id: number;
@@ -264,7 +300,62 @@ export function TeamsRoute() {
 
   const showDivisionColumn = (divisions?.length ?? 0) > 1;
 
-  const columns: Column<TeamGridRow>[] = useMemo(() => {
+  const divisionLabel = (row: TeamGridRow) =>
+    row.division === RANDOM_DIVISION_SENTINEL ? t("teams.randomDivisionOption") : row.division;
+
+  const statusLabel = (row: TeamGridRow) =>
+    row.error ?? (row.dirty ? t("teams.unsavedIndicator") : "");
+
+  // How narrow each column may get and how wide its content wants to be,
+  // from every row rather than just the filtered ones on screen, so a
+  // column keeps its width as the filter changes. Team numbers identify a
+  // row and stay whole; division names keep enough to tell them apart;
+  // everything else keeps its header readable and cuts long values short.
+  const columnSizing = useMemo(() => {
+    const measure = measureGridText();
+    const textSizing = (key: TeamFieldKeyWithText, keep?: SizeColumnOptions["keep"]) =>
+      sizeColumn({
+        header: t(COLUMN_HEADER_KEYS[key]),
+        values: allRows.map((row) => row[key]),
+        padding: CELL_PADDING,
+        keep,
+        measure,
+      });
+    const sizing: Record<string, ColumnSizing> = {
+      number: textSizing("number", "content"),
+      name: textSizing("name"),
+      robot_name: textSizing("robot_name"),
+      organization: textSizing("organization"),
+      city: textSizing("city"),
+      state: textSizing("state"),
+      country: textSizing("country"),
+      division: sizeColumn({
+        header: t("teams.columnDivision"),
+        values: allRows.map(divisionLabel),
+        padding: CELL_PADDING,
+        keep: { distinguish: (divisions ?? []).map((division) => division.name) },
+        measure,
+      }),
+      // The button's text, its padding and border, and room for its focus ring.
+      __delete: fixedColumn(
+        Math.ceil(measure(t("teams.deleteAction"), { bold: true }) + CELL_PADDING + 24)
+      ),
+      // Status text sits in a badge, which adds its own padding.
+      __status: sizeColumn({
+        header: t("teams.columnStatus"),
+        values: allRows.map(statusLabel),
+        padding: CELL_PADDING + 16,
+        measure,
+      }),
+    };
+    return sizing;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allRows, divisions, t]);
+
+  const gridRef = useRef<DataGridHandle>(null);
+  const gridWidth = useContentWidth(gridRef);
+
+  const unsizedColumns: Column<TeamGridRow>[] = useMemo(() => {
     // react-data-grid only treats a column as editable when it has a
     // `renderEditCell` -- `editable: true` on its own is inert despite what
     // the prop's name suggests -- so every text column gets the library's
@@ -275,23 +366,14 @@ export function TeamsRoute() {
       editable: true,
       renderEditCell: renderTextEditor,
     });
-    const base: Column<TeamGridRow>[] = [
-      textColumn("number", t("teams.columnNumber")),
-      textColumn("name", t("teams.columnName")),
-      textColumn("robot_name", t("teams.columnRobotName")),
-      textColumn("organization", t("teams.columnOrganization")),
-      textColumn("city", t("teams.columnCity")),
-      textColumn("state", t("teams.columnState")),
-      textColumn("country", t("teams.columnCountry")),
-    ];
+    const base: Column<TeamGridRow>[] = (
+      Object.keys(COLUMN_HEADER_KEYS) as TeamFieldKeyWithText[]
+    ).map((key) => textColumn(key, t(COLUMN_HEADER_KEYS[key])));
     if (showDivisionColumn) {
       base.push({
         key: "division",
         name: t("teams.columnDivision"),
-        renderCell: ({ row }) =>
-          row.division === RANDOM_DIVISION_SENTINEL
-            ? t("teams.randomDivisionOption")
-            : row.division,
+        renderCell: ({ row }) => divisionLabel(row),
         renderEditCell: (props) => (
           <DivisionEditor
             {...props}
@@ -331,7 +413,22 @@ export function TeamsRoute() {
       },
     });
     return base;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t, showDivisionColumn, divisions]);
+
+  const columns: Column<TeamGridRow>[] = useMemo(() => {
+    const widths = allocateColumnWidths(
+      unsizedColumns.map((column) => columnSizing[column.key]),
+      gridWidth
+    );
+    // minWidth 0: the grid's own 50px default would otherwise widen a
+    // narrow column past its share and push the total into a scrollbar.
+    return unsizedColumns.map((column, index) => ({
+      ...column,
+      width: widths[index],
+      minWidth: 0,
+    }));
+  }, [unsizedColumns, columnSizing, gridWidth]);
 
   function handleRowsChange(
     updatedVisible: TeamGridRow[],
@@ -632,6 +729,7 @@ export function TeamsRoute() {
       )}
 
       <DataGrid
+        ref={gridRef}
         aria-label={t("teams.gridLabel")}
         columns={columns}
         rows={visibleRows}

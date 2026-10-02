@@ -30,7 +30,12 @@ have sharp edges worth knowing before touching that screen. A
 `react-data-grid` column only becomes editable when it has an explicit
 `renderEditCell` — `editable: true` on its own is inert in the version
 this project uses, despite what the prop's name suggests (text columns
-pass the library's own `renderTextEditor`). `papaparse` does double duty:
+pass the library's own `renderTextEditor`). Its `width: "max-content"` is measured once, from whatever rows are
+rendered then (often none), so the roster sizes its columns itself:
+`src/gridColumnWidth.ts` works out each column's minimum and ideal width
+from every row, and shares the grid's measured width
+(`useContentWidth`) out, giving spare room only to columns with data.
+`papaparse` does double duty:
 it parses uploaded CSV files *and* the tab-delimited text a
 spreadsheet paste puts on the clipboard, so there is one parser, not two.
 And `react-data-grid` isn't testable under jsdom as-shipped:
