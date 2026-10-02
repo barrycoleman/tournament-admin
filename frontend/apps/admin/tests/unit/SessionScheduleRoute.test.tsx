@@ -73,6 +73,7 @@ interface StubOptions {
   matches?: MatchRead[] | (() => MatchRead[]);
   fieldSets?: FieldSetRead[];
   fields?: FieldRead[];
+  schedulers?: typeof SCHEDULERS;
   onWrite?: (path: string, options: { method?: string; body?: unknown }) => unknown;
 }
 
@@ -81,6 +82,7 @@ function stub({
   matches = [],
   fieldSets = [MAIN_SET],
   fields = [FIELD_A],
+  schedulers = SCHEDULERS,
   onWrite = () => undefined,
 }: StubOptions = {}) {
   vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
@@ -100,7 +102,7 @@ function stub({
     if (path === "/api/matches?session_id=1") {
       return (typeof matches === "function" ? matches() : matches) as never;
     }
-    if (path === "/api/plugins/schedulers") return SCHEDULERS as never;
+    if (path === "/api/plugins/schedulers") return schedulers as never;
     throw new Error(`unexpected request: ${path}`);
   });
 }
@@ -366,5 +368,22 @@ describe("SessionScheduleRoute — generate form", () => {
     expect(screen.getByRole("link", { name: "View matches" })).toHaveAttribute("href", "/sessions/1/matches");
     const roundType = await screen.findByLabelText("Round type for phase 1");
     await waitFor(() => expect((roundType as HTMLSelectElement).value).toBe("elimination"));
+  });
+
+  it("disables Preview and Generate when no scheduler plugin is installed", async () => {
+    stub({ schedulers: [] });
+    renderSchedule();
+
+    expect(await screen.findByText("No scheduler plugin is installed.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeDisabled();
+  });
+
+  it("does not allow removing the only phase row", async () => {
+    stub({ matches: [scheduleMatch({})] });
+    renderSchedule();
+
+    await screen.findByLabelText("Round type for phase 1");
+    expect(screen.getByRole("button", { name: "Remove phase" })).toBeDisabled();
   });
 });

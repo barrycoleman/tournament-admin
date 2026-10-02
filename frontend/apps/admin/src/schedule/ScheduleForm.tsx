@@ -168,6 +168,7 @@ export function ScheduleForm({
             <button
               type="button"
               className="btn btn-small"
+              disabled={state.phases.length === 1}
               onClick={() => update({ phases: state.phases.filter((_, i) => i !== index) })}
             >
               {t("sessions.schedule.form.removePhaseAction")}
@@ -290,10 +291,10 @@ export function ScheduleForm({
         </p>
       )}
       <div className="form-actions">
-        <button type="button" className="btn" disabled={!ready || busy} onClick={() => submit(true)}>
+        <button type="button" className="btn" disabled={!ready || busy || !effectiveScheduler} onClick={() => submit(true)}>
           {t("sessions.schedule.form.previewAction")}
         </button>
-        <button type="button" className="btn btn-primary" disabled={!ready || busy} onClick={() => submit(false)}>
+        <button type="button" className="btn btn-primary" disabled={!ready || busy || !effectiveScheduler} onClick={() => submit(false)}>
           {t("sessions.schedule.form.generateAction")}
         </button>
       </div>
