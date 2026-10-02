@@ -10,7 +10,8 @@ class FieldSetCreate(BaseModel):
 
 
 class FieldSetUpdate(BaseModel):
-    division_id: int | None
+    name: str | None = None
+    division_id: int | None = None
 
 
 class FieldSetRead(BaseModel):

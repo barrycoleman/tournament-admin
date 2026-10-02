@@ -408,6 +408,16 @@ active per FieldSet at a time. `POST /api/fields` auto-creates a default
 explicit `field_set_id` once a session has more than one (ambiguous
 otherwise).
 
+Fields and FieldSets can be renamed (`PATCH /api/fields/{id}` with
+`{"name"}`; `PATCH /api/field-sets/{id}` with `{"name"}`) and deleted
+(`DELETE /api/fields/{id}`; `DELETE /api/field-sets/{id}`, which deletes
+the set's fields with it), all `admin`-only. A delete is refused (409)
+while anything still depends on it: any `Match.field_id` pointing at the
+field (or at any of the set's fields), or — checked first for a set —
+any `FinalsBracket.field_set_id` pointing at the set. A refused delete
+deletes nothing. Clearing the schedule (`DELETE /api/schedule`) is what
+frees a field up again.
+
 `GET /api/event/match-format` (any authenticated role) exposes the
 selected game plugin's scheduling-relevant format — `round_types`,
 `teams_per_alliance`, `alliance_count`, and `match_duration_seconds`
@@ -650,9 +660,10 @@ just the one that changed.
 
 A `FieldSet` can be assigned exclusively to one `Division` via
 `division_id` (set on `POST /api/field-sets`, or changed later via
-`PATCH /api/field-sets/{id}` — the request body's `division_id` key is
-required, so the caller always states the intended value: an id to
-assign, or `null` to clear). `POST /api/schedule` only ever draws its
+`PATCH /api/field-sets/{id}`, a partial update like
+`PATCH /api/sessions/{id}`: only the keys present are written, so `{}` is
+a no-op, `{"division_id": <id>}` assigns, and `{"division_id": null}`
+clears). `POST /api/schedule` only ever draws its
 FieldSets/Fields from this assignment: a division-scoped generation
 (`division_id` given) only considers that division's own FieldSets; a
 no-division generation (`division_id` omitted) only considers unassigned

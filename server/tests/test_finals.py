@@ -1977,3 +1977,24 @@ def test_score_chase_run_labels_are_sequential_with_no_suffix(cooperative_client
     elimination_matches = [m for m in matches if m["round_type"] == "elimination"]
     assert len(elimination_matches) == 1
     assert elimination_matches[0]["label"] == "F1"
+
+
+def test_delete_field_set_used_by_a_finals_bracket_is_refused(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+    team_ids = [
+        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
+        for i in range(4)
+    ]
+    _rank_teams_directly(client, session_id, team_ids)
+    assert client.post(
+        "/api/finals/start", json={"session_id": session_id, "bracket_size": 2}
+    ).status_code == 201
+
+    field_set_id = client.get(f"/api/field-sets?session_id={session_id}").json()[0]["id"]
+    response = client.delete(f"/api/field-sets/{field_set_id}")
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Field set is used by a finals bracket"

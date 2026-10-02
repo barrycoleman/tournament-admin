@@ -15,3 +15,7 @@ class FieldRead(BaseModel):
     id: int
     field_set_id: int
     name: str
+
+
+class FieldUpdate(BaseModel):
+    name: str
