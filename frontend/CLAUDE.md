@@ -125,12 +125,27 @@ newly-restarted picker one.
 Beyond the bootstrap/auth screens above, the authenticated app
 (`router.tsx`, under `AuthenticatedLayout`) has: `/sessions` (list +
 create/edit), `/sessions/:sessionId` (index-redirects to
-`/sessions/:sessionId/checkin`), `/sessions/:sessionId/checkin` (the
-admin check-in data grid, via `SessionDetailLayout`'s tab-strip `Outlet`
-context — see the session-checkin design spec), and `/checkin` (a
+`/sessions/:sessionId/checkin`), `/sessions/:sessionId/{checkin,fields,schedule,matches}` (the session
+tabs, all rendered through `SessionDetailLayout`'s tab-strip `Outlet`
+context — see the session-checkin and fields-schedule-ui design specs;
+the layout's header also carries the "Set as active session" control), and `/checkin` (a
 separate, non-nested route: the dedicated `front_desk` kiosk screen,
 scoped to `Event.active_session_id` rather than a session id in the
 URL).
+
+The Schedule tab is split so the risky logic is unit-testable without
+rendering: `src/schedule/scheduleRequest.ts` (form state → `POST
+/api/schedule` body, round-type defaults, preview timing math),
+`roundSummary.ts`, and `readiness.ts` are pure; `ScheduleForm`,
+`CurrentRounds`, `ReadinessChecklist`, and `PreviewPanel` are the
+components. A single-division event never sends `division_id` (the
+backend then uses unassigned FieldSets); a multi-division event always
+sends the picked one. `useSessionMatches` (`src/useSessionMatches.ts`)
+is the one `["matches", sessionId]` query both the Schedule and Matches
+tabs share, kept live off `/ws/session/{id}`; `DELETE /api/schedule`
+broadcasts nothing, so anything that clears a round invalidates that key
+itself. Match times always render in the session's timezone
+(`src/matchTime.ts`), never the browser's.
 
 `AppShell.tsx`'s nav is gated per role, the same pattern repeated for
 each: `role === "admin"` renders the full admin nav (Divisions, Teams,
@@ -197,6 +212,12 @@ the same shared password. `playwright.config.ts` pins `workers: 1` and
 needs to run before an event exists). If you add a new E2E spec file
 that needs the event to exist, import the shared constants; do not
 invent a new password.
+
+A spec that adds many teams to the shared event (checked-in teams can't
+be deleted) must sort after `team*.spec.ts` — the team-grid specs assume
+a small roster and break once their new row is virtualized out of view.
+That is why the schedule spec is named `z_sessionSchedule.spec.ts` (it also
+deletes any extra divisions earlier specs left, to start single-division).
 
 `playwright.config.ts` uses `channel: "chrome"` — the machine's installed
 Google Chrome — rather than Playwright's own managed Chromium download,

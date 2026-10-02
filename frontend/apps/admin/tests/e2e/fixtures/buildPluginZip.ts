@@ -27,3 +27,24 @@ export async function buildExampleGamePluginZip(): Promise<string> {
   });
   return outPath;
 }
+
+const BALANCED_SCHEDULER_PLUGIN_DIR = path.resolve(
+  __dirname,
+  "../../../../../../server/plugins/schedulers/balanced"
+);
+
+/** Only manifest.json and plugin.py: the folder can also hold a __pycache__ that doesn't belong in a plugin zip. */
+export async function buildBalancedSchedulerPluginZip(): Promise<string> {
+  const outPath = path.join(os.tmpdir(), `balanced-scheduler-${Date.now()}.zip`);
+  await new Promise<void>((resolve, reject) => {
+    const output = createWriteStream(outPath);
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    output.on("close", () => resolve());
+    archive.on("error", reject);
+    archive.pipe(output);
+    archive.file(path.join(BALANCED_SCHEDULER_PLUGIN_DIR, "manifest.json"), { name: "manifest.json" });
+    archive.file(path.join(BALANCED_SCHEDULER_PLUGIN_DIR, "plugin.py"), { name: "plugin.py" });
+    void archive.finalize();
+  });
+  return outPath;
+}
