@@ -193,7 +193,7 @@ export function SessionFieldsRoute() {
                   cancelLabel={t("sessions.cancelAction")}
                   inputLabel={t("sessions.fields.setNameLabel")}
                 />
-                {multiDivision && (
+                {(multiDivision || fieldSet.division_id !== null) && (
                   <label className="field-set-card__division">
                     <span>{t("sessions.fields.divisionLabel")}</span>
                     <select
@@ -227,6 +227,9 @@ export function SessionFieldsRoute() {
               </div>
               {multiDivision && fieldSet.division_id === null && (
                 <p className="field__hint">{t("sessions.fields.unassignedNote")}</p>
+              )}
+              {!multiDivision && fieldSet.division_id !== null && (
+                <p className="field__hint">{t("sessions.fields.staleDivisionNote")}</p>
               )}
               <ul className="list-plain">
                 {setFields.map((field) => {
@@ -284,7 +287,11 @@ export function SessionFieldsRoute() {
                     setNewFieldNames((previous) => ({ ...previous, [fieldSet.id]: event.target.value }))
                   }
                 />
-                <button type="submit" className="btn btn-small" disabled={!newFieldName.trim()}>
+                <button
+                  type="submit"
+                  className="btn btn-small"
+                  disabled={!newFieldName.trim() || createFieldMutation.isPending}
+                >
                   {t("sessions.fields.addFieldAction")}
                 </button>
               </form>

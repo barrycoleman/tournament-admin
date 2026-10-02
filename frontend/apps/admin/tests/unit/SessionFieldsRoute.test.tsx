@@ -82,6 +82,25 @@ describe("SessionFieldsRoute", () => {
     expect(screen.queryByLabelText("Division")).not.toBeInTheDocument();
   });
 
+  it("still lets a stale division assignment be cleared once the event has a single division", async () => {
+    stubServer(
+      { divisions: ONE_DIVISION, fieldSets: [{ ...MAIN_SET, division_id: 1 }], fields: [FIELD_A] },
+      (path, options) => (options?.method === "PATCH" ? { ...MAIN_SET } : NOT_HANDLED)
+    );
+    renderFields();
+
+    const select = await screen.findByLabelText("Division");
+    expect(screen.getByText(/Single-division events schedule on unassigned field sets/)).toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "" } });
+
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith("/api/field-sets/10", {
+        method: "PATCH",
+        body: { division_id: null },
+      })
+    );
+  });
+
   it("creates the first field without a field_set_id when the session has none", async () => {
     stubServer({ divisions: ONE_DIVISION, fieldSets: [], fields: [] }, (path, options) =>
       path === "/api/fields" && options?.method === "POST" ? FIELD_A : NOT_HANDLED

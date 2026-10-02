@@ -74,6 +74,8 @@ interface StubOptions {
   fieldSets?: FieldSetRead[];
   fields?: FieldRead[];
   schedulers?: typeof SCHEDULERS;
+  /** Request paths that reject with a server error. */
+  failPaths?: string[];
   onWrite?: (path: string, options: { method?: string; body?: unknown }) => unknown;
 }
 
@@ -83,6 +85,7 @@ function stub({
   fieldSets = [MAIN_SET],
   fields = [FIELD_A],
   schedulers = SCHEDULERS,
+  failPaths = [],
   onWrite = () => undefined,
 }: StubOptions = {}) {
   vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
@@ -92,6 +95,7 @@ function stub({
       if (result instanceof Error) throw result;
       return result as never;
     }
+    if (failPaths.includes(path)) throw new ApiError(500, "server exploded");
     if (path === "/api/divisions") return divisions as never;
     if (path === "/api/event") return EVENT as never;
     if (path === "/api/event/match-format") return MATCH_FORMAT as never;
@@ -231,6 +235,144 @@ describe("SessionScheduleRoute — readiness and rounds", () => {
   });
 });
 
+function matchFetchCount(): number {
+  return vi.mocked(apiRequest).mock.calls.filter(([path]) => path === "/api/matches?session_id=1").length;
+}
+
+describe("SessionScheduleRoute — scope changes and failures", () => {
+  it("lists a round generated for a division that a single-division event no longer scopes, and clears it in its own scope", async () => {
+    stub({ matches: [scheduleMatch({ division_id: 2, round_type: "qualification", label: "Q1" })] });
+    renderSchedule();
+
+    const panel = await screen.findByRole("region", { name: "Rounds from a different division setup" });
+    expect(within(panel).getByText("Deleted division")).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole("button", { name: "Clear qualification (Deleted division)" }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Clear" }));
+
+    await waitFor(() =>
+      expect(deleteCalls()).toEqual(["/api/schedule?session_id=1&round_type=qualification&division_id=2"])
+    );
+  });
+
+  it("lists a no-division round in a multi-division event and clears it without a division_id", async () => {
+    stub({
+      divisions: TWO_DIVISIONS,
+      matches: [scheduleMatch({ division_id: null, status: "completed" })],
+    });
+    renderSchedule();
+
+    const panel = await screen.findByRole("region", { name: "Rounds from a different division setup" });
+    expect(within(panel).getByText("No division")).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole("button", { name: "Clear practice (No division)" }));
+    const dialog = screen.getByRole("alertdialog");
+    fireEvent.change(within(dialog).getByLabelText('Type "practice" to confirm'), { target: { value: "practice" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Clear" }));
+
+    await waitFor(() => expect(deleteCalls()).toEqual(["/api/schedule?session_id=1&round_type=practice"]));
+  });
+
+  it("shows no out-of-scope panel when every round is in the current scope", async () => {
+    stub({ matches: [scheduleMatch({})] });
+    renderSchedule();
+
+    await screen.findByRole("row", { name: /practice/ });
+    expect(screen.queryByRole("region", { name: "Rounds from a different division setup" })).not.toBeInTheDocument();
+  });
+
+  it("does not offer elimination when finals games already use it, and lists no round for them", async () => {
+    stub({
+      matches: [
+        scheduleMatch({ id: 1 }),
+        scheduleMatch({ id: 2, round_type: "qualification", label: "Q1", scheduled_time: "2026-11-07T18:00:00Z" }),
+        scheduleMatch({ id: 3, round_type: "elimination", label: "F1", is_finals: true }),
+      ],
+    });
+    renderSchedule();
+
+    expect(await screen.findByText(/Every round type already has a schedule/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Round type for phase 1")).not.toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /elimination/ })).not.toBeInTheDocument();
+  });
+
+  it("does not offer elimination in the phase rows when only a finals game exists", async () => {
+    stub({ matches: [scheduleMatch({ round_type: "elimination", label: "F1", is_finals: true })] });
+    renderSchedule();
+
+    const roundType = await screen.findByLabelText("Round type for phase 1");
+    expect(within(roundType).queryByRole("option", { name: "elimination" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /elimination/ })).not.toBeInTheDocument();
+  });
+
+  it("disables Preview and Generate and explains when every round type is scheduled", async () => {
+    stub({
+      matches: ["practice", "qualification", "elimination"].map((round_type, i) =>
+        scheduleMatch({ id: i + 1, round_type, label: `R${i}`, scheduled_time: `2026-11-07T1${i}:00:00Z` })
+      ),
+    });
+    renderSchedule();
+
+    expect(await screen.findByText(/Every round type already has a schedule/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeDisabled();
+  });
+
+  it("Clear all keeps the dialog open with the error and refreshes matches after a partial failure", async () => {
+    let deletes = 0;
+    stub({
+      matches: [
+        scheduleMatch({ id: 1 }),
+        scheduleMatch({ id: 2, round_type: "qualification", label: "Q1", scheduled_time: "2026-11-07T18:00:00Z" }),
+      ],
+      onWrite: () => {
+        deletes += 1;
+        return deletes === 2 ? new ApiError(422, "boom") : undefined;
+      },
+    });
+    renderSchedule();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Clear all rounds" }));
+    const before = matchFetchCount();
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Clear" }));
+
+    expect(await within(screen.getByRole("alertdialog")).findByText("boom")).toBeInTheDocument();
+    await waitFor(() => expect(matchFetchCount()).toBeGreaterThan(before));
+    expect(deleteCalls()).toHaveLength(2);
+  });
+
+  it("Clear all with scored matches requires typing the literal phrase", async () => {
+    stub({
+      matches: [
+        scheduleMatch({ id: 1, status: "completed" }),
+        scheduleMatch({ id: 2, round_type: "qualification", label: "Q1", scheduled_time: "2026-11-07T18:00:00Z" }),
+      ],
+    });
+    renderSchedule();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Clear all rounds" }));
+    const dialog = screen.getByRole("alertdialog");
+    const confirm = within(dialog).getByRole("button", { name: "Clear" });
+    expect(confirm).toBeDisabled();
+    expect(within(dialog).getByText(/1 of them has a score/)).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('Type "clear all" to confirm'), { target: { value: "clear all" } });
+    expect(confirm).toBeEnabled();
+  });
+
+  it("shows the generic error, not the plugin hint, when match-format fails with a plugin selected", async () => {
+    stub({ failPaths: ["/api/event/match-format"] });
+    renderSchedule();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(enAdmin.errors.generic);
+    expect(screen.queryByText("Select a game plugin to set up the schedule.")).not.toBeInTheDocument();
+  });
+
+  it("shows the generic error when the divisions fetch fails", async () => {
+    stub({ failPaths: ["/api/divisions"] });
+    renderSchedule();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(enAdmin.errors.generic);
+  });
+});
+
 const PREVIEW_RESPONSE = {
   schedule_generation_id: null,
   match_count: 14,
@@ -277,6 +419,24 @@ describe("SessionScheduleRoute — generate form", () => {
     const panel = await screen.findByRole("region", { name: "Preview" });
     expect(within(panel).getByText("practice: 2 matches")).toBeInTheDocument();
     expect(within(panel).getByText("12:51")).toBeInTheDocument();
+  });
+
+  it("uses the singular for a one-match phase in the preview", async () => {
+    stub({
+      onWrite: () => ({
+        ...PREVIEW_RESPONSE,
+        match_count: 1,
+        phase_results: [{ round_type: "practice", schedule_generation_id: null, match_count: 1 }],
+      }),
+    });
+    renderSchedule();
+
+    const preview = await screen.findByRole("button", { name: "Preview" });
+    await waitFor(() => expect(preview).toBeEnabled());
+    fireEvent.click(preview);
+
+    const panel = await screen.findByRole("region", { name: "Preview" });
+    expect(within(panel).getByText("practice: 1 match")).toBeInTheDocument();
   });
 
   it("does not offer round types that already have a schedule", async () => {

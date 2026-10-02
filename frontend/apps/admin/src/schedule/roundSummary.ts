@@ -8,16 +8,9 @@ export interface RoundSummary {
   lastTime: string | null;
 }
 
-/**
- * Schedule-generated rounds for one division (`null` = the no-division
- * scope a single-division event schedules into). Finals games are left
- * out: they share the plugin's "elimination" round type but are never
- * cleared by DELETE /api/schedule.
- */
-export function summarizeRounds(matches: MatchRead[], divisionId: number | null): RoundSummary[] {
+function groupRounds(matches: MatchRead[]): RoundSummary[] {
   const byRound = new Map<string, RoundSummary>();
   for (const match of matches) {
-    if (match.is_finals || match.division_id !== divisionId) continue;
     let summary = byRound.get(match.round_type);
     if (!summary) {
       summary = { roundType: match.round_type, matchCount: 0, scoredCount: 0, firstTime: null, lastTime: null };
@@ -32,4 +25,38 @@ export function summarizeRounds(matches: MatchRead[], divisionId: number | null)
     }
   }
   return [...byRound.values()].sort((a, b) => (a.firstTime ?? "").localeCompare(b.firstTime ?? ""));
+}
+
+/**
+ * Schedule-generated rounds for one division (`null` = the no-division
+ * scope a single-division event schedules into). Finals games are left
+ * out: they share the plugin's "elimination" round type but are never
+ * cleared by DELETE /api/schedule.
+ */
+export function summarizeRounds(matches: MatchRead[], divisionId: number | null): RoundSummary[] {
+  return groupRounds(matches.filter((match) => !match.is_finals && match.division_id === divisionId));
+}
+
+export interface OutOfScopeRound {
+  divisionId: number | null;
+  summary: RoundSummary;
+}
+
+/**
+ * Schedule-generated rounds sitting in a scope the current division count
+ * no longer uses: division-scoped rounds in a single-division event, or
+ * no-division rounds in a multi-division one. They are invisible to
+ * summarizeRounds but still hold their fields, so they must stay clearable.
+ */
+export function summarizeOutOfScopeRounds(matches: MatchRead[], multiDivision: boolean): OutOfScopeRound[] {
+  const stray = matches.filter(
+    (match) => !match.is_finals && (multiDivision ? match.division_id === null : match.division_id !== null)
+  );
+  const scopes = [...new Set(stray.map((match) => match.division_id))];
+  return scopes.flatMap((divisionId) =>
+    groupRounds(stray.filter((match) => match.division_id === divisionId)).map((summary) => ({
+      divisionId,
+      summary,
+    }))
+  );
 }

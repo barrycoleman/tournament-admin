@@ -54,7 +54,7 @@ export function ScheduleForm({
   const [preview, setPreview] = useState<{ response: ScheduleGenerateResponse; snapshot: string } | null>(null);
 
   const { data: schedulers } = useQuery({
-    queryKey: ["schedulerPlugins"],
+    queryKey: ["plugins", "schedulers"],
     queryFn: () => apiRequest<PluginSummary[]>("/api/plugins/schedulers"),
   });
   const effectiveScheduler =
@@ -105,7 +105,7 @@ export function ScheduleForm({
 
   const nextRoundType = available.find((roundType) => !state.phases.some((p) => p.roundType === roundType));
   const lastBlock = state.blocks[state.blocks.length - 1];
-  const busy = submitMutation.isPending;
+  const busy = submitMutation.isPending || available.length === 0;
 
   return (
     <section className="panel schedule-form" aria-label={t("sessions.schedule.form.heading")}>
@@ -130,6 +130,7 @@ export function ScheduleForm({
         </label>
       )}
 
+      {available.length === 0 && <p className="alert alert-warning">{t("sessions.schedule.form.noRoundTypes")}</p>}
       <fieldset className="schedule-form__group">
         <legend>{t("sessions.schedule.form.phasesHeading")}</legend>
         {state.phases.map((phase, index) => (

@@ -142,13 +142,15 @@
         "clearAriaLabel": "Clear {{round}}",
         "clearAllAction": "Clear all rounds",
         "clearHeading": "Clear {{round}}?",
-        "clearBody": "This deletes the round's {{count}} matches.",
         "clearAllHeading": "Clear all rounds?",
         "clearAllBody": "This deletes every generated round in this division. Rounds generated together have to be regenerated together.",
-        "scoredWarning": "{{count}} of them have scores, which are deleted too.",
         "clearAllPhrase": "clear all",
         "typeToConfirm": "Type \"{{phrase}}\" to confirm",
-        "confirmClear": "Clear"
+        "confirmClear": "Clear",
+        "clearBody_one": "This deletes the round's {{count}} match.",
+        "clearBody_other": "This deletes the round's {{count}} matches.",
+        "scoredWarning_one": "{{count}} of them has a score, which is deleted too.",
+        "scoredWarning_other": "{{count}} of them have scores, which are deleted too."
       },
       "form": {
         "heading": "Generate a schedule",
@@ -175,7 +177,6 @@
         "previewAction": "Preview",
         "generateAction": "Generate",
         "needsGamePlugin": "Select a game plugin to set up the schedule.",
-        "generated": "Generated {{count}} matches.",
         "viewMatches": "View matches",
         "errors": {
           "noScheduler": "Choose a scheduler.",
@@ -186,19 +187,32 @@
           "endTimeRequired": "Every time block needs an end time.",
           "cycleRequired": "Enter a cycle time.",
           "endTimeRequiredExceptLast": "Every time block except the last needs an end time."
-        }
+        },
+        "generated_one": "Generated {{count}} match.",
+        "generated_other": "Generated {{count}} matches.",
+        "noRoundTypes": "Every round type already has a schedule in this division. Clear a round to generate it again."
       },
       "preview": {
         "heading": "Preview",
         "stale": "Out of date — preview again",
-        "phaseLine": "{{round}}: {{count}} matches",
         "columnDate": "Date",
         "columnStart": "Start",
         "columnEnd": "End",
         "columnCycle": "Cycle time",
         "columnSlots": "Slots",
         "projectedFinish": "projected finish {{time}}",
-        "nextDay": " (+{{count}} day)"
+        "nextDay": " (+{{count}} day)",
+        "phaseLine_one": "{{round}}: {{count}} match",
+        "phaseLine_other": "{{round}}: {{count}} matches"
+      },
+      "outOfScope": {
+        "heading": "Rounds from a different division setup",
+        "body": "These rounds were generated when the event had a different number of divisions, so they are not shown above. Clear them to free their fields.",
+        "noDivision": "No division",
+        "deletedDivision": "Deleted division",
+        "clearAriaLabel": "Clear {{round}} ({{scope}})",
+        "clearHeading": "Clear {{round}} ({{scope}})?",
+        "columnScope": "Division"
       }
     },
     "loading": "Loading…",
@@ -258,7 +272,8 @@
       "deleteFieldBody": "The field is removed from this session.",
       "deleteSetHeading": "Delete field set {{name}}?",
       "deleteSetBody": "The set and all of its fields are removed from this session.",
-      "confirmDelete": "Delete"
+      "confirmDelete": "Delete",
+      "staleDivisionNote": "Single-division events schedule on unassigned field sets — set this to Unassigned to use it."
     }
   },
   "frontDeskCheckin": {

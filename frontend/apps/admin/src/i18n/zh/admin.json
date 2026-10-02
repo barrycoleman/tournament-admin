@@ -186,7 +186,8 @@
           "endTimeRequired": "每个时间段都需要结束时间。",
           "cycleRequired": "请输入循环时间。",
           "endTimeRequiredExceptLast": "除最后一个外，每个时间段都需要结束时间。"
-        }
+        },
+        "noRoundTypes": "此组别的每种轮次都已有赛程。清除某一轮次后才能重新生成。"
       },
       "preview": {
         "heading": "预览",
@@ -199,6 +200,15 @@
         "columnSlots": "时段数",
         "projectedFinish": "预计 {{time}} 结束",
         "nextDay": "（+{{count}} 天）"
+      },
+      "outOfScope": {
+        "heading": "组别设置变更前生成的轮次",
+        "body": "这些轮次是在赛事组别数量不同时生成的，因此未显示在上方。清除它们才能释放其场地。",
+        "noDivision": "无组别",
+        "deletedDivision": "已删除的组别",
+        "clearAriaLabel": "清除 {{round}}（{{scope}}）",
+        "clearHeading": "清除 {{round}}（{{scope}}）？",
+        "columnScope": "组别"
       }
     },
     "loading": "加载中…",
@@ -258,7 +268,8 @@
       "deleteFieldBody": "该场地将从此场次中移除。",
       "deleteSetHeading": "删除场地组 {{name}}？",
       "deleteSetBody": "该场地组及其所有场地将从此场次中移除。",
-      "confirmDelete": "删除"
+      "confirmDelete": "删除",
+      "staleDivisionNote": "单组别赛事使用未分配的场地组排赛程，请设为“未分配”以启用。"
     }
   },
   "frontDeskCheckin": {

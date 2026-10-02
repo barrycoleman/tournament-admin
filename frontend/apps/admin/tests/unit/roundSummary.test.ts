@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeRounds } from "../../src/schedule/roundSummary";
+import { summarizeOutOfScopeRounds, summarizeRounds } from "../../src/schedule/roundSummary";
 import type { MatchRead } from "../../src/types";
 
 function match(overrides: Partial<MatchRead>): MatchRead {
@@ -57,5 +57,31 @@ describe("summarizeRounds", () => {
     expect(summarizeRounds(matches, 2).map((r) => [r.roundType, r.matchCount])).toEqual([
       ["qualification", 1],
     ]);
+  });
+});
+
+describe("summarizeOutOfScopeRounds", () => {
+  it("returns division-scoped rounds for a single-division event, grouped per scope and round", () => {
+    const matches = [
+      match({ id: 1, division_id: 2, round_type: "qualification", status: "completed" }),
+      match({ id: 2, division_id: 2, round_type: "qualification" }),
+      match({ id: 3, division_id: 3, round_type: "qualification" }),
+      match({ id: 4, division_id: null, round_type: "practice" }),
+      match({ id: 5, division_id: 2, round_type: "elimination", is_finals: true }),
+    ];
+    const result = summarizeOutOfScopeRounds(matches, false);
+    expect(result.map((r) => [r.divisionId, r.summary.roundType, r.summary.matchCount, r.summary.scoredCount])).toEqual([
+      [2, "qualification", 2, 1],
+      [3, "qualification", 1, 0],
+    ]);
+  });
+
+  it("returns only no-division rounds for a multi-division event", () => {
+    const matches = [
+      match({ id: 1, division_id: null, round_type: "practice" }),
+      match({ id: 2, division_id: 2, round_type: "qualification" }),
+    ];
+    const result = summarizeOutOfScopeRounds(matches, true);
+    expect(result.map((r) => [r.divisionId, r.summary.roundType])).toEqual([[null, "practice"]]);
   });
 });

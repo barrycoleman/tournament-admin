@@ -5,9 +5,10 @@ import { Link, useOutletContext } from "react-router-dom";
 import { apiRequest } from "@tournament-admin/shared";
 import { ReadinessChecklist } from "../schedule/ReadinessChecklist";
 import { CurrentRounds } from "../schedule/CurrentRounds";
+import { OutOfScopeRounds } from "../schedule/OutOfScopeRounds";
 import { ScheduleForm } from "../schedule/ScheduleForm";
 import { checkReadiness, countCheckedInTeams, countUsableFields } from "../schedule/readiness";
-import { summarizeRounds } from "../schedule/roundSummary";
+import { summarizeOutOfScopeRounds, summarizeRounds } from "../schedule/roundSummary";
 import { useSessionMatches } from "../useSessionMatches";
 import type {
   Division,
@@ -28,7 +29,7 @@ export function SessionScheduleRoute() {
   const queryClient = useQueryClient();
   const [lastGenerated, setLastGenerated] = useState<ScheduleGenerateResponse | null>(null);
 
-  const { data: divisions } = useQuery({
+  const { data: divisions, isError: divisionsError } = useQuery({
     queryKey: ["divisions"],
     queryFn: () => apiRequest<Division[]>("/api/divisions"),
   });
@@ -36,7 +37,7 @@ export function SessionScheduleRoute() {
     queryKey: ["event"],
     queryFn: () => apiRequest<EventRead>("/api/event"),
   });
-  const { data: matchFormat } = useQuery({
+  const { data: matchFormat, isError: matchFormatError } = useQuery({
     queryKey: ["matchFormat"],
     queryFn: () => apiRequest<MatchFormat>("/api/event/match-format"),
     enabled: Boolean(event?.game_plugin_name),
@@ -61,6 +62,13 @@ export function SessionScheduleRoute() {
 
   // Until the divisions load we cannot tell single- from multi-division, and
   // rendering as single-division would briefly show unscoped data.
+  if (divisionsError) {
+    return (
+      <p className="alert alert-danger" role="alert">
+        {t("errors.generic")}
+      </p>
+    );
+  }
   if (divisions === undefined) return null;
 
   // A single-division event schedules with no division_id at all: the
@@ -77,7 +85,15 @@ export function SessionScheduleRoute() {
     usableFieldCount: countUsableFields(fieldSets ?? [], fields ?? [], divisionId),
   });
   const ready = readiness.every((item) => item.ok);
-  const existingRoundTypes = rounds.map((round) => round.roundType);
+  // The server's conflict check counts every match of a round type in the
+  // scope, finals included, so the form must avoid those types too even
+  // though Current Rounds leaves finals out.
+  const existingRoundTypes = [
+    ...new Set(
+      (matches ?? []).filter((match) => match.division_id === divisionId).map((match) => match.round_type)
+    ),
+  ];
+  const outOfScopeRounds = summarizeOutOfScopeRounds(matches ?? [], multiDivision);
 
   return (
     <div className="session-schedule">
@@ -98,6 +114,7 @@ export function SessionScheduleRoute() {
         </label>
       )}
       <ReadinessChecklist items={readiness} sessionId={session.id} />
+      <OutOfScopeRounds sessionId={session.id} divisions={divisions} rounds={outOfScopeRounds} />
       <CurrentRounds
         sessionId={session.id}
         divisionId={divisionId}
@@ -127,6 +144,10 @@ export function SessionScheduleRoute() {
             queryClient.invalidateQueries({ queryKey: ["matches", session.id] });
           }}
         />
+      ) : event?.game_plugin_name && matchFormatError ? (
+        <p className="alert alert-danger" role="alert">
+          {t("errors.generic")}
+        </p>
       ) : (
         <p className="field__hint">{t("sessions.schedule.form.needsGamePlugin")}</p>
       )}
