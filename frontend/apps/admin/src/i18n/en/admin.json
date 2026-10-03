@@ -96,6 +96,11 @@
     "deleteConfirmBody": "Its {{count}} teams will become unassigned rather than deleted.",
     "cancelAction": "Cancel"
   },
+  "roundTypes": {
+    "practice": "Practice",
+    "qualification": "Qualification",
+    "elimination": "Elimination"
+  },
   "sessions": {
     "heading": "Sessions",
     "columnLabel": "Session name",
@@ -117,17 +122,17 @@
     "scheduleTab": "Schedule",
     "schedule": {
       "divisionLabel": "Division",
+      "divisionOption_one": "{{name}} ({{count}} team checked in)",
+      "divisionOption_other": "{{name}} ({{count}} teams checked in)",
       "readiness": {
-        "heading": "Ready to schedule?",
-        "ok": "Ready",
-        "missing": "Missing",
-        "gamePlugin": "A game plugin is selected",
+        "heading": "Can't schedule yet",
+        "gamePlugin": "No game plugin is selected.",
         "gamePluginFix": "Select a game plugin",
-        "timezone": "The session has a timezone",
+        "timezone": "The session has no timezone.",
         "timezoneFix": "Set the timezone",
-        "teams": "Enough teams are checked in to fill a match",
+        "teams": "Not enough teams are checked in to fill a match.",
         "teamsFix": "Check teams in",
-        "fields": "This division has at least one field",
+        "fields": "This division has no fields.",
         "fieldsFix": "Add fields"
       },
       "rounds": {
@@ -144,7 +149,7 @@
         "clearAllAction": "Clear all rounds",
         "clearHeading": "Clear {{round}}?",
         "clearAllHeading": "Clear all rounds?",
-        "clearAllBody": "This deletes every generated round in this division. Rounds generated together have to be regenerated together.",
+        "clearAllBody": "This deletes every generated round in this division.",
         "clearAllPhrase": "clear all",
         "typeToConfirm": "Type \"{{phrase}}\" to confirm",
         "confirmClear": "Clear",
@@ -167,7 +172,11 @@
         "timingHeading": "Timing",
         "timingFit": "Fit into these windows",
         "timingFixed": "Fixed cycle time",
-        "cycleMinutesLabel": "Cycle time (minutes)",
+        "cycleLabel": "Cycle time",
+        "cycleMinutesLabel": "Cycle time minutes",
+        "cycleSecondsLabel": "Cycle time seconds",
+        "minutesUnit": "min",
+        "secondsUnit": "sec",
         "fixedHint": "Leave the last block's end time blank to run until done. Blocks with an end time hold a fixed number of matches, and the server rejects them if that's more or fewer than the schedule needs.",
         "cycleTight": "This cycle time is under 1.5x the {{seconds}}-second match length.",
         "blockDateLabel": "Date for block {{n}}",
@@ -187,6 +196,7 @@
           "blockIncomplete": "Every time block needs a date and a start time.",
           "endTimeRequired": "Every time block needs an end time.",
           "cycleRequired": "Enter a cycle time.",
+          "cycleInvalid": "Enter the cycle time as whole minutes and seconds, with seconds from 0 to 59.",
           "endTimeRequiredExceptLast": "Every time block except the last needs an end time."
         },
         "generated_one": "Generated {{count}} match.",

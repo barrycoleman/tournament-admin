@@ -120,6 +120,7 @@ describe("SessionMatchesRoute", () => {
     renderMatches();
     await screen.findByRole("gridcell", { name: "P1" });
 
+    expect(screen.getByRole("option", { name: "Qualification" })).toHaveValue("qualification");
     fireEvent.change(screen.getByLabelText("Round"), { target: { value: "qualification" } });
     expect(screen.queryByRole("gridcell", { name: "P1" })).not.toBeInTheDocument();
     expect(screen.getByRole("gridcell", { name: "Q1" })).toBeInTheDocument();

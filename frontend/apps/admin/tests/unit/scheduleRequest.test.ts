@@ -19,6 +19,7 @@ const BASE: ScheduleFormState = {
   ],
   timingMode: "fit",
   cycleMinutes: 7,
+  cycleSeconds: 0,
   blocks: [{ date: "2026-11-07", startTime: "09:00", endTime: "12:00" }],
 };
 
@@ -67,7 +68,8 @@ describe("buildScheduleRequest", () => {
     const state: ScheduleFormState = {
       ...BASE,
       timingMode: "fixed",
-      cycleMinutes: 8,
+      cycleMinutes: 7,
+      cycleSeconds: 30,
       blocks: [
         { date: "2026-11-07", startTime: "09:00", endTime: "12:00" },
         { date: "2026-11-07", startTime: "13:00", endTime: "" },
@@ -75,8 +77,8 @@ describe("buildScheduleRequest", () => {
     };
     const result = buildScheduleRequest(state, { sessionId: 1, divisionId: null, dryRun: true });
     expect(result.ok && result.payload.time_blocks).toEqual([
-      { date: "2026-11-07", start_time: "09:00", end_time: "12:00", cycle_time: 480 },
-      { date: "2026-11-07", start_time: "13:00", end_time: null, cycle_time: 480 },
+      { date: "2026-11-07", start_time: "09:00", end_time: "12:00", cycle_time: 450 },
+      { date: "2026-11-07", start_time: "13:00", end_time: null, cycle_time: 450 },
     ]);
 
     const earlyBlank: ScheduleFormState = {
@@ -115,10 +117,29 @@ describe("buildScheduleRequest", () => {
     expect(
       buildScheduleRequest({ ...BASE, blocks: [{ date: "2026-11-07", startTime: "09:00", endTime: "" }] }, opts)
     ).toEqual({ ok: false, errorKey: "sessions.schedule.form.errors.endTimeRequired" });
-    expect(buildScheduleRequest({ ...BASE, timingMode: "fixed", cycleMinutes: 0 }, opts)).toEqual({
+    expect(buildScheduleRequest({ ...BASE, timingMode: "fixed", cycleMinutes: 0, cycleSeconds: 0 }, opts)).toEqual({
       ok: false,
       errorKey: "sessions.schedule.form.errors.cycleRequired",
     });
+  });
+
+  it("accepts a seconds-only cycle time and rejects seconds past 59 or fractional parts", () => {
+    const opts = { sessionId: 1, divisionId: null, dryRun: true };
+    const fixed = { ...BASE, timingMode: "fixed" as const };
+    const secondsOnly = buildScheduleRequest({ ...fixed, cycleMinutes: 0, cycleSeconds: 45 }, opts);
+    expect(secondsOnly.ok && secondsOnly.payload.time_blocks[0].cycle_time).toBe(45);
+    for (const [cycleMinutes, cycleSeconds] of [
+      [7, 60],
+      [7, -1],
+      [-1, 30],
+      [6.5, 0],
+      [7, 1.5],
+    ]) {
+      expect(buildScheduleRequest({ ...fixed, cycleMinutes, cycleSeconds }, opts)).toEqual({
+        ok: false,
+        errorKey: "sessions.schedule.form.errors.cycleInvalid",
+      });
+    }
   });
 });
 
@@ -172,8 +193,8 @@ describe("timing helpers", () => {
   });
 
   it("flags a cycle time below 1.5x the match duration", () => {
-    expect(isCycleTimeTight(2.5, 120)).toBe(true);
-    expect(isCycleTimeTight(3, 120)).toBe(false);
+    expect(isCycleTimeTight(150, 120)).toBe(true);
+    expect(isCycleTimeTight(180, 120)).toBe(false);
     expect(isCycleTimeTight(0, 120)).toBe(false);
   });
 

@@ -111,20 +111,20 @@ test.describe.serial("session fields, schedule, and matches", () => {
     await expect(card.getByText("Field B")).toBeVisible();
 
     await page.getByRole("link", { name: "Schedule" }).click();
-    const checklist = page.getByRole("region", { name: "Ready to schedule?" });
-    await expect(checklist.getByText("Ready", { exact: true })).toHaveCount(4);
+    await expect(page.getByRole("button", { name: "Preview" })).toBeEnabled();
+    await expect(page.getByRole("region", { name: "Can't schedule yet" })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Preview" }).click();
     const preview = page.getByRole("region", { name: "Preview" });
-    await expect(preview.getByText(/^practice: \d+ matches$/)).toBeVisible();
-    await expect(preview.getByText(/^qualification: \d+ matches$/)).toBeVisible();
+    await expect(preview.getByText(/^Practice: \d+ matches$/)).toBeVisible();
+    await expect(preview.getByText(/^Qualification: \d+ matches$/)).toBeVisible();
     await page.getByLabel("End time for block 1").fill("13:00");
     await expect(page.getByText("Out of date — preview again")).toBeVisible();
 
     await page.getByRole("button", { name: "Generate" }).click();
     await expect(page.getByText(/^Generated \d+ matches\./)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Clear practice" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Clear qualification" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Clear Practice" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Clear Qualification" })).toBeVisible();
 
     await page.getByRole("link", { name: "View matches" }).click();
     await expect(page).toHaveURL(new RegExp(`/sessions/${main.sessionId}/matches$`));
@@ -137,7 +137,7 @@ test.describe.serial("session fields, schedule, and matches", () => {
     await expect(page.getByText("No rounds have been generated yet.")).toBeVisible();
 
     await page.getByRole("button", { name: "Generate" }).click();
-    await expect(page.getByRole("button", { name: "Clear practice" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Clear Practice" })).toBeVisible();
   });
 
   test("a scored round needs its name typed before Clear works", async ({ page, request }) => {
@@ -155,13 +155,13 @@ test.describe.serial("session fields, schedule, and matches", () => {
 
     await loginAsAdmin(page);
     await page.goto(`/sessions/${main.sessionId}/schedule`);
-    await page.getByRole("button", { name: "Clear practice" }).click();
+    await page.getByRole("button", { name: "Clear Practice" }).click();
     const dialog = page.getByRole("alertdialog");
     await expect(dialog.getByRole("button", { name: "Clear" })).toBeDisabled();
-    await dialog.getByLabel('Type "practice" to confirm').fill("practice");
+    await dialog.getByLabel('Type "Practice" to confirm').fill("Practice");
     await dialog.getByRole("button", { name: "Clear" }).click();
-    await expect(page.getByRole("button", { name: "Clear practice" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Clear qualification" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Clear Practice" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Clear Qualification" })).toBeVisible();
   });
 
   test("deleting a field that has matches shows the server's refusal", async ({ page }) => {
@@ -178,9 +178,123 @@ test.describe.serial("session fields, schedule, and matches", () => {
     const bare = await createReadySession(request, "No Fields E2E", "NOF");
     await loginAsAdmin(page);
     await page.goto(`/sessions/${bare.sessionId}/schedule`);
-    await expect(page.getByRole("link", { name: "Add fields" })).toBeVisible();
+    const blockers = page.getByRole("region", { name: "Can't schedule yet" });
+    await expect(blockers.getByRole("listitem")).toHaveCount(1);
+    await expect(blockers.getByRole("link", { name: "Add fields" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Preview" })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Generate" })).toBeDisabled();
+  });
+
+  test("a fixed cycle time is entered as minutes and seconds", async ({ page, request }) => {
+    const fixed = await createReadySession(request, "Fixed Cycle E2E", "FXC");
+    const set = await (
+      await request.post("/api/field-sets", {
+        headers: headers(),
+        data: { session_id: fixed.sessionId, name: "Cycle Fields", division_id: null },
+      })
+    ).json();
+    await request.post("/api/fields", {
+      headers: headers(),
+      data: { session_id: fixed.sessionId, name: "Cycle Field 1", field_set_id: set.id },
+    });
+
+    await loginAsAdmin(page);
+    await page.goto(`/sessions/${fixed.sessionId}/schedule`);
+    await page.getByLabel("Fixed cycle time").check();
+    const cycle = page.getByRole("group", { name: "Cycle time" });
+    await cycle.getByLabel("Cycle time minutes").fill("7");
+    await cycle.getByLabel("Cycle time seconds").fill("30");
+    await page.getByLabel("End time for block 1").fill("");
+
+    await page.getByRole("button", { name: "Preview" }).click();
+    const preview = page.getByRole("region", { name: "Preview" });
+    await expect(preview.getByRole("cell", { name: "7:30", exact: true })).toBeVisible();
+
+    await cycle.getByLabel("Cycle time seconds").fill("75");
+    await page.getByRole("button", { name: "Preview" }).click();
+    await expect(
+      page.getByText("Enter the cycle time as whole minutes and seconds, with seconds from 0 to 59.")
+    ).toBeVisible();
+  });
+
+  test("a new round can start as soon as an open-ended round's matches finish", async ({ page, request }) => {
+    const back = await createReadySession(request, "Back To Back E2E", "B2B");
+    const set = await (
+      await request.post("/api/field-sets", {
+        headers: headers(),
+        data: { session_id: back.sessionId, name: "B2B Fields", division_id: null },
+      })
+    ).json();
+    await request.post("/api/fields", {
+      headers: headers(),
+      data: { session_id: back.sessionId, name: "B2B Field 1", field_set_id: set.id },
+    });
+
+    await loginAsAdmin(page);
+    await page.goto(`/sessions/${back.sessionId}/schedule`);
+    // Practice alone: 2 matches at 09:00 and 09:02:30, open-ended. The
+    // game's matches are 2 minutes, so the second finishes at 09:04:30.
+    await page.getByRole("button", { name: "Remove phase" }).nth(1).click();
+    await page.getByLabel("Fixed cycle time").check();
+    await page.getByLabel("Cycle time minutes").fill("2");
+    await page.getByLabel("Cycle time seconds").fill("30");
+    await page.getByLabel("End time for block 1").fill("");
+    await page.getByRole("button", { name: "Generate" }).click();
+    await expect(page.getByRole("button", { name: "Clear Practice" })).toBeVisible();
+
+    // The form remounts offering only Qualification.
+    await page.getByLabel("Matches per team for phase 1").fill("1");
+    await page.getByLabel("Fixed cycle time").check();
+    await page.getByLabel("Cycle time minutes").fill("2");
+    await page.getByLabel("Cycle time seconds").fill("30");
+    await page.getByLabel("Start time for block 1").fill("09:04");
+    await page.getByLabel("End time for block 1").fill("");
+    await page.getByRole("button", { name: "Generate" }).click();
+    await expect(page.getByRole("alert")).toContainText(
+      "overlapping the practice round's matches on 2026-11-07, which run from 09:00 to 09:04:30 " +
+        "(America/Los_Angeles). Start the new block at 09:05 or later."
+    );
+
+    await page.getByLabel("Start time for block 1").fill("09:05");
+    await page.getByRole("button", { name: "Generate" }).click();
+    await expect(page.getByRole("button", { name: "Clear Qualification" })).toBeVisible();
+  });
+
+  test("clearing one round of a two-phase generate frees its time for a new one", async ({ page, request }) => {
+    const phased = await createReadySession(request, "Two Phase E2E", "TPH");
+    const set = await (
+      await request.post("/api/field-sets", {
+        headers: headers(),
+        data: { session_id: phased.sessionId, name: "TPH Fields", division_id: null },
+      })
+    ).json();
+    await request.post("/api/fields", {
+      headers: headers(),
+      data: { session_id: phased.sessionId, name: "TPH Field 1", field_set_id: set.id },
+    });
+
+    await loginAsAdmin(page);
+    await page.goto(`/sessions/${phased.sessionId}/schedule`);
+    // The default phases, Practice x1 then Qualification x6, in one
+    // open-ended block: practice's 2 matches run 09:00-09:04:30.
+    await page.getByLabel("Fixed cycle time").check();
+    await page.getByLabel("Cycle time minutes").fill("2");
+    await page.getByLabel("Cycle time seconds").fill("30");
+    await page.getByLabel("End time for block 1").fill("");
+    await page.getByRole("button", { name: "Generate" }).click();
+    await expect(page.getByRole("button", { name: "Clear Qualification" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Clear Qualification" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Clear" }).click();
+    await expect(page.getByRole("button", { name: "Clear Qualification" })).toHaveCount(0);
+
+    await page.getByLabel("Fixed cycle time").check();
+    await page.getByLabel("Cycle time minutes").fill("2");
+    await page.getByLabel("Cycle time seconds").fill("30");
+    await page.getByLabel("Start time for block 1").fill("09:05");
+    await page.getByLabel("End time for block 1").fill("");
+    await page.getByRole("button", { name: "Generate" }).click();
+    await expect(page.getByRole("button", { name: "Clear Qualification" })).toBeVisible();
   });
 
   test("two divisions each generate on their own field set", async ({ page, request }) => {
@@ -225,14 +339,17 @@ test.describe.serial("session fields, schedule, and matches", () => {
     try {
       await loginAsAdmin(page);
       await page.goto(`/sessions/${sessionId}/schedule`);
+      await expect(page.getByLabel("Division").locator(`option[value="${second.id}"]`)).toHaveText(
+        "E2E Blue (8 teams checked in)"
+      );
       await page.getByLabel("Division").selectOption(String(first.id));
       await page.getByRole("button", { name: "Generate" }).click();
-      await expect(page.getByRole("button", { name: "Clear qualification" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Clear Qualification" })).toBeVisible();
 
       await page.getByLabel("Division").selectOption(String(second.id));
       await expect(page.getByText("No rounds have been generated yet.")).toBeVisible();
       await page.getByRole("button", { name: "Generate" }).click();
-      await expect(page.getByRole("button", { name: "Clear qualification" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Clear Qualification" })).toBeVisible();
 
       await page.getByRole("link", { name: "Matches", exact: true }).click();
       await page.getByLabel("Division").selectOption(String(second.id));

@@ -96,6 +96,11 @@
     "deleteConfirmBody": "其 {{count}} 支队伍将变为未分配,而不会被删除。",
     "cancelAction": "取消"
   },
+  "roundTypes": {
+    "practice": "练习赛",
+    "qualification": "资格赛",
+    "elimination": "淘汰赛"
+  },
   "sessions": {
     "heading": "场次",
     "columnLabel": "场次名称",
@@ -117,17 +122,16 @@
     "scheduleTab": "赛程",
     "schedule": {
       "divisionLabel": "组别",
+      "divisionOption": "{{name}}(已签到 {{count}} 支队伍)",
       "readiness": {
-        "heading": "可以排赛程了吗？",
-        "ok": "就绪",
-        "missing": "缺少",
-        "gamePlugin": "已选择比赛插件",
+        "heading": "暂时无法生成赛程",
+        "gamePlugin": "尚未选择比赛插件。",
         "gamePluginFix": "选择比赛插件",
-        "timezone": "场次已设置时区",
+        "timezone": "该场次未设置时区。",
         "timezoneFix": "设置时区",
-        "teams": "已签到的队伍足够组成一场比赛",
+        "teams": "已签到的队伍不足以组成一场比赛。",
         "teamsFix": "签到队伍",
-        "fields": "此组别有至少一个场地",
+        "fields": "该组别没有场地。",
         "fieldsFix": "添加场地"
       },
       "rounds": {
@@ -145,7 +149,7 @@
         "clearHeading": "清除 {{round}}？",
         "clearBody": "将删除该轮次的 {{count}} 场比赛。",
         "clearAllHeading": "清除所有轮次？",
-        "clearAllBody": "将删除此组别所有已生成的轮次。一起生成的轮次需要一起重新生成。",
+        "clearAllBody": "将删除此组别所有已生成的轮次。",
         "scoredWarning": "其中 {{count}} 场已有分数，分数也会被删除。",
         "clearAllPhrase": "全部清除",
         "typeToConfirm": "输入“{{phrase}}”以确认",
@@ -165,7 +169,11 @@
         "timingHeading": "时间安排",
         "timingFit": "安排在这些时间段内",
         "timingFixed": "固定循环时间",
+        "cycleLabel": "循环时间",
         "cycleMinutesLabel": "循环时间（分钟）",
+        "cycleSecondsLabel": "循环时间（秒）",
+        "minutesUnit": "分",
+        "secondsUnit": "秒",
         "fixedHint": "最后一个时间段的结束时间可留空，表示一直进行到结束。设定了结束时间的时间段可容纳的比赛数固定，若多于或少于所需，服务器会拒绝。",
         "cycleTight": "该循环时间不到 {{seconds}} 秒比赛时长的 1.5 倍。",
         "blockDateLabel": "时间段 {{n}} 的日期",
@@ -186,6 +194,7 @@
           "blockIncomplete": "每个时间段都需要日期和开始时间。",
           "endTimeRequired": "每个时间段都需要结束时间。",
           "cycleRequired": "请输入循环时间。",
+          "cycleInvalid": "请以整数分钟和秒输入循环时间，秒数为 0 到 59。",
           "endTimeRequiredExceptLast": "除最后一个外，每个时间段都需要结束时间。"
         },
         "noRoundTypes": "此组别的每种轮次都已有赛程。清除某一轮次后才能重新生成。"

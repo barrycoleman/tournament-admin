@@ -8,6 +8,7 @@ import { apiRequest } from "@tournament-admin/shared";
 import { formatMatchTime, spansMultipleDays } from "../matchTime";
 import { useSessionMatches } from "../useSessionMatches";
 import type { Division, FieldRead, SessionRead, TeamSummary } from "../types";
+import { roundTypeLabel } from "../roundTypeLabel";
 
 interface MatchGridRow {
   id: number;
@@ -159,7 +160,7 @@ export function SessionMatchesRoute() {
             <option value="">{t("sessions.matches.allRounds")}</option>
             {roundTypes.map((roundType) => (
               <option key={roundType} value={roundType}>
-                {roundType}
+                {roundTypeLabel(t, roundType)}
               </option>
             ))}
           </select>

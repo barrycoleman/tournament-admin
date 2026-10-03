@@ -18,7 +18,9 @@ export interface ScheduleFormState {
   schedulerPluginName: string;
   phases: PhaseDraft[];
   timingMode: TimingMode;
+  /** Fixed mode's cycle time, as the two whole numbers entered (seconds 0-59). */
   cycleMinutes: number;
+  cycleSeconds: number;
   blocks: BlockDraft[];
 }
 
@@ -65,9 +67,13 @@ export function buildScheduleRequest(
   if (state.timingMode === "fit") {
     if (sorted.some((b) => !b.endTime)) return fail("endTimeRequired");
   } else {
-    if (!(state.cycleMinutes > 0)) return fail("cycleRequired");
+    const { cycleMinutes: minutes, cycleSeconds: seconds } = state;
+    if (!Number.isInteger(minutes) || !Number.isInteger(seconds) || minutes < 0 || seconds < 0 || seconds > 59) {
+      return fail("cycleInvalid");
+    }
+    cycleSeconds = minutes * 60 + seconds;
+    if (cycleSeconds === 0) return fail("cycleRequired");
     if (sorted.slice(0, -1).some((b) => !b.endTime)) return fail("endTimeRequiredExceptLast");
-    cycleSeconds = Math.round(state.cycleMinutes * 60);
   }
 
   const payload: ScheduleRequestPayload = {
@@ -126,8 +132,8 @@ export function formatCycleTime(seconds: number): string {
 }
 
 /** Mirrors the server's default `warn_below_multiplier` of 1.5. */
-export function isCycleTimeTight(cycleMinutes: number, matchDurationSeconds: number): boolean {
-  return cycleMinutes > 0 && cycleMinutes * 60 < matchDurationSeconds * 1.5;
+export function isCycleTimeTight(cycleSeconds: number, matchDurationSeconds: number): boolean {
+  return cycleSeconds > 0 && cycleSeconds < matchDurationSeconds * 1.5;
 }
 
 export function todayInZone(timeZone: string | null, now: Date = new Date()): string {

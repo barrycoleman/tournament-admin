@@ -6,6 +6,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { apiErrorMessage } from "../apiErrorMessage";
 import { formatMatchTime } from "../matchTime";
 import type { RoundSummary } from "./roundSummary";
+import { roundTypeLabel } from "../roundTypeLabel";
 
 interface CurrentRoundsProps {
   sessionId: number;
@@ -50,7 +51,7 @@ export function CurrentRounds({ sessionId, divisionId, sessionTimezone, rounds }
     ? null
     : isAll
       ? t("sessions.schedule.rounds.clearAllPhrase")
-      : targets[0].roundType;
+      : roundTypeLabel(t, targets[0].roundType);
   const body = targets === null
     ? ""
     : [
@@ -83,7 +84,7 @@ export function CurrentRounds({ sessionId, divisionId, sessionTimezone, rounds }
             <tbody>
               {rounds.map((round) => (
                 <tr key={round.roundType}>
-                  <td>{round.roundType}</td>
+                  <td>{roundTypeLabel(t, round.roundType)}</td>
                   <td>{round.matchCount}</td>
                   <td>{round.scoredCount}</td>
                   <td>{formatTime(round.firstTime)}</td>
@@ -92,7 +93,7 @@ export function CurrentRounds({ sessionId, divisionId, sessionTimezone, rounds }
                     <button
                       type="button"
                       className="btn btn-small"
-                      aria-label={t("sessions.schedule.rounds.clearAriaLabel", { round: round.roundType })}
+                      aria-label={t("sessions.schedule.rounds.clearAriaLabel", { round: roundTypeLabel(t, round.roundType) })}
                       onClick={() => openDialog([round])}
                     >
                       {t("sessions.schedule.rounds.clearAction")}
@@ -115,7 +116,7 @@ export function CurrentRounds({ sessionId, divisionId, sessionTimezone, rounds }
           heading={
             isAll
               ? t("sessions.schedule.rounds.clearAllHeading")
-              : t("sessions.schedule.rounds.clearHeading", { round: targets[0].roundType })
+              : t("sessions.schedule.rounds.clearHeading", { round: roundTypeLabel(t, targets[0].roundType) })
           }
           body={body}
           confirmLabel={t("sessions.schedule.rounds.confirmClear")}

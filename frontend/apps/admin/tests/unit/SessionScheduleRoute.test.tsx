@@ -144,22 +144,28 @@ beforeEach(() => {
 });
 
 describe("SessionScheduleRoute — readiness and rounds", () => {
-  it("shows every readiness item as ready and no rounds when nothing is scheduled", async () => {
+  it("shows no readiness box once nothing blocks scheduling", async () => {
     stub();
     renderSchedule();
 
-    const checklist = await screen.findByRole("region", { name: "Ready to schedule?" });
-    await waitFor(() => expect(within(checklist).getAllByText("Ready")).toHaveLength(4));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Preview" })).toBeEnabled());
+    expect(screen.queryByRole("region", { name: "Can't schedule yet" })).not.toBeInTheDocument();
     expect(screen.getByText("No rounds have been generated yet.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Division")).not.toBeInTheDocument();
   });
 
-  it("flags missing fields with a link to the Fields tab", async () => {
+  it("lists only what blocks scheduling, each with a link to fix it", async () => {
     stub({ fields: [] });
     renderSchedule();
 
-    const link = await screen.findByRole("link", { name: "Add fields" });
-    expect(link).toHaveAttribute("href", "/sessions/1/fields");
+    const blockers = await screen.findByRole("region", { name: "Can't schedule yet" });
+    expect(within(blockers).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "This division has no fields. Add fields",
+    ]);
+    expect(within(blockers).getByRole("link", { name: "Add fields" })).toHaveAttribute(
+      "href",
+      "/sessions/1/fields"
+    );
   });
 
   it("lists rounds for the scope with match and scored counts, leaving out finals", async () => {
@@ -172,7 +178,7 @@ describe("SessionScheduleRoute — readiness and rounds", () => {
     });
     renderSchedule();
 
-    const row = await screen.findByRole("row", { name: /practice/ });
+    const row = await screen.findByRole("row", { name: /Practice/ });
     expect(within(row).getByText("2")).toBeInTheDocument();
     expect(within(row).getByText("1")).toBeInTheDocument();
     expect(screen.queryByRole("row", { name: /elimination/ })).not.toBeInTheDocument();
@@ -182,13 +188,13 @@ describe("SessionScheduleRoute — readiness and rounds", () => {
     stub({ matches: [scheduleMatch({ status: "completed" })] });
     renderSchedule();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Clear practice" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Clear Practice" }));
     const dialog = screen.getByRole("alertdialog");
     const confirm = within(dialog).getByRole("button", { name: "Clear" });
     expect(confirm).toBeDisabled();
 
-    fireEvent.change(within(dialog).getByLabelText('Type "practice" to confirm'), {
-      target: { value: "practice" },
+    fireEvent.change(within(dialog).getByLabelText('Type "Practice" to confirm'), {
+      target: { value: "Practice" },
     });
     expect(confirm).toBeEnabled();
     fireEvent.click(confirm);
@@ -226,11 +232,24 @@ describe("SessionScheduleRoute — readiness and rounds", () => {
 
     expect(await screen.findByText("No rounds have been generated yet.")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Division"), { target: { value: "2" } });
-    fireEvent.click(await screen.findByRole("button", { name: "Clear qualification" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Clear Qualification" }));
     fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Clear" }));
 
     await waitFor(() =>
       expect(deleteCalls()).toEqual(["/api/schedule?session_id=1&round_type=qualification&division_id=2"])
+    );
+  });
+
+  it("shows each division's checked-in team count in the division picker", async () => {
+    stub({ divisions: TWO_DIVISIONS });
+    renderSchedule();
+
+    const picker = await screen.findByLabelText("Division");
+    await waitFor(() =>
+      expect(within(picker).getAllByRole("option").map((option) => option.textContent)).toEqual([
+        "Division 1 (4 teams checked in)",
+        "Blue (0 teams checked in)",
+      ])
     );
   });
 });
@@ -246,7 +265,7 @@ describe("SessionScheduleRoute — scope changes and failures", () => {
 
     const panel = await screen.findByRole("region", { name: "Rounds from a different division setup" });
     expect(within(panel).getByText("Deleted division")).toBeInTheDocument();
-    fireEvent.click(within(panel).getByRole("button", { name: "Clear qualification (Deleted division)" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Clear Qualification (Deleted division)" }));
     fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Clear" }));
 
     await waitFor(() =>
@@ -263,9 +282,9 @@ describe("SessionScheduleRoute — scope changes and failures", () => {
 
     const panel = await screen.findByRole("region", { name: "Rounds from a different division setup" });
     expect(within(panel).getByText("No division")).toBeInTheDocument();
-    fireEvent.click(within(panel).getByRole("button", { name: "Clear practice (No division)" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Clear Practice (No division)" }));
     const dialog = screen.getByRole("alertdialog");
-    fireEvent.change(within(dialog).getByLabelText('Type "practice" to confirm'), { target: { value: "practice" } });
+    fireEvent.change(within(dialog).getByLabelText('Type "Practice" to confirm'), { target: { value: "Practice" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Clear" }));
 
     await waitFor(() => expect(deleteCalls()).toEqual(["/api/schedule?session_id=1&round_type=practice"]));
@@ -275,7 +294,7 @@ describe("SessionScheduleRoute — scope changes and failures", () => {
     stub({ matches: [scheduleMatch({})] });
     renderSchedule();
 
-    await screen.findByRole("row", { name: /practice/ });
+    await screen.findByRole("row", { name: /Practice/ });
     expect(screen.queryByRole("region", { name: "Rounds from a different division setup" })).not.toBeInTheDocument();
   });
 
@@ -417,7 +436,7 @@ describe("SessionScheduleRoute — generate form", () => {
       ])
     );
     const panel = await screen.findByRole("region", { name: "Preview" });
-    expect(within(panel).getByText("practice: 2 matches")).toBeInTheDocument();
+    expect(within(panel).getByText("Practice: 2 matches")).toBeInTheDocument();
     expect(within(panel).getByText("12:51")).toBeInTheDocument();
   });
 
@@ -436,7 +455,7 @@ describe("SessionScheduleRoute — generate form", () => {
     fireEvent.click(preview);
 
     const panel = await screen.findByRole("region", { name: "Preview" });
-    expect(within(panel).getByText("practice: 1 match")).toBeInTheDocument();
+    expect(within(panel).getByText("Practice: 1 match")).toBeInTheDocument();
   });
 
   it("does not offer round types that already have a schedule", async () => {
@@ -445,7 +464,7 @@ describe("SessionScheduleRoute — generate form", () => {
 
     const roundType = await screen.findByLabelText("Round type for phase 1");
     expect((roundType as HTMLSelectElement).value).toBe("qualification");
-    expect(within(roundType).queryByRole("option", { name: "practice" })).not.toBeInTheDocument();
+    expect(within(roundType).queryByRole("option", { name: "Practice" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Round type for phase 2")).not.toBeInTheDocument();
   });
 
@@ -454,7 +473,8 @@ describe("SessionScheduleRoute — generate form", () => {
     renderSchedule();
 
     fireEvent.click(await screen.findByLabelText("Fixed cycle time"));
-    fireEvent.change(screen.getByLabelText("Cycle time (minutes)"), { target: { value: "8" } });
+    fireEvent.change(screen.getByLabelText("Cycle time minutes"), { target: { value: "8" } });
+    fireEvent.change(screen.getByLabelText("Cycle time seconds"), { target: { value: "15" } });
     fireEvent.change(screen.getByLabelText("End time for block 1"), { target: { value: "" } });
     const preview = screen.getByRole("button", { name: "Preview" });
     await waitFor(() => expect(preview).toBeEnabled());
@@ -462,7 +482,7 @@ describe("SessionScheduleRoute — generate form", () => {
 
     await waitFor(() =>
       expect((scheduleBodies()[0] as { time_blocks: unknown }).time_blocks).toEqual([
-        { date: "2026-11-07", start_time: "09:00", end_time: null, cycle_time: 480 },
+        { date: "2026-11-07", start_time: "09:00", end_time: null, cycle_time: 495 },
       ])
     );
   });

@@ -85,6 +85,14 @@ export function SessionScheduleRoute() {
     usableFieldCount: countUsableFields(fieldSets ?? [], fields ?? [], divisionId),
   });
   const ready = readiness.every((item) => item.ok);
+  // Listing blockers before their data arrives would flash false warnings.
+  const readinessLoaded =
+    event !== undefined &&
+    teams !== undefined &&
+    participants !== undefined &&
+    fieldSets !== undefined &&
+    fields !== undefined &&
+    (!event.game_plugin_name || matchFormat !== undefined);
   // The server's conflict check counts every match of a round type in the
   // scope, finals included, so the form must avoid those types too even
   // though Current Rounds leaves finals out.
@@ -107,13 +115,16 @@ export function SessionScheduleRoute() {
           >
             {(divisions ?? []).map((division) => (
               <option key={division.id} value={division.id}>
-                {division.name}
+                {t("sessions.schedule.divisionOption", {
+                  name: division.name,
+                  count: countCheckedInTeams(teams ?? [], participants ?? [], division.id),
+                })}
               </option>
             ))}
           </select>
         </label>
       )}
-      <ReadinessChecklist items={readiness} sessionId={session.id} />
+      {readinessLoaded && <ReadinessChecklist items={readiness} sessionId={session.id} />}
       <OutOfScopeRounds sessionId={session.id} divisions={divisions} rounds={outOfScopeRounds} />
       <CurrentRounds
         sessionId={session.id}

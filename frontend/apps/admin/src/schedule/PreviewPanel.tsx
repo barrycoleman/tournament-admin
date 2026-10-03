@@ -2,6 +2,7 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { formatCycleTime, projectedFinish } from "./scheduleRequest";
 import type { ScheduleGenerateResponse } from "../types";
+import { roundTypeLabel } from "../roundTypeLabel";
 
 export function PreviewPanel({ response, stale }: { response: ScheduleGenerateResponse; stale: boolean }) {
   const { t } = useTranslation();
@@ -18,7 +19,7 @@ export function PreviewPanel({ response, stale }: { response: ScheduleGenerateRe
       <ul className="list-plain">
         {(response.phase_results ?? []).map((phase) => (
           <li key={phase.round_type} className="list-row">
-            {t("sessions.schedule.preview.phaseLine", { round: phase.round_type, count: phase.match_count })}
+            {t("sessions.schedule.preview.phaseLine", { round: roundTypeLabel(t, phase.round_type), count: phase.match_count })}
           </li>
         ))}
       </ul>

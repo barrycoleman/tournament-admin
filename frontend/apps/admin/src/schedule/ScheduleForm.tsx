@@ -18,6 +18,7 @@ import {
   type ScheduleRequestPayload,
 } from "./scheduleRequest";
 import type { MatchFormat, PluginSummary, ScheduleGenerateResponse, SessionRead } from "../types";
+import { roundTypeLabel } from "../roundTypeLabel";
 
 interface ScheduleFormProps {
   sessionId: number;
@@ -48,6 +49,7 @@ export function ScheduleForm({
     phases: defaultPhases(available),
     timingMode: "fit",
     cycleMinutes: 7,
+    cycleSeconds: 0,
     blocks: [{ date: session.session_date ?? todayInZone(session.timezone), startTime: "09:00", endTime: "12:00" }],
   }));
   const [formError, setFormError] = useState<string | null>(null);
@@ -143,7 +145,7 @@ export function ScheduleForm({
             >
               {roundTypeOptionsForRow(available, state.phases, index).map((roundType) => (
                 <option key={roundType} value={roundType}>
-                  {roundType}
+                  {roundTypeLabel(t, roundType)}
                 </option>
               ))}
             </select>
@@ -178,7 +180,7 @@ export function ScheduleForm({
         ))}
         <button
           type="button"
-          className="btn btn-small"
+          className="btn btn-small schedule-form__add"
           disabled={nextRoundType === undefined}
           onClick={() =>
             nextRoundType && update({ phases: [...state.phases, { roundType: nextRoundType, matchesPerTeam: 1 }] })
@@ -212,20 +214,37 @@ export function ScheduleForm({
         </div>
         {state.timingMode === "fixed" && (
           <div className="field">
-            <label className="field__label" htmlFor="schedule-cycle-minutes">
-              {t("sessions.schedule.form.cycleMinutesLabel")}
-            </label>
-            <input
-              id="schedule-cycle-minutes"
-              className="input schedule-form__number"
-              type="number"
-              min={1}
-              step={0.5}
-              value={state.cycleMinutes}
-              onChange={(event) => update({ cycleMinutes: Number(event.target.value) })}
-            />
+            <span className="field__label" id="schedule-cycle-label">
+              {t("sessions.schedule.form.cycleLabel")}
+            </span>
+            <div className="schedule-form__duration" role="group" aria-labelledby="schedule-cycle-label">
+              <input
+                className="input schedule-form__number"
+                type="number"
+                min={0}
+                step={1}
+                aria-label={t("sessions.schedule.form.cycleMinutesLabel")}
+                value={state.cycleMinutes}
+                onChange={(event) => update({ cycleMinutes: Number(event.target.value) })}
+              />
+              <span aria-hidden="true">{t("sessions.schedule.form.minutesUnit")}</span>
+              <input
+                className="input schedule-form__number"
+                type="number"
+                min={0}
+                max={59}
+                step={1}
+                aria-label={t("sessions.schedule.form.cycleSecondsLabel")}
+                value={state.cycleSeconds}
+                onChange={(event) => update({ cycleSeconds: Number(event.target.value) })}
+              />
+              <span aria-hidden="true">{t("sessions.schedule.form.secondsUnit")}</span>
+            </div>
             <span className="field__hint">{t("sessions.schedule.form.fixedHint")}</span>
-            {isCycleTimeTight(state.cycleMinutes, matchFormat.match_duration_seconds) && (
+            {isCycleTimeTight(
+              state.cycleMinutes * 60 + state.cycleSeconds,
+              matchFormat.match_duration_seconds
+            ) && (
               <p className="alert alert-warning">
                 {t("sessions.schedule.form.cycleTight", { seconds: matchFormat.match_duration_seconds })}
               </p>
@@ -267,7 +286,7 @@ export function ScheduleForm({
         ))}
         <button
           type="button"
-          className="btn btn-small"
+          className="btn btn-small schedule-form__add"
           onClick={() =>
             update({
               blocks: [

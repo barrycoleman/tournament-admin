@@ -6,6 +6,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { apiErrorMessage } from "../apiErrorMessage";
 import type { Division } from "../types";
 import type { OutOfScopeRound } from "./roundSummary";
+import { roundTypeLabel } from "../roundTypeLabel";
 
 interface OutOfScopeRoundsProps {
   sessionId: number;
@@ -45,7 +46,7 @@ export function OutOfScopeRounds({ sessionId, divisions, rounds }: OutOfScopeRou
         t("sessions.schedule.outOfScope.deletedDivision"));
 
   const scored = target?.summary.scoredCount ?? 0;
-  const phrase = target !== null && scored > 0 ? target.summary.roundType : null;
+  const phrase = target !== null && scored > 0 ? roundTypeLabel(t, target.summary.roundType) : null;
 
   return (
     <section className="panel alert-warning" aria-labelledby={headingId}>
@@ -65,7 +66,7 @@ export function OutOfScopeRounds({ sessionId, divisions, rounds }: OutOfScopeRou
           {rounds.map((round) => (
             <tr key={`${round.divisionId ?? "none"}:${round.summary.roundType}`}>
               <td>{scopeLabel(round.divisionId)}</td>
-              <td>{round.summary.roundType}</td>
+              <td>{roundTypeLabel(t, round.summary.roundType)}</td>
               <td>{round.summary.matchCount}</td>
               <td>{round.summary.scoredCount}</td>
               <td>
@@ -73,7 +74,7 @@ export function OutOfScopeRounds({ sessionId, divisions, rounds }: OutOfScopeRou
                   type="button"
                   className="btn btn-small"
                   aria-label={t("sessions.schedule.outOfScope.clearAriaLabel", {
-                    round: round.summary.roundType,
+                    round: roundTypeLabel(t, round.summary.roundType),
                     scope: scopeLabel(round.divisionId),
                   })}
                   onClick={() => {
@@ -92,7 +93,7 @@ export function OutOfScopeRounds({ sessionId, divisions, rounds }: OutOfScopeRou
         <ConfirmDialog
           key={`${target.divisionId ?? "none"}:${target.summary.roundType}`}
           heading={t("sessions.schedule.outOfScope.clearHeading", {
-            round: target.summary.roundType,
+            round: roundTypeLabel(t, target.summary.roundType),
             scope: scopeLabel(target.divisionId),
           })}
           body={[
