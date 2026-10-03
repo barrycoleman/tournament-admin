@@ -37,3 +37,4 @@ class MatchFormatRead(BaseModel):
     teams_per_alliance: int
     alliance_count: int
     match_duration_seconds: int
+    default_cycle_time_seconds: int | None = None

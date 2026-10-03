@@ -31,6 +31,9 @@ def match_format() -> dict[str, Any]:
         "game_model": "cooperative_score",
         "alliance_selection": "seed_pairing",
         "finals_format": "score_chase",
+        # A starting point for the Schedule tab: a 60-second match plus
+        # time to reset the field and queue the next teams.
+        "default_cycle_time_seconds": 300,
     }
 
 

@@ -92,6 +92,7 @@ def read_match_format(
         match_duration_seconds=(
             match_format["autonomous_seconds"] + match_format["driver_seconds"]
         ),
+        default_cycle_time_seconds=match_format.get("default_cycle_time_seconds"),
     )
 
 

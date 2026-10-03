@@ -222,6 +222,23 @@ def _check_match_format(module: Any) -> CheckResult:
             f"finals_format must be one of {sorted(VALID_FINALS_FORMATS)}, got "
             f"{result['finals_format']!r}",
         )
+    default_cycle = result.get("default_cycle_time_seconds")
+    if default_cycle is not None:
+        match_seconds = result["autonomous_seconds"] + result["driver_seconds"]
+        if isinstance(default_cycle, bool) or not isinstance(default_cycle, int):
+            return CheckResult(
+                "match_format() shape",
+                False,
+                "default_cycle_time_seconds must be an integer number of seconds, got "
+                f"{default_cycle!r}",
+            )
+        if default_cycle < match_seconds:
+            return CheckResult(
+                "match_format() shape",
+                False,
+                f"default_cycle_time_seconds ({default_cycle}) must be at least the "
+                f"match length ({match_seconds}s)",
+            )
     return CheckResult("match_format() shape", True)
 
 

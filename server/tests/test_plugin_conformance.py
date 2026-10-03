@@ -393,3 +393,40 @@ def test_scheduler_with_duplicate_station_names_fails_conformance(tmp_path):
     assert not report.passed
     failing = [c for c in report.checks if not c.passed]
     assert any("distinct" in c.message for c in failing)
+
+
+def _example_with_default_cycle(tmp_path, name: str, value: str):
+    import shutil
+
+    plugin_dir = tmp_path / name
+    shutil.copytree(FIXTURE_EXAMPLE_PLUGIN, plugin_dir)
+    manifest = json.loads((plugin_dir / "manifest.json").read_text())
+    manifest["name"] = name
+    (plugin_dir / "manifest.json").write_text(json.dumps(manifest))
+    plugin_text = (plugin_dir / "plugin.py").read_text()
+    anchor = '"finals_format": "single_elimination",'
+    assert anchor in plugin_text, "test fixture setup did not find the line to extend"
+    (plugin_dir / "plugin.py").write_text(
+        plugin_text.replace(anchor, f'{anchor}\n        "default_cycle_time_seconds": {value},')
+    )
+    return plugin_dir
+
+
+def test_a_default_cycle_time_of_at_least_the_match_length_passes(tmp_path):
+    report = run_conformance_checks(_example_with_default_cycle(tmp_path, "cycle-ok", "300"))
+    check = next(c for c in report.checks if c.name == "match_format() shape")
+    assert check.passed, check.message
+
+
+def test_a_default_cycle_time_shorter_than_the_match_fails(tmp_path):
+    report = run_conformance_checks(_example_with_default_cycle(tmp_path, "cycle-short", "90"))
+    check = next(c for c in report.checks if c.name == "match_format() shape")
+    assert not check.passed
+    assert "at least the match length (120s)" in check.message
+
+
+def test_a_non_integer_default_cycle_time_fails(tmp_path):
+    report = run_conformance_checks(_example_with_default_cycle(tmp_path, "cycle-float", "300.5"))
+    check = next(c for c in report.checks if c.name == "match_format() shape")
+    assert not check.passed
+    assert "default_cycle_time_seconds must be an integer" in check.message

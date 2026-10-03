@@ -171,6 +171,7 @@ def test_match_format_reports_the_selected_game_plugin(client):
         "teams_per_alliance": 2,
         "alliance_count": 2,
         "match_duration_seconds": 120,
+        "default_cycle_time_seconds": None,
     }
 
 

@@ -67,6 +67,7 @@ def test_match_format_is_a_cooperative_score_chase():
         "game_model": "cooperative_score",
         "alliance_selection": "seed_pairing",
         "finals_format": "score_chase",
+        "default_cycle_time_seconds": 300,
     }
 
 
@@ -266,3 +267,10 @@ def test_seed_paired_score_chase_finals_run_to_completion(sample_client):
     final = sample_client.get(f"/api/finals/{bracket['id']}").json()
     assert final["status"] == "complete"
     assert [(r["rank"], r["score"]) for r in final["results"]] == [(1, 70), (2, 50)]
+
+
+def test_sample_game_declares_a_five_minute_default_cycle_time():
+    plugin_path = Path(__file__).parent.parent / "plugins" / "games" / "sample_cooperative" / "plugin.py"
+    namespace: dict = {}
+    exec(compile(plugin_path.read_text(), str(plugin_path), "exec"), namespace)
+    assert namespace["match_format"]()["default_cycle_time_seconds"] == 300
