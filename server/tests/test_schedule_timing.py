@@ -7,6 +7,7 @@ from tournament_server.services.schedule_timing import (
     ResolvedBlock,
     assign_scheduled_times,
     block_utc_bounds,
+    blocks_occupied_windows,
     deserialize_time_blocks,
     implicit_default_time_block,
     resolve_block_cycle_times,
@@ -286,3 +287,85 @@ def test_block_utc_bounds_open_ended_has_no_end():
     block = {"date": D1, "start_time": "10:00", "end_time": None, "cycle_time": 180}
     _, end_utc = block_utc_bounds(block, "UTC")
     assert end_utc is None
+
+
+# ---------- Occupied windows ----------
+
+
+def test_blocks_occupied_windows_end_one_match_length_after_the_last_start():
+    # 2 matches at 09:00 and 09:02 (120s cycle) in an open-ended block; a
+    # 60-second match makes the block's real end 09:03.
+    resolved = [ResolvedBlock(D1, "09:00", None, 120.0, 2)]
+    assert blocks_occupied_windows(resolved, "America/Los_Angeles", 60) == [
+        (
+            dt.datetime(2026, 9, 5, 16, 0, tzinfo=dt.UTC),
+            dt.datetime(2026, 9, 5, 16, 3, tzinfo=dt.UTC),
+        )
+    ]
+
+
+def test_blocks_occupied_windows_follow_assign_scheduled_times_rounding():
+    # A fit-mode block's fractional cycle time: the last match starts
+    # where assign_scheduled_times puts it, so the end matches it exactly.
+    resolved = [
+        ResolvedBlock(D1, "09:00", "12:00", 10800 / 7, 7),
+        ResolvedBlock(D1, "13:00", "13:30", 900.0, 2),
+    ]
+    times = assign_scheduled_times(resolved, list(range(9)), "UTC")
+    assert blocks_occupied_windows(resolved, "UTC", 150) == [
+        (times[0], times[6] + dt.timedelta(seconds=150)),
+        (times[7], times[8] + dt.timedelta(seconds=150)),
+    ]
+
+
+def test_blocks_occupied_windows_for_one_phases_slots():
+    # A combined request: practice took global slots 0-1, qualification
+    # 2-7, across two blocks of 4 slots each. Each phase claims only the
+    # stretch of each block its own matches use.
+    resolved = [
+        ResolvedBlock(D1, "09:00", "10:00", 900.0, 4),
+        ResolvedBlock(D1, "11:00", "12:00", 900.0, 4),
+    ]
+    times = assign_scheduled_times(resolved, list(range(8)), "UTC")
+    match = dt.timedelta(seconds=120)
+    assert blocks_occupied_windows(resolved, "UTC", 120, range(0, 2)) == [
+        (times[0], times[1] + match),
+        None,
+    ]
+    assert blocks_occupied_windows(resolved, "UTC", 120, range(2, 8)) == [
+        (times[2], times[3] + match),
+        (times[4], times[7] + match),
+    ]
+
+
+def test_blocks_occupied_windows_is_none_for_a_block_with_no_matches():
+    resolved = [ResolvedBlock(D1, "09:00", "09:01", 120.0, 0)]
+    assert blocks_occupied_windows(resolved, "UTC", 60) == [None]
+
+
+def test_serialize_stores_each_blocks_occupied_window():
+    blocks = [
+        {"date": D1, "start_time": "09:00", "end_time": "12:00", "cycle_time": None},
+        {"date": D1, "start_time": "13:00", "end_time": "13:01", "cycle_time": 120},
+    ]
+    occupied = [
+        (
+            dt.datetime(2026, 9, 5, 16, 30, tzinfo=dt.UTC),
+            dt.datetime(2026, 9, 5, 18, 59, 30, tzinfo=dt.UTC),
+        ),
+        None,
+    ]
+    round_tripped = deserialize_time_blocks(
+        serialize_time_blocks(blocks, "America/Los_Angeles", occupied)
+    )
+    assert [b["occupied"] for b in round_tripped] == occupied
+
+
+def test_deserialize_leaves_occupied_out_of_rows_that_never_stored_it():
+    # A generation saved before occupied windows existed: the overlap check
+    # must fall back to the block's own window, so the key stays absent
+    # rather than reading as None ("this block holds no matches").
+    legacy_json = json.dumps(
+        [{"date": "2026-09-05", "start_time": "10:00", "end_time": None, "cycle_time": 180}]
+    )
+    assert "occupied" not in deserialize_time_blocks(legacy_json)[0]

@@ -310,6 +310,59 @@ def block_utc_bounds(
     return start_utc, end_utc
 
 
+def blocks_occupied_windows(
+    resolved_blocks: list[ResolvedBlock],
+    timezone_name: str,
+    match_duration_seconds: int,
+    slots: range | None = None,
+) -> list[tuple[dt.datetime, dt.datetime] | None]:
+    """For each resolved block, the UTC window its matches actually use:
+    from its first match's start to its last match's start plus one match
+    length, both placed exactly as assign_scheduled_times places them.
+    None for a block with no matches.
+
+    `slots` narrows this to one phase of a combined request: the global
+    slot indices (in the order assign_scheduled_times numbers them across
+    every block) that phase's matches took. Without it, every slot counts.
+
+    This, not the block's requested start_time/end_time, is what a later
+    generation's overlap check holds a generation to: an open-ended block
+    would otherwise count as running forever, a block whose matches finish
+    early would keep the rest of its window booked, and one phase of a
+    combined request would keep claiming the other phases' time after they
+    were cleared."""
+    tz = ZoneInfo(timezone_name)
+    windows: list[tuple[dt.datetime, dt.datetime] | None] = []
+    block_first_slot = 0
+    for block in resolved_blocks:
+        block_slots = range(block_first_slot, block_first_slot + block.time_slot_count)
+        block_first_slot += block.time_slot_count
+        if slots is not None:
+            block_slots = range(
+                max(block_slots.start, slots.start), min(block_slots.stop, slots.stop)
+            )
+        if len(block_slots) == 0:
+            windows.append(None)
+            continue
+        block_start_utc = dt.datetime.combine(
+            block.date, _parse_time_of_day(block.start_time), tzinfo=tz
+        ).astimezone(dt.UTC)
+        base = block_first_slot - block.time_slot_count
+
+        def slot_start(global_slot: int) -> dt.datetime:
+            offset = round((global_slot - base) * block.cycle_time_seconds)
+            return block_start_utc + dt.timedelta(seconds=offset)
+
+        windows.append(
+            (
+                slot_start(block_slots.start),
+                slot_start(block_slots.stop - 1)
+                + dt.timedelta(seconds=match_duration_seconds),
+            )
+        )
+    return windows
+
+
 def implicit_default_time_block(
     match_duration_seconds: int, warn_below_multiplier: float
 ) -> dict:
@@ -320,7 +373,11 @@ def implicit_default_time_block(
     }
 
 
-def serialize_time_blocks(time_blocks: list[dict], timezone_name: str) -> str:
+def serialize_time_blocks(
+    time_blocks: list[dict],
+    timezone_name: str,
+    occupied: list[tuple[dt.datetime, dt.datetime] | None] | None = None,
+) -> str:
     """JSON-encodes a list of time-block dicts (as produced by
     ScheduleGenerateRequest.time_blocks or the implicit-default path) for
     storage in ScheduleGeneration.time_blocks_json. Each block's `date`
@@ -335,19 +392,29 @@ def serialize_time_blocks(time_blocks: list[dict], timezone_name: str) -> str:
     strings across generations that may have resolved against different
     timezone frames (the implicit-default path always resolves against
     "UTC"; the explicit time_blocks path resolves against the session's
-    own timezone) -- see this project's final-review fix wave, Finding 2."""
-    return json.dumps(
-        [
-            {
-                "date": b["date"].isoformat(),
-                "start_time": b["start_time"],
-                "end_time": b.get("end_time"),
-                "cycle_time": b.get("cycle_time"),
-                "timezone": timezone_name,
-            }
-            for b in time_blocks
-        ]
-    )
+    own timezone) -- see this project's final-review fix wave, Finding 2.
+
+    When given, `occupied` (blocks_occupied_windows's result, one entry per
+    block in the same order) is stored per block as `occupied_from`/
+    `occupied_until` ISO-8601 UTC instants, both null for a block that
+    holds none of this generation's matches."""
+    if occupied is not None and len(occupied) != len(time_blocks):
+        raise ValueError("occupied needs exactly one entry per time block")
+    encoded = []
+    for index, b in enumerate(time_blocks):
+        entry = {
+            "date": b["date"].isoformat(),
+            "start_time": b["start_time"],
+            "end_time": b.get("end_time"),
+            "cycle_time": b.get("cycle_time"),
+            "timezone": timezone_name,
+        }
+        if occupied is not None:
+            window = occupied[index]
+            entry["occupied_from"] = window[0].isoformat() if window is not None else None
+            entry["occupied_until"] = window[1].isoformat() if window is not None else None
+        encoded.append(entry)
+    return json.dumps(encoded)
 
 
 def deserialize_time_blocks(time_blocks_json: str) -> list[dict]:
@@ -363,15 +430,28 @@ def deserialize_time_blocks(time_blocks_json: str) -> list[dict]:
     section) -- so there is no genuine production row whose true
     original frame this default could get wrong; it only affects test
     data and generations made in the narrow window between the phases/
-    dry_run feature landing and this default being added."""
-    raw = json.loads(time_blocks_json)
-    return [
-        {
+    dry_run feature landing and this default being added.
+
+    "occupied" (a (from, until) pair of UTC datetimes, or None for a block
+    with none of the generation's matches) is present only when the row
+    stored it; rows from before it existed leave the key out, so callers
+    can tell "no matches" from "unknown"."""
+    blocks = []
+    for b in json.loads(time_blocks_json):
+        block = {
             "date": dt.date.fromisoformat(b["date"]),
             "start_time": b["start_time"],
             "end_time": b.get("end_time"),
             "cycle_time": b.get("cycle_time"),
             "timezone": b.get("timezone", "UTC"),
         }
-        for b in raw
-    ]
+        if "occupied_from" in b:
+            if b["occupied_until"] is None:
+                block["occupied"] = None
+            else:
+                block["occupied"] = (
+                    dt.datetime.fromisoformat(b["occupied_from"]),
+                    dt.datetime.fromisoformat(b["occupied_until"]),
+                )
+        blocks.append(block)
+    return blocks

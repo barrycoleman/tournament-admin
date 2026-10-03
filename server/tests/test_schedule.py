@@ -1,5 +1,7 @@
 import datetime as dt
+import json
 import random
+from zoneinfo import ZoneInfo
 
 
 def _setup_ready_session(client, num_teams: int = 8) -> tuple[int, list[int]]:
@@ -1118,7 +1120,8 @@ def test_generate_schedule_rejects_overlap_with_a_prior_generation(client):
     assert first.status_code == 201
 
     # A second generation (different round_type, same session/division)
-    # whose block overlaps the first's must be rejected.
+    # whose matches would overlap the first's (09:00 and 09:30, the
+    # second running to 09:32) must be rejected.
     second = client.post(
         "/api/schedule",
         json={
@@ -1127,12 +1130,12 @@ def test_generate_schedule_rejects_overlap_with_a_prior_generation(client):
             "target_matches_per_team": 1,
             "scheduler_plugin_name": "simple_random",
             "time_blocks": [
-                {"date": "2026-09-05", "start_time": "09:30", "end_time": "11:00", "cycle_time": 60}
+                {"date": "2026-09-05", "start_time": "09:30", "end_time": None, "cycle_time": 60}
             ],
         },
     )
     assert second.status_code == 422
-    assert "schedule_generation_id" in second.json()["detail"]
+    assert "overlapping the practice round's matches" in second.json()["detail"]
 
     # Matches from the first generation are untouched by the rejected call.
     matches = client.get(f"/api/matches?session_id={session_id}").json()
@@ -1599,19 +1602,14 @@ def test_generate_schedule_rejects_overlap_across_timezone_frames_from_implicit_
     client,
 ):
     # Final-review live-probe regression (Finding 2): the implicit-default
-    # generation path stores its one open-ended block against a "UTC"
-    # timezone frame, while the explicit time_blocks path stores its
-    # blocks against the session's own IANA timezone. Comparing the two
-    # sides' raw wall-clock date/start_time/end_time strings directly
-    # (the pre-fix behavior) missed overlaps like this one: the implicit
-    # block below is dated "today" (whatever the real wall clock says
-    # when this test runs) while the explicit block is dated tomorrow --
-    # different date strings, so a same-date-only comparison skips the
-    # check entirely and never notices that the implicit block is
-    # open-ended and therefore still running tomorrow in real time too.
-    # Converting both sides to real UTC instants (this fix) correctly
-    # rejects this as a genuine overlap regardless of which local date
-    # string either side happens to be stored under.
+    # generation path stores its one block against a "UTC" timezone frame,
+    # while the explicit time_blocks path stores its blocks against the
+    # session's own IANA timezone. Comparing the two sides' raw wall-clock
+    # date/start_time strings directly (the pre-fix behavior) gets this
+    # wrong: the same real instant reads 7-8 hours apart in the two frames
+    # (and often on different dates). Converting both sides to real UTC
+    # instants correctly flags a Los Angeles block that starts while the
+    # implicit block's matches are still running.
     client.post("/api/event", json={"name": "Regional Qualifier"})
     plugins = client.get("/api/plugins/games").json()
     client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
@@ -1630,8 +1628,8 @@ def test_generate_schedule_rejects_overlap_across_timezone_frames_from_implicit_
     client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
 
     # First generation: implicit-default path (no time_blocks given) --
-    # one open-ended block, starting ~5 minutes from now, stored against
-    # a "UTC" frame.
+    # one block starting ~5 minutes from now, stored against a "UTC" frame,
+    # whose 2 matches run for a few minutes.
     first = client.post(
         "/api/schedule",
         json={
@@ -1642,13 +1640,16 @@ def test_generate_schedule_rejects_overlap_across_timezone_frames_from_implicit_
         },
     )
     assert first.status_code == 201
+    implicit = first.json()["resolved_time_blocks"][0]
+    implicit_start_utc = dt.datetime.combine(
+        dt.date.fromisoformat(implicit["date"]),
+        dt.time.fromisoformat(implicit["start_time"]),
+        tzinfo=dt.UTC,
+    )
 
-    # Second generation: explicit time_blocks resolved against the
-    # session's America/Los_Angeles timezone, dated tomorrow relative to
-    # whenever this test actually runs -- a genuinely later real-world
-    # block that, because the first block is open-ended, necessarily
-    # overlaps it in real time.
-    tomorrow = (dt.datetime.now(dt.UTC) + dt.timedelta(days=1)).date().isoformat()
+    # Second generation: an explicit Los Angeles block starting at that
+    # same real instant, written in Los Angeles wall-clock terms.
+    local_start = implicit_start_utc.astimezone(ZoneInfo("America/Los_Angeles"))
     second = client.post(
         "/api/schedule",
         json={
@@ -1658,16 +1659,18 @@ def test_generate_schedule_rejects_overlap_across_timezone_frames_from_implicit_
             "scheduler_plugin_name": "simple_random",
             "time_blocks": [
                 {
-                    "date": tomorrow,
-                    "start_time": "09:00",
-                    "end_time": "10:00",
+                    "date": local_start.date().isoformat(),
+                    "start_time": local_start.strftime("%H:%M"),
+                    "end_time": None,
                     "cycle_time": 1800,
                 }
             ],
         },
     )
     assert second.status_code == 422
-    assert "schedule_generation_id" in second.json()["detail"]
+    detail = second.json()["detail"]
+    assert "overlapping the practice round's matches" in detail
+    assert "(America/Los_Angeles)" in detail and "(UTC)" in detail
 
     matches = client.get(f"/api/matches?session_id={session_id}").json()
     assert all(m["round_type"] == "practice" for m in matches)
@@ -1774,3 +1777,216 @@ def test_resolved_time_blocks_report_their_time_slot_count(client):
     counts = [b["time_slot_count"] for b in real.json()["resolved_time_blocks"]]
     matches = client.get(f"/api/matches?session_id={session_id}").json()
     assert sum(counts) == len({m["time_slot"] for m in matches})
+
+
+# ---------- Overlap is judged by the time a block's matches actually use ----------
+
+
+def _timed_session(client) -> int:
+    """8 checked-in teams on 1 field in a Los Angeles session: a 1-match-per-team
+    round is 2 matches of the example game's 120-second length."""
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    plugins = client.get("/api/plugins/games").json()
+    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
+    session_id = client.post(
+        "/api/sessions",
+        json={"label": "Session 1", "session_date": "2026-10-03", "timezone": "America/Los_Angeles"},
+    ).json()["id"]
+    for i in range(8):
+        team_id = client.post(
+            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
+        ).json()["id"]
+        client.post(
+            f"/api/sessions/{session_id}/participants",
+            json={"team_id": team_id, "checked_in": True},
+        )
+    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+    return session_id
+
+
+def _generate(client, session_id: int, round_type: str, block: dict):
+    return client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "round_type": round_type,
+            "target_matches_per_team": 1,
+            "scheduler_plugin_name": "simple_random",
+            "time_blocks": [{"date": "2026-10-03", **block}],
+        },
+    )
+
+
+def _open_ended_practice(client, session_id: int) -> None:
+    # Matches at 09:00 and 09:02:30; the second ends at 09:04:30.
+    first = _generate(
+        client, session_id, "practice", {"start_time": "09:00", "end_time": None, "cycle_time": 150}
+    )
+    assert first.status_code == 201, first.text
+
+
+def test_a_block_may_start_once_an_open_ended_blocks_matches_finish(client):
+    session_id = _timed_session(client)
+    _open_ended_practice(client, session_id)
+
+    second = _generate(
+        client, session_id, "qualification", {"start_time": "09:05", "end_time": None, "cycle_time": 150}
+    )
+    assert second.status_code == 201, second.text
+
+
+def test_a_block_starting_before_the_last_match_ends_names_both_windows(client):
+    session_id = _timed_session(client)
+    _open_ended_practice(client, session_id)
+
+    second = _generate(
+        client, session_id, "qualification", {"start_time": "09:04", "end_time": "10:00", "cycle_time": None}
+    )
+    assert second.status_code == 422
+    # Fit mode spreads the 2 matches over 09:04-10:00: 09:04 and 09:32.
+    assert second.json()["detail"] == (
+        "The new block's matches on 2026-10-03 would run from 09:04 to 09:34, "
+        "overlapping the practice round's matches on 2026-10-03, which run from "
+        "09:00 to 09:04:30 (America/Los_Angeles). Start the new block at 09:05 or later."
+    )
+
+
+def test_an_open_ended_new_block_may_finish_before_an_existing_round(client):
+    session_id = _timed_session(client)
+    _open_ended_practice(client, session_id)
+
+    # 08:55 and 08:57:30, finishing 08:59:30: clear of the 09:00 practice.
+    before = _generate(
+        client, session_id, "qualification", {"start_time": "08:55", "end_time": None, "cycle_time": 150}
+    )
+    assert before.status_code == 201, before.text
+
+
+def test_a_new_block_running_into_an_existing_round_says_when_to_finish(client):
+    session_id = _timed_session(client)
+    _open_ended_practice(client, session_id)
+
+    second = _generate(
+        client, session_id, "qualification", {"start_time": "08:57", "end_time": None, "cycle_time": 150}
+    )
+    assert second.status_code == 422
+    assert second.json()["detail"] == (
+        "The new block's matches on 2026-10-03 would run from 08:57 to 09:01:30, "
+        "overlapping the practice round's matches on 2026-10-03, which run from "
+        "09:00 to 09:04:30 (America/Los_Angeles). The new block's matches must "
+        "finish by 09:00."
+    )
+
+
+def test_a_fixed_block_that_finishes_early_frees_the_rest_of_its_window(client):
+    session_id = _timed_session(client)
+    # 09:00-12:00 at a 5400-second cycle holds exactly the 2 matches, at
+    # 09:00 and 10:30; the second ends at 10:32.
+    first = _generate(
+        client, session_id, "practice", {"start_time": "09:00", "end_time": "12:00", "cycle_time": 5400}
+    )
+    assert first.status_code == 201, first.text
+
+    early = _generate(
+        client, session_id, "qualification", {"start_time": "10:31", "end_time": None, "cycle_time": 150}
+    )
+    assert early.status_code == 422
+    assert "which run from 09:00 to 10:32 (America/Los_Angeles)" in early.json()["detail"]
+
+    after = _generate(
+        client, session_id, "qualification", {"start_time": "10:32", "end_time": None, "cycle_time": 150}
+    )
+    assert after.status_code == 201, after.text
+
+
+def test_a_generation_saved_without_occupied_times_keeps_its_requested_window(client):
+    from sqlalchemy import select
+
+    from tournament_server.models.schedule_generation import ScheduleGeneration
+
+    session_id = _timed_session(client)
+    _open_ended_practice(client, session_id)
+    # Rewrite the stored blocks the way generations were saved before
+    # occupied times existed.
+    db = client.app.state.session_factory()
+    try:
+        generation = db.execute(select(ScheduleGeneration)).scalar_one()
+        blocks = json.loads(generation.time_blocks_json)
+        for block in blocks:
+            del block["occupied_from"]
+            del block["occupied_until"]
+        generation.time_blocks_json = json.dumps(blocks)
+        db.commit()
+    finally:
+        db.close()
+
+    second = _generate(
+        client, session_id, "qualification", {"start_time": "11:00", "end_time": None, "cycle_time": 150}
+    )
+    assert second.status_code == 422
+    assert "which run from 09:00 with no end time" in second.json()["detail"]
+
+
+def test_clearing_one_phase_of_a_combined_request_frees_only_its_time(client):
+    session_id = _timed_session(client)
+    # Practice x1 (2 matches) then qualification x1 (2 matches) in one
+    # open-ended block at a 150s cycle: practice at 09:00 and 09:02:30,
+    # qualification at 09:05 and 09:07:30.
+    combined = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "scheduler_plugin_name": "simple_random",
+            "phases": [
+                {"round_type": "practice", "target_matches_per_team": 1},
+                {"round_type": "qualification", "target_matches_per_team": 1},
+            ],
+            "time_blocks": [
+                {"date": "2026-10-03", "start_time": "09:00", "end_time": None, "cycle_time": 150}
+            ],
+        },
+    )
+    assert combined.status_code == 201, combined.text
+    cleared = client.delete(
+        f"/api/schedule?session_id={session_id}&round_type=qualification"
+    )
+    assert cleared.status_code == 200, cleared.text
+
+    # Practice still holds 09:00-09:04:30, and only that.
+    inside = _generate(
+        client, session_id, "qualification", {"start_time": "09:04", "end_time": None, "cycle_time": 150}
+    )
+    assert inside.status_code == 422
+    assert "which run from 09:00 to 09:04:30 (America/Los_Angeles)" in inside.json()["detail"]
+
+    again = _generate(
+        client, session_id, "qualification", {"start_time": "09:05", "end_time": None, "cycle_time": 150}
+    )
+    assert again.status_code == 201, again.text
+
+
+def test_a_later_phase_claims_only_its_own_matches_window(client):
+    session_id = _timed_session(client)
+    combined = client.post(
+        "/api/schedule",
+        json={
+            "session_id": session_id,
+            "scheduler_plugin_name": "simple_random",
+            "phases": [
+                {"round_type": "practice", "target_matches_per_team": 1},
+                {"round_type": "qualification", "target_matches_per_team": 1},
+            ],
+            "time_blocks": [
+                {"date": "2026-10-03", "start_time": "09:00", "end_time": None, "cycle_time": 150}
+            ],
+        },
+    )
+    assert combined.status_code == 201, combined.text
+    client.delete(f"/api/schedule?session_id={session_id}&round_type=practice")
+
+    # Qualification's matches (09:05 and 09:07:30) run 09:05-09:09:30, so
+    # the freed practice time before them is open again.
+    before = _generate(
+        client, session_id, "practice", {"start_time": "09:00", "end_time": "09:05", "cycle_time": 150}
+    )
+    assert before.status_code == 201, before.text

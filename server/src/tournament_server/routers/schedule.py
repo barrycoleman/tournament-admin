@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
@@ -31,8 +32,10 @@ from tournament_server.schemas.schedule import (
 from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
 from tournament_server.services.team_assignment import get_sole_division_id
 from tournament_server.services.schedule_timing import (
+    ResolvedBlock,
     assign_scheduled_times,
     block_utc_bounds,
+    blocks_occupied_windows,
     deserialize_time_blocks,
     implicit_default_time_block,
     resolve_block_cycle_times,
@@ -103,60 +106,106 @@ def _validate_generated_schedule(
             _fail(422, "Alliance stations must be distinct within a match")
 
 
+def _local_clock(instant: dt.datetime, timezone_name: str, on_date: dt.date) -> str:
+    """`instant` as wall-clock time in `timezone_name`: HH:MM, with :SS only
+    when it isn't on the minute, and its date in front when that differs
+    from `on_date` (a window that runs past midnight)."""
+    local = instant.astimezone(ZoneInfo(timezone_name))
+    clock = local.strftime("%H:%M:%S" if local.second else "%H:%M")
+    return clock if local.date() == on_date else f"{local.date().isoformat()} {clock}"
+
+
 def _check_no_overlap_with_prior_generations(
     db: Session,
     session_id: int,
     division_id: int | None,
-    new_blocks: list[dict],
+    new_blocks: list[ResolvedBlock],
+    new_occupied: list[tuple[dt.datetime, dt.datetime] | None],
     new_timezone_name: str,
 ) -> None:
-    """Raises ValueError if any of new_blocks overlaps any block stored by
-    an earlier, still-live ScheduleGeneration for the same
-    (session_id, division_id) -- checked across every round_type, not just
-    the one being generated now, since two round_types sharing the same
-    physical fields must never double-book a time window.
+    """Raises ValueError if the matches of any of new_blocks would overlap
+    the matches of any block stored by an earlier, still-live
+    ScheduleGeneration for the same (session_id, division_id) -- checked
+    across every round_type, not just the one being generated now, since
+    two round_types sharing the same physical fields must never double-book
+    a time window.
 
-    Both sides are converted to real UTC instants
-    (schedule_timing.block_utc_bounds) before comparing, rather than
-    comparing raw local "HH:MM" wall-clock strings (and a same-date
-    short-circuit) directly. This matters because the implicit-default
-    generation path stores its one block against a "UTC" timezone frame
-    while the explicit time_blocks path stores its blocks against the
-    session's own IANA timezone: two blocks that are the same real moment
-    (or that genuinely overlap in real time) can have wall-clock date/
-    start_time/end_time values that look identical, disjoint, or even
-    backwards depending on which path produced which side, so comparing
-    the raw strings (as an earlier version of this function did) both
-    missed real overlaps and could have flagged non-overlapping blocks as
-    conflicting. Comparing resolved UTC instants is correct regardless of
-    which path either side came from."""
+    Each side is held to the window its matches actually use
+    (blocks_occupied_windows), not the window it was requested with: an
+    open-ended block would otherwise run forever, one whose matches finish
+    early would keep the rest of its window booked, and each phase of a
+    combined request stores only its own matches' windows, so clearing one
+    phase frees exactly its time. A block with none of a generation's
+    matches holds nothing for it. A stored generation saved before occupied
+    windows were recorded falls back to its requested start_time/end_time
+    (open-ended still meaning indefinitely).
+
+    Both sides are compared as real UTC instants (block_utc_bounds), never
+    as raw local "HH:MM" strings: the implicit-default generation path
+    stores its one block against a "UTC" frame while the explicit
+    time_blocks path stores its blocks against the session's own IANA
+    timezone, so the same real moment can have wall-clock values that look
+    identical, disjoint, or even backwards depending on which path produced
+    which side."""
     query = select(ScheduleGeneration).where(ScheduleGeneration.session_id == session_id)
     if division_id is None:
         query = query.where(ScheduleGeneration.division_id.is_(None))
     else:
         query = query.where(ScheduleGeneration.division_id == division_id)
-    new_bounds = [block_utc_bounds(b, new_timezone_name) for b in new_blocks]
+    new_windows = [
+        (block, *window)
+        for block, window in zip(new_blocks, new_occupied)
+        if window is not None
+    ]
+
     for prior in db.execute(query).scalars().all():
         if prior.time_blocks_json is None:
             continue
-        prior_blocks = deserialize_time_blocks(prior.time_blocks_json)
-        for prior_block in prior_blocks:
-            prior_start, prior_end = block_utc_bounds(
-                prior_block, prior_block["timezone"]
-            )
-            for new_block, (new_start, new_end) in zip(new_blocks, new_bounds):
-                new_ends_before_prior = new_end is not None and new_end <= prior_start
-                prior_ends_before_new = prior_end is not None and prior_end <= new_start
-                if not (new_ends_before_prior or prior_ends_before_new):
-                    raise ValueError(
-                        "time_blocks overlap with an existing schedule: "
-                        f"schedule_generation_id {prior.id}'s block starting at "
-                        f"{prior_block['date']} {prior_block['start_time']!r} "
-                        f"({prior_block['timezone']}) overlaps the new block "
-                        f"starting at {new_block['date']} "
-                        f"{new_block['start_time']!r} ({new_timezone_name}) "
-                        "in real (UTC) time"
+        for prior_block in deserialize_time_blocks(prior.time_blocks_json):
+            prior_timezone = prior_block["timezone"]
+            prior_start, prior_end = block_utc_bounds(prior_block, prior_timezone)
+            if "occupied" in prior_block:
+                if prior_block["occupied"] is None:
+                    continue
+                prior_start, prior_end = prior_block["occupied"]
+            for new_block, new_start, new_end in new_windows:
+                if new_end <= prior_start or (prior_end is not None and prior_end <= new_start):
+                    continue
+                prior_from = _local_clock(prior_start, prior_timezone, prior_block["date"])
+                prior_range = (
+                    f"from {prior_from} to "
+                    f"{_local_clock(prior_end, prior_timezone, prior_block['date'])}"
+                    if prior_end is not None
+                    else f"from {prior_from} with no end time"
+                )
+                new_range = (
+                    f"from {_local_clock(new_start, new_timezone_name, new_block.date)} to "
+                    f"{_local_clock(new_end, new_timezone_name, new_block.date)}"
+                )
+                if prior_timezone == new_timezone_name:
+                    new_zone, prior_zone = "", f" ({prior_timezone})"
+                else:
+                    new_zone, prior_zone = f" ({new_timezone_name})", f" ({prior_timezone})"
+                if new_start < prior_start:
+                    advice = (
+                        "The new block's matches must finish by "
+                        f"{_local_clock(prior_start, new_timezone_name, new_block.date)}."
                     )
+                elif prior_end is not None:
+                    # Blocks start on the minute, so round up to the next one.
+                    earliest = prior_end + dt.timedelta(seconds=-prior_end.second % 60)
+                    advice = (
+                        "Start the new block at "
+                        f"{_local_clock(earliest, new_timezone_name, new_block.date)} or later."
+                    )
+                else:
+                    advice = "Clear that round to schedule anything after it."
+                raise ValueError(
+                    f"The new block's matches on {new_block.date.isoformat()} would run "
+                    f"{new_range}{new_zone}, overlapping the {prior.round_type} round's "
+                    f"matches on {prior_block['date'].isoformat()}, which run "
+                    f"{prior_range}{prior_zone}. {advice}"
+                )
 
 
 def _fold_generated_into_pairing_history(
@@ -389,13 +438,17 @@ def generate_schedule(
     try:
         if payload.time_blocks is not None:
             validate_blocks_ordered_and_non_overlapping(time_blocks_input)
-            _check_no_overlap_with_prior_generations(
-                db, payload.session_id, payload.division_id, time_blocks_input,
-                timezone_name,
-            )
         resolved_blocks = resolve_block_cycle_times(
             time_blocks_input, total_time_slots_needed
         )
+        if payload.time_blocks is not None:
+            _check_no_overlap_with_prior_generations(
+                db, payload.session_id, payload.division_id, resolved_blocks,
+                blocks_occupied_windows(
+                    resolved_blocks, timezone_name, match_duration_seconds
+                ),
+                timezone_name,
+            )
         global_assignments = assign_scheduled_times(
             resolved_blocks, list(range(total_time_slots_needed)), timezone_name
         )
@@ -447,7 +500,6 @@ def generate_schedule(
             phase_results=phase_results_dry,
         )
 
-    stored_time_blocks_json = serialize_time_blocks(time_blocks_input, timezone_name)
     phase_results: list[PhaseResult] = []
     created_matches = []
     global_offset = 0
@@ -457,6 +509,7 @@ def generate_schedule(
             local_slot: global_offset + rank
             for rank, local_slot in enumerate(sorted_local_slots)
         }
+        phase_slots = range(global_offset, global_offset + len(sorted_local_slots))
         global_offset += len(sorted_local_slots)
 
         generation = ScheduleGeneration(
@@ -467,7 +520,17 @@ def generate_schedule(
             scheduler_plugin_version=scheduler_plugin.version,
             target_matches_per_team=phase.target_matches_per_team,
             generated_at=utc_now(),
-            time_blocks_json=stored_time_blocks_json,
+            # Every phase stores the request's blocks, but only the windows
+            # its own matches use: resolved_blocks is in (date, start_time)
+            # order, which the explicit path has already required of
+            # time_blocks_input (the implicit path has one block).
+            time_blocks_json=serialize_time_blocks(
+                time_blocks_input,
+                timezone_name,
+                blocks_occupied_windows(
+                    resolved_blocks, timezone_name, match_duration_seconds, phase_slots
+                ),
+            ),
         )
         db.add(generation)
         db.flush()
