@@ -48,6 +48,16 @@ working example); a **scheduler** plugin (`kind: "scheduler"`, folder
 `SCHEDULER_PLUGIN_KIND`, and `plugins/schedulers/simple_random/plugin.py`
 for a complete working example).
 
+One game plugin ships with the server, `plugins/games/sample_cooperative/`
+("Sample Cooperative Game"): two teams per match share one score entered
+as a single number (0-999), ranked by average, with seed-paired
+score-chase finals and a 60-second, driver-only match. It exists so a
+fresh install can select a game and build a schedule without writing a
+plugin first, and as the smallest real example of a cooperative game.
+Real games' plugins are meant to be developed and distributed separately
+and installed by zip (see below). `tests/test_sample_cooperative_plugin.py`
+runs it through conformance and a full event.
+
 The server scans both `<plugins_root>/games/*/` and
 `<plugins_root>/schedulers/*/` at startup (`plugin_registry/discovery.py`)
 and also accepts new plugins of either kind at runtime — `POST
@@ -222,7 +232,7 @@ write lives.
 An Event selects exactly one game plugin via `POST /api/event/game-plugin`
 — immutable once set. A Match has Alliances (created together via `POST
 /api/matches`), with the count determined by the game plugin's declared
-`alliance_count` (both shipped game plugins currently declare 2). Each
+`alliance_count` (every game plugin so far declares 2). Each
 alliance holds one or more Teams through the `alliance_teams` join table.
 `POST /api/matches/{id}/alliances/{id}/score` runs the event's plugin's
 `validate()` (blocking on violations unless `force: true` is passed) and
@@ -248,7 +258,7 @@ ranking is by average score — see the next section). `alliance_count`
 (also declared in `match_format()`) is read everywhere a match's alliance
 count matters — `POST /api/matches`, the scheduler-plugin contract, and
 `POST /api/schedule`'s structural validation — instead of being hardcoded,
-even though both game models shipped so far declare `alliance_count: 2`.
+even though every game plugin so far declares `alliance_count: 2`.
 
 Every list/read endpoint that's scoped to a session (`GET /api/matches`,
 `GET /api/rankings`) takes an explicit `session_id` query parameter,
