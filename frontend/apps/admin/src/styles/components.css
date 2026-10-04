@@ -989,3 +989,120 @@
   align-items: center;
   gap: var(--space-2);
 }
+
+/* Schedule planner */
+.division-tabs {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  border-bottom: var(--border-width) solid var(--color-border);
+  margin-bottom: var(--space-4);
+}
+.division-tabs__tab {
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.division-tabs__tab[aria-selected="true"] {
+  border-bottom-color: var(--color-accent);
+  color: var(--color-text);
+  font-weight: 600;
+}
+.division-tabs__tab:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+.playing-times__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+.playing-times__header h2 {
+  margin: 0;
+}
+.playing-times__summary {
+  color: var(--color-text-secondary);
+  flex: 1;
+}
+.plan-timeline {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.plan-timeline__window {
+  flex-basis: 0;
+  min-width: 3rem;
+}
+.plan-timeline__bar {
+  position: relative;
+  height: 1.25rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-sunken);
+  overflow: hidden;
+}
+.plan-timeline__segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--color-accent);
+}
+.plan-timeline__segment[data-round="practice"] {
+  background: color-mix(in srgb, var(--color-accent) 55%, var(--color-bg));
+}
+.plan-timeline__segment--draft {
+  opacity: 0.55;
+}
+.plan-timeline__segment--overflow {
+  background: var(--color-danger);
+}
+.plan-timeline__label,
+.plan-timeline__gap {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+.plan-timeline__gap {
+  align-self: center;
+  white-space: nowrap;
+}
+.pill {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  background: var(--color-bg-sunken);
+  color: var(--color-text-secondary);
+}
+.pill--changed {
+  background: var(--color-warning-bg);
+  color: var(--color-text);
+}
+.pill--new {
+  background: var(--color-success-bg);
+  color: var(--color-text);
+}
+.rounds-table input.input--changed {
+  border-color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+.rounds-table__hint {
+  margin-left: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+.fit-status {
+  margin-top: var(--space-3);
+}
+.fit-status--ok {
+  color: var(--color-success);
+}
+.fit-status--stale {
+  opacity: 0.6;
+}

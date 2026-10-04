@@ -133,11 +133,13 @@
         "teams": "Not enough teams are checked in to fill a match.",
         "teamsFix": "Check teams in",
         "fields": "This division has no fields.",
-        "fieldsFix": "Add fields"
+        "fieldsFix": "Add fields",
+        "playingTimes": "This session has no playing times.",
+        "playingTimesFix": "Add playing times"
       },
       "rounds": {
-        "heading": "Current rounds",
-        "none": "No rounds have been generated yet.",
+        "heading": "Rounds",
+        "none": "No rounds yet. Add one to start planning.",
         "columnRound": "Round",
         "columnMatches": "Matches",
         "columnScored": "Scored",
@@ -156,7 +158,29 @@
         "clearBody_one": "This deletes the round's {{count}} match.",
         "clearBody_other": "This deletes the round's {{count}} matches.",
         "scoredWarning_one": "{{count}} of them has a score, which is deleted too.",
-        "scoredWarning_other": "{{count}} of them have scores, which are deleted too."
+        "scoredWarning_other": "{{count}} of them have scores, which are deleted too.",
+        "columnMatchesPerTeam": "Matches per team",
+        "columnCycle": "Cycle time",
+        "columnWhen": "When",
+        "add": "Add round",
+        "remove": "Remove",
+        "removeLabel": "Remove {{round}}",
+        "newRoundTypeLabel": "Round type for new round {{n}}",
+        "matchesPerTeamLabel": "{{round}} matches per team",
+        "cycleMinutesLabel": "{{round}} cycle time minutes",
+        "cycleSecondsLabel": "{{round}} cycle time seconds",
+        "minutesUnit": "min",
+        "secondsUnit": "sec",
+        "was": "was {{value}}",
+        "pillScheduled": "scheduled",
+        "pillChanged": "changed",
+        "pillNew": "new",
+        "pillNeedsRebuild": "needs rebuild",
+        "pillScored_one": "{{count}} scored",
+        "pillScored_other": "{{count}} scored",
+        "doesNotFit": "doesn't fit",
+        "pending": "after {{round}}",
+        "droppedLocked": "{{rounds}} now has scores, so your changes to it were discarded."
       },
       "form": {
         "heading": "Generate a schedule",
@@ -224,6 +248,69 @@
         "clearAriaLabel": "Clear {{round}} ({{scope}})",
         "clearHeading": "Clear {{round}} ({{scope}})?",
         "columnScope": "Division"
+      },
+      "needsGamePlugin": "Select a game plugin on the event setup screen before scheduling.",
+      "noSchedulers": "No scheduler plugin is installed. Install one before scheduling.",
+      "divisionTabsLabel": "Divisions",
+      "divisionTab_one": "{{name}} · {{count}} team",
+      "divisionTab_other": "{{name}} · {{count}} teams",
+      "discardHeading": "Discard unapplied changes?",
+      "discardBody": "Your changes to this division's rounds haven't been applied.",
+      "discardConfirm": "Discard changes",
+      "keepEditing": "Keep editing",
+      "unsaved": {
+        "heading": "Leave without applying?",
+        "body": "Your changes to the rounds haven't been applied.",
+        "leave": "Leave",
+        "stay": "Stay"
+      },
+      "duration": {
+        "minutes": "{{minutes}} min",
+        "hours": "{{hours}} h",
+        "hoursMinutes": "{{hours}} h {{minutes}} min"
+      },
+      "playingTimes": {
+        "heading": "Playing times",
+        "none": "No playing times yet. Add the times matches can be played, for every day of this session.",
+        "edit": "Edit",
+        "save": "Save",
+        "cancel": "Cancel",
+        "add": "Add playing time",
+        "remove": "Remove",
+        "dateLabel": "Playing time {{n}} date",
+        "startLabel": "Playing time {{n}} start",
+        "endLabel": "Playing time {{n}} end",
+        "removeLabel": "Remove playing time {{n}}",
+        "timelineLabel": "Session timeline",
+        "gapBreak": "{{duration}} break",
+        "gapOvernight": "overnight",
+        "outsideRebuild": "Some matches are outside the playing times: {{rounds}}. Apply changes below to rebuild them.",
+        "outsideLocked": "{{rounds}} has matches outside the playing times but can't be rebuilt because it has scores. Clear it to move its matches.",
+        "errors": {
+          "incomplete": "Every playing time needs a date, a start and an end.",
+          "endBeforeStart": "Each playing time must end after it starts.",
+          "overlap": "Two playing times on the same day overlap."
+        }
+      },
+      "fit": {
+        "checking": "Checking the plan…",
+        "fits": "Fits, with {{free}} of {{day}} still free.",
+        "fitsExactly": "Fits.",
+        "over_one": "Over by {{duration}}: {{count}} {{round}} match doesn't fit before {{end}}.",
+        "over_other": "Over by {{duration}}: {{count}} {{round}} matches don't fit before {{end}}.",
+        "useCycle": "Use cycle time {{cycle}}",
+        "extend": "Extend {{day}} to {{time}}"
+      },
+      "actions": {
+        "generate": "Generate",
+        "apply": "Apply changes",
+        "discard": "Discard changes",
+        "rebuilds": "Rebuilds {{rounds}}.",
+        "moreOptions": "More options",
+        "schedulerLabel": "Scheduler",
+        "applied_one": "{{count}} match scheduled.",
+        "applied_other": "{{count}} matches scheduled.",
+        "viewMatches": "View matches"
       }
     },
     "loading": "Loading…",
