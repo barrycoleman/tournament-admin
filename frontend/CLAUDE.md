@@ -138,19 +138,39 @@ separate, non-nested route: the dedicated `front_desk` kiosk screen,
 scoped to `Event.active_session_id` rather than a session id in the
 URL).
 
-The Schedule tab is split so the risky logic is unit-testable without
-rendering: `src/schedule/scheduleRequest.ts` (form state → `POST
-/api/schedule` body, round-type defaults, preview timing math),
-`roundSummary.ts`, and `readiness.ts` are pure; `ScheduleForm`,
-`CurrentRounds`, `ReadinessChecklist`, and `PreviewPanel` are the
-components. A single-division event never sends `division_id` (the
-backend then uses unassigned FieldSets); a multi-division event always
-sends the picked one. `useSessionMatches` (`src/useSessionMatches.ts`)
-is the one `["matches", sessionId]` query both the Schedule and Matches
-tabs share, kept live off `/ws/session/{id}`; `DELETE /api/schedule`
-broadcasts nothing, so anything that clears a round invalidates that key
-itself. Match times always render in the session's timezone
-(`src/matchTime.ts`), never the browser's.
+The Schedule tab is a live planner. `src/schedule/planDraft.ts` (rows,
+change detection and `isDraftDirty`, what Apply sends — the first
+new/changed/needs-rebuild row and every row after it — default cycle
+times, and merging a server refresh into the draft), `playingWindows.ts`,
+`timeline.ts`, `roundSummary.ts` and `readiness.ts` are pure and
+unit-tested. `SessionScheduleRoute` loads session-wide data, shows
+readiness blockers and the division tabs, and renders one `DivisionPlanner`
+per division (keyed by division, so switching tabs resets its draft after
+a discard prompt). It mounts the planner only once both the match format
+and the playing windows have loaded, because `PlayingTimesPanel` seeds its
+editor from the windows on first render. The readiness "Add playing
+times" link is a same-page anchor that scrolls to and focuses
+`#playing-times` itself, since client-side navigation wouldn't.
+`DivisionPlanner` owns the draft (`usePlannerDraft`, dirty when a scheduled
+row is edited or a new row is added, removed or edited relative to the
+suggestions it started with), sends it as a dry run 400 ms after the last
+edit (`usePlanPreview`, keyed by the request body), and renders
+`PlayingTimesPanel` (with `PlanTimeline`), `RoundsTable`, `FitStatus` and
+the Generate/Apply button, which stays disabled until the latest dry run
+says the plan fits. `RoundsTable`'s cycle inputs (`CycleInputs`) keep the
+text as typed and only re-sync from the row when `parseCycle` of that text
+no longer equals it. Anything that changes playing times or clears a round
+(`PlayingTimesPanel`, the extend action, `ClearRoundDialog`) invalidates
+`["schedulePlan"]` too, because an identical request body would otherwise
+reuse a stale answer. `useUnsavedChangesGuard` uses the data router's
+`useBlocker` plus `beforeunload`. A single-division event never sends
+`division_id` (the backend then uses unassigned FieldSets); a
+multi-division event always sends the selected one. `useSessionMatches`
+(`src/useSessionMatches.ts`) is the one `["matches", sessionId]` query both
+the Schedule and Matches tabs share, kept live off `/ws/session/{id}`;
+`DELETE /api/schedule` broadcasts nothing, so anything that clears a round
+invalidates that key itself. Match times always render in the session's
+timezone (`src/matchTime.ts`), never the browser's.
 
 `AppShell.tsx`'s nav is gated per role, the same pattern repeated for
 each: `role === "admin"` renders the full admin nav (Divisions, Teams,
