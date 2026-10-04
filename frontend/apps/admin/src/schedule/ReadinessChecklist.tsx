@@ -9,6 +9,8 @@ function fixLink(key: ReadinessKey, sessionId: number): string {
       return "/events/setup";
     case "timezone":
       return "/sessions";
+    case "playingTimes":
+      return "#playing-times";
     case "teams":
       return `/sessions/${sessionId}/checkin`;
     case "fields":

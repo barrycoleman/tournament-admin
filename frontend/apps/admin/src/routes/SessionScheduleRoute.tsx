@@ -1,14 +1,15 @@
-import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Link, useOutletContext } from "react-router-dom";
+import { useOutletContext } from "react-router-dom";
 import { apiRequest } from "@tournament-admin/shared";
-import { ReadinessChecklist } from "../schedule/ReadinessChecklist";
-import { CurrentRounds } from "../schedule/CurrentRounds";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { DivisionPlanner } from "../schedule/DivisionPlanner";
+import { DivisionTabs } from "../schedule/DivisionTabs";
 import { OutOfScopeRounds } from "../schedule/OutOfScopeRounds";
-import { ScheduleForm } from "../schedule/ScheduleForm";
+import { ReadinessChecklist } from "../schedule/ReadinessChecklist";
 import { checkReadiness, countCheckedInTeams, countUsableFields } from "../schedule/readiness";
-import { summarizeOutOfScopeRounds, summarizeRounds } from "../schedule/roundSummary";
+import { summarizeOutOfScopeRounds } from "../schedule/roundSummary";
 import { useSessionMatches } from "../useSessionMatches";
 import type {
   Division,
@@ -17,7 +18,7 @@ import type {
   FieldSetRead,
   MatchFormat,
   ParticipationRead,
-  ScheduleGenerateResponse,
+  PlayingWindowRead,
   SessionRead,
   TeamSummary,
 } from "../types";
@@ -26,26 +27,20 @@ export function SessionScheduleRoute() {
   const { t } = useTranslation();
   const { session } = useOutletContext<{ session: SessionRead }>();
   const [selectedDivisionId, setSelectedDivisionId] = useState<number | null>(null);
-  const queryClient = useQueryClient();
-  const [lastGenerated, setLastGenerated] = useState<ScheduleGenerateResponse | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [pendingDivisionId, setPendingDivisionId] = useState<number | null>(null);
 
   const { data: divisions, isError: divisionsError } = useQuery({
     queryKey: ["divisions"],
     queryFn: () => apiRequest<Division[]>("/api/divisions"),
   });
-  const { data: event } = useQuery({
-    queryKey: ["event"],
-    queryFn: () => apiRequest<EventRead>("/api/event"),
-  });
+  const { data: event } = useQuery({ queryKey: ["event"], queryFn: () => apiRequest<EventRead>("/api/event") });
   const { data: matchFormat, isError: matchFormatError } = useQuery({
     queryKey: ["matchFormat"],
     queryFn: () => apiRequest<MatchFormat>("/api/event/match-format"),
     enabled: Boolean(event?.game_plugin_name),
   });
-  const { data: teams } = useQuery({
-    queryKey: ["teams"],
-    queryFn: () => apiRequest<TeamSummary[]>("/api/teams"),
-  });
+  const { data: teams } = useQuery({ queryKey: ["teams"], queryFn: () => apiRequest<TeamSummary[]>("/api/teams") });
   const { data: participants } = useQuery({
     queryKey: ["participants", session.id],
     queryFn: () => apiRequest<ParticipationRead[]>(`/api/sessions/${session.id}/participants`),
@@ -58,10 +53,13 @@ export function SessionScheduleRoute() {
     queryKey: ["fields", session.id],
     queryFn: () => apiRequest<FieldRead[]>(`/api/fields?session_id=${session.id}`),
   });
-  const { data: matches } = useSessionMatches(session.id);
+  const { data: windows } = useQuery({
+    queryKey: ["playingWindows", session.id],
+    queryFn: () => apiRequest<PlayingWindowRead[]>(`/api/sessions/${session.id}/playing-windows`),
+  });
+  const { data: matches, dataUpdatedAt: matchesUpdatedAt } = useSessionMatches(session.id);
+  const onDirtyChange = useCallback((value: boolean) => setDirty(value), []);
 
-  // Until the divisions load we cannot tell single- from multi-division, and
-  // rendering as single-division would briefly show unscoped data.
   if (divisionsError) {
     return (
       <p className="alert alert-danger" role="alert">
@@ -73,13 +71,13 @@ export function SessionScheduleRoute() {
 
   // A single-division event schedules with no division_id at all: the
   // backend then uses unassigned FieldSets and the sole division's teams.
-  const multiDivision = (divisions?.length ?? 0) > 1;
-  const divisionId = multiDivision ? (selectedDivisionId ?? divisions![0].id) : null;
+  const multiDivision = divisions.length > 1;
+  const divisionId = multiDivision ? (selectedDivisionId ?? divisions[0].id) : null;
 
-  const rounds = summarizeRounds(matches ?? [], divisionId);
   const readiness = checkReadiness({
     gamePluginSelected: Boolean(event?.game_plugin_name),
     sessionTimezone: session.timezone,
+    playingWindowCount: windows?.length ?? 0,
     checkedInTeamCount: countCheckedInTeams(teams ?? [], participants ?? [], divisionId),
     teamsNeeded: matchFormat ? matchFormat.teams_per_alliance * matchFormat.alliance_count : 0,
     usableFieldCount: countUsableFields(fieldSets ?? [], fields ?? [], divisionId),
@@ -92,75 +90,68 @@ export function SessionScheduleRoute() {
     participants !== undefined &&
     fieldSets !== undefined &&
     fields !== undefined &&
+    windows !== undefined &&
     (!event.game_plugin_name || matchFormat !== undefined);
-  // The server's conflict check counts every match of a round type in the
-  // scope, finals included, so the form must avoid those types too even
-  // though Current Rounds leaves finals out.
-  const existingRoundTypes = [
-    ...new Set(
-      (matches ?? []).filter((match) => match.division_id === divisionId).map((match) => match.round_type)
-    ),
-  ];
   const outOfScopeRounds = summarizeOutOfScopeRounds(matches ?? [], multiDivision);
+
+  function selectDivision(id: number) {
+    if (id === divisionId) return;
+    if (dirty) setPendingDivisionId(id);
+    else setSelectedDivisionId(id);
+  }
+
+  const planner =
+    matchFormat && windows ? (
+      <DivisionPlanner
+        key={divisionId ?? "none"}
+        session={session}
+        divisionId={divisionId}
+        matchFormat={matchFormat}
+        windows={windows}
+        ready={ready}
+        matchesUpdatedAt={matchesUpdatedAt}
+        onDirtyChange={onDirtyChange}
+      />
+    ) : event?.game_plugin_name && matchFormatError ? (
+      <p className="alert alert-danger" role="alert">
+        {t("errors.generic")}
+      </p>
+    ) : event && !event.game_plugin_name ? (
+      <p className="field__hint">{t("sessions.schedule.needsGamePlugin")}</p>
+    ) : null;
 
   return (
     <div className="session-schedule">
-      {multiDivision && (
-        <label className="field">
-          <span className="field__label">{t("sessions.schedule.divisionLabel")}</span>
-          <select
-            className="select"
-            value={divisionId ?? ""}
-            onChange={(event) => setSelectedDivisionId(Number(event.target.value))}
-          >
-            {(divisions ?? []).map((division) => (
-              <option key={division.id} value={division.id}>
-                {t("sessions.schedule.divisionOption", {
-                  name: division.name,
-                  count: countCheckedInTeams(teams ?? [], participants ?? [], division.id),
-                })}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
       {readinessLoaded && <ReadinessChecklist items={readiness} sessionId={session.id} />}
-      <OutOfScopeRounds sessionId={session.id} divisions={divisions} rounds={outOfScopeRounds} />
-      <CurrentRounds
-        sessionId={session.id}
-        divisionId={divisionId}
-        sessionTimezone={session.timezone}
-        rounds={rounds}
-      />
-      {lastGenerated && (
-        <p className="alert alert-success" role="status">
-          {t("sessions.schedule.form.generated", { count: lastGenerated.match_count })}{" "}
-          <Link to={`/sessions/${session.id}/matches`}>{t("sessions.schedule.form.viewMatches")}</Link>
-        </p>
-      )}
-      {matchFormat ? (
-        <ScheduleForm
-          // Remounting on the existing round types (and division) resets
-          // the form after a Generate or Clear lands, so it never offers a
-          // round type that now has a schedule.
-          key={`${divisionId ?? "none"}:${existingRoundTypes.join(",")}`}
-          sessionId={session.id}
-          divisionId={divisionId}
-          session={session}
-          matchFormat={matchFormat}
-          existingRoundTypes={existingRoundTypes}
-          ready={ready}
-          onGenerated={(response) => {
-            setLastGenerated(response);
-            queryClient.invalidateQueries({ queryKey: ["matches", session.id] });
-          }}
+      {multiDivision && (
+        <DivisionTabs
+          divisions={divisions}
+          counts={new Map(divisions.map((d) => [d.id, countCheckedInTeams(teams ?? [], participants ?? [], d.id)]))}
+          selectedId={divisionId!}
+          onSelect={selectDivision}
         />
-      ) : event?.game_plugin_name && matchFormatError ? (
-        <p className="alert alert-danger" role="alert">
-          {t("errors.generic")}
-        </p>
+      )}
+      <OutOfScopeRounds sessionId={session.id} divisions={divisions} rounds={outOfScopeRounds} />
+      {multiDivision ? (
+        <div role="tabpanel" id="division-panel" aria-labelledby={`division-tab-${divisionId}`}>
+          {planner}
+        </div>
       ) : (
-        <p className="field__hint">{t("sessions.schedule.form.needsGamePlugin")}</p>
+        planner
+      )}
+      {pendingDivisionId !== null && (
+        <ConfirmDialog
+          heading={t("sessions.schedule.discardHeading")}
+          body={t("sessions.schedule.discardBody")}
+          confirmLabel={t("sessions.schedule.discardConfirm")}
+          cancelLabel={t("sessions.schedule.keepEditing")}
+          onConfirm={() => {
+            setSelectedDivisionId(pendingDivisionId);
+            setPendingDivisionId(null);
+            setDirty(false);
+          }}
+          onCancel={() => setPendingDivisionId(null)}
+        />
       )}
     </div>
   );

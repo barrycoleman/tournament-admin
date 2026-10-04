@@ -136,25 +136,3 @@ export interface ParticipationRead {
   team_id: number;
   checked_in: boolean;
 }
-
-export interface ResolvedTimeBlock {
-  date: string;
-  start_time: string;
-  end_time: string | null;
-  cycle_time_seconds: number;
-  time_slot_count: number;
-}
-
-export interface PhaseResult {
-  round_type: string;
-  schedule_generation_id: number | null;
-  match_count: number;
-}
-
-export interface ScheduleGenerateResponse {
-  schedule_generation_id: number | null;
-  match_count: number;
-  resolved_time_blocks: ResolvedTimeBlock[];
-  cycle_time_warning: string | null;
-  phase_results: PhaseResult[] | null;
-}

@@ -1,6 +1,6 @@
 import type { FieldRead, FieldSetRead, ParticipationRead, TeamSummary } from "../types";
 
-export type ReadinessKey = "gamePlugin" | "timezone" | "teams" | "fields";
+export type ReadinessKey = "gamePlugin" | "timezone" | "playingTimes" | "teams" | "fields";
 
 export interface ReadinessItem {
   key: ReadinessKey;
@@ -10,6 +10,7 @@ export interface ReadinessItem {
 export function checkReadiness(input: {
   gamePluginSelected: boolean;
   sessionTimezone: string | null;
+  playingWindowCount: number;
   checkedInTeamCount: number;
   teamsNeeded: number;
   usableFieldCount: number;
@@ -17,6 +18,7 @@ export function checkReadiness(input: {
   return [
     { key: "gamePlugin", ok: input.gamePluginSelected },
     { key: "timezone", ok: input.sessionTimezone !== null },
+    { key: "playingTimes", ok: input.playingWindowCount > 0 },
     { key: "teams", ok: input.teamsNeeded > 0 && input.checkedInTeamCount >= input.teamsNeeded },
     { key: "fields", ok: input.usableFieldCount > 0 },
   ];

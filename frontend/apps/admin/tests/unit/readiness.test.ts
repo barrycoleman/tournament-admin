@@ -7,6 +7,7 @@ describe("readiness", () => {
       checkReadiness({
         gamePluginSelected: true,
         sessionTimezone: "America/Los_Angeles",
+        playingWindowCount: 1,
         checkedInTeamCount: 4,
         teamsNeeded: 4,
         usableFieldCount: 1,
@@ -14,6 +15,7 @@ describe("readiness", () => {
     ).toEqual([
       { key: "gamePlugin", ok: true },
       { key: "timezone", ok: true },
+      { key: "playingTimes", ok: true },
       { key: "teams", ok: true },
       { key: "fields", ok: true },
     ]);
@@ -24,11 +26,24 @@ describe("readiness", () => {
       checkReadiness({
         gamePluginSelected: false,
         sessionTimezone: null,
+        playingWindowCount: 1,
         checkedInTeamCount: 10,
         teamsNeeded: 0,
         usableFieldCount: 0,
       }).map((item) => item.ok)
-    ).toEqual([false, false, false, false]);
+    ).toEqual([false, false, true, false, false]);
+  });
+
+  it("blocks on a session with no playing times", () => {
+    const items = checkReadiness({
+      gamePluginSelected: true,
+      sessionTimezone: "America/Los_Angeles",
+      playingWindowCount: 0,
+      checkedInTeamCount: 8,
+      teamsNeeded: 4,
+      usableFieldCount: 1,
+    });
+    expect(items.filter((item) => !item.ok).map((item) => item.key)).toEqual(["playingTimes"]);
   });
 
   it("counts only fields in field sets scoped to the division (null = unassigned)", () => {
