@@ -20,7 +20,7 @@ import {
   rowsValid,
   type PlanRequest,
 } from "./planDraft";
-import { withLastWindowEnd } from "./playingWindows";
+import { sameWindows, withLastWindowEnd } from "./playingWindows";
 import type { TimelineSpan } from "./timeline";
 import { usePlannerDraft } from "./usePlannerDraft";
 import { usePlanPreview } from "./usePlanPreview";
@@ -108,8 +108,23 @@ export function DivisionPlanner({
     },
   });
   const extend = useMutation({
-    mutationFn: (endTime: string) =>
-      apiRequest(`/api/sessions/${session.id}/playing-windows`, { method: "PUT", body: withLastWindowEnd(windows, endTime) }),
+    // The PUT replaces every window, so it is built from the server's current
+    // list. If that list is no longer the one this overflow was checked
+    // against (another admin edited it), nothing is sent: the plan is
+    // re-checked instead, so their edits are never overwritten.
+    mutationFn: async (endTime: string): Promise<{ windowsChanged: boolean }> => {
+      const current = await queryClient.fetchQuery({
+        queryKey: ["playingWindows", session.id],
+        queryFn: () => apiRequest<PlayingWindowRead[]>(`/api/sessions/${session.id}/playing-windows`),
+        staleTime: 0,
+      });
+      if (!sameWindows(current, windows)) return { windowsChanged: true };
+      await apiRequest(`/api/sessions/${session.id}/playing-windows`, {
+        method: "PUT",
+        body: withLastWindowEnd(current, endTime),
+      });
+      return { windowsChanged: false };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["playingWindows", session.id] });
       queryClient.invalidateQueries({ queryKey: ["scheduleRounds", session.id] });
@@ -209,6 +224,11 @@ export function DivisionPlanner({
             }}
             onExtend={(endTime) => extend.mutate(endTime)}
           />
+        )}
+        {extend.data?.windowsChanged && !extend.isPending && (
+          <p className="alert alert-warning" role="status">
+            {t("sessions.schedule.fit.windowsChanged")}
+          </p>
         )}
         {extend.isError && (
           <p className="alert alert-danger" role="alert">

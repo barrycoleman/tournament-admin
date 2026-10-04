@@ -215,6 +215,37 @@ test.describe.serial("session fields, schedule, and matches", () => {
     await expect(page.getByText(/^\d+ matches scheduled\./)).toBeVisible();
   });
 
+  test("Practice and Qualification flow across lunch and into the second day", async ({ page, request }) => {
+    const session = await createReadySession(request, "Two Day E2E", "TWD");
+    await addField(request, session.sessionId, "Two Day Field");
+    // A short Saturday morning, lunch, a short afternoon, then Sunday: the
+    // 14 default matches (4:00 apart on one field) can't all fit on Saturday.
+    await setWindows(request, session.sessionId, [
+      ["2026-11-07", "09:00", "09:20"],
+      ["2026-11-07", "13:00", "13:20"],
+      ["2026-11-08", "09:00", "12:00"],
+    ]);
+
+    await loginAsAdmin(page);
+    await page.goto(`/sessions/${session.sessionId}/schedule`);
+    await expect(page.getByLabel("Practice matches per team")).toHaveValue("1");
+    await expect(page.getByLabel("Qualification matches per team")).toHaveValue("6");
+    await expect(page.getByText(/^✓ Fits/)).toBeVisible();
+    await page.getByRole("button", { name: "Generate" }).click();
+    await expect(page.getByText(/^\d+ matches scheduled\./)).toBeVisible();
+
+    // The Qualification round starts on Saturday and ends on Sunday.
+    const qualificationRow = page.getByRole("row", { name: /Qualification/ });
+    await expect(qualificationRow).toContainText(/Sat, Nov 7, \d\d:\d\d – Sun, Nov 8, \d\d:\d\d/);
+
+    // The Matches tab spans two days, so it labels every time with its day.
+    await page.getByRole("link", { name: "View matches" }).click();
+    await expect(page.getByRole("gridcell", { name: "P1", exact: true })).toBeVisible();
+    await expect(page.getByRole("gridcell", { name: "Sat, Nov 7, 09:00", exact: true })).toBeVisible();
+    await expect(page.getByRole("gridcell", { name: "Sat, Nov 7, 13:00", exact: true })).toBeVisible();
+    await expect(page.getByRole("gridcell", { name: "Sun, Nov 8, 09:00", exact: true })).toBeVisible();
+  });
+
   test("a scored round is locked while the round after it stays editable", async ({ page, request }) => {
     const session = await createReadySession(request, "Locked E2E", "LCK");
     await addField(request, session.sessionId, "Locked Field");

@@ -168,6 +168,7 @@
         "pillChanged": "已更改",
         "pillNew": "新",
         "pillNeedsRebuild": "需重新生成",
+        "pillLocked": "已锁定",
         "pillScored_one": "{{count}} 场已计分",
         "pillScored_other": "{{count}} 场已计分",
         "doesNotFit": "排不下",
@@ -232,10 +233,11 @@
         "checking": "正在检查方案…",
         "fits": "可以排下，{{day}}还剩 {{free}}。",
         "fitsExactly": "可以排下。",
-        "over_one": "超出 {{duration}}：{{count}} 场{{round}}比赛在 {{end}} 前排不下。",
-        "over_other": "超出 {{duration}}：{{count}} 场{{round}}比赛在 {{end}} 前排不下。",
+        "over_one": "超出 {{duration}}：从{{round}}开始，有 {{count}} 场比赛在 {{end}} 前排不下。",
+        "over_other": "超出 {{duration}}：从{{round}}开始，有 {{count}} 场比赛在 {{end}} 前排不下。",
         "useCycle": "使用周期时间 {{cycle}}",
-        "extend": "将{{day}}延长到 {{time}}"
+        "extend": "将{{day}}延长到 {{time}}",
+        "windowsChanged": "比赛时段已被修改，方案已重新检查。"
       },
       "actions": {
         "generate": "生成",

@@ -112,7 +112,9 @@ export function RoundsTable({
                     {locked ? (
                       <span className="pill">
                         <span aria-hidden="true">🔒 </span>
-                        {t("sessions.schedule.rounds.pillScored", { count: row.scheduled!.scored_count })}
+                        {row.scheduled!.scored_count === 0
+                          ? t("sessions.schedule.rounds.pillLocked")
+                          : t("sessions.schedule.rounds.pillScored", { count: row.scheduled!.scored_count })}
                       </span>
                     ) : row.scheduled === null ? (
                       <span className="pill pill--new">{t("sessions.schedule.rounds.pillNew")}</span>

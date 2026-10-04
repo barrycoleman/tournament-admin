@@ -170,6 +170,7 @@
         "pillChanged": "changed",
         "pillNew": "new",
         "pillNeedsRebuild": "needs rebuild",
+        "pillLocked": "locked",
         "pillScored_one": "{{count}} scored",
         "pillScored_other": "{{count}} scored",
         "doesNotFit": "doesn't fit",
@@ -234,10 +235,11 @@
         "checking": "Checking the plan…",
         "fits": "Fits, with {{free}} of {{day}} still free.",
         "fitsExactly": "Fits.",
-        "over_one": "Over by {{duration}}: {{count}} {{round}} match doesn't fit before {{end}}.",
-        "over_other": "Over by {{duration}}: {{count}} {{round}} matches don't fit before {{end}}.",
+        "over_one": "Over by {{duration}}: {{count}} match doesn't fit before {{end}}, starting with {{round}}.",
+        "over_other": "Over by {{duration}}: {{count}} matches don't fit before {{end}}, starting with {{round}}.",
         "useCycle": "Use cycle time {{cycle}}",
-        "extend": "Extend {{day}} to {{time}}"
+        "extend": "Extend {{day}} to {{time}}",
+        "windowsChanged": "The playing times changed since this plan was checked. It has been checked again."
       },
       "actions": {
         "generate": "Generate",

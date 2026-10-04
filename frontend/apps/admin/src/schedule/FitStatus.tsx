@@ -70,7 +70,12 @@ export function FitStatus({ preview, windows, onUseCycle, onExtend, extendPendin
       </p>
       <div className="form-actions">
         {overflow.suggested_cycle_time_seconds !== null && (
-          <button type="button" className="btn btn-small" onClick={() => onUseCycle(overflow.suggested_cycle_time_seconds!)}>
+          <button
+            type="button"
+            className="btn btn-small"
+            disabled={!preview.settled}
+            onClick={() => onUseCycle(overflow.suggested_cycle_time_seconds!)}
+          >
             {t("sessions.schedule.fit.useCycle", { cycle: formatCycle(overflow.suggested_cycle_time_seconds) })}
           </button>
         )}
@@ -78,7 +83,7 @@ export function FitStatus({ preview, windows, onUseCycle, onExtend, extendPendin
           <button
             type="button"
             className="btn btn-small"
-            disabled={extendPending}
+            disabled={extendPending || !preview.settled}
             onClick={() => onExtend(overflow.suggested_last_window_end!)}
           >
             {t("sessions.schedule.fit.extend", { day, time: overflow.suggested_last_window_end })}

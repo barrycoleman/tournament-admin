@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   draftsFromWindows,
   nextWindowDraft,
+  sameWindows,
   summarizeWindows,
   validateWindowDrafts,
   windowsPayload,
@@ -59,5 +60,13 @@ describe("playing window drafts", () => {
 
   it("extends only the last window", () => {
     expect(withLastWindowEnd(WINDOWS, "15:16").windows.map((w) => w.end_time)).toEqual(["12:00", "17:00", "15:16"]);
+  });
+
+  it("compares window lists by every date, start and end", () => {
+    expect(sameWindows(WINDOWS, WINDOWS.map((w) => ({ ...w, start_utc: "x" })))).toBe(true);
+    expect(sameWindows(WINDOWS, WINDOWS.slice(0, 2))).toBe(false);
+    expect(sameWindows(WINDOWS, WINDOWS.map((w, i) => (i === 1 ? { ...w, end_time: "17:30" } : w)))).toBe(false);
+    expect(sameWindows(WINDOWS, WINDOWS.map((w, i) => (i === 0 ? { ...w, date: "2026-11-06" } : w)))).toBe(false);
+    expect(sameWindows(WINDOWS, WINDOWS.map((w, i) => (i === 2 ? { ...w, start_time: "08:00" } : w)))).toBe(false);
   });
 });

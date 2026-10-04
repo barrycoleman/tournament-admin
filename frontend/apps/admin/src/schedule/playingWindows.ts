@@ -53,6 +53,16 @@ export function summarizeWindows(
   return [...byDate.entries()].map(([date, ranges]) => `${weekdayLabel(date, locale)} ${ranges.join(", ")}`).join(" · ");
 }
 
+type WindowTimes = Pick<PlayingWindowRead, "date" | "start_time" | "end_time">;
+
+/** Whether two window lists hold the same dates and times, in the same order. */
+export function sameWindows(a: WindowTimes[], b: WindowTimes[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((w, i) => w.date === b[i].date && w.start_time === b[i].start_time && w.end_time === b[i].end_time)
+  );
+}
+
 /** The PUT body that moves only the last window's end. */
 export function withLastWindowEnd(windows: PlayingWindowRead[], endTime: string) {
   return {

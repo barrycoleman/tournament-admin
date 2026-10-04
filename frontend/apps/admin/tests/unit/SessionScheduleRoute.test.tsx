@@ -123,7 +123,7 @@ const OVER: PlanResponse = {
 
 interface StubOptions {
   divisions?: Division[];
-  windows?: typeof WINDOWS;
+  windows?: typeof WINDOWS | (() => typeof WINDOWS);
   rounds?: ScheduledRound[] | (() => ScheduledRound[]);
   fields?: FieldRead[];
   matches?: MatchRead[];
@@ -167,7 +167,7 @@ function stub({
     if (path === "/api/fields?session_id=1") return fields as never;
     if (path === "/api/matches?session_id=1") return matches as never;
     if (path === "/api/plugins/schedulers") return SCHEDULERS as never;
-    if (path === "/api/sessions/1/playing-windows") return windows as never;
+    if (path === "/api/sessions/1/playing-windows") return (typeof windows === "function" ? windows() : windows) as never;
     if (path.startsWith("/api/schedule/rounds?session_id=1")) {
       return { rounds: typeof rounds === "function" ? rounds() : rounds, session_last_cycle_time_seconds: null } as never;
     }
@@ -264,12 +264,27 @@ describe("SessionScheduleRoute — planning", () => {
     });
     renderSchedule();
     fireEvent.change(await screen.findByLabelText("Qualification matches per team"), { target: { value: "8" } });
-    expect(await screen.findByText(/Over by 16 min: 3 Qualification matches don't fit before Sat 12:00\./)).toBeInTheDocument();
+    expect(await screen.findByText(/Over by 16 min: 3 matches don't fit before Sat 12:00, starting with Qualification\./)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply changes" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Use cycle time 6:50" }));
     expect(screen.getByLabelText("Qualification cycle time minutes")).toHaveValue(6);
     expect(screen.getByLabelText("Qualification cycle time seconds")).toHaveValue(50);
     await waitFor(() => expect(screen.getByRole("button", { name: "Apply changes" })).toBeEnabled());
+  });
+
+  it("disables the overflow fixes while the shown check answers an older draft", async () => {
+    stub({ rounds: [round({ round_type: "qualification", target_matches_per_team: 6 })], plan: () => OVER });
+    renderSchedule();
+    const perTeam = await screen.findByLabelText("Qualification matches per team");
+    fireEvent.change(perTeam, { target: { value: "8" } });
+    const useCycle = await screen.findByRole("button", { name: "Use cycle time 6:50" });
+    const extend = screen.getByRole("button", { name: "Extend Sat to 12:16" });
+    await waitFor(() => expect(useCycle).toBeEnabled());
+    expect(extend).toBeEnabled();
+    fireEvent.change(perTeam, { target: { value: "9" } });
+    expect(useCycle).toBeDisabled();
+    expect(extend).toBeDisabled();
+    await waitFor(() => expect(useCycle).toBeEnabled());
   });
 
   it("re-checks the plan after Extend", async () => {
@@ -288,6 +303,58 @@ describe("SessionScheduleRoute — planning", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Apply changes" })).toBeEnabled());
   });
 
+  it("Extend sends the server's current windows with only the last end moved", async () => {
+    const twoWindows = [
+      WINDOWS[0],
+      { date: "2026-11-08", start_time: "09:00", end_time: "12:00", start_utc: "2026-11-08T17:00:00Z", end_utc: "2026-11-08T20:00:00Z" },
+    ];
+    const puts: unknown[] = [];
+    stub({
+      windows: twoWindows,
+      rounds: [round({ round_type: "qualification", target_matches_per_team: 6 })],
+      plan: () => OVER,
+      onWrite: (path, options) => {
+        if (path === "/api/sessions/1/playing-windows") puts.push(options.body);
+        return [];
+      },
+    });
+    renderSchedule();
+    fireEvent.change(await screen.findByLabelText("Qualification matches per team"), { target: { value: "8" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Extend Sun to 12:16" }));
+    await waitFor(() => expect(puts).toHaveLength(1));
+    expect(puts[0]).toEqual({
+      windows: [
+        { date: "2026-11-07", start_time: "09:00", end_time: "12:00" },
+        { date: "2026-11-08", start_time: "09:00", end_time: "12:16" },
+      ],
+    });
+    expect(screen.queryByText(enAdmin.sessions.schedule.fit.windowsChanged)).not.toBeInTheDocument();
+  });
+
+  it("does not overwrite playing times another admin changed; it re-checks the plan instead", async () => {
+    let serverWindows = WINDOWS;
+    const puts: unknown[] = [];
+    stub({
+      windows: () => serverWindows,
+      rounds: [round({ round_type: "qualification", target_matches_per_team: 6 })],
+      plan: () => OVER,
+      onWrite: (path, options) => {
+        if (path === "/api/sessions/1/playing-windows") puts.push(options.body);
+        return [];
+      },
+    });
+    renderSchedule();
+    fireEvent.change(await screen.findByLabelText("Qualification matches per team"), { target: { value: "8" } });
+    const extendButton = await screen.findByRole("button", { name: "Extend Sat to 12:16" });
+    await waitFor(() => expect(extendButton).toBeEnabled());
+    const dryRunsBefore = dryRuns().length;
+    serverWindows = [{ ...WINDOWS[0], start_time: "08:00", start_utc: "2026-11-07T16:00:00Z" }];
+    fireEvent.click(extendButton);
+    expect(await screen.findByText(enAdmin.sessions.schedule.fit.windowsChanged)).toBeInTheDocument();
+    expect(puts).toHaveLength(0);
+    await waitFor(() => expect(dryRuns().length).toBeGreaterThan(dryRunsBefore));
+  });
+
   it("locks a scored round and only offers Clear", async () => {
     stub({ rounds: [round({ locked: true, scored_count: 1 }), round({ round_type: "qualification" })] });
     renderSchedule();
@@ -295,6 +362,19 @@ describe("SessionScheduleRoute — planning", () => {
     expect(screen.queryByLabelText("Practice matches per team")).not.toBeInTheDocument();
     expect(screen.getByText(/1 scored/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Clear Practice" })).toBeInTheDocument();
+  });
+
+  it("labels a round locked only by a later scored round without a zero count", async () => {
+    stub({
+      rounds: [
+        round({ locked: true, scored_count: 0 }),
+        round({ round_type: "qualification", locked: true, scored_count: 2 }),
+      ],
+    });
+    renderSchedule();
+    expect(await screen.findByText("locked")).toBeInTheDocument();
+    expect(screen.queryByText(/0 scored/)).not.toBeInTheDocument();
+    expect(screen.getByText(/2 scored/)).toBeInTheDocument();
   });
 
   it("requires typing the round name to clear a round with scored matches", async () => {

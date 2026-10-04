@@ -162,7 +162,11 @@ text as typed and only re-sync from the row when `parseCycle` of that text
 no longer equals it. Anything that changes playing times or clears a round
 (`PlayingTimesPanel`, the extend action, `ClearRoundDialog`) invalidates
 `["schedulePlan"]` too, because an identical request body would otherwise
-reuse a stale answer. `useUnsavedChangesGuard` uses the data router's
+reuse a stale answer. The extend action's PUT replaces every window, so it
+first re-fetches the windows and, if they no longer match the ones the
+overflow was checked against, sends nothing and re-checks instead (so it
+never overwrites another admin's edit); "Use cycle time" and "Extend" are
+disabled until the preview is settled. `useUnsavedChangesGuard` uses the data router's
 `useBlocker` plus `beforeunload`. A single-division event never sends
 `division_id` (the backend then uses unassigned FieldSets); a
 multi-division event always sends the selected one. `useSessionMatches`
