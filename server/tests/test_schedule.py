@@ -1032,3 +1032,71 @@ def test_an_old_format_generation_still_blocks_overlapping_matches(client):
     response = schedule(client, session_id, [("qualification", 1)])
     assert response.status_code == 422
     assert "overlapping the practice round's matches" in response.json()["detail"]
+
+
+def _rounds(client, session_id, division_id=None):
+    params = {"session_id": session_id}
+    if division_id is not None:
+        params["division_id"] = division_id
+    response = client.get("/api/schedule/rounds", params=params)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_rounds_endpoint_lists_rounds_in_order_with_their_settings(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    set_playing_windows(client, session_id, [{"date": PLAY_DATE, "start_time": "09:00", "end_time": "12:00"}])
+    assert schedule(client, session_id, [("practice", 1, 150), ("qualification", 2, 240)]).status_code == 201
+    body = _rounds(client, session_id)
+    assert body["session_last_cycle_time_seconds"] == 240
+    practice, qualification = body["rounds"]
+    assert practice == {
+        "round_type": "practice",
+        "target_matches_per_team": 1,
+        "cycle_time_seconds": 150,
+        "match_count": 2,
+        "scored_count": 0,
+        "first_start": "2026-11-07T17:00:00Z",
+        "last_end": "2026-11-07T17:04:30Z",
+        "locked": False,
+        "outside_playing_windows": False,
+    }
+    assert qualification["round_type"] == "qualification"
+    assert qualification["cycle_time_seconds"] == 240
+
+
+def test_a_scored_round_and_every_round_before_it_are_locked(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    assert schedule(client, session_id, [("practice", 1), ("qualification", 1)]).status_code == 201
+    _score_one_match(client, session_id, "qualification")
+    practice, qualification = _rounds(client, session_id)["rounds"]
+    assert qualification["scored_count"] == 1 and qualification["locked"] is True
+    assert practice["scored_count"] == 0 and practice["locked"] is True
+
+
+def test_rounds_after_a_scored_round_stay_unlocked(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    assert schedule(client, session_id, [("practice", 1), ("qualification", 1)]).status_code == 201
+    _score_one_match(client, session_id, "practice")
+    practice, qualification = _rounds(client, session_id)["rounds"]
+    assert practice["locked"] is True
+    assert qualification["locked"] is False
+
+
+def test_a_round_outside_new_playing_times_is_flagged(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    set_playing_windows(client, session_id, [{"date": PLAY_DATE, "start_time": "09:00", "end_time": "12:00"}])
+    assert schedule(client, session_id, [("practice", 1)]).status_code == 201
+    set_playing_windows(client, session_id, [{"date": PLAY_DATE, "start_time": "13:00", "end_time": "17:00"}])
+    assert _rounds(client, session_id)["rounds"][0]["outside_playing_windows"] is True
+
+
+def test_rounds_endpoint_uses_the_no_division_scope_in_a_single_division_event(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    assert schedule(client, session_id, [("practice", 1)]).status_code == 201
+    assert [r["round_type"] for r in _rounds(client, session_id)["rounds"]] == ["practice"]
+
+
+def test_rounds_endpoint_with_nothing_scheduled(client):
+    session_id, _ = _setup_ready_session(client)
+    assert _rounds(client, session_id) == {"rounds": [], "session_last_cycle_time_seconds": None}

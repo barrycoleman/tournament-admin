@@ -29,6 +29,8 @@ from tournament_server.schemas.schedule import (
     ScheduleGenerateRequest,
     ScheduleGenerateResponse,
     ScheduleOverflow,
+    ScheduleRoundsRead,
+    ScheduledRoundRead,
 )
 from tournament_server.services.playing_windows import load_windows
 from tournament_server.services.schedule_timing import (
@@ -648,6 +650,85 @@ def generate_schedule(
         )
 
     return ScheduleGenerateResponse(fits=True, rounds=round_results, overflow=None)
+
+
+@router.get("/rounds", response_model=ScheduleRoundsRead)
+def read_schedule_rounds(
+    request: Request,
+    session_id: int = Query(...),
+    division_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> ScheduleRoundsRead:
+    """The scope's rounds in chronological order, with what the Schedule
+    tab needs to show and edit them. A round is locked when it, or any
+    round after it, has a scored match: rebuilding it would move scored
+    matches."""
+    session_obj = db.get(TournamentSession, session_id)
+    if session_obj is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    match_seconds = 0
+    event = get_the_event(db)
+    if event is not None and event.game_plugin_name is not None:
+        game_plugin = request.app.state.game_plugins.get(event.game_plugin_name)
+        if game_plugin is not None:
+            match_format = game_plugin.module.match_format()
+            match_seconds = match_format["autonomous_seconds"] + match_format["driver_seconds"]
+    match_length = dt.timedelta(seconds=match_seconds)
+
+    windows = (
+        to_utc_windows(load_windows(db, session_id), session_obj.timezone)
+        if session_obj.timezone is not None
+        else []
+    )
+
+    def inside_windows(start: dt.datetime) -> bool:
+        return any(w.start <= start and start + match_length <= w.end for w in windows)
+
+    generation_query = select(ScheduleGeneration).where(ScheduleGeneration.session_id == session_id)
+    if division_id is None:
+        generation_query = generation_query.where(ScheduleGeneration.division_id.is_(None))
+    else:
+        generation_query = generation_query.where(ScheduleGeneration.division_id == division_id)
+    latest_generation: dict[str, ScheduleGeneration] = {}
+    for generation in db.execute(
+        generation_query.order_by(ScheduleGeneration.generated_at, ScheduleGeneration.id)
+    ).scalars().all():
+        latest_generation[generation.round_type] = generation
+
+    rounds = []
+    for round_ in _division_rounds(db, session_id, division_id):
+        generation = latest_generation.get(round_.round_type)
+        times = [m.scheduled_time for m in round_.matches if m.scheduled_time is not None]
+        rounds.append(
+            ScheduledRoundRead(
+                round_type=round_.round_type,
+                target_matches_per_team=generation.target_matches_per_team if generation else None,
+                cycle_time_seconds=generation.cycle_time_seconds if generation else None,
+                match_count=len(round_.matches),
+                scored_count=len(round_.scored_match_ids),
+                first_start=min(times) if times else None,
+                last_end=max(times) + match_length if times else None,
+                locked=False,
+                outside_playing_windows=bool(windows) and any(not inside_windows(t) for t in times),
+            )
+        )
+    locked = False
+    for round_read in reversed(rounds):
+        locked = locked or round_read.scored_count > 0
+        round_read.locked = locked
+
+    last_cycle = db.execute(
+        select(ScheduleGeneration.cycle_time_seconds)
+        .where(
+            ScheduleGeneration.session_id == session_id,
+            ScheduleGeneration.cycle_time_seconds.is_not(None),
+        )
+        .order_by(ScheduleGeneration.generated_at.desc(), ScheduleGeneration.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return ScheduleRoundsRead(rounds=rounds, session_last_cycle_time_seconds=last_cycle)
 
 
 @router.delete("")
