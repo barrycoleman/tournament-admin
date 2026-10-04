@@ -321,6 +321,110 @@ describe("SessionScheduleRoute — planning", () => {
   });
 });
 
+describe("SessionScheduleRoute — review fixes", () => {
+  it("totals the plan's matches and its finish time under the table", async () => {
+    stub();
+    renderSchedule();
+    expect(await screen.findByText("14 matches · finishes 09:40")).toBeInTheDocument();
+  });
+
+  it("does not count the untouched pre-fill as unsaved", async () => {
+    stub();
+    renderSchedule();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled());
+    expect(screen.queryByRole("button", { name: "Discard changes" })).not.toBeInTheDocument();
+  });
+
+  it("treats an added round as unsaved: Discard appears and leaving asks first", async () => {
+    stub({ rounds: [round({})] });
+    const { router } = renderSchedule();
+    await screen.findByLabelText("Practice matches per team");
+    expect(screen.queryByRole("button", { name: "Discard changes" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add round" }));
+    expect(screen.getByRole("button", { name: "Discard changes" })).toBeInTheDocument();
+    await act(() => router.navigate("/elsewhere"));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+  });
+
+  it("shows an error instead of an empty table when the rounds fetch fails", async () => {
+    stub({
+      rounds: () => {
+        throw new ApiError(500, "boom");
+      },
+    });
+    renderSchedule();
+    expect(await screen.findByRole("alert")).toHaveTextContent(enAdmin.errors.generic);
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("shows the server's message when Extend fails", async () => {
+    stub({
+      rounds: [round({ round_type: "qualification", target_matches_per_team: 6 })],
+      plan: () => OVER,
+      onWrite: (path) =>
+        path === "/api/sessions/1/playing-windows" ? new ApiError(422, "Playing times overlap") : undefined,
+    });
+    renderSchedule();
+    fireEvent.change(await screen.findByLabelText("Qualification matches per team"), { target: { value: "8" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Extend Sat to 12:16" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Playing times overlap");
+  });
+
+  it("keeps the cycle time exactly as typed, and explains an invalid one", async () => {
+    stub();
+    renderSchedule();
+    const minutes = await screen.findByLabelText("Practice cycle time minutes");
+    const seconds = screen.getByLabelText("Practice cycle time seconds");
+    fireEvent.change(seconds, { target: { value: "50" } });
+    fireEvent.change(minutes, { target: { value: "" } });
+    expect(minutes).toHaveValue(null);
+    expect(seconds).toHaveValue(50);
+    fireEvent.change(minutes, { target: { value: "6" } });
+    expect(minutes).toHaveValue(6);
+    expect(seconds).toHaveValue(50);
+
+    fireEvent.change(seconds, { target: { value: "75" } });
+    expect(seconds).toHaveValue(75);
+    expect(
+      screen.getByText("Each round needs at least 1 match per team and a cycle time of at least 2:00.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeDisabled();
+  });
+
+  it("re-checks the plan after a round is cleared", async () => {
+    let cleared = false;
+    stub({
+      rounds: () =>
+        cleared
+          ? [round({ round_type: "qualification", target_matches_per_team: 6 })]
+          : [round({}), round({ round_type: "qualification", target_matches_per_team: 6 })],
+      onWrite: (_path, options) => {
+        if (options.method === "DELETE") cleared = true;
+        return undefined;
+      },
+    });
+    renderSchedule();
+    fireEvent.change(await screen.findByLabelText("Qualification matches per team"), { target: { value: "8" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Apply changes" })).toBeEnabled());
+    const before = dryRuns().length;
+    fireEvent.click(screen.getByRole("button", { name: "Clear Practice" }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Clear" }));
+    await waitFor(() => expect(cleared).toBe(true));
+    await waitFor(() => expect(dryRuns().length).toBeGreaterThan(before));
+  });
+
+  it("scrolls to the playing times from the readiness link", async () => {
+    stub({ windows: [] });
+    renderSchedule();
+    const link = await screen.findByRole("link", { name: "Add playing times" });
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    fireEvent.click(link);
+    expect(scroll).toHaveBeenCalled();
+    expect(screen.getByLabelText("Playing time 1 date")).toHaveFocus();
+    scroll.mockRestore();
+  });
+});
+
 describe("SessionScheduleRoute — readiness and divisions", () => {
   it("lists a missing playing time as a blocker, with the editor open", async () => {
     stub({ windows: [] });

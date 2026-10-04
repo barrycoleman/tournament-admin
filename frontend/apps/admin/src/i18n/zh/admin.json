@@ -172,7 +172,10 @@
         "pillScored_other": "{{count}} 场已计分",
         "doesNotFit": "排不下",
         "pending": "在{{round}}之后",
-        "droppedLocked": "{{rounds}} 现已有成绩，你对它的更改已被放弃。"
+        "droppedLocked": "{{rounds}} 现已有成绩，你对它的更改已被放弃。",
+        "total_one": "共 {{count}} 场 · {{time}} 结束",
+        "total_other": "共 {{count}} 场 · {{time}} 结束",
+        "invalid": "每个轮次至少需要每队 1 场，且周期时间不少于 {{cycle}}。"
       },
       "outOfScope": {
         "heading": "组别设置变更前生成的轮次",

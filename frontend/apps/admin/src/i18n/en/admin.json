@@ -174,7 +174,10 @@
         "pillScored_other": "{{count}} scored",
         "doesNotFit": "doesn't fit",
         "pending": "after {{round}}",
-        "droppedLocked": "{{rounds}} now has scores, so your changes to it were discarded."
+        "droppedLocked": "{{rounds}} now has scores, so your changes to it were discarded.",
+        "total_one": "{{count}} match · finishes {{time}}",
+        "total_other": "{{count}} matches · finishes {{time}}",
+        "invalid": "Each round needs at least 1 match per team and a cycle time of at least {{cycle}}."
       },
       "outOfScope": {
         "heading": "Rounds from a different division setup",

@@ -13,7 +13,7 @@ import { PlayingTimesPanel } from "./PlayingTimesPanel";
 import { RoundsTable } from "./RoundsTable";
 import {
   buildPlanRequest,
-  isRowChanged,
+  formatCycle,
   planAction,
   plannerRoundTypes,
   rowsToSend,
@@ -84,7 +84,7 @@ export function DivisionPlanner({
   const toSend = rowsToSend(draft.rows);
   const action = planAction(draft.rows);
   const valid = rowsValid(toSend, matchFormat.match_duration_seconds);
-  const dirty = draft.rows.some(isRowChanged);
+  const dirty = draft.dirty;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   const guardDialog = useUnsavedChangesGuard(dirty);
 
@@ -114,6 +114,9 @@ export function DivisionPlanner({
       queryClient.invalidateQueries({ queryKey: ["playingWindows", session.id] });
       queryClient.invalidateQueries({ queryKey: ["scheduleRounds", session.id] });
       queryClient.invalidateQueries({ queryKey: ["schedulePlan"] });
+    },
+    onError: (error) => {
+      if (!(error instanceof ApiError)) showTransientError(t("errors.network"));
     },
   });
 
@@ -168,7 +171,11 @@ export function DivisionPlanner({
       )}
       <section className="panel" aria-labelledby={headingId}>
         <h2 id={headingId}>{t("sessions.schedule.rounds.heading")}</h2>
-        {draft.loaded && (
+        {roundsQuery.isError ? (
+          <p className="alert alert-danger" role="alert">
+            {t("errors.generic")}
+          </p>
+        ) : draft.loaded && (
           <RoundsTable
             rows={draft.rows}
             sendKeys={sendKeys}
@@ -186,6 +193,11 @@ export function DivisionPlanner({
             {t("sessions.schedule.rounds.clearAllAction")}
           </button>
         )}
+        {action !== "none" && !valid && (
+          <p className="alert alert-warning" role="status">
+            {t("sessions.schedule.rounds.invalid", { cycle: formatCycle(matchFormat.match_duration_seconds) })}
+          </p>
+        )}
         {previewRequest !== null && (
           <FitStatus
             preview={preview}
@@ -197,6 +209,11 @@ export function DivisionPlanner({
             }}
             onExtend={(endTime) => extend.mutate(endTime)}
           />
+        )}
+        {extend.isError && (
+          <p className="alert alert-danger" role="alert">
+            {apiErrorMessage(extend.error, t("errors.generic"))}
+          </p>
         )}
         {apply.error instanceof ApiError && (
           <p className="alert alert-danger" role="alert">

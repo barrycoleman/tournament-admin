@@ -1097,6 +1097,10 @@
   font-size: var(--text-xs);
   color: var(--color-text-secondary);
 }
+.rounds-table__total {
+  margin-top: var(--space-2);
+  font-weight: 600;
+}
 .fit-status {
   margin-top: var(--space-3);
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatMatchTime, spansMultipleDays } from "../matchTime";
 import { roundTypeLabel } from "../roundTypeLabel";
@@ -51,6 +52,18 @@ export function RoundsTable({
     return `${from} – ${formatMatchTime(end, timeZone, spansMultipleDays([start, end], timeZone), i18n.language)}`;
   }
 
+  // What each row will hold: the dry run's answer for rows being sent, else what's scheduled.
+  const outcomes = rows.map((row) => {
+    if (!sendKeys.has(row.key)) return row.scheduled;
+    return preview?.rounds.find((round) => round.round_type === row.roundType) ?? null;
+  });
+  const finish = outcomes.at(-1)?.last_end ?? null;
+  const total =
+    rows.length > 0 && finish && outcomes.every((outcome) => outcome !== null)
+      ? outcomes.reduce((sum, outcome) => sum + outcome!.match_count, 0)
+      : null;
+  const times = outcomes.flatMap((outcome) => [outcome?.first_start, outcome?.last_end]).filter(Boolean) as string[];
+
   return (
     <>
       {rows.length === 0 ? (
@@ -75,9 +88,8 @@ export function RoundsTable({
               const planned = sendKeys.has(row.key)
                 ? preview?.rounds.find((round) => round.round_type === row.roundType)
                 : undefined;
-              const { minutes, seconds } = splitCycle(Number.isNaN(row.cycleSeconds) ? 0 : row.cycleSeconds);
               const matchesChanged = row.original !== null && row.matchesPerTeam !== row.original.matchesPerTeam;
-              const cycleChanged = row.original !== null && row.cycleSeconds !== row.original.cycleSeconds;
+              const cycleChanged = row.original !== null && !Object.is(row.cycleSeconds, row.original.cycleSeconds);
               return (
                 <tr key={row.key}>
                   <td>
@@ -138,37 +150,12 @@ export function RoundsTable({
                     {locked ? (
                       formatCycle(row.cycleSeconds)
                     ) : (
-                      <span className="schedule-form__duration">
-                        <input
-                          className={`input schedule-form__number${cycleChanged ? " input--changed" : ""}`}
-                          type="number"
-                          min={0}
-                          step={1}
-                          aria-label={t("sessions.schedule.rounds.cycleMinutesLabel", { round: label })}
-                          value={minutes}
-                          onChange={(event) => update(row.key, { cycleSeconds: event.target.valueAsNumber * 60 + seconds })}
-                        />
-                        <span aria-hidden="true">{t("sessions.schedule.rounds.minutesUnit")}</span>
-                        <input
-                          className={`input schedule-form__number${cycleChanged ? " input--changed" : ""}`}
-                          type="number"
-                          min={0}
-                          max={59}
-                          step={1}
-                          aria-label={t("sessions.schedule.rounds.cycleSecondsLabel", { round: label })}
-                          value={seconds}
-                          onChange={(event) => {
-                            const value = event.target.valueAsNumber;
-                            update(row.key, { cycleSeconds: value >= 0 && value <= 59 ? minutes * 60 + value : Number.NaN });
-                          }}
-                        />
-                        <span aria-hidden="true">{t("sessions.schedule.rounds.secondsUnit")}</span>
-                        {cycleChanged && (
-                          <span className="rounds-table__hint">
-                            {t("sessions.schedule.rounds.was", { value: formatCycle(row.original!.cycleSeconds) })}
-                          </span>
-                        )}
-                      </span>
+                      <CycleInputs
+                        cycleSeconds={row.cycleSeconds}
+                        round={label}
+                        original={cycleChanged ? row.original!.cycleSeconds : null}
+                        onChange={(cycleSeconds) => update(row.key, { cycleSeconds })}
+                      />
                     )}
                   </td>
                   <td>{planned?.match_count ?? row.scheduled?.match_count ?? "—"}</td>
@@ -208,6 +195,14 @@ export function RoundsTable({
           </tbody>
         </table>
       )}
+      {total !== null && (
+        <p className="rounds-table__total">
+          {t("sessions.schedule.rounds.total", {
+            count: total,
+            time: formatMatchTime(finish!, timeZone, spansMultipleDays(times, timeZone), i18n.language),
+          })}
+        </p>
+      )}
       <button
         type="button"
         className="btn btn-small schedule-form__add"
@@ -222,5 +217,73 @@ export function RoundsTable({
         {t("sessions.schedule.rounds.add")}
       </button>
     </>
+  );
+}
+
+/** Whole minutes and seconds (0–59) make a cycle time; anything else is NaN. */
+function parseCycle(minutes: string, seconds: string): number {
+  if (!/^\d+$/.test(minutes) || !/^\d+$/.test(seconds)) return Number.NaN;
+  const rest = Number(seconds);
+  return rest > 59 ? Number.NaN : Number(minutes) * 60 + rest;
+}
+
+function cycleText(cycleSeconds: number): { minutes: string; seconds: string } {
+  if (Number.isNaN(cycleSeconds)) return { minutes: "", seconds: "" };
+  const { minutes, seconds } = splitCycle(cycleSeconds);
+  return { minutes: String(minutes), seconds: String(seconds) };
+}
+
+interface CycleInputsProps {
+  cycleSeconds: number;
+  round: string;
+  /** The scheduled cycle time when this one differs from it, else null. */
+  original: number | null;
+  onChange: (cycleSeconds: number) => void;
+}
+
+/** Minutes and seconds inputs that show exactly what was typed, even while it isn't a valid cycle time. */
+function CycleInputs({ cycleSeconds, round, original, onChange }: CycleInputsProps) {
+  const { t } = useTranslation();
+  const [text, setText] = useState(() => cycleText(cycleSeconds));
+  const [seen, setSeen] = useState(cycleSeconds);
+  // Follow a change made elsewhere (a suggested cycle time, Discard, a server refresh).
+  if (!Object.is(seen, cycleSeconds)) {
+    setSeen(cycleSeconds);
+    if (!Object.is(parseCycle(text.minutes, text.seconds), cycleSeconds)) setText(cycleText(cycleSeconds));
+  }
+  const changedClass = original !== null ? " input--changed" : "";
+
+  function edit(next: { minutes: string; seconds: string }) {
+    setText(next);
+    onChange(parseCycle(next.minutes, next.seconds));
+  }
+
+  return (
+    <span className="schedule-form__duration">
+      <input
+        className={`input schedule-form__number${changedClass}`}
+        type="number"
+        min={0}
+        step={1}
+        aria-label={t("sessions.schedule.rounds.cycleMinutesLabel", { round })}
+        value={text.minutes}
+        onChange={(event) => edit({ ...text, minutes: event.target.value })}
+      />
+      <span aria-hidden="true">{t("sessions.schedule.rounds.minutesUnit")}</span>
+      <input
+        className={`input schedule-form__number${changedClass}`}
+        type="number"
+        min={0}
+        max={59}
+        step={1}
+        aria-label={t("sessions.schedule.rounds.cycleSecondsLabel", { round })}
+        value={text.seconds}
+        onChange={(event) => edit({ ...text, seconds: event.target.value })}
+      />
+      <span aria-hidden="true">{t("sessions.schedule.rounds.secondsUnit")}</span>
+      {original !== null && (
+        <span className="rounds-table__hint">{t("sessions.schedule.rounds.was", { value: formatCycle(original) })}</span>
+      )}
+    </span>
   );
 }

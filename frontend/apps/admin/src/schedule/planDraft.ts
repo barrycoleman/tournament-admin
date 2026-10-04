@@ -89,6 +89,28 @@ export function isRowChanged(row: RoundRow): boolean {
   );
 }
 
+/** The new rows' values in order, to tell an untouched pre-fill from one that was edited, added to or trimmed. */
+function newRowsSignature(rows: RoundRow[]): string {
+  return JSON.stringify(
+    rows.filter((row) => row.scheduled === null).map((row) => [row.roundType, row.matchesPerTeam, row.cycleSeconds])
+  );
+}
+
+/**
+ * Whether the draft holds unapplied work: an edited scheduled row, or new
+ * rows that differ from `baselineNew` (the new rows the draft started with,
+ * so a division's untouched pre-filled suggestions don't count).
+ */
+export function isDraftDirty(rows: RoundRow[], baselineNew: RoundRow[]): boolean {
+  return rows.some(isRowChanged) || newRowsSignature(rows) !== newRowsSignature(baselineNew);
+}
+
+/** The baseline's new rows minus those whose round the server now has scheduled. */
+export function pruneScheduledRows(baselineNew: RoundRow[], rounds: ScheduledRound[]): RoundRow[] {
+  const scheduledTypes = new Set(rounds.map((round) => round.round_type));
+  return baselineNew.filter((row) => !scheduledTypes.has(row.roundType));
+}
+
 export function needsRebuild(row: RoundRow): boolean {
   return Boolean(row.scheduled?.outside_playing_windows && !row.scheduled.locked);
 }

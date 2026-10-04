@@ -5,11 +5,13 @@ import {
   fallbackCycleSeconds,
   formatCycle,
   initialRows,
+  isDraftDirty,
   isRowChanged,
   mergeServerRounds,
   newRow,
   planAction,
   plannerRoundTypes,
+  pruneScheduledRows,
   rowsToSend,
   rowsValid,
   splitCycle,
@@ -179,5 +181,33 @@ describe("mergeServerRounds", () => {
     const rows = initialRows([PRACTICE], [], cycleFor).map((r) => ({ ...r, matchesPerTeam: 2 }));
     const { rows: merged } = mergeServerRounds(rows, [{ ...PRACTICE, target_matches_per_team: 2 }], 420);
     expect(isRowChanged(merged[0])).toBe(false);
+  });
+});
+
+describe("isDraftDirty", () => {
+  const prefill = initialRows([], ["practice", "qualification"], cycleFor);
+
+  it("treats an untouched pre-fill as clean", () => {
+    expect(isDraftDirty(prefill, prefill)).toBe(false);
+    expect(isDraftDirty(prefill.map((row) => ({ ...row })), prefill)).toBe(false);
+  });
+
+  it("counts editing, removing or adding a new row as a change", () => {
+    expect(isDraftDirty([{ ...prefill[0], matchesPerTeam: 2 }, prefill[1]], prefill)).toBe(true);
+    expect(isDraftDirty([prefill[0]], prefill)).toBe(true);
+    expect(isDraftDirty([...prefill, newRow("elimination", 1, 420, "new-9")], prefill)).toBe(true);
+    expect(isDraftDirty([{ ...prefill[0], cycleSeconds: Number.NaN }, prefill[1]], prefill)).toBe(true);
+  });
+
+  it("counts an edited scheduled row, and a new row added after scheduled ones", () => {
+    const rows = initialRows([PRACTICE], ["practice", "qualification"], cycleFor);
+    expect(isDraftDirty(rows, [])).toBe(false);
+    expect(isDraftDirty([{ ...rows[0], matchesPerTeam: 3 }], [])).toBe(true);
+    expect(isDraftDirty([...rows, newRow("qualification", 6, 420, "new-1")], [])).toBe(true);
+  });
+
+  it("drops baseline rows whose round the server has now scheduled", () => {
+    expect(pruneScheduledRows(prefill, [PRACTICE]).map((row) => row.roundType)).toEqual(["qualification"]);
+    expect(pruneScheduledRows(prefill, [PRACTICE, QUALIFICATION])).toEqual([]);
   });
 });

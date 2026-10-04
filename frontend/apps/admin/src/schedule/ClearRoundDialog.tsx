@@ -30,6 +30,8 @@ export function ClearRoundDialog({ sessionId, divisionId, targets, onDone }: Cle
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["matches", sessionId] });
       queryClient.invalidateQueries({ queryKey: ["scheduleRounds", sessionId] });
+      // A cached dry run was checked against the rounds just cleared.
+      queryClient.invalidateQueries({ queryKey: ["schedulePlan"] });
     },
   });
   const isAll = targets.length > 1;
