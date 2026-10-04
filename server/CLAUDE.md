@@ -54,8 +54,13 @@ as a single number (0-999), ranked by average, with seed-paired
 score-chase finals and a 60-second, driver-only match. It exists so a
 fresh install can select a game and build a schedule without writing a
 plugin first, and as the smallest real example of a cooperative game.
-Real games' plugins are meant to be developed and distributed separately
-and installed by zip (see below). `tests/test_sample_cooperative_plugin.py`
+A game plugin's `match_format()` may also declare an optional
+`default_cycle_time_seconds`: an integer number of seconds, at least the
+match length (`autonomous_seconds + driver_seconds`), that the admin UI
+offers as a new round's default cycle time. The conformance tool rejects a
+non-integer (a `bool` included) or too-short value; the sample game
+declares 300. Real games' plugins are meant to be developed and distributed
+separately and installed by zip (see below). `tests/test_sample_cooperative_plugin.py`
 runs it through conformance and a full event.
 
 The server scans both `<plugins_root>/games/*/` and
@@ -429,85 +434,32 @@ deletes nothing. Clearing the schedule (`DELETE /api/schedule`) is what
 frees a field up again.
 
 `GET /api/event/match-format` (any authenticated role) exposes the
-selected game plugin's scheduling-relevant format — `round_types`,
-`teams_per_alliance`, `alliance_count`, and `match_duration_seconds`
-(`autonomous_seconds + driver_seconds`, the same value `POST
-/api/schedule` uses for its cycle-time warning) — so the admin UI's
-schedule form can offer real round types and warn about tight cycle
-times before previewing. 422 with the same message `POST /api/schedule`
-uses when no game plugin is selected.
+selected game plugin's scheduling-relevant format -- `round_types`,
+`teams_per_alliance`, `alliance_count`, `match_duration_seconds`
+(`autonomous_seconds + driver_seconds`, the match length `POST
+/api/schedule` enforces as the minimum cycle time) and the optional
+`default_cycle_time_seconds` (null when the plugin doesn't declare one) --
+so the admin UI's schedule form can offer real round types and sensible
+default cycle times before previewing. 422 with the same message `POST
+/api/schedule` uses when no game plugin is selected.
 
 `POST /api/schedule` generates matches for a `(session_id, division_id)`
-via a scheduler plugin's `generate_schedule()`, in one of two mutually
-exclusive request shapes (`schemas/schedule.py`'s
-`ScheduleGenerateRequest._check_round_type_xor_phases` 422s if both or
-neither are given):
-
-- **Singular shape** (the original shape): a top-level `round_type` +
-  `target_matches_per_team` generates exactly one round_type in this call.
-- **`phases` shape**: `phases: list[{round_type,
-  target_matches_per_team}]` (at least one entry, no repeated
-  `round_type` within the list) generates several round_types in one
-  combined call — e.g. `[{"round_type": "practice",
-  "target_matches_per_team": 1}, {"round_type": "qualification",
-  "target_matches_per_team": 6}]` for the common "practice, then
-  qualification" plan. Every phase's scheduler-plugin call runs first, in
-  order, folding each phase's own just-generated matches into the
-  in-memory pairing history the *next* phase's call sees
-  (`_fold_generated_into_pairing_history`) — a `balanced` scheduler
-  plugin therefore already knows about phase 1's pairings when it plans
-  phase 2, with no DB round-trip needed. Only once every phase's plugin
-  call has succeeded are time slots allocated across all of them
-  together (see "Time-based scheduling" below) and everything persisted:
-  one `ScheduleGeneration` row and its own batch of `Match` rows per
-  phase (`match_number` restarting at 1 within each phase, same as the
-  singular shape), with every earlier phase's matches always landing at
-  earlier `scheduled_time`s than every later phase's — no manual
-  clock-time math required from the caller. A single-entry `phases` list
-  is accepted and behaves identically to the singular shape, just
-  returning its result via `phase_results` (a one-element list) instead
-  of the flat `match_count`.
-
-It 409s if matches already exist for any phase's `(session_id,
-division_id, round_type)` combination — checked for every phase before
-anything is generated for any of them (all-or-nothing). Regenerating
-requires an explicit `DELETE /api/schedule` first (still one `round_type`
-at a time — see "Time-based scheduling" below for why this makes
-regenerating a single phase of a combined batch by itself a hard 422),
-which deletes only that combination's Matches (and their
-Alliances/AllianceTeams/ScoreRecords), its `ScheduleGeneration` row (and
-therefore its stored blocks — see below), and then recomputes that
-division's `Ranking` rows from whatever completed matches remain —
-including ones from other, untouched `round_type`s — rather than leaving
-them either stale or wiped (a scoped fix for the general
-stale-ranking-row cleanup gap noted under Match & scoring above — this
-action makes that gap immediately visible, so it's addressed here
-specifically). The scheduler plugin decides who plays whom and which
-FieldSet/time_slot each match runs in; the core server assigns
-`match_number` and the literal `field_id` afterward (round-robin within
-each match's FieldSet) — see `services/scheduling.py` for the
-cross-session pairing-history query the plugin receives, and
-`routers/schedule.py`'s `_validate_generated_schedule` for the structural
-checks (correct alliance shape, no team double-booked within a
-`time_slot`) applied to whatever the plugin returns, before anything is
-persisted — the same validate-before-persist discipline used for score
-submission. In a `phases` request, every `HTTPException` raised by
-`_validate_generated_schedule` (and the scheduler-plugin call's own
-exception handler, one frame up) names the failing phase's `round_type`,
-so a combined request's error is never ambiguous about which half of it
-broke.
-
-`dry_run: true` runs every phase's scheduler-plugin call and the full
-block/cycle-time resolution exactly as a real request would — computing
-and returning the same response shape (`resolved_time_blocks`,
-`cycle_time_warning`, `phase_results` or `match_count`) — but skips every
-persistence step entirely: no `ScheduleGeneration` row, no `Match` row,
-no commit. This is what lets an organizer iterate on time-block lengths
-and match-count targets against their real roster and field setup,
-seeing accurate cycle-time feedback, without generating (and then having
-to clear) a real schedule for each attempt; calling it repeatedly with
-the same payload is idempotent (nothing accumulates) and never blocks a
-subsequent real generation for the same round_type(s).
+via a scheduler plugin's `generate_schedule()`, assigning every match a
+real UTC `scheduled_time` by flowing it through the session's playing
+windows -- see "Playing windows and round placement" below for the request
+shape, placement rules, rebuilds, dry runs and overflow. The scheduler
+plugin decides who plays whom and which FieldSet/time_slot each match runs
+in; the core server assigns `match_number` (restarting at 1 within each
+round) and the literal `field_id` afterward (round-robin within each
+match's FieldSet) -- see `services/scheduling.py` for the cross-session
+pairing-history query the plugin receives, and `routers/schedule.py`'s
+`_validate_generated_schedule` for the structural checks (correct alliance
+shape, no team double-booked within a `time_slot`) applied to whatever the
+plugin returns, before anything is persisted -- the same
+validate-before-persist discipline used for score submission. Every
+`HTTPException` raised by `_validate_generated_schedule` (and the
+scheduler-plugin call's own exception handler) names the failing round's
+`round_type`, so a multi-round request's error is never ambiguous.
 
 ### Match labeling
 
@@ -550,140 +502,124 @@ following the same `generate_schedule` contract.
 Elimination brackets are a separate, later phase — no plugin contract for
 bracket progression exists yet.
 
-## Time-based scheduling
+## Playing windows and round placement
 
-`POST /api/schedule` assigns every generated `Match` a real UTC
-`scheduled_time`, computed from `time_blocks` — a list of `{date,
-start_time, end_time, cycle_time}` windows (`services/schedule_timing.py`).
-Each block carries its **own** `date` (a real calendar date — no longer
-inherited from one shared session-level date) alongside a zero-padded
-`"HH:MM"` `start_time`/`end_time` (enforced by the request schema);
-blocks must be given in ascending `(date, start_time)` order with no two
-windows overlapping on the same date (422 otherwise — two blocks on
-different dates never overlap regardless of how their times of day
-compare). Each block is independently pinned (`end_time` + `cycle_time`
-both given, a fixed match capacity), "calculate for me" (`cycle_time:
-null`, needs `end_time` to divide by), or open-ended (`end_time: null`,
-needs `cycle_time`, must be the last block in chronological order, and
-cannot coexist with a "calculate for me" block — see
-`resolve_block_cycle_times`'s validation for why). Multiple "calculate
-for me" blocks are apportioned capacity by duration via
-`_apportion_time_slots`'s largest-remainder method, which yields the same
-computed cycle time across blocks when durations divide the remaining
-slots into exact integer proportions; when they don't, integer rounding
-can leave blocks with slightly different (but each individually correct)
-cycle times. In a `phases` request, every phase's own required time-slot
-count (computed the same way as the singular shape) is summed into one
-`total_time_slots_needed` before block resolution, so one combined set of
-blocks covers every phase; resolved slots are then handed out to phases
-in the order given — phase 1's own count first, then phase 2's picking up
-where phase 1 left off, and so on — which is what guarantees every
-earlier phase's matches land at earlier `scheduled_time`s than every
-later phase's.
+A session owns its playing windows: the clock times matches may run in
+(`session_playing_windows`, one row per `{date, start_time, end_time}`,
+zero-padded `"HH:MM"` strings, each window carrying its own real calendar
+date). `GET /api/sessions/{id}/playing-windows` reads them and `PUT` of the
+same path replaces them all at once; both are `admin`-only, and each
+returned window also carries its resolved `start_utc`/`end_utc` (null while
+the session has no timezone). `PUT` is validated by
+`services/playing_windows.validate_windows`: windows are sorted by `(date,
+start_time)`, each must end after it starts, no two on the same date may
+overlap (one may end exactly when the next starts), and a session can have
+at most 50 (`MAX_WINDOWS`) -- a 422 otherwise -- and the session must have a
+`timezone` (an IANA zone name) before any window can be saved. `session_date`
+is display-only and is never read for scheduling. Changing the windows never
+moves a match that already exists; the planner flags those rounds instead
+(`outside_playing_windows`, below).
 
-Cycle time governs the interval between distinct `time_slot`s, not raw
-matches — several matches can share one `time_slot` when multiple
-`FieldSet`s run concurrently, and they all get the identical
-`scheduled_time`. Each block in the response's `resolved_time_blocks`
-(`ResolvedTimeBlockRead`: `date`, `start_time`, `end_time`,
-`cycle_time_seconds`, `time_slot_count` — the slots allocated to that
-block, which lets a client project an open-ended block's finish time)
-carries its own resolved `date`, which is what lets a multi-day `dry_run`
-preview tell an organizer which calendar day each resolved block actually
-falls on.
+`POST /api/schedule` takes `rounds: [{round_type, target_matches_per_team,
+cycle_time_seconds}]` (at least one, no repeated `round_type`, each cycle
+time at least the match length); `ScheduleGenerateRequest` forbids unknown
+keys so a client still sending a removed request shape fails loudly. It 422s without a session `timezone`
+or without any playing windows. Every round's scheduler-plugin call runs
+first, in order, each folding its just-generated matches into the in-memory
+pairing history the next round sees (`_fold_generated_into_pairing_history`);
+only then are time slots placed and anything persisted.
 
-Omitting `time_blocks` entirely synthesizes one implicit open-ended block
-starting five minutes from `utc_now()` (today's real UTC date), at a
-cycle time derived from the game plugin's `autonomous_seconds +
-driver_seconds` times `warn_below_multiplier` (default `1.5`) —
-comfortably above the warning threshold in the typical case, though
-rounding at an exact `.5` boundary can in rare cases still trigger it.
-This requires no `session_date`/`timezone` on the session at all. Using
-real `time_blocks` only requires `TournamentSession.timezone` (an IANA
-zone name) to be set — **not** `session_date`: since every block now
-carries its own `date`, `session_date` is purely a display-only "nominal
-date" for sorting/labeling a session in a list, and is never read to
-resolve `time_blocks`, even for a single-day request.
+Placement (`services/schedule_timing.py`'s `place_slots` and `place_plan`)
+flows each round's time slots through the windows in order, `cycle_time_seconds`
+apart: a slot starts only if a match started then would finish by its
+window's end, otherwise it moves to the next window's start and spacing
+restarts there. Cycle time governs the interval between distinct
+`time_slot`s, not raw matches -- matches sharing a slot (several FieldSets
+running concurrently) all get the identical `scheduled_time`. Each round
+starts on the first whole minute after the previous round's last match
+ends (`ceil_minute`); once one round runs out of room, every later slot is
+unplaced. A plan as a whole starts after the division's kept matches (the
+latest kept match's start plus one match length, rounded up to a whole
+minute) or, with none, at the first window's start. A window cannot span
+midnight on its own date; a schedule running past midnight needs a window
+dated the next day. A window start in a DST gap or overlap resolves via
+Python's default (`fold=0`) rather than raising.
 
-`ScheduleGenerateResponse.cycle_time_warning` fires when any resolved
-block's cycle time is below `match_duration_seconds *
-warn_below_multiplier` — informational only, never blocks generation.
+**Rebuilding.** Listing a round that already exists rebuilds it, together
+with every later round (`_rounds_to_replace`): every round after the
+earliest listed one must be listed too, and none of the rebuilt rounds may
+have score records (422 otherwise). The deletion and re-creation happen in
+one transaction, so a failure leaves the previous schedule untouched, and
+the pairing history the scheduler plugin sees excludes the replaced matches.
+A rebuild therefore no longer requires a `DELETE /api/schedule` first.
+`DELETE /api/schedule` (one `round_type` at a time, via `_delete_round`)
+still exists: it deletes that round's Matches (and their Alliances,
+AllianceTeams and ScoreRecords) and `ScheduleGeneration` row, then
+recomputes the division's `Ranking` rows from whatever completed matches
+remain, including other, untouched `round_type`s.
 
-A block still can't span midnight on its own `date` (an `end_time`
-earlier than its own `start_time` is rejected as invalid, not treated as
-spilling into the next day) — a schedule that needs to run past midnight
-needs a second block dated the next day instead. A block whose
-`start_time` falls in a DST spring-forward gap or fall-back overlap in
-the session's `timezone` resolves via Python's default (`fold=0`) rather
-than raising — not expected to matter for tournament scheduling, but
-worth knowing if a session ever spans a DST transition.
+**Dry runs and overflow.** `dry_run: true` runs the whole plan -- scheduler
+plugin calls, placement, the overlap safety net -- and persists nothing (no
+`ScheduleGeneration`, no `Match`, no commit), so it is idempotent. The
+response is `ScheduleGenerateResponse`: `fits`, `rounds` (per-round
+`round_type`, `schedule_generation_id` -- null on a dry run --, `match_count`,
+`slot_count`, `first_start`, and `last_end`, which is null for a round that
+doesn't fully fit) and `overflow`. When the plan doesn't fit, `overflow`
+(`ScheduleOverflow`) carries `unplaced_slot_count`, `unplaced_match_count`,
+`over_by_seconds` (how far the plan, placed as if the last window never
+ended, runs past the last window's end), `suggested_cycle_time_seconds` and
+`suggested_last_window_end`. The suggested cycle time is the longest
+whole-second cycle for the last listed round alone that makes the plan fit,
+found by binary search (placement times never decrease as a cycle time
+grows, so the search is sound); it is null if not even the match length
+fits, or if the last round's cycle time is already the match length. The
+suggested window end is the earliest whole-minute local end for the last
+window that would fit, null if that passes midnight
+(`overflow_suggestions`). A non-dry-run request that doesn't fit is a 422
+naming how many matches don't fit and the first round that is short, and
+creates nothing.
 
-### Cross-generation overlap enforcement and its timezone frame
+**What a generation records.** Each `ScheduleGeneration` stores the round's
+`cycle_time_seconds` and, in `time_blocks_json`
+(`schedule_timing.serialize_time_blocks`/`deserialize_time_blocks`), one
+entry per playing window that round's matches actually use: the window's
+`date`/`start_time`/`end_time`, the `cycle_time`, the session's `timezone`
+name, and `occupied_from`/`occupied_until` (UTC ISO 8601) -- the first
+match's start and the last match's start plus one match length inside that
+window (`occupied_by_window`). A window holding none of the round's matches
+gets no entry. A row saved before occupied windows existed has no
+`occupied_from` key (`deserialize_time_blocks` leaves `occupied` out rather
+than reading it as `None`) and, if it also predates the `timezone` key,
+decodes as `"UTC"`; this project has never had real deployed event data, so
+that default only affects test data.
 
-Every `ScheduleGeneration` row stores the request's resolved
-`time_blocks` as `time_blocks_json`
-(`schedule_timing.serialize_time_blocks`/`deserialize_time_blocks`): in a
-combined `phases` call every phase's row stores the same requested
-blocks, each with only that phase's own occupied window (below). Each
-serialized block also carries the IANA `timezone` name it
-was resolved against — the implicit-default path always resolves against
-`"UTC"`; the explicit `time_blocks` path resolves against the session's
-own `timezone`. This is what lets
-`routers/schedule.py`'s `_check_no_overlap_with_prior_generations` — run
-before generating anything whenever `time_blocks` are given explicitly —
-correctly compare the *new* request's blocks against every other
-still-live `ScheduleGeneration` for the same `(session_id, division_id)`
-(across every `round_type`, not just the one being generated), 422ing if
-any overlap. Two blocks stored under different timezone frames can have
-wall-clock `date`/`start_time`/`end_time` values that look identical,
-disjoint, or even backwards while representing the same (or genuinely
-overlapping) real moments — comparing the raw strings directly (this
-check's original form) both missed real overlaps and could have flagged
-non-overlapping blocks as conflicting. The check instead converts both
-sides to real UTC instants (`schedule_timing.block_utc_bounds`, which
-combines a block's `date` + `start_time`/`end_time` against its own
-`timezone` via `ZoneInfo`) before comparing. A block stored before
-`timezone` existed on it at all decodes with `timezone` defaulting to
-`"UTC"` — this project has never had real deployed event data (see
-"Database migrations" below), so there is no genuine production row whose
-true original frame this default could get wrong; it only affects test
-data and any generation made in the narrow window between the
-`phases`/`dry_run` feature landing and this default being added.
-`DELETE /api/schedule` deletes the cleared `round_type`'s own
-`ScheduleGeneration` row (and therefore its stored blocks) along with its
-Matches, which is the only way to free up a time window a generation
-previously claimed — a still-live generation's blocks are checked against
-forever, until it's cleared.
+`routers/schedule.py`'s `_check_no_overlap_with_prior_generations` is now a
+safety net, not the primary guard: since a plan starts after the division's
+kept matches it should never fire, but it still compares the new rounds'
+occupied windows against every other still-live generation for the same
+`(session_id, division_id)` (skipping the rounds being rebuilt), converting
+both sides to real UTC instants (`block_utc_bounds`) so differing timezone
+frames can't hide or fake an overlap. It exists to catch rows saved before
+occupied windows existed, which fall back to their requested
+`start_time`/`end_time`. The 422 names both windows in local wall-clock
+time. Non-overlap is enforced **per `(session, division)`**, never globally
+across a session: two divisions with disjoint FieldSets are expected and
+allowed to run at the same clock time (see "Multi-division scheduling"
+below).
 
-What a generation claims in each block is the window its own matches
-actually use, not the window the block was requested with: from its
-first match's start to its last match's start plus one match length
-(`schedule_timing.blocks_occupied_windows`, which places matches exactly
-as `assign_scheduled_times` does; its `slots` argument narrows it to one
-phase's global slot range). Each serialized block stores that window as
-`occupied_from`/`occupied_until` (UTC ISO 8601; both `null` when the
-block holds none of that generation's matches, which then claims
-nothing there), and the new request's blocks are held to the same rule —
-which is why the check runs after `resolve_block_cycle_times` rather
-than before it. Without this an open-ended block would claim everything
-after its start, a block whose matches finish early would keep the rest
-of its window booked, and clearing one phase of a combined request would
-free nothing while its sibling phases still held the shared blocks. A
-row saved before occupied windows existed has no `occupied_from` key
-(`deserialize_time_blocks` then leaves `occupied` out rather than reading
-it as `None`), and falls back to its requested `start_time`/`end_time`,
-open-ended still meaning indefinitely. The 422 names both windows in
-local wall-clock time and says where the new block could go instead.
-
-Non-overlap is enforced **per `(session, division)`**, never globally
-across a session: two different divisions with disjoint FieldSets are
-expected and allowed to run at literally the same clock time (see
-"Multi-division scheduling" below) — this check doesn't change that.
-
-Because each phase claims only its own matches' time, one phase of a
-combined `phases` batch can be cleared and regenerated by itself (as a
-singular-shape or single-phase call) into the time it freed, without
-touching the batch's other phases.
+**The planner view.** `GET /api/schedule/rounds?session_id=&division_id=`
+(`admin`-only) returns `ScheduleRoundsRead` for the admin UI's Schedule tab:
+the scope's rounds in chronological order of their first match, each with
+`round_type`, `target_matches_per_team` and `cycle_time_seconds` (from the
+round's latest generation, null if none), `match_count`, `scored_count`,
+`first_start`, `last_end` (the last match start plus one match length),
+`locked` (the round or any later round has a scored match, since rebuilding
+it would move scored matches) and `outside_playing_windows` (some match no
+longer fits inside any current playing window, e.g. after the windows were
+edited). The response also carries `session_last_cycle_time_seconds`, the
+`cycle_time_seconds` of the session's most recently created generation in
+any division, which the UI uses as one step in choosing a new round's
+default cycle time.
 
 ## Multi-division scheduling
 
@@ -701,9 +637,8 @@ generate their own schedule without colliding on physical fields — each
 division's `time_slot` numbering is independent, and overlapping
 `time_slot` values across divisions are correct and expected once their
 fields are disjoint (that's parallel fields working as designed, not a
-collision). `time_blocks`/cycle-time resolution needed no changes either,
-since it was already scoped per generation call; only the FieldSet lookup
-itself was blind to which division a call was for.
+collision). Placement was already scoped per generation call; only the
+FieldSet lookup itself was blind to which division a call was for.
 
 A FieldSet's single nullable `division_id` makes true double-assignment
 structurally impossible — reassigning it after the fact only affects

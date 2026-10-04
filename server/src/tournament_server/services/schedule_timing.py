@@ -46,25 +46,23 @@ def serialize_time_blocks(
     timezone_name: str,
     occupied: list[tuple[dt.datetime, dt.datetime] | None] | None = None,
 ) -> str:
-    """JSON-encodes a list of time-block dicts (the playing windows a
-    round's matches use) for storage in ScheduleGeneration.time_blocks_json.
-    Each block's `date` (a real dt.date) is encoded as an ISO-8601 string.
+    """JSON-encodes the playing windows one round's matches use, for
+    storage in ScheduleGeneration.time_blocks_json: one dict per window with
+    `date` (encoded as an ISO-8601 string), `start_time`, `end_time` and
+    `cycle_time`.
 
-    Each encoded block also carries `timezone_name` -- the IANA zone its
-    own start_time/end_time wall-clock strings are meant to be
-    interpreted against. This is what lets a later, different generation
-    call's overlap check (routers/schedule.py's
-    _check_no_overlap_with_prior_generations) convert this stored block
-    back to a real UTC instant instead of comparing raw wall-clock
-    strings across generations that may have resolved against different
-    timezone frames (the implicit-default path always resolves against
-    "UTC"; the explicit time_blocks path resolves against the session's
-    own timezone) -- see this project's final-review fix wave, Finding 2.
+    Each encoded entry also carries `timezone` (timezone_name), the IANA
+    zone its wall-clock start_time/end_time strings are meant to be read
+    against -- the session's timezone. That is what lets a later
+    generation's overlap check (routers/schedule.py's
+    _check_no_overlap_with_prior_generations) convert a stored window back
+    to real UTC instants.
 
-    When given, `occupied` (one (from, until) entry per block in the same
-    order, as occupied_by_window reports them, or None) is stored per block
-    as `occupied_from`/`occupied_until` ISO-8601 UTC instants, both null for
-    a block that holds none of this generation's matches."""
+    `occupied` (one (from, until) entry per window in the same order, as
+    occupied_by_window reports them, or None) is stored per entry as
+    `occupied_from`/`occupied_until` ISO-8601 UTC instants: the time the
+    round's matches actually claim inside that window. Both are null for a
+    window holding none of them."""
     if occupied is not None and len(occupied) != len(time_blocks):
         raise ValueError("occupied needs exactly one entry per time block")
     encoded = []
@@ -86,23 +84,15 @@ def serialize_time_blocks(
 
 def deserialize_time_blocks(time_blocks_json: str) -> list[dict]:
     """Inverse of serialize_time_blocks: decodes stored JSON back into
-    block dicts with a real dt.date under "date", suitable for passing to
+    window dicts with a real dt.date under "date", suitable for passing to
     block_utc_bounds.
 
-    A block's "timezone" key defaults to "UTC" when absent, for rows
-    written before serialize_time_blocks started storing it: that's the
-    frame the more common no-time_blocks-given (implicit-default) call
-    path already resolved against, and this project has never had real
-    deployed event data (server/CLAUDE.md's "Database migrations"
-    section) -- so there is no genuine production row whose true
-    original frame this default could get wrong; it only affects test
-    data and generations made in the narrow window between the phases/
-    dry_run feature landing and this default being added.
-
-    "occupied" (a (from, until) pair of UTC datetimes, or None for a block
-    with none of the generation's matches) is present only when the row
-    stored it; rows from before it existed leave the key out, so callers
-    can tell "no matches" from "unknown"."""
+    Rows written before newer keys existed stay readable: a missing
+    "timezone" defaults to "UTC", and a row without "occupied_from" gets no
+    "occupied" key at all. When present, "occupied" is a (from, until) pair
+    of UTC datetimes, or None for a window holding none of the round's
+    matches, so callers can tell "no matches" (None) from "unknown" (key
+    absent, fall back to the requested start_time/end_time)."""
     blocks = []
     for b in json.loads(time_blocks_json):
         block = {
