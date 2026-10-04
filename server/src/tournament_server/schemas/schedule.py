@@ -2,72 +2,64 @@ from __future__ import annotations
 
 import datetime as dt
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class TimeBlock(BaseModel):
-    date: dt.date
-    start_time: str = Field(pattern=r"^\d{2}:\d{2}$")
-    end_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
-    cycle_time: int | None = Field(default=None, gt=0)
-
-
-class SchedulePhase(BaseModel):
+class ScheduleRound(BaseModel):
     round_type: str
-    target_matches_per_team: int
+    target_matches_per_team: int = Field(ge=1)
+    cycle_time_seconds: int = Field(gt=0)
 
 
 class ScheduleGenerateRequest(BaseModel):
+    # Forbid unknown keys so a client still sending the old time_blocks/
+    # phases shape fails loudly instead of being half-understood.
+    model_config = ConfigDict(extra="forbid")
+
     session_id: int
     division_id: int | None = None
-    round_type: str | None = None
-    target_matches_per_team: int | None = None
-    phases: list[SchedulePhase] | None = None
     scheduler_plugin_name: str
+    rounds: list[ScheduleRound] = Field(min_length=1)
     excluded_team_ids: list[int] = []
-    time_blocks: list[TimeBlock] | None = None
-    warn_below_multiplier: float = 1.5
     dry_run: bool = False
 
-    @model_validator(mode="after")
-    def _check_round_type_xor_phases(self) -> "ScheduleGenerateRequest":
-        singular_given = (
-            self.round_type is not None or self.target_matches_per_team is not None
-        )
-        if self.phases is not None:
-            if singular_given:
-                raise ValueError(
-                    "Provide either round_type/target_matches_per_team or "
-                    "phases, not both"
-                )
-            if len(self.phases) < 1:
-                raise ValueError("phases must contain at least one entry")
-        else:
-            if self.round_type is None or self.target_matches_per_team is None:
-                raise ValueError(
-                    "Provide either round_type and target_matches_per_team, "
-                    "or phases"
-                )
-        return self
 
-
-class ResolvedTimeBlockRead(BaseModel):
-    date: dt.date
-    start_time: str
-    end_time: str | None
-    cycle_time_seconds: float
-    time_slot_count: int
-
-
-class PhaseResult(BaseModel):
+class RoundResult(BaseModel):
     round_type: str
     schedule_generation_id: int | None
     match_count: int
+    slot_count: int
+    first_start: dt.datetime | None
+    # Null when the round doesn't fully fit in the playing windows.
+    last_end: dt.datetime | None
+
+
+class ScheduleOverflow(BaseModel):
+    unplaced_slot_count: int
+    unplaced_match_count: int
+    over_by_seconds: int
+    suggested_cycle_time_seconds: int | None
+    suggested_last_window_end: str | None
 
 
 class ScheduleGenerateResponse(BaseModel):
-    schedule_generation_id: int | None
+    fits: bool
+    rounds: list[RoundResult]
+    overflow: ScheduleOverflow | None
+
+
+class ScheduledRoundRead(BaseModel):
+    round_type: str
+    target_matches_per_team: int | None
+    cycle_time_seconds: int | None
     match_count: int
-    resolved_time_blocks: list[ResolvedTimeBlockRead]
-    cycle_time_warning: str | None
-    phase_results: list[PhaseResult] | None = None
+    scored_count: int
+    first_start: dt.datetime | None
+    last_end: dt.datetime | None
+    locked: bool
+    outside_playing_windows: bool
+
+
+class ScheduleRoundsRead(BaseModel):
+    rounds: list[ScheduledRoundRead]
+    session_last_cycle_time_seconds: int | None

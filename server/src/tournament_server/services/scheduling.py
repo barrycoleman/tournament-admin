@@ -9,7 +9,7 @@ from tournament_server.models.session import TournamentSession
 
 
 def build_pairing_history(
-    db: Session, event_id: int
+    db: Session, event_id: int, exclude_match_ids: frozenset[int] | set[int] = frozenset()
 ) -> dict[frozenset[int], dict[str, int]]:
     session_ids = [
         row.id
@@ -23,6 +23,8 @@ def build_pairing_history(
     matches = db.execute(
         select(Match).where(Match.session_id.in_(session_ids))
     ).scalars().all()
+    # A rebuild must not count the very matches it is about to replace.
+    matches = [match for match in matches if match.id not in exclude_match_ids]
 
     history: dict[frozenset[int], dict[str, int]] = {}
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import math
+from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -23,25 +25,25 @@ from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
 from tournament_server.realtime import broadcast_for_session
 from tournament_server.schemas.schedule import (
-    PhaseResult,
-    ResolvedTimeBlockRead,
+    RoundResult,
     ScheduleGenerateRequest,
     ScheduleGenerateResponse,
-    SchedulePhase,
+    ScheduleOverflow,
+)
+from tournament_server.services.playing_windows import load_windows
+from tournament_server.services.schedule_timing import (
+    PlayingWindow,
+    block_utc_bounds,
+    ceil_minute,
+    deserialize_time_blocks,
+    occupied_by_window,
+    overflow_suggestions,
+    place_plan,
+    serialize_time_blocks,
+    to_utc_windows,
 )
 from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
 from tournament_server.services.team_assignment import get_sole_division_id
-from tournament_server.services.schedule_timing import (
-    ResolvedBlock,
-    assign_scheduled_times,
-    block_utc_bounds,
-    blocks_occupied_windows,
-    deserialize_time_blocks,
-    implicit_default_time_block,
-    resolve_block_cycle_times,
-    serialize_time_blocks,
-    validate_blocks_ordered_and_non_overlapping,
-)
 from tournament_server.services.scheduling import build_pairing_history
 
 router = APIRouter(prefix="/api/schedule", tags=["schedule"])
@@ -51,8 +53,8 @@ def _validate_generated_schedule(
     generated: list, valid_field_set_ids: set[int], alliance_count: int, round_type: str
 ) -> None:
     """`round_type` is included in every raised HTTPException's detail so
-    a combined multi-phase request's error names which phase actually
-    failed -- mirroring the round_type context the phase loop's own
+    a multi-round request's error names which round actually
+    failed -- mirroring the round_type context the round loop's own
     scheduler-plugin-exception handler already adds around its call into
     this function."""
 
@@ -119,47 +121,25 @@ def _check_no_overlap_with_prior_generations(
     db: Session,
     session_id: int,
     division_id: int | None,
-    new_blocks: list[ResolvedBlock],
-    new_occupied: list[tuple[dt.datetime, dt.datetime] | None],
+    skip_round_types: set[str],
+    new_windows: list[tuple[str, PlayingWindow, dt.datetime, dt.datetime]],
     new_timezone_name: str,
 ) -> None:
-    """Raises ValueError if the matches of any of new_blocks would overlap
-    the matches of any block stored by an earlier, still-live
-    ScheduleGeneration for the same (session_id, division_id) -- checked
-    across every round_type, not just the one being generated now, since
-    two round_types sharing the same physical fields must never double-book
-    a time window.
-
-    Each side is held to the window its matches actually use
-    (blocks_occupied_windows), not the window it was requested with: an
-    open-ended block would otherwise run forever, one whose matches finish
-    early would keep the rest of its window booked, and each phase of a
-    combined request stores only its own matches' windows, so clearing one
-    phase frees exactly its time. A block with none of a generation's
-    matches holds nothing for it. A stored generation saved before occupied
-    windows were recorded falls back to its requested start_time/end_time
-    (open-ended still meaning indefinitely).
-
-    Both sides are compared as real UTC instants (block_utc_bounds), never
-    as raw local "HH:MM" strings: the implicit-default generation path
-    stores its one block against a "UTC" frame while the explicit
-    time_blocks path stores its blocks against the session's own IANA
-    timezone, so the same real moment can have wall-clock values that look
-    identical, disjoint, or even backwards depending on which path produced
-    which side."""
+    """A safety net: raises ValueError if any new round's matches overlap the
+    matches of another live generation in this (session, division). Rounds
+    being rebuilt (skip_round_types) are about to be deleted, so they don't
+    count. Under normal use this can't fire, because a plan starts after the
+    division's kept matches; it guards against rows saved before occupied
+    windows existed, which fall back to their requested window (open-ended
+    meaning indefinitely). Both sides are compared as real UTC instants."""
     query = select(ScheduleGeneration).where(ScheduleGeneration.session_id == session_id)
     if division_id is None:
         query = query.where(ScheduleGeneration.division_id.is_(None))
     else:
         query = query.where(ScheduleGeneration.division_id == division_id)
-    new_windows = [
-        (block, *window)
-        for block, window in zip(new_blocks, new_occupied)
-        if window is not None
-    ]
 
     for prior in db.execute(query).scalars().all():
-        if prior.time_blocks_json is None:
+        if prior.round_type in skip_round_types or prior.time_blocks_json is None:
             continue
         for prior_block in deserialize_time_blocks(prior.time_blocks_json):
             prior_timezone = prior_block["timezone"]
@@ -168,7 +148,7 @@ def _check_no_overlap_with_prior_generations(
                 if prior_block["occupied"] is None:
                     continue
                 prior_start, prior_end = prior_block["occupied"]
-            for new_block, new_start, new_end in new_windows:
+            for round_type, window, new_start, new_end in new_windows:
                 if new_end <= prior_start or (prior_end is not None and prior_end <= new_start):
                     continue
                 prior_from = _local_clock(prior_start, prior_timezone, prior_block["date"])
@@ -178,33 +158,13 @@ def _check_no_overlap_with_prior_generations(
                     if prior_end is not None
                     else f"from {prior_from} with no end time"
                 )
-                new_range = (
-                    f"from {_local_clock(new_start, new_timezone_name, new_block.date)} to "
-                    f"{_local_clock(new_end, new_timezone_name, new_block.date)}"
-                )
-                if prior_timezone == new_timezone_name:
-                    new_zone, prior_zone = "", f" ({prior_timezone})"
-                else:
-                    new_zone, prior_zone = f" ({new_timezone_name})", f" ({prior_timezone})"
-                if new_start < prior_start:
-                    advice = (
-                        "The new block's matches must finish by "
-                        f"{_local_clock(prior_start, new_timezone_name, new_block.date)}."
-                    )
-                elif prior_end is not None:
-                    # Blocks start on the minute, so round up to the next one.
-                    earliest = prior_end + dt.timedelta(seconds=-prior_end.second % 60)
-                    advice = (
-                        "Start the new block at "
-                        f"{_local_clock(earliest, new_timezone_name, new_block.date)} or later."
-                    )
-                else:
-                    advice = "Clear that round to schedule anything after it."
                 raise ValueError(
-                    f"The new block's matches on {new_block.date.isoformat()} would run "
-                    f"{new_range}{new_zone}, overlapping the {prior.round_type} round's "
-                    f"matches on {prior_block['date'].isoformat()}, which run "
-                    f"{prior_range}{prior_zone}. {advice}"
+                    f"The new {_round_label(round_type)} matches on {window.date.isoformat()} "
+                    f"would run from {_local_clock(new_start, new_timezone_name, window.date)} to "
+                    f"{_local_clock(new_end, new_timezone_name, window.date)}, overlapping the "
+                    f"{prior.round_type} round's matches on {prior_block['date'].isoformat()}, "
+                    f"which run {prior_range} ({prior_timezone}). Clear that round or change "
+                    "the playing times."
                 )
 
 
@@ -212,10 +172,10 @@ def _fold_generated_into_pairing_history(
     pairing_history: dict[frozenset[int], dict[str, int]], generated: list[dict]
 ) -> None:
     """Mutates pairing_history in place to include the partner/opponent
-    pairings from a phase's just-generated (not yet persisted) matches, in
+    pairings from a round's just-generated (not yet persisted) matches, in
     the same {frozenset({team_a, team_b}): {"partner_count", "opponent_count"}}
-    shape build_pairing_history produces -- so a later phase in the same
-    combined /api/schedule request sees the earlier phase's own results
+    shape build_pairing_history produces -- so a later round in the same
+    /api/schedule request sees the earlier round's own results
     before its own scheduler-plugin call runs. This must stay purely
     in-memory (no DB read/write) since it also needs to hold for dry_run,
     which never persists anything for build_pairing_history to see on a
@@ -244,6 +204,125 @@ def _fold_generated_into_pairing_history(
                 bump(a, b, "opponent_count")
 
 
+def _round_label(round_type: str) -> str:
+    return round_type.replace("_", " ").capitalize()
+
+
+@dataclass
+class _DivisionRound:
+    round_type: str
+    matches: list[Match]
+    first_start: dt.datetime | None
+    scored_match_ids: set[int]
+
+
+def _division_rounds(db: Session, session_id: int, division_id: int | None) -> list[_DivisionRound]:
+    """The scope's schedule-generated rounds (finals games excluded) in
+    chronological order of their first match."""
+    query = select(Match).where(Match.session_id == session_id, Match.finals_bracket_id.is_(None))
+    if division_id is None:
+        query = query.where(Match.division_id.is_(None))
+    else:
+        query = query.where(Match.division_id == division_id)
+    matches = db.execute(query).scalars().all()
+    match_ids = [match.id for match in matches]
+    scored = (
+        set(
+            db.execute(
+                select(Alliance.match_id)
+                .join(ScoreRecord, ScoreRecord.alliance_id == Alliance.id)
+                .where(Alliance.match_id.in_(match_ids))
+            ).scalars().all()
+        )
+        if match_ids
+        else set()
+    )
+    by_type: dict[str, list[Match]] = {}
+    for match in matches:
+        by_type.setdefault(match.round_type, []).append(match)
+    rounds = []
+    for round_type, round_matches in by_type.items():
+        times = [m.scheduled_time for m in round_matches if m.scheduled_time is not None]
+        rounds.append(
+            _DivisionRound(
+                round_type=round_type,
+                matches=round_matches,
+                first_start=min(times) if times else None,
+                scored_match_ids={m.id for m in round_matches if m.id in scored},
+            )
+        )
+    latest = dt.datetime.max.replace(tzinfo=dt.UTC)
+    rounds.sort(key=lambda r: (r.first_start or latest, r.round_type))
+    return rounds
+
+
+def _rounds_to_replace(existing: list[_DivisionRound], listed: list[str]) -> list[_DivisionRound]:
+    """The existing rounds a request rebuilds: from the earliest listed one
+    to the end. Every round after it must be listed too (a rebuild moves
+    them), and none of them may have scores."""
+    first = next((i for i, r in enumerate(existing) if r.round_type in listed), None)
+    if first is None:
+        return []
+    tail = existing[first:]
+    for later in tail:
+        if later.round_type not in listed:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Rebuilding {_round_label(tail[0].round_type)} also moves the rounds "
+                    f"after it; include {_round_label(later.round_type)} too"
+                ),
+            )
+    for round_ in tail:
+        if round_.scored_match_ids:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"{_round_label(round_.round_type)} has scored matches, so it can't be "
+                    "rebuilt. Clear it first."
+                ),
+            )
+    return tail
+
+
+def _delete_round(db: Session, session_id: int, division_id: int | None, round_type: str) -> int:
+    """Deletes one round's schedule-generated matches (with their alliances
+    and score records) and its ScheduleGeneration rows. Doesn't commit."""
+    match_query = select(Match).where(
+        Match.session_id == session_id,
+        Match.round_type == round_type,
+        Match.finals_bracket_id.is_(None),
+    )
+    generation_query = select(ScheduleGeneration).where(
+        ScheduleGeneration.session_id == session_id,
+        ScheduleGeneration.round_type == round_type,
+    )
+    if division_id is None:
+        match_query = match_query.where(Match.division_id.is_(None))
+        generation_query = generation_query.where(ScheduleGeneration.division_id.is_(None))
+    else:
+        match_query = match_query.where(Match.division_id == division_id)
+        generation_query = generation_query.where(ScheduleGeneration.division_id == division_id)
+    matches = db.execute(match_query).scalars().all()
+    for match in matches:
+        for alliance in db.execute(select(Alliance).where(Alliance.match_id == match.id)).scalars().all():
+            for record in db.execute(
+                select(ScoreRecord).where(ScoreRecord.alliance_id == alliance.id)
+            ).scalars().all():
+                db.delete(record)
+            for alliance_team in db.execute(
+                select(AllianceTeam).where(AllianceTeam.alliance_id == alliance.id)
+            ).scalars().all():
+                db.delete(alliance_team)
+            db.flush()
+            db.delete(alliance)
+        db.delete(match)
+    for generation in db.execute(generation_query).scalars().all():
+        db.delete(generation)
+    db.flush()
+    return len(matches)
+
+
 @router.post("", response_model=ScheduleGenerateResponse, status_code=201)
 def generate_schedule(
     payload: ScheduleGenerateRequest,
@@ -251,6 +330,10 @@ def generate_schedule(
     db: Session = Depends(get_db),
     _role: str = Depends(require_admin),
 ) -> ScheduleGenerateResponse:
+    """Plans (dry_run) or builds a division's rounds, flowing their matches
+    through the session's playing windows. A listed round that already
+    exists is rebuilt, together with every round after it, in one
+    transaction."""
     event = get_the_event(db)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not initialized")
@@ -268,62 +351,74 @@ def generate_schedule(
             ),
         )
 
-    if db.get(TournamentSession, payload.session_id) is None:
+    session_obj = db.get(TournamentSession, payload.session_id)
+    if session_obj is None:
         raise HTTPException(status_code=404, detail="Session not found")
     if payload.division_id is not None and db.get(Division, payload.division_id) is None:
         raise HTTPException(status_code=404, detail="Division not found")
 
-    scheduler_plugin = request.app.state.scheduler_plugins.get(
-        payload.scheduler_plugin_name
-    )
+    scheduler_plugin = request.app.state.scheduler_plugins.get(payload.scheduler_plugin_name)
     if scheduler_plugin is None:
         raise HTTPException(
             status_code=404,
             detail=f"Scheduler plugin {payload.scheduler_plugin_name!r} is not installed",
         )
 
-    phases: list[SchedulePhase] = (
-        payload.phases
-        if payload.phases is not None
-        else [
-            SchedulePhase(
-                round_type=payload.round_type,
-                target_matches_per_team=payload.target_matches_per_team,
-            )
-        ]
-    )
-
-    # A request's own phases list must not repeat a round_type against
-    # itself -- each round_type is meant to own exactly one
-    # ScheduleGeneration+Match batch per (session, division), and the
-    # DB-conflict check below can't catch this since none of these
-    # round_types exist in the database yet within this request.
-    phase_round_types = [phase.round_type for phase in phases]
-    if len(set(phase_round_types)) != len(phase_round_types):
-        raise HTTPException(
-            status_code=422,
-            detail="phases must not repeat the same round_type more than once",
-        )
-
-    # All-or-nothing: every phase's (session, division, round_type) must be
-    # conflict-free before anything is generated for any phase.
-    for phase in phases:
-        existing_query = select(Match).where(
-            Match.session_id == payload.session_id, Match.round_type == phase.round_type
-        )
-        if payload.division_id is None:
-            existing_query = existing_query.where(Match.division_id.is_(None))
-        else:
-            existing_query = existing_query.where(Match.division_id == payload.division_id)
-        if db.execute(existing_query).scalars().first() is not None:
+    match_format = game_plugin.module.match_format()
+    match_seconds = match_format["autonomous_seconds"] + match_format["driver_seconds"]
+    listed = [r.round_type for r in payload.rounds]
+    if len(set(listed)) != len(listed):
+        raise HTTPException(status_code=422, detail="rounds must not repeat a round_type")
+    for round_in in payload.rounds:
+        if round_in.round_type == "elimination":
             raise HTTPException(
-                status_code=409,
+                status_code=422,
+                detail="Elimination matches are created by the finals bracket, not the schedule",
+            )
+        if round_in.round_type not in match_format["round_types"]:
+            raise HTTPException(
+                status_code=422,
                 detail=(
-                    f"Matches already exist for round_type {phase.round_type!r} in "
-                    "this session/division; clear them with DELETE /api/schedule "
-                    "before regenerating"
+                    f"{round_in.round_type!r} is not a valid round_type for this "
+                    "event's game plugin"
                 ),
             )
+        if round_in.cycle_time_seconds < match_seconds:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"{_round_label(round_in.round_type)}'s cycle time must be at least "
+                    f"the match length ({match_seconds}s)"
+                ),
+            )
+
+    if session_obj.timezone is None:
+        raise HTTPException(
+            status_code=422, detail="Set the session's timezone before scheduling"
+        )
+    timezone_name = session_obj.timezone
+    window_rows = load_windows(db, payload.session_id)
+    if not window_rows:
+        raise HTTPException(
+            status_code=422,
+            detail="This session has no playing times; add them before scheduling",
+        )
+    windows = to_utc_windows(window_rows, timezone_name)
+
+    existing = _division_rounds(db, payload.session_id, payload.division_id)
+    replaced = _rounds_to_replace(existing, listed)
+    kept_starts = [
+        match.scheduled_time
+        for round_ in existing
+        if round_.round_type not in listed
+        for match in round_.matches
+        if match.scheduled_time is not None
+    ]
+    earliest = (
+        ceil_minute(max(kept_starts) + dt.timedelta(seconds=match_seconds))
+        if kept_starts
+        else windows[0].start
+    )
 
     participation_query = select(SessionParticipation).where(
         SessionParticipation.session_id == payload.session_id,
@@ -347,15 +442,12 @@ def generate_schedule(
     if payload.division_id is None:
         field_set_query = field_set_query.where(FieldSet.division_id.is_(None))
     else:
-        field_set_query = field_set_query.where(
-            FieldSet.division_id == payload.division_id
-        )
+        field_set_query = field_set_query.where(FieldSet.division_id == payload.division_id)
     field_sets = db.execute(field_set_query).scalars().all()
     if not field_sets:
         if payload.division_id is None:
             raise HTTPException(
-                status_code=422,
-                detail="Session has no unassigned FieldSets configured",
+                status_code=422, detail="Session has no unassigned FieldSets configured"
             )
         raise HTTPException(
             status_code=422,
@@ -367,31 +459,18 @@ def generate_schedule(
     if not fields:
         raise HTTPException(status_code=422, detail="Session has no Fields configured")
 
-    match_format = game_plugin.module.match_format()
-    for phase in phases:
-        if phase.round_type not in match_format["round_types"]:
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    f"{phase.round_type!r} is not a valid round_type for this "
-                    "event's game plugin"
-                ),
-            )
     teams_per_alliance = match_format["teams_per_alliance"]
     alliance_count = match_format["alliance_count"]
-
-    pairing_history = build_pairing_history(db, event.id)
-
-    match_duration_seconds = (
-        match_format["autonomous_seconds"] + match_format["driver_seconds"]
+    pairing_history = build_pairing_history(
+        db, event.id, exclude_match_ids={m.id for r in replaced for m in r.matches}
     )
 
-    phase_generated: list[tuple[SchedulePhase, list]] = []
-    for phase in phases:
+    generated_rounds: list[list[dict]] = []
+    for round_in in payload.rounds:
         try:
             generated = scheduler_plugin.module.generate_schedule(
                 teams=[{"team_id": t.id, "organization": t.organization} for t in teams],
-                target_matches_per_team=phase.target_matches_per_team,
+                target_matches_per_team=round_in.target_matches_per_team,
                 teams_per_alliance=teams_per_alliance,
                 alliance_count=alliance_count,
                 fields=[{"field_id": f.id, "field_set_id": f.field_set_id} for f in fields],
@@ -404,163 +483,145 @@ def generate_schedule(
                 status_code=422,
                 detail=(
                     "Scheduler plugin could not generate a schedule for "
-                    f"round_type {phase.round_type!r}: {exc}"
+                    f"round_type {round_in.round_type!r}: {exc}"
                 ),
             )
         _validate_generated_schedule(
-            generated, {fs.id for fs in field_sets}, alliance_count, phase.round_type
+            generated, {fs.id for fs in field_sets}, alliance_count, round_in.round_type
         )
         _fold_generated_into_pairing_history(pairing_history, generated)
-        phase_generated.append((phase, generated))
+        generated_rounds.append(generated)
 
-    total_time_slots_needed = sum(
-        len({entry["time_slot"] for entry in generated}) for _, generated in phase_generated
-    )
+    # Each round's time slots in order; matches sharing a slot run together.
+    slot_ranks = [
+        {slot: rank for rank, slot in enumerate(sorted({e["time_slot"] for e in generated}))}
+        for generated in generated_rounds
+    ]
+    plan = [
+        (len(ranks), round_in.cycle_time_seconds)
+        for ranks, round_in in zip(slot_ranks, payload.rounds)
+    ]
+    placement = place_plan(windows, earliest, plan, match_seconds)
+    match_length = dt.timedelta(seconds=match_seconds)
 
-    session_obj = db.get(TournamentSession, payload.session_id)
-    if payload.time_blocks is not None:
-        if session_obj.timezone is None:
+    round_results = []
+    unplaced_matches = 0
+    for round_in, generated, ranks, starts in zip(
+        payload.rounds, generated_rounds, slot_ranks, placement.round_starts
+    ):
+        unplaced_matches += sum(1 for e in generated if ranks[e["time_slot"]] >= len(starts))
+        round_results.append(
+            RoundResult(
+                round_type=round_in.round_type,
+                schedule_generation_id=None,
+                match_count=len(generated),
+                slot_count=len(ranks),
+                first_start=starts[0] if starts else None,
+                last_end=starts[-1] + match_length if len(starts) == len(ranks) else None,
+            )
+        )
+
+    if not placement.fits:
+        suggestions = overflow_suggestions(windows, earliest, plan, match_seconds, timezone_name)
+        overflow = ScheduleOverflow(
+            unplaced_slot_count=placement.unplaced_slot_count,
+            unplaced_match_count=unplaced_matches,
+            over_by_seconds=suggestions.over_by_seconds,
+            suggested_cycle_time_seconds=suggestions.suggested_cycle_time_seconds,
+            suggested_last_window_end=suggestions.suggested_last_window_end,
+        )
+        if not payload.dry_run:
+            first_short = next(r for r in round_results if r.last_end is None)
             raise HTTPException(
                 status_code=422,
-                detail="Session must have timezone set to use time_blocks",
-            )
-        time_blocks_input = [b.model_dump() for b in payload.time_blocks]
-        timezone_name = session_obj.timezone
-    else:
-        implicit_start = utc_now() + dt.timedelta(minutes=5)
-        time_blocks_input = [implicit_default_time_block(
-            match_duration_seconds, payload.warn_below_multiplier
-        )]
-        time_blocks_input[0]["start_time"] = implicit_start.strftime("%H:%M")
-        time_blocks_input[0]["date"] = implicit_start.date()
-        timezone_name = "UTC"
-
-    try:
-        if payload.time_blocks is not None:
-            validate_blocks_ordered_and_non_overlapping(time_blocks_input)
-        resolved_blocks = resolve_block_cycle_times(
-            time_blocks_input, total_time_slots_needed
-        )
-        if payload.time_blocks is not None:
-            _check_no_overlap_with_prior_generations(
-                db, payload.session_id, payload.division_id, resolved_blocks,
-                blocks_occupied_windows(
-                    resolved_blocks, timezone_name, match_duration_seconds
+                detail=(
+                    f"{unplaced_matches} matches don't fit in the session's playing times, "
+                    f"starting with {_round_label(first_short.round_type)} (over by "
+                    f"{math.ceil(suggestions.over_by_seconds / 60)} min). Shorten the cycle "
+                    "time or add playing time."
                 ),
-                timezone_name,
             )
-        global_assignments = assign_scheduled_times(
-            resolved_blocks, list(range(total_time_slots_needed)), timezone_name
+        return ScheduleGenerateResponse(fits=False, rounds=round_results, overflow=overflow)
+
+    occupied_per_round = [
+        occupied_by_window(windows, starts, match_seconds) for starts in placement.round_starts
+    ]
+    try:
+        _check_no_overlap_with_prior_generations(
+            db,
+            payload.session_id,
+            payload.division_id,
+            set(listed),
+            [
+                (round_in.round_type, window, start, end)
+                for round_in, occupied in zip(payload.rounds, occupied_per_round)
+                for window, start, end in occupied
+            ],
+            timezone_name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    warn_threshold_seconds = match_duration_seconds * payload.warn_below_multiplier
-    tight_blocks = [
-        b for b in resolved_blocks if b.cycle_time_seconds < warn_threshold_seconds
-    ]
-    cycle_time_warning = None
-    if tight_blocks:
-        block_names = ", ".join(f"{b.date} {b.start_time}" for b in tight_blocks)
-        cycle_time_warning = (
-            f"Cycle time is below {payload.warn_below_multiplier}x match "
-            f"duration ({match_duration_seconds}s) in block(s) starting at "
-            f"{block_names}"
-        )
-
-    resolved_time_blocks_read = [
-        ResolvedTimeBlockRead(
-            date=b.date,
-            start_time=b.start_time,
-            end_time=b.end_time,
-            cycle_time_seconds=b.cycle_time_seconds,
-            time_slot_count=b.time_slot_count,
-        )
-        for b in resolved_blocks
-    ]
-
     if payload.dry_run:
-        phase_results_dry = (
-            [
-                PhaseResult(
-                    round_type=phase.round_type,
-                    schedule_generation_id=None,
-                    match_count=len(generated),
-                )
-                for phase, generated in phase_generated
-            ]
-            if payload.phases is not None
-            else None
-        )
-        return ScheduleGenerateResponse(
-            schedule_generation_id=None,
-            match_count=sum(len(generated) for _, generated in phase_generated),
-            resolved_time_blocks=resolved_time_blocks_read,
-            cycle_time_warning=cycle_time_warning,
-            phase_results=phase_results_dry,
-        )
+        return ScheduleGenerateResponse(fits=True, rounds=round_results, overflow=None)
 
-    phase_results: list[PhaseResult] = []
+    # Everything below runs in one transaction: a failure before commit
+    # leaves the previous schedule exactly as it was.
+    for round_ in replaced:
+        _delete_round(db, payload.session_id, payload.division_id, round_.round_type)
+
+    fields_by_set: dict[int, list[int]] = {}
+    for f in fields:
+        fields_by_set.setdefault(f.field_set_id, []).append(f.id)
+    for field_ids in fields_by_set.values():
+        field_ids.sort()
+
     created_matches = []
-    global_offset = 0
-    for phase, generated in phase_generated:
-        sorted_local_slots = sorted({entry["time_slot"] for entry in generated})
-        global_index_by_local_slot = {
-            local_slot: global_offset + rank
-            for rank, local_slot in enumerate(sorted_local_slots)
-        }
-        phase_slots = range(global_offset, global_offset + len(sorted_local_slots))
-        global_offset += len(sorted_local_slots)
-
+    for index, (round_in, generated, ranks, starts, occupied) in enumerate(
+        zip(payload.rounds, generated_rounds, slot_ranks, placement.round_starts, occupied_per_round)
+    ):
         generation = ScheduleGeneration(
             session_id=payload.session_id,
             division_id=payload.division_id,
-            round_type=phase.round_type,
+            round_type=round_in.round_type,
             scheduler_plugin_name=scheduler_plugin.name,
             scheduler_plugin_version=scheduler_plugin.version,
-            target_matches_per_team=phase.target_matches_per_team,
+            target_matches_per_team=round_in.target_matches_per_team,
+            cycle_time_seconds=round_in.cycle_time_seconds,
             generated_at=utc_now(),
-            # Every phase stores the request's blocks, but only the windows
-            # its own matches use: resolved_blocks is in (date, start_time)
-            # order, which the explicit path has already required of
-            # time_blocks_input (the implicit path has one block).
             time_blocks_json=serialize_time_blocks(
-                time_blocks_input,
+                [
+                    {
+                        "date": window.date,
+                        "start_time": window.start_time,
+                        "end_time": window.end_time,
+                        "cycle_time": round_in.cycle_time_seconds,
+                    }
+                    for window, _, _ in occupied
+                ],
                 timezone_name,
-                blocks_occupied_windows(
-                    resolved_blocks, timezone_name, match_duration_seconds, phase_slots
-                ),
+                [(start, end) for _, start, end in occupied],
             ),
         )
         db.add(generation)
         db.flush()
 
-        fields_by_set: dict[int, list[int]] = {}
-        for f in fields:
-            fields_by_set.setdefault(f.field_set_id, []).append(f.id)
-        for field_ids in fields_by_set.values():
-            field_ids.sort()
         next_field_index: dict[int, int] = {fs_id: 0 for fs_id in fields_by_set}
-
-        phase_matches = []
         for match_number, entry in enumerate(generated, start=1):
-            field_set_id = entry["field_set_id"]
-            field_ids_for_set = fields_by_set[field_set_id]
+            field_ids_for_set = fields_by_set[entry["field_set_id"]]
             field_id = field_ids_for_set[
-                next_field_index[field_set_id] % len(field_ids_for_set)
+                next_field_index[entry["field_set_id"]] % len(field_ids_for_set)
             ]
-            next_field_index[field_set_id] += 1
-
-            global_index = global_index_by_local_slot[entry["time_slot"]]
+            next_field_index[entry["field_set_id"]] += 1
             match = Match(
                 session_id=payload.session_id,
                 division_id=payload.division_id,
-                round_type=phase.round_type,
+                round_type=round_in.round_type,
                 match_number=match_number,
                 field_id=field_id,
                 time_slot=entry["time_slot"],
                 schedule_generation_id=generation.id,
-                scheduled_time=global_assignments[global_index],
+                scheduled_time=starts[ranks[entry["time_slot"]]],
             )
             db.add(match)
             db.flush()
@@ -570,16 +631,8 @@ def generate_schedule(
                 db.flush()
                 for team_id in alliance_entry["team_ids"]:
                     db.add(AllianceTeam(alliance_id=alliance.id, team_id=team_id))
-            phase_matches.append(match)
-
-        created_matches.extend(phase_matches)
-        phase_results.append(
-            PhaseResult(
-                round_type=phase.round_type,
-                schedule_generation_id=generation.id,
-                match_count=len(phase_matches),
-            )
-        )
+            created_matches.append(match)
+        round_results[index].schedule_generation_id = generation.id
 
     db.commit()
 
@@ -594,13 +647,7 @@ def generate_schedule(
             },
         )
 
-    return ScheduleGenerateResponse(
-        schedule_generation_id=phase_results[0].schedule_generation_id,
-        match_count=sum(pr.match_count for pr in phase_results),
-        resolved_time_blocks=resolved_time_blocks_read,
-        cycle_time_warning=cycle_time_warning,
-        phase_results=phase_results if payload.phases is not None else None,
-    )
+    return ScheduleGenerateResponse(fits=True, rounds=round_results, overflow=None)
 
 
 @router.delete("")
@@ -628,45 +675,7 @@ def clear_schedule(
         db.delete(ranking)
     db.flush()
 
-    # Then delete matches and their cascading objects
-    match_query = select(Match).where(
-        Match.session_id == session_id,
-        Match.round_type == round_type,
-        Match.finals_bracket_id.is_(None),
-    )
-    if division_id is None:
-        match_query = match_query.where(Match.division_id.is_(None))
-    else:
-        match_query = match_query.where(Match.division_id == division_id)
-    matches = db.execute(match_query).scalars().all()
-
-    for match in matches:
-        alliances = db.execute(
-            select(Alliance).where(Alliance.match_id == match.id)
-        ).scalars().all()
-        for alliance in alliances:
-            for record in db.execute(
-                select(ScoreRecord).where(ScoreRecord.alliance_id == alliance.id)
-            ).scalars().all():
-                db.delete(record)
-            for alliance_team in db.execute(
-                select(AllianceTeam).where(AllianceTeam.alliance_id == alliance.id)
-            ).scalars().all():
-                db.delete(alliance_team)
-            db.flush()
-            db.delete(alliance)
-        db.delete(match)
-
-    generation_query = select(ScheduleGeneration).where(
-        ScheduleGeneration.session_id == session_id,
-        ScheduleGeneration.round_type == round_type,
-    )
-    if division_id is None:
-        generation_query = generation_query.where(ScheduleGeneration.division_id.is_(None))
-    else:
-        generation_query = generation_query.where(ScheduleGeneration.division_id == division_id)
-    for generation in db.execute(generation_query).scalars().all():
-        db.delete(generation)
+    matches_deleted = _delete_round(db, session_id, division_id, round_type)
 
     db.commit()
 
@@ -702,4 +711,4 @@ def clear_schedule(
 
             recompute_event_rankings(request.app, db, game_plugin, event.id, division_id)
 
-    return {"matches_deleted": len(matches)}
+    return {"matches_deleted": matches_deleted}

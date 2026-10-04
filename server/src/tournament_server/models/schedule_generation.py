@@ -22,3 +22,5 @@ class ScheduleGeneration(Base):
     target_matches_per_team: Mapped[int] = mapped_column(Integer)
     generated_at: Mapped[dt.datetime] = mapped_column(UTCDateTime)
     time_blocks_json: Mapped[str | None] = mapped_column(Text, default=None)
+    # The round's cycle time; null for rows saved before rounds recorded it.
+    cycle_time_seconds: Mapped[int | None] = mapped_column(Integer, default=None)

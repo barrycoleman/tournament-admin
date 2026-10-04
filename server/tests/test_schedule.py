@@ -1,10 +1,17 @@
+import copy
 import datetime as dt
 import json
 import random
 from zoneinfo import ZoneInfo
 
+from schedule_helpers import ALL_DAY, PLAY_DATE, TZ, schedule, set_playing_windows
 
-def _setup_ready_session(client, num_teams: int = 8) -> tuple[int, list[int]]:
+LA = ZoneInfo(TZ)
+
+
+def _setup_ready_session(
+    client, num_teams: int = 8, num_fields: int = 2
+) -> tuple[int, list[int]]:
     client.post("/api/event", json={"name": "Regional Qualifier"})
 
     plugins = client.get("/api/plugins/games").json()
@@ -24,30 +31,48 @@ def _setup_ready_session(client, num_teams: int = 8) -> tuple[int, list[int]]:
             json={"team_id": team_id, "checked_in": True},
         )
 
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 2"})
+    for i in range(num_fields):
+        client.post("/api/fields", json={"session_id": session_id, "name": f"Field {i + 1}"})
 
+    set_playing_windows(client, session_id)
     return session_id, team_ids
+
+
+def _local_times(client, session_id, round_type=None):
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    return sorted(
+        {
+            dt.datetime.fromisoformat(m["scheduled_time"]).astimezone(LA).strftime("%a %H:%M:%S")
+            for m in matches
+            if round_type is None or m["round_type"] == round_type
+        }
+    )
+
+
+def _score_one_match(client, session_id, round_type):
+    match = next(
+        m for m in client.get(f"/api/matches?session_id={session_id}").json()
+        if m["round_type"] == round_type
+    )
+    for alliance in match["alliances"]:
+        response = client.post(
+            f"/api/matches/{match['id']}/alliances/{alliance['id']}/score",
+            json={"data": {"high_balls": 1, "low_balls": 1}},
+        )
+        assert response.status_code in (200, 201), response.text
 
 
 def test_generate_schedule_creates_matches(client):
     session_id, team_ids = _setup_ready_session(client)
 
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    response = schedule(client, session_id, [("qualification", 3)])
     assert response.status_code == 201
     body = response.json()
-    assert body["match_count"] > 0
+    match_count = sum(r["match_count"] for r in body["rounds"])
+    assert match_count > 0
 
     matches = client.get(f"/api/matches?session_id={session_id}").json()
-    assert len(matches) == body["match_count"]
+    assert len(matches) == match_count
     for match in matches:
         assert match["round_type"] == "qualification"
         assert match["field_id"] is not None
@@ -68,43 +93,13 @@ def test_generate_schedule_succeeds_in_a_single_division_event(client):
     # explicitly here documents the regression this task fixes.
     session_id, team_ids = _setup_ready_session(client)
 
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    response = schedule(client, session_id, [("qualification", 3)])
     assert response.status_code == 201
-
-
-def test_generate_schedule_rejects_when_matches_already_exist(client):
-    session_id, _ = _setup_ready_session(client)
-    payload = {
-        "session_id": session_id,
-        "round_type": "qualification",
-        "target_matches_per_team": 3,
-        "scheduler_plugin_name": "simple_random",
-    }
-    client.post("/api/schedule", json=payload)
-
-    response = client.post("/api/schedule", json=payload)
-    assert response.status_code == 409
 
 
 def test_generate_schedule_rejects_unknown_scheduler_plugin(client):
     session_id, _ = _setup_ready_session(client)
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "does-not-exist",
-        },
-    )
+    response = schedule(client, session_id, [("qualification", 3)], scheduler="does-not-exist")
     assert response.status_code == 404
 
 
@@ -145,30 +140,14 @@ def test_generate_schedule_rejects_double_booking_plugin_output(client):
     )
     client.app.state.scheduler_plugins["simple_random"] = stub
 
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    response = schedule(client, session_id, [("qualification", 3)])
     assert response.status_code == 422
     assert "double-booked" in response.json()["detail"]
 
 
 def test_clear_schedule_deletes_matches_and_rankings(client):
     session_id, team_ids = _setup_ready_session(client)
-    client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    schedule(client, session_id, [("qualification", 3)])
     matches_before = client.get(f"/api/matches?session_id={session_id}").json()
     match = matches_before[0]
     for alliance in match["alliances"]:
@@ -198,30 +177,14 @@ def test_clear_schedule_recomputes_rankings_instead_of_wiping_other_round_types(
     session_id, team_ids = _setup_ready_session(client)
 
     # Practice: 8 teams, target 1 -> 2 matches.
-    practice_response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "practice",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    practice_response = schedule(client, session_id, [("practice", 1)])
     assert practice_response.status_code == 201
-    assert practice_response.json()["match_count"] == 2
+    assert sum(r["match_count"] for r in practice_response.json()["rounds"]) == 2
 
     # Qualification: 8 teams, target 3 -> 6 matches.
-    qual_response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    qual_response = schedule(client, session_id, [("qualification", 3)])
     assert qual_response.status_code == 201
-    assert qual_response.json()["match_count"] == 6
+    assert sum(r["match_count"] for r in qual_response.json()["rounds"]) == 6
 
     all_matches = client.get(f"/api/matches?session_id={session_id}").json()
     qual_matches_before = [m for m in all_matches if m["round_type"] == "qualification"]
@@ -262,15 +225,7 @@ def test_clear_schedule_recomputes_rankings_instead_of_wiping_other_round_types(
 def test_clear_schedule_with_no_matching_round_type_leaves_rankings_untouched(client):
     session_id, team_ids = _setup_ready_session(client)
 
-    qual_response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    qual_response = schedule(client, session_id, [("qualification", 3)])
     assert qual_response.status_code == 201
 
     qual_matches = client.get(f"/api/matches?session_id={session_id}").json()
@@ -312,15 +267,7 @@ def test_clear_schedule_rejects_nonexistent_session(client):
 def test_generate_schedule_rejects_invalid_round_type(client):
     session_id, _ = _setup_ready_session(client)
 
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "not-a-real-round-type",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    response = schedule(client, session_id, [("not-a-real-round-type", 3)])
     assert response.status_code == 422
 
     matches = client.get(f"/api/matches?session_id={session_id}").json()
@@ -340,352 +287,14 @@ def test_generate_schedule_rejects_invalid_round_type(client):
 
 def test_clear_schedule_allows_regeneration_afterward(client):
     session_id, team_ids = _setup_ready_session(client)
-    payload = {
-        "session_id": session_id,
-        "round_type": "qualification",
-        "target_matches_per_team": 3,
-        "scheduler_plugin_name": "simple_random",
-    }
-    client.post("/api/schedule", json=payload)
+    schedule(client, session_id, [("qualification", 3)])
     client.delete(
         "/api/schedule",
         params={"session_id": session_id, "round_type": "qualification"},
     )
 
-    response = client.post("/api/schedule", json=payload)
+    response = schedule(client, session_id, [("qualification", 3)])
     assert response.status_code == 201
-
-
-def test_generate_schedule_with_time_blocks_assigns_scheduled_time(client):
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
-    session_id = client.post(
-        "/api/sessions",
-        json={
-            "label": "Session 1",
-            "session_date": "2026-09-05",
-            "timezone": "America/Los_Angeles",
-        },
-    ).json()["id"]
-    team_ids = []
-    for i in range(8):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        team_ids.append(team_id)
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": None}
-            ],
-        },
-    )
-    assert response.status_code == 201
-    body = response.json()
-    assert len(body["resolved_time_blocks"]) == 1
-    assert body["resolved_time_blocks"][0]["cycle_time_seconds"] > 0
-
-    matches = client.get(f"/api/matches?session_id={session_id}").json()
-    for match in matches:
-        assert match["scheduled_time"] is not None
-
-
-def test_generate_schedule_without_time_blocks_uses_implicit_default(client):
-    session_id, team_ids = _setup_ready_session(client)
-
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
-    assert response.status_code == 201
-    body = response.json()
-    assert len(body["resolved_time_blocks"]) == 1
-    assert body["resolved_time_blocks"][0]["end_time"] is None
-    assert body["cycle_time_warning"] is None
-
-    matches = client.get(f"/api/matches?session_id={session_id}").json()
-    for match in matches:
-        assert match["scheduled_time"] is not None
-
-
-def test_generate_schedule_rejects_time_blocks_without_timezone(client):
-    session_id, team_ids = _setup_ready_session(client)
-
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": None}
-            ],
-        },
-    )
-    assert response.status_code == 422
-
-
-def test_generate_schedule_allows_time_blocks_without_session_date(client):
-    # session_date is display-only now -- a session with no session_date
-    # at all, only a timezone, must still be able to use time_blocks,
-    # since each block carries its own date.
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
-    session_id = client.post(
-        "/api/sessions",
-        json={"label": "Session 1", "timezone": "America/Los_Angeles"},
-    ).json()["id"]
-    assert client.get(f"/api/sessions").json()[0]["session_date"] is None
-    for i in range(8):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": None}
-            ],
-        },
-    )
-    assert response.status_code == 201
-
-
-def test_generate_schedule_rejects_mismatched_time_blocks(client):
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
-    session_id = client.post(
-        "/api/sessions",
-        json={
-            "label": "Session 1",
-            "session_date": "2026-09-05",
-            "timezone": "America/Los_Angeles",
-        },
-    ).json()["id"]
-    team_ids = []
-    for i in range(8):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        team_ids.append(team_id)
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {"date": "2026-09-05", "start_time": "10:00", "end_time": "10:05", "cycle_time": 300}
-            ],
-        },
-    )
-    assert response.status_code == 422
-
-
-def test_generate_schedule_warns_when_cycle_time_too_tight(client):
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    game_plugin_name = plugins[0]["name"]
-    client.post("/api/event/game-plugin", json={"name": game_plugin_name})
-
-    session_id = client.post(
-        "/api/sessions",
-        json={
-            "label": "Session 1",
-            "session_date": "2026-09-05",
-            "timezone": "America/Los_Angeles",
-        },
-    ).json()["id"]
-    team_ids = []
-    for i in range(4):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        team_ids.append(team_id)
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {"date": "2026-09-05", "start_time": "10:00", "end_time": "10:01", "cycle_time": 60}
-            ],
-        },
-    )
-    assert response.status_code == 201
-    assert response.json()["cycle_time_warning"] is not None
-
-
-def test_generate_schedule_rejects_zero_cycle_time(client):
-    session_id, team_ids = _setup_ready_session(client)
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": 0}
-            ],
-        },
-    )
-    assert response.status_code == 422
-
-
-def test_generate_schedule_rejects_negative_cycle_time(client):
-    session_id, team_ids = _setup_ready_session(client)
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": -60}
-            ],
-        },
-    )
-    assert response.status_code == 422
-
-
-def test_generate_schedule_rejects_malformed_start_time(client):
-    session_id, team_ids = _setup_ready_session(client)
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {"date": "2026-09-05", "start_time": "9:00", "end_time": "12:00", "cycle_time": 180}
-            ],
-        },
-    )
-    assert response.status_code == 422
-
-
-def test_generate_schedule_rejects_overlapping_time_blocks(client):
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
-    session_id = client.post(
-        "/api/sessions",
-        json={
-            "label": "Session 1",
-            "session_date": "2026-09-05",
-            "timezone": "America/Los_Angeles",
-        },
-    ).json()["id"]
-    for i in range(8):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": 180},
-                {"date": "2026-09-05", "start_time": "11:00", "end_time": "13:00", "cycle_time": 180},
-            ],
-        },
-    )
-    assert response.status_code == 422
-
-
-def test_generate_schedule_rejects_time_blocks_not_in_ascending_order(client):
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
-    session_id = client.post(
-        "/api/sessions",
-        json={
-            "label": "Session 1",
-            "session_date": "2026-09-05",
-            "timezone": "America/Los_Angeles",
-        },
-    ).json()["id"]
-    for i in range(8):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {"date": "2026-09-05", "start_time": "14:00", "end_time": "16:00", "cycle_time": 180},
-                {"date": "2026-09-05", "start_time": "10:00", "end_time": "12:00", "cycle_time": 180},
-            ],
-        },
-    )
-    assert response.status_code == 422
 
 
 def test_generate_schedule_shares_scheduled_time_across_concurrent_field_sets(client):
@@ -739,75 +348,19 @@ def test_generate_schedule_shares_scheduled_time_across_concurrent_field_sets(cl
     )
     client.app.state.scheduler_plugins["simple_random"] = stub
 
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    response = schedule(client, session_id, [("qualification", 1)])
     assert response.status_code == 201
     body = response.json()
     # Two matches share time_slot 0 across two FieldSets: this must count
-    # as ONE distinct time slot for cycle-time capacity math (an implicit
-    # single-slot open-ended default block, not two).
-    assert len(body["resolved_time_blocks"]) == 1
+    # as ONE distinct time slot when placing them in the playing windows.
+    assert body["rounds"][0]["slot_count"] == 1
 
     matches = client.get(f"/api/matches?session_id={session_id}").json()
     assert len(matches) == 2
     scheduled_times = {m["scheduled_time"] for m in matches}
     assert len(scheduled_times) == 1
-
-
-def test_generate_schedule_warn_below_multiplier_override_changes_warning_outcome(client):
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
-    session_id = client.post(
-        "/api/sessions",
-        json={
-            "label": "Session 1",
-            "session_date": "2026-09-05",
-            "timezone": "America/Los_Angeles",
-        },
-    ).json()["id"]
-    for i in range(4):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-
-    payload = {
-        "session_id": session_id,
-        "round_type": "qualification",
-        "target_matches_per_team": 1,
-        "scheduler_plugin_name": "simple_random",
-        "time_blocks": [
-            {"date": "2026-09-05", "start_time": "10:00", "end_time": "10:01", "cycle_time": 60}
-        ],
-    }
-
-    lenient_response = client.post(
-        "/api/schedule", json={**payload, "warn_below_multiplier": 0.1}
-    )
-    assert lenient_response.status_code == 201
-    assert lenient_response.json()["cycle_time_warning"] is None
-
-    client.delete(
-        f"/api/schedule?session_id={session_id}&round_type=qualification"
-    )
-
-    strict_response = client.post(
-        "/api/schedule", json={**payload, "warn_below_multiplier": 1000.0}
-    )
-    assert strict_response.status_code == 201
-    assert strict_response.json()["cycle_time_warning"] is not None
+    # The one shared slot starts when the session's 08:00 window opens.
+    assert _local_times(client, session_id) == ["Sat 08:00:00"]
 
 
 def test_generate_schedule_scopes_field_sets_to_division(client):
@@ -815,6 +368,7 @@ def test_generate_schedule_scopes_field_sets_to_division(client):
     plugins = client.get("/api/plugins/games").json()
     client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    set_playing_windows(client, session_id)
 
     division_red = client.post("/api/divisions", json={"name": "Red"}).json()["id"]
     division_blue = client.post("/api/divisions", json={"name": "Blue"}).json()["id"]
@@ -863,27 +417,11 @@ def test_generate_schedule_scopes_field_sets_to_division(client):
             json={"team_id": team_id, "checked_in": True},
         )
 
-    red_response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "division_id": division_red,
-            "round_type": "qualification",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    red_response = schedule(client, session_id, [("qualification", 1)], division_id=division_red)
     assert red_response.status_code == 201
 
-    blue_response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "division_id": division_blue,
-            "round_type": "qualification",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-        },
+    blue_response = schedule(
+        client, session_id, [("qualification", 1)], division_id=division_blue
     )
     assert blue_response.status_code == 201
 
@@ -919,6 +457,7 @@ def test_generate_schedule_rejects_division_with_no_field_set(client):
     plugins = client.get("/api/plugins/games").json()
     client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    set_playing_windows(client, session_id)
     division_id = client.post("/api/divisions", json={"name": "Red"}).json()["id"]
     other_division_id = client.post("/api/divisions", json={"name": "Blue"}).json()["id"]
 
@@ -953,16 +492,7 @@ def test_generate_schedule_rejects_division_with_no_field_set(client):
             json={"team_id": team_id, "checked_in": True},
         )
 
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "division_id": division_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    response = schedule(client, session_id, [("qualification", 1)], division_id=division_id)
     assert response.status_code == 422
     assert str(division_id) in response.json()["detail"]
 
@@ -972,6 +502,7 @@ def test_generate_schedule_without_division_only_uses_unassigned_field_sets(clie
     plugins = client.get("/api/plugins/games").json()
     client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    set_playing_windows(client, session_id)
 
     division_id = client.post("/api/divisions", json={"name": "Red"}).json()["id"]
     red_field_set_id = client.post(
@@ -1008,15 +539,7 @@ def test_generate_schedule_without_division_only_uses_unassigned_field_sets(clie
             json={"team_id": team_id, "checked_in": True},
         )
 
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    response = schedule(client, session_id, [("qualification", 1)])
     assert response.status_code == 201
 
     matches = client.get(f"/api/matches?session_id={session_id}").json()
@@ -1026,120 +549,6 @@ def test_generate_schedule_without_division_only_uses_unassigned_field_sets(clie
     assert matches
     for match in matches:
         assert match["field_id"] == unassigned_field_id
-
-
-def test_generate_schedule_with_time_blocks_spanning_multiple_days(client):
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
-    session_id = client.post(
-        "/api/sessions",
-        json={
-            "label": "Session 1",
-            "session_date": "2026-09-05",
-            "timezone": "America/Los_Angeles",
-        },
-    ).json()["id"]
-    for i in range(8):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 6,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                # 8 teams / 4 teams-per-match / target 6 matches-per-team ->
-                # 12 total match slots for the example-game fixture plugin.
-                # This block's fixed capacity (6 min / 60s cycle = 6 slots)
-                # must not exceed that 12, leaving the remainder (6) for the
-                # open-ended day-2 block below.
-                {"date": "2026-09-05", "start_time": "09:00", "end_time": "09:06", "cycle_time": 60},
-                {"date": "2026-09-06", "start_time": "09:00", "end_time": None, "cycle_time": 60},
-            ],
-        },
-    )
-    assert response.status_code == 201
-
-    matches = client.get(f"/api/matches?session_id={session_id}").json()
-    scheduled_dates = {m["scheduled_time"][:10] for m in matches}
-    assert "2026-09-05" in scheduled_dates
-    # America/Los_Angeles 09:00 on 2026-09-06 is 2026-09-06T16:00Z --
-    # comparing the UTC date string directly is safe here since the
-    # offset doesn't cross midnight UTC for this timezone/time.
-    assert "2026-09-06" in scheduled_dates
-
-
-def test_generate_schedule_rejects_overlap_with_a_prior_generation(client):
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
-    session_id = client.post(
-        "/api/sessions",
-        json={
-            "label": "Session 1",
-            "session_date": "2026-09-05",
-            "timezone": "America/Los_Angeles",
-        },
-    ).json()["id"]
-    for i in range(8):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-
-    first = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "practice",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-            # 8 teams / 4 teams-per-match / 1 field -> 2 matches, 2 distinct
-            # time_slots needed; cycle_time must divide the 60-minute block
-            # into exactly that many slots (fixed blocks require an exact
-            # capacity match per resolve_block_cycle_times).
-            "time_blocks": [
-                {"date": "2026-09-05", "start_time": "09:00", "end_time": "10:00", "cycle_time": 1800}
-            ],
-        },
-    )
-    assert first.status_code == 201
-
-    # A second generation (different round_type, same session/division)
-    # whose matches would overlap the first's (09:00 and 09:30, the
-    # second running to 09:32) must be rejected.
-    second = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {"date": "2026-09-05", "start_time": "09:30", "end_time": None, "cycle_time": 60}
-            ],
-        },
-    )
-    assert second.status_code == 422
-    assert "overlapping the practice round's matches" in second.json()["detail"]
-
-    # Matches from the first generation are untouched by the rejected call.
-    matches = client.get(f"/api/matches?session_id={session_id}").json()
-    assert all(m["round_type"] == "practice" for m in matches)
 
 
 def test_generate_schedule_allows_overlap_across_different_divisions(client):
@@ -1154,6 +563,7 @@ def test_generate_schedule_allows_overlap_across_different_divisions(client):
             "timezone": "America/Los_Angeles",
         },
     ).json()["id"]
+    set_playing_windows(client, session_id)
     division_2_id = client.post("/api/divisions", json={"name": "Division 2"}).json()["id"]
 
     division_1_id = client.get("/api/divisions").json()[0]["id"]
@@ -1196,113 +606,24 @@ def test_generate_schedule_allows_overlap_across_different_divisions(client):
         )
         team_ids_div2.append(team["id"])
 
-    # 4 teams per division / 4 teams-per-match -> 1 match, 1 time_slot
-    # needed per division; cycle_time must exactly divide the 60-minute
-    # block into that single slot (fixed blocks require an exact capacity
-    # match per resolve_block_cycle_times).
-    same_block = [
-        {"date": "2026-09-05", "start_time": "09:00", "end_time": "10:00", "cycle_time": 3600}
-    ]
-    response_1 = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "division_id": division_1_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": same_block,
-        },
-    )
+    # 4 teams per division / 4 teams-per-match -> 1 match, 1 time_slot per
+    # division. Both divisions flow through the same playing window, so
+    # their matches start at the same moment on their own fields.
+    response_1 = schedule(client, session_id, [("qualification", 1)], division_id=division_1_id)
     assert response_1.status_code == 201
 
-    response_2 = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "division_id": division_2_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": same_block,
-        },
-    )
+    response_2 = schedule(client, session_id, [("qualification", 1)], division_id=division_2_id)
     assert response_2.status_code == 201
 
-
-def test_delete_schedule_clears_stored_blocks_allowing_reuse(client):
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
-    session_id = client.post(
-        "/api/sessions",
-        json={
-            "label": "Session 1",
-            "session_date": "2026-09-05",
-            "timezone": "America/Los_Angeles",
-        },
-    ).json()["id"]
-    for i in range(8):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-
-    # 8 teams / 4 teams-per-match / 1 field -> 2 matches, 2 distinct
-    # time_slots needed; cycle_time must exactly divide the 60-minute
-    # block into that many slots (fixed blocks require an exact capacity
-    # match per resolve_block_cycle_times).
-    block = [
-        {"date": "2026-09-05", "start_time": "09:00", "end_time": "10:00", "cycle_time": 1800}
-    ]
-    first = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": block,
-        },
-    )
-    assert first.status_code == 201
-
-    client.delete(
-        "/api/schedule",
-        params={"session_id": session_id, "round_type": "qualification"},
-    )
-
-    # The exact same block, reused for the same round_type after a
-    # DELETE, must succeed -- the cleared generation's blocks must no
-    # longer be checked against.
-    second = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": block,
-        },
-    )
-    assert second.status_code == 201
+    matches = client.get(f"/api/matches?session_id={session_id}").json()
+    assert len(matches) == 2
+    assert len({m["scheduled_time"] for m in matches}) == 1
+    assert _local_times(client, session_id) == ["Sat 08:00:00"]
 
 
 def test_generated_qualification_matches_have_q_prefixed_labels(client):
     session_id, team_ids = _setup_ready_session(client)
-    client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    schedule(client, session_id, [("qualification", 3)])
     matches = client.get(f"/api/matches?session_id={session_id}").json()
     labels = sorted(m["label"] for m in matches)
     assert labels == [f"Q{n}" for n in range(1, len(matches) + 1)]
@@ -1310,86 +631,33 @@ def test_generated_qualification_matches_have_q_prefixed_labels(client):
 
 def test_generated_practice_matches_have_p_prefixed_labels(client):
     session_id, team_ids = _setup_ready_session(client)
-    client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "practice",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    schedule(client, session_id, [("practice", 1)])
     matches = client.get(f"/api/matches?session_id={session_id}").json()
     labels = sorted(m["label"] for m in matches)
     assert labels == [f"P{n}" for n in range(1, len(matches) + 1)]
 
 
-def test_generate_schedule_rejects_both_round_type_and_phases(client):
-    session_id, team_ids = _setup_ready_session(client)
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "phases": [{"round_type": "practice", "target_matches_per_team": 1}],
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
-    assert response.status_code == 422
-
-
-def test_generate_schedule_rejects_neither_round_type_nor_phases(client):
-    session_id, team_ids = _setup_ready_session(client)
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
-    assert response.status_code == 422
-
-
 def test_generate_schedule_rejects_empty_phases_list(client):
     session_id, team_ids = _setup_ready_session(client)
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "phases": [],
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    response = schedule(client, session_id, [])
     assert response.status_code == 422
 
 
 def test_generate_schedule_with_phases_orders_matches_by_phase(client):
     session_id, team_ids = _setup_ready_session(client, num_teams=8)
 
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "phases": [
-                {"round_type": "practice", "target_matches_per_team": 1},
-                {"round_type": "qualification", "target_matches_per_team": 2},
-            ],
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    response = schedule(client, session_id, [("practice", 1), ("qualification", 2)])
     assert response.status_code == 201
     body = response.json()
-    assert body["phase_results"] is not None
-    assert [pr["round_type"] for pr in body["phase_results"]] == ["practice", "qualification"]
+    assert [pr["round_type"] for pr in body["rounds"]] == ["practice", "qualification"]
     practice_count = next(
-        pr["match_count"] for pr in body["phase_results"] if pr["round_type"] == "practice"
+        pr["match_count"] for pr in body["rounds"] if pr["round_type"] == "practice"
     )
     qualification_count = next(
-        pr["match_count"] for pr in body["phase_results"] if pr["round_type"] == "qualification"
+        pr["match_count"] for pr in body["rounds"] if pr["round_type"] == "qualification"
     )
-    assert body["match_count"] == practice_count + qualification_count
-    assert body["schedule_generation_id"] == body["phase_results"][0]["schedule_generation_id"]
+    assert (practice_count, qualification_count) == (2, 4)
+    assert all(pr["schedule_generation_id"] is not None for pr in body["rounds"])
 
     matches = client.get(f"/api/matches?session_id={session_id}").json()
     practice_times = [m["scheduled_time"] for m in matches if m["round_type"] == "practice"]
@@ -1399,145 +667,53 @@ def test_generate_schedule_with_phases_orders_matches_by_phase(client):
     assert max(practice_times) < min(qualification_times)
 
 
-def test_generate_schedule_phases_all_or_nothing_conflict(client):
-    session_id, team_ids = _setup_ready_session(client, num_teams=8)
-
-    # Pre-create a qualification match directly, occupying that
-    # round_type -- a subsequent combined-phase request that includes
-    # qualification must fail entirely, including for the practice phase.
-    client.post(
-        "/api/matches",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "match_number": 1,
-            "field_id": None,
-            "alliances": [
-                {"station": "red", "team_ids": [team_ids[0], team_ids[1]]},
-                {"station": "blue", "team_ids": [team_ids[2], team_ids[3]]},
-            ],
-        },
-    )
-
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "phases": [
-                {"round_type": "practice", "target_matches_per_team": 1},
-                {"round_type": "qualification", "target_matches_per_team": 2},
-            ],
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
-    assert response.status_code == 409
-
-    matches = client.get(f"/api/matches?session_id={session_id}").json()
-    assert all(m["round_type"] != "practice" for m in matches)
-
-
 def test_generate_schedule_dry_run_creates_nothing(client):
     session_id, team_ids = _setup_ready_session(client, num_teams=8)
 
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "phases": [
-                {"round_type": "practice", "target_matches_per_team": 1},
-                {"round_type": "qualification", "target_matches_per_team": 2},
-            ],
-            "scheduler_plugin_name": "simple_random",
-            "dry_run": True,
-        },
+    response = schedule(
+        client, session_id, [("practice", 1), ("qualification", 2)], dry_run=True
     )
     assert response.status_code == 201
     body = response.json()
-    assert body["schedule_generation_id"] is None
-    assert body["match_count"] > 0
-    assert all(pr["schedule_generation_id"] is None for pr in body["phase_results"])
+    assert body["rounds"][0]["schedule_generation_id"] is None
+    assert sum(r["match_count"] for r in body["rounds"]) > 0
+    assert all(pr["schedule_generation_id"] is None for pr in body["rounds"])
 
     matches = client.get(f"/api/matches?session_id={session_id}").json()
     assert matches == []
 
     # Since nothing was persisted, a real (non-dry-run) request for the
-    # same phases must still succeed afterward.
-    real_response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "phases": [
-                {"round_type": "practice", "target_matches_per_team": 1},
-                {"round_type": "qualification", "target_matches_per_team": 2},
-            ],
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    # same rounds must still succeed afterward.
+    real_response = schedule(client, session_id, [("practice", 1), ("qualification", 2)])
     assert real_response.status_code == 201
 
 
 def test_generate_schedule_dry_run_is_idempotent(client):
     session_id, team_ids = _setup_ready_session(client, num_teams=8)
-    payload = {
-        "session_id": session_id,
-        "round_type": "qualification",
-        "target_matches_per_team": 3,
-        "scheduler_plugin_name": "simple_random",
-        "dry_run": True,
-    }
 
-    first = client.post("/api/schedule", json=payload).json()
-    second = client.post("/api/schedule", json=payload).json()
+    first = schedule(client, session_id, [("qualification", 3)], dry_run=True).json()
+    second = schedule(client, session_id, [("qualification", 3)], dry_run=True).json()
 
-    assert first["match_count"] == second["match_count"]
-    assert first["schedule_generation_id"] is None
-    assert second["schedule_generation_id"] is None
-    assert first["phase_results"] is None
-    assert second["phase_results"] is None
+    assert sum(r["match_count"] for r in first["rounds"]) == sum(
+        r["match_count"] for r in second["rounds"]
+    )
+    assert first["rounds"][0]["schedule_generation_id"] is None
+    assert second["rounds"][0]["schedule_generation_id"] is None
+    assert first["rounds"] == second["rounds"]
 
     matches = client.get(f"/api/matches?session_id={session_id}").json()
     assert matches == []
 
 
-def test_generate_schedule_singular_shape_unaffected_by_phases_support(client):
-    # Backward-compatibility regression check for the singular-shape path
-    # now that generate_schedule's internals are phases-aware.
-    session_id, team_ids = _setup_ready_session(client)
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 3,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
-    assert response.status_code == 201
-    body = response.json()
-    assert body["phase_results"] is None
-    assert body["schedule_generation_id"] is not None
-    assert body["match_count"] > 0
-
-
 def test_generate_schedule_rejects_duplicate_round_type_across_phases(client):
-    # A phases list repeating the same round_type against itself is a
-    # request-shape problem the DB-conflict check can't catch (nothing
-    # exists in the DB yet for either phase) -- it must still be rejected,
-    # all-or-nothing, before anything is generated or persisted.
+    # A rounds list repeating the same round_type against itself is a
+    # request-shape problem -- it must be rejected, all-or-nothing, before
+    # anything is generated or persisted.
     session_id, team_ids = _setup_ready_session(client, num_teams=8)
 
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "phases": [
-                {"round_type": "qualification", "target_matches_per_team": 1},
-                {"round_type": "qualification", "target_matches_per_team": 2},
-            ],
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    response = schedule(client, session_id, [("qualification", 1), ("qualification", 2)])
     assert response.status_code == 422
+    assert response.json()["detail"] == "rounds must not repeat a round_type"
 
     matches = client.get(f"/api/matches?session_id={session_id}").json()
     assert matches == []
@@ -1545,25 +721,25 @@ def test_generate_schedule_rejects_duplicate_round_type_across_phases(client):
 
 def test_generate_schedule_combined_phases_fold_pairing_history_between_phases(client):
     # Regression check for a subtler bug: cross_session_pairing_history is
-    # computed once from the DB before the phase loop runs, and nothing is
+    # computed once from the DB before the round loop runs, and nothing is
     # persisted until the whole combined request succeeds -- so without
-    # explicitly folding each phase's own just-generated pairings into that
-    # in-memory dict before the next phase's scheduler-plugin call, a
-    # later phase in the same request never sees an earlier phase's own
+    # explicitly folding each round's own just-generated pairings into that
+    # in-memory dict before the next round's scheduler-plugin call, a
+    # later round in the same request never sees an earlier round's own
     # pairings, silently degrading a pairing-aware scheduler plugin
-    # (`balanced`) relative to issuing the same phases as separate,
+    # (`balanced`) relative to issuing the same rounds as separate,
     # sequential requests.
     #
     # With exactly 4 teams, 1 field_set, target_matches_per_team=1 on both
-    # phases, and no pre-existing matches, `balanced`'s cost-minimization
+    # rounds, and no pre-existing matches, `balanced`'s cost-minimization
     # over its 20 sampling attempts is fully determined by
     # `random`'s state once seeded, since nothing else in the request path
-    # consumes it. Folding phase 1's own partner/opponent pairings into
-    # `cross_session_pairing_history` before phase 2's call always makes
-    # phase 2's cost model rate repeating phase 1's own partner-alliance
+    # consumes it. Folding round 1's own partner/opponent pairings into
+    # `cross_session_pairing_history` before round 2's call always makes
+    # round 2's cost model rate repeating round 1's own partner-alliance
     # split strictly worse than at least one alternative split; without
-    # folding, phase 2 sees the same (empty) history phase 1 did, and can
-    # -- depending on the RNG state carried over from phase 1's own call,
+    # folding, round 2 sees the same (empty) history round 1 did, and can
+    # -- depending on the RNG state carried over from round 1's own call,
     # which seed=1 is confirmed to trigger -- pick the exact same
     # partner-alliance split again. This makes the assertion below a real,
     # falsifiable proof that the fold is happening: reverting it (restoring
@@ -1571,16 +747,8 @@ def test_generate_schedule_combined_phases_fold_pairing_history_between_phases(c
     session_id, team_ids = _setup_ready_session(client, num_teams=4)
 
     random.seed(1)
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "phases": [
-                {"round_type": "practice", "target_matches_per_team": 1},
-                {"round_type": "qualification", "target_matches_per_team": 1},
-            ],
-            "scheduler_plugin_name": "balanced",
-        },
+    response = schedule(
+        client, session_id, [("practice", 1), ("qualification", 1)], scheduler="balanced"
     )
     assert response.status_code == 201
 
@@ -1598,395 +766,269 @@ def test_generate_schedule_combined_phases_fold_pairing_history_between_phases(c
     assert practice_split != qualification_split
 
 
-def test_generate_schedule_rejects_overlap_across_timezone_frames_from_implicit_and_explicit_paths(
-    client,
-):
-    # Final-review live-probe regression (Finding 2): the implicit-default
-    # generation path stores its one block against a "UTC" timezone frame,
-    # while the explicit time_blocks path stores its blocks against the
-    # session's own IANA timezone. Comparing the two sides' raw wall-clock
-    # date/start_time strings directly (the pre-fix behavior) gets this
-    # wrong: the same real instant reads 7-8 hours apart in the two frames
-    # (and often on different dates). Converting both sides to real UTC
-    # instants correctly flags a Los Angeles block that starts while the
-    # implicit block's matches are still running.
+def test_rejects_a_session_without_playing_windows(client):
+    session_id, _ = _setup_ready_session(client)
+    client.put(f"/api/sessions/{session_id}/playing-windows", json={"windows": []})
+    response = schedule(client, session_id, [("qualification", 1)])
+    assert response.status_code == 422
+    assert response.json()["detail"] == "This session has no playing times; add them before scheduling"
+
+
+def test_rejects_a_session_without_a_timezone(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
-    session_id = client.post(
-        "/api/sessions",
-        json={"label": "Session 1", "timezone": "America/Los_Angeles"},
-    ).json()["id"]
-    for i in range(8):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+    client.post("/api/event/game-plugin", json={"name": "example-game"})
+    session_id = client.post("/api/sessions", json={"label": "No zone"}).json()["id"]
+    response = schedule(client, session_id, [("qualification", 1)])
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Set the session's timezone before scheduling"
 
-    # First generation: implicit-default path (no time_blocks given) --
-    # one block starting ~5 minutes from now, stored against a "UTC" frame,
-    # whose 2 matches run for a few minutes.
-    first = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "practice",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
-    assert first.status_code == 201
-    implicit = first.json()["resolved_time_blocks"][0]
-    implicit_start_utc = dt.datetime.combine(
-        dt.date.fromisoformat(implicit["date"]),
-        dt.time.fromisoformat(implicit["start_time"]),
-        tzinfo=dt.UTC,
-    )
 
-    # Second generation: an explicit Los Angeles block starting at that
-    # same real instant, written in Los Angeles wall-clock terms.
-    local_start = implicit_start_utc.astimezone(ZoneInfo("America/Los_Angeles"))
-    second = client.post(
+def test_rejects_the_old_request_shape(client):
+    session_id, _ = _setup_ready_session(client)
+    response = client.post(
         "/api/schedule",
         json={
             "session_id": session_id,
             "round_type": "qualification",
             "target_matches_per_team": 1,
             "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {
-                    "date": local_start.date().isoformat(),
-                    "start_time": local_start.strftime("%H:%M"),
-                    "end_time": None,
-                    "cycle_time": 1800,
-                }
-            ],
         },
     )
-    assert second.status_code == 422
-    detail = second.json()["detail"]
-    assert "overlapping the practice round's matches" in detail
-    assert "(America/Los_Angeles)" in detail and "(UTC)" in detail
-
-    matches = client.get(f"/api/matches?session_id={session_id}").json()
-    assert all(m["round_type"] == "practice" for m in matches)
+    assert response.status_code == 422
 
 
-def test_generate_schedule_with_phases_and_explicit_multi_block_time_blocks(client):
-    # This exact combination -- phases combined with explicit,
-    # multi-block time_blocks -- is the flagship use case of this whole
-    # feature, but had no automated coverage before this fix wave
-    # (Finding 7). Confirms a combined 2-phase request with explicit,
-    # multi-day time_blocks generates correctly and phase ordering/labels
-    # are correct.
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
-    session_id = client.post(
-        "/api/sessions",
-        json={
-            "label": "Session 1",
-            "session_date": "2026-09-05",
-            "timezone": "America/Los_Angeles",
-        },
-    ).json()["id"]
-    for i in range(8):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+def test_rejects_elimination_and_a_cycle_shorter_than_the_match(client):
+    session_id, _ = _setup_ready_session(client)
+    elimination = schedule(client, session_id, [("elimination", 1)])
+    assert elimination.status_code == 422
+    assert "finals" in elimination.json()["detail"]
+    short = schedule(client, session_id, [("qualification", 1, 90)])
+    assert short.status_code == 422
+    assert "at least the match length (120s)" in short.json()["detail"]
 
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "phases": [
-                {"round_type": "practice", "target_matches_per_team": 1},
-                {"round_type": "qualification", "target_matches_per_team": 2},
-            ],
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [
-                {
-                    "date": "2026-09-05",
-                    "start_time": "09:00",
-                    "end_time": "10:00",
-                    "cycle_time": None,
-                },
-                {
-                    "date": "2026-09-06",
-                    "start_time": "09:00",
-                    "end_time": "10:00",
-                    "cycle_time": None,
-                },
-            ],
-        },
-    )
-    assert response.status_code == 201
-    body = response.json()
-    assert body["phase_results"] is not None
-    assert [pr["round_type"] for pr in body["phase_results"]] == [
-        "practice",
-        "qualification",
+
+def test_matches_flow_across_a_break_and_into_the_next_day(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    set_playing_windows(client, session_id, [
+        {"date": PLAY_DATE, "start_time": "09:00", "end_time": "09:06"},
+        {"date": PLAY_DATE, "start_time": "13:00", "end_time": "13:06"},
+        {"date": "2026-11-08", "start_time": "09:00", "end_time": "12:00"},
+    ])
+    # 8 teams, 4 per match, 1 field: 1 match per slot. 1/team = 2 slots.
+    response = schedule(client, session_id, [("qualification", 3, 240)])
+    assert response.status_code == 201, response.text
+    assert _local_times(client, session_id) == [
+        "Sat 09:00:00", "Sat 09:04:00", "Sat 13:00:00", "Sat 13:04:00", "Sun 09:00:00", "Sun 09:04:00",
     ]
-    assert body["match_count"] == sum(pr["match_count"] for pr in body["phase_results"])
-    assert len(body["resolved_time_blocks"]) == 2
-    assert {b["date"] for b in body["resolved_time_blocks"]} == {
-        "2026-09-05",
-        "2026-09-06",
-    }
 
+
+def test_a_new_round_starts_on_the_minute_after_the_previous_rounds_last_match(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    set_playing_windows(client, session_id, [{"date": PLAY_DATE, "start_time": "09:00", "end_time": "12:00"}])
+    assert schedule(client, session_id, [("practice", 1, 150)]).status_code == 201
+    # Practice: 09:00 and 09:02:30, which ends at 09:04:30.
+    assert schedule(client, session_id, [("qualification", 1, 240)]).status_code == 201
+    assert _local_times(client, session_id, "qualification")[0] == "Sat 09:05:00"
+
+
+def test_a_round_after_one_that_ends_in_a_gap_starts_at_the_next_window(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    set_playing_windows(client, session_id, [
+        {"date": PLAY_DATE, "start_time": "09:00", "end_time": "09:05"},
+        {"date": PLAY_DATE, "start_time": "13:00", "end_time": "14:00"},
+    ])
+    # Practice 09:00 (ends 09:02) and 09:02:30 would end 09:04:30; both fit before 09:05.
+    assert schedule(client, session_id, [("practice", 1, 150)]).status_code == 201
+    assert schedule(client, session_id, [("qualification", 1, 240)]).status_code == 201
+    assert _local_times(client, session_id, "qualification")[0] == "Sat 13:00:00"
+
+
+def test_a_dry_run_reports_each_rounds_times_and_creates_nothing(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    set_playing_windows(client, session_id, [{"date": PLAY_DATE, "start_time": "09:00", "end_time": "12:00"}])
+    response = schedule(client, session_id, [("practice", 1, 150), ("qualification", 1, 240)], dry_run=True)
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["fits"] is True and body["overflow"] is None
+    practice, qualification = body["rounds"]
+    assert (practice["match_count"], practice["slot_count"]) == (2, 2)
+    assert practice["schedule_generation_id"] is None
+    assert practice["first_start"] == "2026-11-07T17:00:00Z"
+    assert practice["last_end"] == "2026-11-07T17:04:30Z"
+    assert qualification["first_start"] == "2026-11-07T17:05:00Z"
+    assert client.get(f"/api/matches?session_id={session_id}").json() == []
+
+
+def test_a_dry_run_that_does_not_fit_reports_overflow_and_suggestions(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    set_playing_windows(client, session_id, [{"date": PLAY_DATE, "start_time": "09:00", "end_time": "10:00"}])
+    # 6 matches per team = 12 single-field slots at 6:00: the last would start 10:06.
+    body = schedule(client, session_id, [("qualification", 6, 360)], dry_run=True).json()
+    assert body["fits"] is False
+    assert body["rounds"][0]["last_end"] is None
+    overflow = body["overflow"]
+    assert overflow["unplaced_slot_count"] == 2
+    assert overflow["unplaced_match_count"] == 2
+    assert overflow["over_by_seconds"] == 480  # last match would end 10:08
+    assert overflow["suggested_last_window_end"] == "10:08"
+    assert overflow["suggested_cycle_time_seconds"] == 316  # 11 * c + 120 <= 3600
+
+
+def test_a_real_request_that_does_not_fit_is_422_and_creates_nothing(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    set_playing_windows(client, session_id, [{"date": PLAY_DATE, "start_time": "09:00", "end_time": "10:00"}])
+    response = schedule(client, session_id, [("qualification", 6, 360)])
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("2 matches don't fit in the session's playing times")
+    assert client.get(f"/api/matches?session_id={session_id}").json() == []
+
+
+def test_rebuilding_a_round_also_rebuilds_the_rounds_after_it(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    assert schedule(client, session_id, [("practice", 1), ("qualification", 1)]).status_code == 201
+    response = schedule(client, session_id, [("practice", 2), ("qualification", 1)])
+    assert response.status_code == 201, response.text
     matches = client.get(f"/api/matches?session_id={session_id}").json()
-    practice_matches = [m for m in matches if m["round_type"] == "practice"]
-    qualification_matches = [m for m in matches if m["round_type"] == "qualification"]
-    assert len(practice_matches) > 0
-    assert len(qualification_matches) > 0
-    assert all(m["label"].startswith("P") for m in practice_matches)
-    assert all(m["label"].startswith("Q") for m in qualification_matches)
-    assert max(m["scheduled_time"] for m in practice_matches) < min(
-        m["scheduled_time"] for m in qualification_matches
+    assert sum(m["round_type"] == "practice" for m in matches) == 4
+    last_practice = max(m["scheduled_time"] for m in matches if m["round_type"] == "practice")
+    first_qualification = min(m["scheduled_time"] for m in matches if m["round_type"] == "qualification")
+    assert first_qualification > last_practice
+
+
+def test_rebuilding_a_round_without_the_rounds_after_it_is_rejected(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    assert schedule(client, session_id, [("practice", 1), ("qualification", 1)]).status_code == 201
+    response = schedule(client, session_id, [("practice", 2)])
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Rebuilding Practice also moves the rounds after it; include Qualification too"
     )
 
 
-def test_resolved_time_blocks_report_their_time_slot_count(client):
-    session_id, _ = _setup_ready_session(client, num_teams=8)
-    client.patch(f"/api/sessions/{session_id}", json={"timezone": "America/Los_Angeles"})
-    payload = {
-        "session_id": session_id,
-        "phases": [{"round_type": "qualification", "target_matches_per_team": 3}],
-        "scheduler_plugin_name": "simple_random",
-        "time_blocks": [
-            {"date": "2026-09-05", "start_time": "09:00", "end_time": "10:00", "cycle_time": None},
-            {"date": "2026-09-05", "start_time": "11:00", "end_time": "12:00", "cycle_time": None},
-        ],
-    }
-
-    dry = client.post("/api/schedule", json={**payload, "dry_run": True})
-    assert dry.status_code == 201, dry.text
-    assert all(b["time_slot_count"] > 0 for b in dry.json()["resolved_time_blocks"])
-
-    real = client.post("/api/schedule", json=payload)
-    assert real.status_code == 201, real.text
-    counts = [b["time_slot_count"] for b in real.json()["resolved_time_blocks"]]
-    matches = client.get(f"/api/matches?session_id={session_id}").json()
-    assert sum(counts) == len({m["time_slot"] for m in matches})
+def test_rebuilding_only_the_last_round_keeps_the_earlier_ones(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    assert schedule(client, session_id, [("practice", 1), ("qualification", 1)]).status_code == 201
+    before = {m["id"] for m in client.get(f"/api/matches?session_id={session_id}").json() if m["round_type"] == "practice"}
+    assert schedule(client, session_id, [("qualification", 2)]).status_code == 201
+    after = {m["id"] for m in client.get(f"/api/matches?session_id={session_id}").json() if m["round_type"] == "practice"}
+    assert after == before
 
 
-# ---------- Overlap is judged by the time a block's matches actually use ----------
+def test_a_round_with_scores_cannot_be_rebuilt(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    assert schedule(client, session_id, [("practice", 1), ("qualification", 1)]).status_code == 201
+    _score_one_match(client, session_id, "practice")
+    response = schedule(client, session_id, [("practice", 2), ("qualification", 1)])
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Practice has scored matches, so it can't be rebuilt. Clear it first."
 
 
-def _timed_session(client) -> int:
-    """8 checked-in teams on 1 field in a Los Angeles session: a 1-match-per-team
-    round is 2 matches of the example game's 120-second length."""
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    plugins = client.get("/api/plugins/games").json()
-    client.post("/api/event/game-plugin", json={"name": plugins[0]["name"]})
-    session_id = client.post(
-        "/api/sessions",
-        json={"label": "Session 1", "session_date": "2026-10-03", "timezone": "America/Los_Angeles"},
-    ).json()["id"]
-    for i in range(8):
-        team_id = client.post(
-            "/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}
-        ).json()["id"]
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-    return session_id
+def test_a_round_after_a_scored_round_can_still_be_rebuilt(client):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    assert schedule(client, session_id, [("practice", 1), ("qualification", 1)]).status_code == 201
+    _score_one_match(client, session_id, "practice")
+    assert schedule(client, session_id, [("qualification", 2)]).status_code == 201
 
 
-def _generate(client, session_id: int, round_type: str, block: dict):
-    return client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": round_type,
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-            "time_blocks": [{"date": "2026-10-03", **block}],
-        },
-    )
+def test_a_rebuild_whose_scheduler_fails_leaves_the_old_schedule_intact(client, monkeypatch):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    assert schedule(client, session_id, [("practice", 1), ("qualification", 1)]).status_code == 201
+    before = client.get(f"/api/matches?session_id={session_id}").json()
+    module = client.app.state.scheduler_plugins.get("simple_random").module
+    real = module.generate_schedule
+    calls = {"n": 0}
+
+    def fail_second(**kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("scheduler exploded")
+        return real(**kwargs)
+
+    monkeypatch.setattr(module, "generate_schedule", fail_second)
+    response = schedule(client, session_id, [("practice", 2), ("qualification", 1)])
+    assert response.status_code == 422
+    assert client.get(f"/api/matches?session_id={session_id}").json() == before
 
 
-def _open_ended_practice(client, session_id: int) -> None:
-    # Matches at 09:00 and 09:02:30; the second ends at 09:04:30.
-    first = _generate(
-        client, session_id, "practice", {"start_time": "09:00", "end_time": None, "cycle_time": 150}
-    )
-    assert first.status_code == 201, first.text
+def test_a_rebuild_that_fails_while_saving_rolls_back(client, monkeypatch):
+    import pytest
+
+    from tournament_server.routers import schedule as schedule_router
+
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    assert schedule(client, session_id, [("practice", 1), ("qualification", 1)]).status_code == 201
+    before = client.get(f"/api/matches?session_id={session_id}").json()
+    real = schedule_router.serialize_time_blocks
+    calls = {"n": 0}
+
+    def fail_second(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("disk full")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(schedule_router, "serialize_time_blocks", fail_second)
+    with pytest.raises(RuntimeError):
+        schedule(client, session_id, [("practice", 2), ("qualification", 1)])
+    assert client.get(f"/api/matches?session_id={session_id}").json() == before
 
 
-def test_a_block_may_start_once_an_open_ended_blocks_matches_finish(client):
-    session_id = _timed_session(client)
-    _open_ended_practice(client, session_id)
+def test_pairing_history_leaves_out_the_rounds_being_replaced(client, monkeypatch):
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    assert schedule(client, session_id, [("qualification", 1)]).status_code == 201
+    module = client.app.state.scheduler_plugins.get("simple_random").module
+    real = module.generate_schedule
+    seen = []
 
-    second = _generate(
-        client, session_id, "qualification", {"start_time": "09:05", "end_time": None, "cycle_time": 150}
-    )
-    assert second.status_code == 201, second.text
+    def capture(**kwargs):
+        # A snapshot: the router folds this round's own pairings into the
+        # same dict once the plugin returns.
+        seen.append(copy.deepcopy(kwargs["cross_session_pairing_history"]))
+        return real(**kwargs)
 
-
-def test_a_block_starting_before_the_last_match_ends_names_both_windows(client):
-    session_id = _timed_session(client)
-    _open_ended_practice(client, session_id)
-
-    second = _generate(
-        client, session_id, "qualification", {"start_time": "09:04", "end_time": "10:00", "cycle_time": None}
-    )
-    assert second.status_code == 422
-    # Fit mode spreads the 2 matches over 09:04-10:00: 09:04 and 09:32.
-    assert second.json()["detail"] == (
-        "The new block's matches on 2026-10-03 would run from 09:04 to 09:34, "
-        "overlapping the practice round's matches on 2026-10-03, which run from "
-        "09:00 to 09:04:30 (America/Los_Angeles). Start the new block at 09:05 or later."
-    )
+    monkeypatch.setattr(module, "generate_schedule", capture)
+    assert schedule(client, session_id, [("qualification", 1)]).status_code == 201
+    assert seen == [{}]
 
 
-def test_an_open_ended_new_block_may_finish_before_an_existing_round(client):
-    session_id = _timed_session(client)
-    _open_ended_practice(client, session_id)
-
-    # 08:55 and 08:57:30, finishing 08:59:30: clear of the 09:00 practice.
-    before = _generate(
-        client, session_id, "qualification", {"start_time": "08:55", "end_time": None, "cycle_time": 150}
-    )
-    assert before.status_code == 201, before.text
-
-
-def test_a_new_block_running_into_an_existing_round_says_when_to_finish(client):
-    session_id = _timed_session(client)
-    _open_ended_practice(client, session_id)
-
-    second = _generate(
-        client, session_id, "qualification", {"start_time": "08:57", "end_time": None, "cycle_time": 150}
-    )
-    assert second.status_code == 422
-    assert second.json()["detail"] == (
-        "The new block's matches on 2026-10-03 would run from 08:57 to 09:01:30, "
-        "overlapping the practice round's matches on 2026-10-03, which run from "
-        "09:00 to 09:04:30 (America/Los_Angeles). The new block's matches must "
-        "finish by 09:00."
-    )
-
-
-def test_a_fixed_block_that_finishes_early_frees_the_rest_of_its_window(client):
-    session_id = _timed_session(client)
-    # 09:00-12:00 at a 5400-second cycle holds exactly the 2 matches, at
-    # 09:00 and 10:30; the second ends at 10:32.
-    first = _generate(
-        client, session_id, "practice", {"start_time": "09:00", "end_time": "12:00", "cycle_time": 5400}
-    )
-    assert first.status_code == 201, first.text
-
-    early = _generate(
-        client, session_id, "qualification", {"start_time": "10:31", "end_time": None, "cycle_time": 150}
-    )
-    assert early.status_code == 422
-    assert "which run from 09:00 to 10:32 (America/Los_Angeles)" in early.json()["detail"]
-
-    after = _generate(
-        client, session_id, "qualification", {"start_time": "10:32", "end_time": None, "cycle_time": 150}
-    )
-    assert after.status_code == 201, after.text
-
-
-def test_a_generation_saved_without_occupied_times_keeps_its_requested_window(client):
-    from sqlalchemy import select
-
+def test_a_generation_records_its_cycle_time_and_the_windows_it_uses(client):
     from tournament_server.models.schedule_generation import ScheduleGeneration
 
-    session_id = _timed_session(client)
-    _open_ended_practice(client, session_id)
-    # Rewrite the stored blocks the way generations were saved before
-    # occupied times existed.
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    set_playing_windows(client, session_id, [
+        {"date": PLAY_DATE, "start_time": "09:00", "end_time": "09:05"},
+        {"date": PLAY_DATE, "start_time": "13:00", "end_time": "14:00"},
+    ])
+    assert schedule(client, session_id, [("qualification", 2, 240)]).status_code == 201
     db = client.app.state.session_factory()
     try:
-        generation = db.execute(select(ScheduleGeneration)).scalar_one()
+        generation = db.query(ScheduleGeneration).one()
+        assert generation.cycle_time_seconds == 240
         blocks = json.loads(generation.time_blocks_json)
-        for block in blocks:
-            del block["occupied_from"]
-            del block["occupied_until"]
-        generation.time_blocks_json = json.dumps(blocks)
-        db.commit()
+        assert [(b["start_time"], b["occupied_from"], b["occupied_until"]) for b in blocks] == [
+            ("09:00", "2026-11-07T17:00:00+00:00", "2026-11-07T17:02:00+00:00"),
+            ("13:00", "2026-11-07T21:00:00+00:00", "2026-11-07T21:10:00+00:00"),
+        ]
     finally:
         db.close()
 
-    second = _generate(
-        client, session_id, "qualification", {"start_time": "11:00", "end_time": None, "cycle_time": 150}
-    )
-    assert second.status_code == 422
-    assert "which run from 09:00 with no end time" in second.json()["detail"]
 
+def test_an_old_format_generation_still_blocks_overlapping_matches(client):
+    from tournament_server.models.schedule_generation import ScheduleGeneration
 
-def test_clearing_one_phase_of_a_combined_request_frees_only_its_time(client):
-    session_id = _timed_session(client)
-    # Practice x1 (2 matches) then qualification x1 (2 matches) in one
-    # open-ended block at a 150s cycle: practice at 09:00 and 09:02:30,
-    # qualification at 09:05 and 09:07:30.
-    combined = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "scheduler_plugin_name": "simple_random",
-            "phases": [
-                {"round_type": "practice", "target_matches_per_team": 1},
-                {"round_type": "qualification", "target_matches_per_team": 1},
-            ],
-            "time_blocks": [
-                {"date": "2026-10-03", "start_time": "09:00", "end_time": None, "cycle_time": 150}
-            ],
-        },
-    )
-    assert combined.status_code == 201, combined.text
-    cleared = client.delete(
-        f"/api/schedule?session_id={session_id}&round_type=qualification"
-    )
-    assert cleared.status_code == 200, cleared.text
-
-    # Practice still holds 09:00-09:04:30, and only that.
-    inside = _generate(
-        client, session_id, "qualification", {"start_time": "09:04", "end_time": None, "cycle_time": 150}
-    )
-    assert inside.status_code == 422
-    assert "which run from 09:00 to 09:04:30 (America/Los_Angeles)" in inside.json()["detail"]
-
-    again = _generate(
-        client, session_id, "qualification", {"start_time": "09:05", "end_time": None, "cycle_time": 150}
-    )
-    assert again.status_code == 201, again.text
-
-
-def test_a_later_phase_claims_only_its_own_matches_window(client):
-    session_id = _timed_session(client)
-    combined = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "scheduler_plugin_name": "simple_random",
-            "phases": [
-                {"round_type": "practice", "target_matches_per_team": 1},
-                {"round_type": "qualification", "target_matches_per_team": 1},
-            ],
-            "time_blocks": [
-                {"date": "2026-10-03", "start_time": "09:00", "end_time": None, "cycle_time": 150}
-            ],
-        },
-    )
-    assert combined.status_code == 201, combined.text
-    client.delete(f"/api/schedule?session_id={session_id}&round_type=practice")
-
-    # Qualification's matches (09:05 and 09:07:30) run 09:05-09:09:30, so
-    # the freed practice time before them is open again.
-    before = _generate(
-        client, session_id, "practice", {"start_time": "09:00", "end_time": "09:05", "cycle_time": 150}
-    )
-    assert before.status_code == 201, before.text
+    session_id, _ = _setup_ready_session(client, num_fields=1)
+    assert schedule(client, session_id, [("practice", 1)]).status_code == 201
+    db = client.app.state.session_factory()
+    try:
+        generation = db.query(ScheduleGeneration).one()
+        # A row saved before occupied windows existed: an open-ended block
+        # from 08:00 claims everything after it.
+        generation.time_blocks_json = json.dumps([
+            {"date": PLAY_DATE, "start_time": "08:00", "end_time": None, "cycle_time": 300, "timezone": TZ}
+        ])
+        db.commit()
+    finally:
+        db.close()
+    response = schedule(client, session_id, [("qualification", 1)])
+    assert response.status_code == 422
+    assert "overlapping the practice round's matches" in response.json()["detail"]

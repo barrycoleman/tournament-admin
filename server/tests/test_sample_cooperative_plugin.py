@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from auth_helpers import TEST_PASSWORD
 from plugin_helpers import zip_fixture_plugin
+from schedule_helpers import schedule, set_playing_windows
 from tournament_server.app import create_app
 from tournament_server.cli import main
 from tournament_server.plugin_registry.conformance import run_conformance_checks
@@ -149,15 +150,8 @@ def test_match_format_endpoint_reports_a_sixty_second_match(sample_client):
 
 def test_a_schedule_can_be_generated(sample_client):
     session_id, team_ids = _checked_in_session(sample_client, 6)
-    response = sample_client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 4,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    set_playing_windows(sample_client, session_id)
+    response = schedule(sample_client, session_id, [("qualification", 4)])
     assert response.status_code == 201, response.text
 
     matches = sample_client.get(f"/api/matches?session_id={session_id}").json()

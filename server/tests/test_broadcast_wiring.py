@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from schedule_helpers import schedule, set_playing_windows
 from test_finals import _rank_teams_directly, _setup_ranked_teams
 
 
@@ -55,21 +56,14 @@ def test_new_match_created_broadcasts_for_schedule_generation(client):
             json={"team_id": team_id, "checked_in": True},
         )
     client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+    set_playing_windows(client, session_id)
     raw = TestClient(client.app)
     admin_token = client.headers["Authorization"].removeprefix("Bearer ")
 
     with raw.websocket_connect(
         f"/ws/session/{session_id}?token={admin_token}"
     ) as ws:
-        response = client.post(
-            "/api/schedule",
-            json={
-                "session_id": session_id,
-                "round_type": "qualification",
-                "target_matches_per_team": 1,
-                "scheduler_plugin_name": "simple_random",
-            },
-        )
+        response = schedule(client, session_id, [("qualification", 1)])
         assert response.status_code == 201
         received = ws.receive_json()
 
