@@ -149,6 +149,18 @@ describe("mergeServerRounds", () => {
     expect(dropped).toEqual([]);
   });
 
+  it("adopts the server's new values for an unedited row", () => {
+    const rows = initialRows([PRACTICE, QUALIFICATION], [], cycleFor);
+    const { rows: merged } = mergeServerRounds(
+      rows,
+      [PRACTICE, { ...QUALIFICATION, target_matches_per_team: 8, cycle_time_seconds: 400 }],
+      420
+    );
+    const qual = merged.find((r) => r.key === "qualification")!;
+    expect([qual.matchesPerTeam, qual.cycleSeconds]).toEqual([8, 400]);
+    expect(isRowChanged(qual)).toBe(false);
+  });
+
   it("drops an edit to a round that became locked, and says so", () => {
     const rows = initialRows([PRACTICE], [], cycleFor).map((r) => ({ ...r, matchesPerTeam: 2 }));
     const { rows: merged, dropped } = mergeServerRounds(rows, [{ ...PRACTICE, locked: true, scored_count: 1 }], 420);

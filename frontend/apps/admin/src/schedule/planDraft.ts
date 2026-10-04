@@ -158,6 +158,7 @@ export function mergeServerRounds(
       if (isRowChanged(current)) dropped.push(round.round_type);
       return fresh;
     }
+    if (!isRowChanged(current)) return fresh;
     return { ...current, scheduled: round, original: fresh.original };
   });
   const scheduledTypes = new Set(rounds.map((round) => round.round_type));
