@@ -19,7 +19,7 @@ export function PlanTimeline({
   const usable = windows.filter((w) => w.start_utc !== null && w.end_utc !== null);
   if (usable.length === 0) return null;
   return (
-    <div className="plan-timeline" role="img" aria-label={t("sessions.schedule.playingTimes.timelineLabel")}>
+    <div className="plan-timeline">
       {usable.map((window, index) => {
         const startMs = Date.parse(window.start_utc!);
         const endMs = Date.parse(window.end_utc!);
@@ -38,7 +38,7 @@ export function PlanTimeline({
               </span>
             )}
             <div className="plan-timeline__window" style={{ flexGrow: (endMs - startMs) / 60_000 }}>
-              <div className="plan-timeline__bar">
+              <div className="plan-timeline__bar" aria-hidden="true">
                 {segments.map((segment, i) => (
                   <span
                     key={i}
