@@ -71,6 +71,56 @@ export interface MatchFormat {
   teams_per_alliance: number;
   alliance_count: number;
   match_duration_seconds: number;
+  default_cycle_time_seconds: number | null;
+}
+
+export interface PlayingWindowRead {
+  date: string;
+  start_time: string;
+  end_time: string;
+  start_utc: string | null;
+  end_utc: string | null;
+}
+
+export interface ScheduledRound {
+  round_type: string;
+  target_matches_per_team: number | null;
+  cycle_time_seconds: number | null;
+  match_count: number;
+  scored_count: number;
+  first_start: string | null;
+  last_end: string | null;
+  locked: boolean;
+  outside_playing_windows: boolean;
+}
+
+export interface ScheduleRounds {
+  rounds: ScheduledRound[];
+  session_last_cycle_time_seconds: number | null;
+}
+
+export interface PlanRoundResult {
+  round_type: string;
+  schedule_generation_id: number | null;
+  match_count: number;
+  slot_count: number;
+  first_start: string | null;
+  /** Null when the round doesn't fully fit. */
+  last_end: string | null;
+}
+
+export interface PlanOverflow {
+  unplaced_slot_count: number;
+  unplaced_match_count: number;
+  over_by_seconds: number;
+  suggested_cycle_time_seconds: number | null;
+  suggested_last_window_end: string | null;
+}
+
+export interface PlanResponse {
+  fits: boolean;
+  rounds: PlanRoundResult[];
+  overflow: PlanOverflow | null;
 }
 
 export interface TeamSummary {
