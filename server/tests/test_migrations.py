@@ -3,11 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from alembic import command
+from auth_helpers import TEST_PASSWORD
+from fastapi.testclient import TestClient
 from migration_helpers import build_isolated_two_revision_script_dir
 from sqlalchemy import create_engine, inspect, text
 
 from tournament_server import migrations
 from tournament_server.app import create_app
+from tournament_server.auth import hash_password
 from tournament_server.db import Base, init_db, make_engine
 from tournament_server.migrations import (
     MigrationOutcome,
@@ -504,3 +507,88 @@ def test_backfill_migration_adds_a_default_division_for_event_with_none(tmp_path
 
     assert event_1_divisions == ["Division 1"]
     assert event_2_divisions == ["Existing Division"]  # untouched -- already had one
+
+
+def test_playing_windows_upgrade_keeps_existing_schedule_generations(tmp_path):
+    """The schedule planner's migrations (e5a1c3b9d2f4 adds
+    session_playing_windows, f6b2d4c8e1a7 adds a nullable
+    schedule_generations.cycle_time_seconds) must upgrade a database that
+    already holds a generated schedule: the generation and its matches
+    survive with a null cycle time, the windows table exists (empty), and
+    GET /api/schedule/rounds still reports the round."""
+    db_path = str(tmp_path / "pre_existing_generations.db")
+    config = _make_alembic_config(db_path)
+    command.upgrade(config, "c9d34b7a1f02")  # baseline, before the planner's migrations
+
+    raw_engine = create_engine(f"sqlite:///{db_path}")
+    with raw_engine.connect() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO events (id, name, active_session_id, created_at) "
+                "VALUES (1, 'Regional Qualifier', 1, '2026-01-01 00:00:00')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO sessions (id, event_id, label, session_date, timezone) "
+                "VALUES (1, 1, 'Saturday', '2026-11-07', 'America/Los_Angeles')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO schedule_generations (id, session_id, division_id, round_type, "
+                "scheduler_plugin_name, scheduler_plugin_version, target_matches_per_team, "
+                "generated_at, time_blocks_json) VALUES (1, 1, NULL, 'qualification', "
+                "'simple_random', '1.0.0', 4, '2026-11-01 12:00:00', NULL)"
+            )
+        )
+        for number, start in ((1, "2026-11-07 17:00:00"), (2, "2026-11-07 17:05:00")):
+            connection.execute(
+                text(
+                    "INSERT INTO matches (session_id, division_id, round_type, match_number, "
+                    "schedule_generation_id, scheduled_time, status, phase, paused) "
+                    "VALUES (1, NULL, 'qualification', :number, 1, :start, 'scheduled', "
+                    "'not_started', 0)"
+                ),
+                {"number": number, "start": start},
+            )
+        connection.execute(
+            text("INSERT INTO role_credentials (role, password_hash) VALUES ('admin', :hash)"),
+            {"hash": hash_password(TEST_PASSWORD)},
+        )
+        connection.commit()
+    raw_engine.dispose()
+
+    engine = make_engine(db_path)
+    assert ensure_schema_current(engine, db_path) == MigrationOutcome.UPGRADED
+
+    inspector = inspect(engine)
+    assert "session_playing_windows" in inspector.get_table_names()
+    with engine.connect() as connection:
+        generation = connection.execute(
+            text("SELECT id, target_matches_per_team, cycle_time_seconds FROM schedule_generations")
+        ).one()
+        window_count = connection.execute(
+            text("SELECT COUNT(*) FROM session_playing_windows")
+        ).scalar_one()
+    assert (generation.id, generation.target_matches_per_team) == (1, 4)
+    assert generation.cycle_time_seconds is None
+    assert window_count == 0
+
+    app = create_app(db_path=db_path, plugins_root=str(tmp_path / "plugins"))
+    with TestClient(app) as client:
+        login = client.post("/api/auth/login", json={"role": "admin", "password": TEST_PASSWORD})
+        assert login.status_code == 200, login.text
+        client.headers["Authorization"] = f"Bearer {login.json()['access_token']}"
+        response = client.get("/api/schedule/rounds", params={"session_id": 1})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["session_last_cycle_time_seconds"] is None
+    assert len(body["rounds"]) == 1
+    round_ = body["rounds"][0]
+    assert round_["round_type"] == "qualification"
+    assert round_["target_matches_per_team"] == 4
+    assert round_["cycle_time_seconds"] is None
+    assert round_["match_count"] == 2
+    assert round_["locked"] is False
+    assert round_["outside_playing_windows"] is False

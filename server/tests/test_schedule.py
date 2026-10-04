@@ -4,6 +4,8 @@ import json
 import random
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from schedule_helpers import ALL_DAY, PLAY_DATE, TZ, schedule, set_playing_windows
 
 LA = ZoneInfo(TZ)
@@ -637,13 +639,13 @@ def test_generated_practice_matches_have_p_prefixed_labels(client):
     assert labels == [f"P{n}" for n in range(1, len(matches) + 1)]
 
 
-def test_generate_schedule_rejects_empty_phases_list(client):
+def test_generate_schedule_rejects_empty_rounds_list(client):
     session_id, team_ids = _setup_ready_session(client)
     response = schedule(client, session_id, [])
     assert response.status_code == 422
 
 
-def test_generate_schedule_with_phases_orders_matches_by_phase(client):
+def test_generate_schedule_with_rounds_orders_matches_by_round(client):
     session_id, team_ids = _setup_ready_session(client, num_teams=8)
 
     response = schedule(client, session_id, [("practice", 1), ("qualification", 2)])
@@ -705,7 +707,7 @@ def test_generate_schedule_dry_run_is_idempotent(client):
     assert matches == []
 
 
-def test_generate_schedule_rejects_duplicate_round_type_across_phases(client):
+def test_generate_schedule_rejects_duplicate_round_type_across_rounds(client):
     # A rounds list repeating the same round_type against itself is a
     # request-shape problem -- it must be rejected, all-or-nothing, before
     # anything is generated or persisted.
@@ -719,7 +721,7 @@ def test_generate_schedule_rejects_duplicate_round_type_across_phases(client):
     assert matches == []
 
 
-def test_generate_schedule_combined_phases_fold_pairing_history_between_phases(client):
+def test_generate_schedule_combined_rounds_fold_pairing_history_between_rounds(client):
     # Regression check for a subtler bug: cross_session_pairing_history is
     # computed once from the DB before the round loop runs, and nothing is
     # persisted until the whole combined request succeeds -- so without
@@ -783,18 +785,30 @@ def test_rejects_a_session_without_a_timezone(client):
     assert response.json()["detail"] == "Set the session's timezone before scheduling"
 
 
-def test_rejects_the_old_request_shape(client):
+@pytest.mark.parametrize(
+    "old_key, old_value",
+    [
+        ("time_blocks", [{"start": "2026-11-07T17:00:00Z", "end": "2026-11-07T20:00:00Z"}]),
+        ("phases", [{"round_type": "qualification", "target_matches_per_team": 1}]),
+    ],
+)
+def test_rejects_the_old_request_shape(client, old_key, old_value):
+    # A body that is otherwise valid (it has a proper `rounds` list) but
+    # still carries an old key must be refused rather than half-understood.
     session_id, _ = _setup_ready_session(client)
-    response = client.post(
-        "/api/schedule",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "target_matches_per_team": 1,
-            "scheduler_plugin_name": "simple_random",
-        },
-    )
+    valid = {
+        "session_id": session_id,
+        "scheduler_plugin_name": "simple_random",
+        "rounds": [
+            {"round_type": "qualification", "target_matches_per_team": 1, "cycle_time_seconds": 300}
+        ],
+        "dry_run": True,
+    }
+    assert client.post("/api/schedule", json=valid).status_code == 201
+
+    response = client.post("/api/schedule", json={**valid, old_key: old_value})
     assert response.status_code == 422
+    assert any(error["loc"][-1] == old_key for error in response.json()["detail"])
 
 
 def test_rejects_elimination_and_a_cycle_shorter_than_the_match(client):
