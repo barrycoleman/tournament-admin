@@ -6,3 +6,5 @@ frontend/**/test-results/
 frontend/**/playwright-report/
 frontend/**/*.tsbuildinfo
 .playwright-mcp/
+*.db-shm
+*.db-wal

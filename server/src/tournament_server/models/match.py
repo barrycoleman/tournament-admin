@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tournament_server.db import Base, UTCDateTime
@@ -41,4 +41,6 @@ class Match(Base):
         UTCDateTime, default=None
     )
     paused: Mapped[bool] = mapped_column(default=False)
-    remaining_seconds_at_pause: Mapped[float | None] = mapped_column(default=None)
+    remaining_seconds_at_pause: Mapped[float | None] = mapped_column(
+        Float, default=None
+    )
