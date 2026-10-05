@@ -32,6 +32,7 @@ from tournament_server.schemas.schedule import (
     ScheduleRoundsRead,
     ScheduledRoundRead,
 )
+from tournament_server.services.deletion import delete_matches
 from tournament_server.services.playing_windows import load_windows
 from tournament_server.services.schedule_timing import (
     PlayingWindow,
@@ -306,19 +307,7 @@ def _delete_round(db: Session, session_id: int, division_id: int | None, round_t
         match_query = match_query.where(Match.division_id == division_id)
         generation_query = generation_query.where(ScheduleGeneration.division_id == division_id)
     matches = db.execute(match_query).scalars().all()
-    for match in matches:
-        for alliance in db.execute(select(Alliance).where(Alliance.match_id == match.id)).scalars().all():
-            for record in db.execute(
-                select(ScoreRecord).where(ScoreRecord.alliance_id == alliance.id)
-            ).scalars().all():
-                db.delete(record)
-            for alliance_team in db.execute(
-                select(AllianceTeam).where(AllianceTeam.alliance_id == alliance.id)
-            ).scalars().all():
-                db.delete(alliance_team)
-            db.flush()
-            db.delete(alliance)
-        db.delete(match)
+    delete_matches(db, matches)
     for generation in db.execute(generation_query).scalars().all():
         db.delete(generation)
     db.flush()

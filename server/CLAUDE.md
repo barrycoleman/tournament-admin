@@ -207,6 +207,27 @@ validated as a real IANA zone via `ZoneInfo` at write time here, same as
 `POST /api/sessions` already does. `admin`-only, 404 if the session
 doesn't exist.
 
+`DELETE /api/sessions/{id}` (`admin`-only, 204) deletes a session and
+everything scoped to it -- finals brackets, matches (with alliances and
+score records), schedule generations, rankings, check-ins, playing
+windows, field sets and fields -- through `services/deletion.py`, whose
+`delete_matches`/`delete_finals_bracket` are the same helpers
+`DELETE /api/schedule` and `DELETE /api/finals/{id}` use. It 409s if any
+match in the session has a score record, so the rule is "unscored", not
+"in the future"; an unscored finals bracket doesn't block it. Because an
+unscored session contributes nothing to event-wide rankings, nothing is
+recomputed. Deleting the event's active session clears
+`Event.active_session_id` and broadcasts `active_session_changed` with
+`null`. Every `SessionRead` carries a computed `has_scored_matches` so
+the admin UI can disable Delete up front.
+
+`POST /api/sessions/{id}/copy-fields` (`admin`-only, 201) takes
+`{source_session_id}` and recreates that session's field sets (name and
+`division_id`) and their fields, in id order, returning the new
+`FieldSetRead`s. It 409s if the target session already has a field set
+(no merging), 422s if the source has none or is the same session, and
+404s for either unknown session.
+
 `POST /api/sessions/{id}/participants` (`routers/participation.py`'s
 `add_participant`) is a real upsert, not a bare insert: it looks up the
 existing `(session_id, team_id)` row first and updates `checked_in` in

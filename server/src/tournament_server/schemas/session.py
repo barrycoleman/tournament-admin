@@ -25,3 +25,10 @@ class SessionRead(BaseModel):
     label: str
     session_date: dt.date | None
     timezone: str | None
+    # Whether any match in the session has a score; a scored session can't
+    # be deleted.
+    has_scored_matches: bool = False
+
+
+class CopyFieldsRequest(BaseModel):
+    source_session_id: int

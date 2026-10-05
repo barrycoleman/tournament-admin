@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from tournament_server.auth import require_admin, require_any_role
 from tournament_server.deps import get_db, get_game_plugin_for_event, get_the_event
-from tournament_server.models.alliance import Alliance, AllianceTeam
+from tournament_server.models.alliance import Alliance
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
 from tournament_server.models.bracket_matchup import BracketMatchup
 from tournament_server.models.division import Division
@@ -32,6 +32,7 @@ from tournament_server.schemas.finals import (
     FinalsRunRead,
     FinalsStartRequest,
 )
+from tournament_server.services.deletion import delete_finals_bracket
 from tournament_server.services.finals import (
     expand_wins_to_advance,
     generate_bracket,
@@ -499,50 +500,6 @@ def delete_finals(
             status_code=409, detail="Cannot delete a completed finals bracket"
         )
 
-    matches = db.execute(
-        select(Match).where(Match.finals_bracket_id == bracket.id)
-    ).scalars().all()
-    for match in matches:
-        alliances = db.execute(
-            select(Alliance).where(Alliance.match_id == match.id)
-        ).scalars().all()
-        for alliance in alliances:
-            for record in db.execute(
-                select(ScoreRecord).where(ScoreRecord.alliance_id == alliance.id)
-            ).scalars().all():
-                db.delete(record)
-            for alliance_team in db.execute(
-                select(AllianceTeam).where(AllianceTeam.alliance_id == alliance.id)
-            ).scalars().all():
-                db.delete(alliance_team)
-            db.flush()
-            db.delete(alliance)
-        db.delete(match)
-    db.flush()
-
-    for matchup in db.execute(
-        select(BracketMatchup).where(BracketMatchup.bracket_id == bracket.id)
-    ).scalars().all():
-        db.delete(matchup)
-
-    for result in db.execute(
-        select(FinalsResult).where(FinalsResult.finals_bracket_id == bracket.id)
-    ).scalars().all():
-        db.delete(result)
-
-    bracket_alliances = db.execute(
-        select(BracketAlliance).where(BracketAlliance.bracket_id == bracket.id)
-    ).scalars().all()
-    for alliance in bracket_alliances:
-        for team_row in db.execute(
-            select(BracketAllianceTeam).where(
-                BracketAllianceTeam.bracket_alliance_id == alliance.id
-            )
-        ).scalars().all():
-            db.delete(team_row)
-        db.flush()
-        db.delete(alliance)
-
-    db.delete(bracket)
+    delete_finals_bracket(db, bracket)
     db.commit()
     return Response(status_code=204)
