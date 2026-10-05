@@ -311,8 +311,21 @@
       "deleteSetHeading": "Delete field set {{name}}?",
       "deleteSetBody": "The set and all of its fields are removed from this session.",
       "confirmDelete": "Delete",
-      "staleDivisionNote": "Single-division events schedule on unassigned field sets — set this to Unassigned to use it."
-    }
+      "staleDivisionNote": "Single-division events schedule on unassigned field sets — set this to Unassigned to use it.",
+      "copyFromLabel": "Or copy fields from",
+      "copyFromPlaceholder": "Choose a session…",
+      "copyAction": "Copy fields"
+    },
+    "setActiveShortAction": "Set active",
+    "setActiveAriaLabel": "Set {{name}} as the active session",
+    "deleteAction": "Delete",
+    "deleteAriaLabel": "Delete session {{name}}",
+    "deleteBlockedHint": "This session has scored matches, so it can't be deleted.",
+    "deleteHeading": "Delete session {{name}}?",
+    "deleteBody": "This removes the session's schedule, finals, playing times, fields, check-ins and rankings. Teams and divisions are kept.",
+    "deleteActiveNote": "It's the active session, so no session will be active afterwards.",
+    "deletePhrasePrompt": "Type \"{{name}}\" to confirm",
+    "deleteConfirm": "Delete session"
   },
   "frontDeskCheckin": {
     "heading": "Team Check-In",

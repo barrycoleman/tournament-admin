@@ -129,11 +129,13 @@ newly-restarted picker one.
 
 Beyond the bootstrap/auth screens above, the authenticated app
 (`router.tsx`, under `AuthenticatedLayout`) has: `/sessions` (list +
-create/edit), `/sessions/:sessionId` (index-redirects to
+create/edit, plus per-row Set active and Delete; Delete is disabled with a
+`title` explaining why when `SessionRead.has_scored_matches`, and otherwise
+asks for the session's name in `ConfirmDialog`), `/sessions/:sessionId` (index-redirects to
 `/sessions/:sessionId/checkin`), `/sessions/:sessionId/{checkin,fields,schedule,matches}` (the session
 tabs, all rendered through `SessionDetailLayout`'s tab-strip `Outlet`
 context — see the session-checkin and fields-schedule-ui design specs;
-the layout's header also carries the "Set as active session" control), and `/checkin` (a
+the layout's header also carries the "Set as active session" control; the Fields tab's empty state offers "copy fields from" any other session that has field sets, via `POST /api/sessions/{id}/copy-fields`), and `/checkin` (a
 separate, non-nested route: the dedicated `front_desk` kiosk screen,
 scoped to `Event.active_session_id` rather than a session id in the
 URL).

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { apiErrorMessage } from "../apiErrorMessage";
 import type { EventRead, SessionRead } from "../types";
 
 function listTimezones(): string[] {
@@ -111,6 +113,7 @@ export function SessionsRoute() {
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<SessionRead | null>(null);
 
   const { data: sessions } = useQuery({
     queryKey: ["sessions"],
@@ -154,9 +157,34 @@ export function SessionsRoute() {
     },
   });
 
+  const activateMutation = useMutation({
+    mutationFn: (id: number) =>
+      apiRequest<EventRead>("/api/event/active-session", {
+        method: "POST",
+        body: { session_id: id },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiRequest<void>(`/api/sessions/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setPendingDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["event"] });
+    },
+  });
+
   return (
     <div>
       <h1>{t("sessions.heading")}</h1>
+      {activateMutation.isError && (
+        <p className="alert alert-danger" role="alert">
+          {apiErrorMessage(activateMutation.error, t("errors.generic"))}
+        </p>
+      )}
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -220,6 +248,16 @@ export function SessionsRoute() {
                     {session.timezone ?? <span className="table__missing">—</span>}
                   </td>
                   <td className="table__actions">
+                    {event && event.active_session_id !== session.id && (
+                      <button
+                        className="btn btn-small"
+                        onClick={() => activateMutation.mutate(session.id)}
+                        disabled={activateMutation.isPending}
+                        aria-label={t("sessions.setActiveAriaLabel", { name: session.label })}
+                      >
+                        {t("sessions.setActiveShortAction")}
+                      </button>
+                    )}
                     <button
                       className="btn btn-small"
                       onClick={() => {
@@ -228,6 +266,18 @@ export function SessionsRoute() {
                       }}
                     >
                       {t("sessions.editAction")}
+                    </button>
+                    <button
+                      className="btn btn-danger btn-small"
+                      onClick={() => {
+                        deleteMutation.reset();
+                        setPendingDelete(session);
+                      }}
+                      disabled={session.has_scored_matches}
+                      title={session.has_scored_matches ? t("sessions.deleteBlockedHint") : undefined}
+                      aria-label={t("sessions.deleteAriaLabel", { name: session.label })}
+                    >
+                      {t("sessions.deleteAction")}
                     </button>
                   </td>
                 </tr>
@@ -266,6 +316,26 @@ export function SessionsRoute() {
                 : t("errors.generic")
               : null
           }
+        />
+      )}
+      {pendingDelete && (
+        <ConfirmDialog
+          heading={t("sessions.deleteHeading", { name: pendingDelete.label })}
+          body={
+            event?.active_session_id === pendingDelete.id
+              ? `${t("sessions.deleteBody")} ${t("sessions.deleteActiveNote")}`
+              : t("sessions.deleteBody")
+          }
+          confirmLabel={t("sessions.deleteConfirm")}
+          cancelLabel={t("sessions.cancelAction")}
+          requiredPhrase={pendingDelete.label}
+          phrasePrompt={t("sessions.deletePhrasePrompt", { name: pendingDelete.label })}
+          isPending={deleteMutation.isPending}
+          error={
+            deleteMutation.isError ? apiErrorMessage(deleteMutation.error, t("errors.generic")) : null
+          }
+          onConfirm={() => deleteMutation.mutate(pendingDelete.id)}
+          onCancel={() => setPendingDelete(null)}
         />
       )}
     </div>

@@ -21,6 +21,7 @@ const SESSION: SessionRead = {
   label: "Saturday",
   session_date: "2026-11-07",
   timezone: "America/Los_Angeles",
+  has_scored_matches: false,
 };
 const ONE_DIVISION: Division[] = [{ id: 1, event_id: 1, name: "Division 1", target_team_count: null }];
 const TWO_DIVISIONS: Division[] = [
@@ -34,7 +35,13 @@ const NOT_HANDLED = Symbol("not handled");
 type Override = (path: string, options?: { method?: string; body?: unknown }) => unknown;
 
 function stubServer(
-  state: { divisions: Division[]; fieldSets: FieldSetRead[]; fields: FieldRead[] },
+  state: {
+    divisions: Division[];
+    fieldSets: FieldSetRead[];
+    fields: FieldRead[];
+    sessions?: SessionRead[];
+    otherFieldSets?: Record<number, FieldSetRead[]>;
+  },
   override: Override = () => NOT_HANDLED
 ) {
   vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
@@ -45,6 +52,9 @@ function stubServer(
     if (path === "/api/divisions") return state.divisions as never;
     if (path === "/api/field-sets?session_id=1") return state.fieldSets as never;
     if (path === "/api/fields?session_id=1") return state.fields as never;
+    if (path === "/api/sessions") return (state.sessions ?? [SESSION]) as never;
+    const otherSets = path.match(/^\/api\/field-sets\?session_id=(\d+)$/);
+    if (otherSets) return (state.otherFieldSets?.[Number(otherSets[1])] ?? []) as never;
     throw new Error(`unexpected request: ${opts?.method ?? "GET"} ${path}`);
   });
 }
@@ -177,5 +187,89 @@ describe("SessionFieldsRoute", () => {
     expect(await within(card).findByRole("alert")).toHaveTextContent(
       "Field has scheduled matches; clear the schedule first"
     );
+  });
+
+  describe("copying fields from another session", () => {
+    const SUNDAY: SessionRead = { ...SESSION, id: 2, label: "Sunday" };
+    const MONDAY: SessionRead = { ...SESSION, id: 3, label: "Monday" };
+
+    it("offers only other sessions that have fields, and copies from the chosen one", async () => {
+      let copyRequest: { path: string; body: unknown } | null = null;
+      stubServer(
+        {
+          divisions: ONE_DIVISION,
+          fieldSets: [],
+          fields: [],
+          sessions: [SESSION, SUNDAY, MONDAY],
+          otherFieldSets: { 2: [{ ...MAIN_SET, id: 20, session_id: 2 }] },
+        },
+        (path, options) => {
+          if (options?.method === "POST") {
+            copyRequest = { path, body: options.body };
+            return [{ ...MAIN_SET, id: 30 }];
+          }
+          return NOT_HANDLED;
+        }
+      );
+      renderFields();
+
+      const select = await screen.findByLabelText("Or copy fields from");
+      const options = within(select).getAllByRole("option").map((option) => option.textContent);
+      expect(options).toEqual(["Choose a session…", "Sunday"]);
+      expect(screen.getByRole("button", { name: "Copy fields" })).toBeDisabled();
+
+      fireEvent.change(select, { target: { value: "2" } });
+      fireEvent.click(screen.getByRole("button", { name: "Copy fields" }));
+
+      await waitFor(() =>
+        expect(copyRequest).toEqual({
+          path: "/api/sessions/1/copy-fields",
+          body: { source_session_id: 2 },
+        })
+      );
+    });
+
+    it("hides the copy option when no other session has fields", async () => {
+      stubServer({ divisions: ONE_DIVISION, fieldSets: [], fields: [], sessions: [SESSION, SUNDAY] });
+      renderFields();
+
+      await screen.findByText("This session has no fields yet.");
+      await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/field-sets?session_id=2"));
+      expect(screen.queryByLabelText("Or copy fields from")).not.toBeInTheDocument();
+    });
+
+    it("hides the copy option once the session has fields of its own", async () => {
+      stubServer({
+        divisions: ONE_DIVISION,
+        fieldSets: [MAIN_SET],
+        fields: [FIELD_A],
+        sessions: [SESSION, SUNDAY],
+        otherFieldSets: { 2: [{ ...MAIN_SET, id: 20, session_id: 2 }] },
+      });
+      renderFields();
+
+      await screen.findByRole("region", { name: "Main Fields" });
+      expect(screen.queryByLabelText("Or copy fields from")).not.toBeInTheDocument();
+    });
+
+    it("shows the server's message when the copy fails", async () => {
+      stubServer(
+        {
+          divisions: ONE_DIVISION,
+          fieldSets: [],
+          fields: [],
+          sessions: [SESSION, SUNDAY],
+          otherFieldSets: { 2: [{ ...MAIN_SET, id: 20, session_id: 2 }] },
+        },
+        (_path, options) =>
+          options?.method === "POST" ? new ApiError(409, "This session already has fields") : NOT_HANDLED
+      );
+      renderFields();
+
+      fireEvent.change(await screen.findByLabelText("Or copy fields from"), { target: { value: "2" } });
+      fireEvent.click(screen.getByRole("button", { name: "Copy fields" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("This session already has fields");
+    });
   });
 });

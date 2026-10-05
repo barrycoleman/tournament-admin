@@ -30,6 +30,8 @@ export interface SessionRead {
   label: string;
   session_date: string | null;
   timezone: string | null;
+  /** A session with a scored match can't be deleted. */
+  has_scored_matches: boolean;
 }
 
 export interface FieldSetRead {

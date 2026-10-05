@@ -604,6 +604,10 @@
   text-align: right;
 }
 
+.table__actions .btn + .btn {
+  margin-left: var(--space-2);
+}
+
 .table__empty {
   text-align: center;
   color: var(--color-text-secondary);

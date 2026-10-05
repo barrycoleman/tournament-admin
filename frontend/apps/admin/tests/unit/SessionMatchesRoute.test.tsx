@@ -21,6 +21,7 @@ const SESSION: SessionRead = {
   label: "Saturday",
   session_date: "2026-11-07",
   timezone: "America/Los_Angeles",
+  has_scored_matches: false,
 };
 const TEAMS = [
   { id: 1, number: "101", name: "Alpha", division_id: 1 },

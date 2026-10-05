@@ -309,8 +309,21 @@
       "deleteSetHeading": "删除场地组 {{name}}？",
       "deleteSetBody": "该场地组及其所有场地将从此场次中移除。",
       "confirmDelete": "删除",
-      "staleDivisionNote": "单组别赛事使用未分配的场地组排赛程，请设为“未分配”以启用。"
-    }
+      "staleDivisionNote": "单组别赛事使用未分配的场地组排赛程，请设为“未分配”以启用。",
+      "copyFromLabel": "或从以下场次复制场地",
+      "copyFromPlaceholder": "选择场次…",
+      "copyAction": "复制场地"
+    },
+    "setActiveShortAction": "设为当前",
+    "setActiveAriaLabel": "将 {{name}} 设为当前场次",
+    "deleteAction": "删除",
+    "deleteAriaLabel": "删除场次 {{name}}",
+    "deleteBlockedHint": "该场次已有计分的比赛，无法删除。",
+    "deleteHeading": "删除场次 {{name}}？",
+    "deleteBody": "这将删除该场次的赛程、决赛、比赛时段、场地、签到和排名。队伍和组别会保留。",
+    "deleteActiveNote": "这是当前场次，删除后将没有当前场次。",
+    "deletePhrasePrompt": "输入“{{name}}”以确认",
+    "deleteConfirm": "删除场次"
   },
   "frontDeskCheckin": {
     "heading": "队伍签到",

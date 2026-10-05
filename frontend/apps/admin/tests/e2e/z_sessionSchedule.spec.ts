@@ -374,4 +374,75 @@ test.describe.serial("session fields, schedule, and matches", () => {
       await request.delete(`/api/divisions/${second.id}`, { headers: headers() });
     }
   });
+
+  test("set a session active from the sessions list", async ({ page, request }) => {
+    const session = await (
+      await request.post("/api/sessions", { headers: headers(), data: { label: "Activate E2E" } })
+    ).json();
+    await loginAsAdmin(page);
+    await page.goto("/sessions");
+    await page.getByRole("button", { name: "Set Activate E2E as the active session" }).click();
+    const row = page.getByRole("row", { name: /Activate E2E/ });
+    await expect(row.getByText("Active session")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Set Activate E2E as the active session" })).toHaveCount(0);
+    const event = await (await request.get("/api/event", { headers: headers() })).json();
+    expect(event.active_session_id).toBe(session.id);
+  });
+
+  test("copy another session's fields, then generate on them", async ({ page, request }) => {
+    const source = await (
+      await request.post("/api/sessions", { headers: headers(), data: { label: "Copy Source E2E" } })
+    ).json();
+    const set = await (
+      await request.post("/api/field-sets", { headers: headers(), data: { session_id: source.id, name: "North Hall" } })
+    ).json();
+    for (const name of ["North 1", "North 2"]) {
+      await request.post("/api/fields", {
+        headers: headers(),
+        data: { session_id: source.id, name, field_set_id: set.id },
+      });
+    }
+    const target = await createReadySession(request, "Copy Target E2E", "CPY");
+    await setWindows(request, target.sessionId, [["2026-11-07", "09:00", "17:00"]]);
+
+    await loginAsAdmin(page);
+    await page.goto(`/sessions/${target.sessionId}/fields`);
+    await page.getByLabel("Or copy fields from").selectOption({ label: "Copy Source E2E" });
+    await page.getByRole("button", { name: "Copy fields" }).click();
+    const card = page.getByRole("region", { name: "North Hall" });
+    await expect(card.getByText("North 1")).toBeVisible();
+    await expect(card.getByText("North 2")).toBeVisible();
+    await expect(page.getByLabel("Or copy fields from")).toHaveCount(0);
+
+    await page.getByRole("link", { name: "Schedule" }).click();
+    await expect(page.getByText(/^✓ Fits/)).toBeVisible();
+    await page.getByRole("button", { name: "Generate" }).click();
+    await expect(page.getByText(/^\d+ matches scheduled\./)).toBeVisible();
+  });
+
+  test("delete a session after typing its name; a scored session can't be deleted", async ({ page, request }) => {
+    await request.post("/api/sessions", { headers: headers(), data: { label: "Delete Me E2E" } });
+    const scored = await createReadySession(request, "Scored Keep E2E", "SKP");
+    await addField(request, scored.sessionId, "Keep Field");
+    await setWindows(request, scored.sessionId, [["2026-11-07", "09:00", "17:00"]]);
+    await scheduleViaApi(request, scored.sessionId, [["qualification", 2]]);
+    await scoreFirstMatch(request, scored.sessionId, "qualification");
+
+    await loginAsAdmin(page);
+    await page.goto("/sessions");
+    const blocked = page.getByRole("button", { name: "Delete session Scored Keep E2E" });
+    await expect(blocked).toBeDisabled();
+    await expect(blocked).toHaveAttribute("title", "This session has scored matches, so it can't be deleted.");
+
+    await page.getByRole("button", { name: "Delete session Delete Me E2E" }).click();
+    const dialog = page.getByRole("alertdialog");
+    const confirm = dialog.getByRole("button", { name: "Delete session" });
+    await expect(confirm).toBeDisabled();
+    await dialog.getByLabel('Type "Delete Me E2E" to confirm').fill("Delete Me E2E");
+    await confirm.click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Delete Me E2E" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Scored Keep E2E" })).toBeVisible();
+  });
 });
+

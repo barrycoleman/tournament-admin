@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -183,5 +183,115 @@ describe("SessionsRoute", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add session" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Label cannot be empty");
+  });
+
+  describe("row actions", () => {
+    const SATURDAY = {
+      id: 1,
+      event_id: 1,
+      label: "Saturday",
+      session_date: null,
+      timezone: null,
+      has_scored_matches: false,
+    };
+    const SUNDAY = { ...SATURDAY, id: 2, label: "Sunday" };
+
+    function stub(
+      sessions: (typeof SATURDAY)[],
+      activeId: number | null,
+      onWrite: (path: string, options: { method?: string; body?: unknown }) => unknown = () => null
+    ) {
+      vi.mocked(apiRequest).mockReset();
+      vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
+        const opts = options as { method?: string; body?: unknown } | undefined;
+        if (opts?.method) {
+          const result = onWrite(path, opts);
+          if (result instanceof Error) throw result;
+          return result as never;
+        }
+        if (path === "/api/sessions") return sessions as never;
+        if (path === "/api/event") return { id: 1, name: "Event", active_session_id: activeId } as never;
+        throw new Error(`unexpected request: ${path}`);
+      });
+    }
+
+    it("sets another session active, and offers no Set active on the active one", async () => {
+      let activated: unknown = null;
+      stub([SATURDAY, SUNDAY], 2, (path, options) => {
+        if (path === "/api/event/active-session") activated = options.body;
+        return { id: 1, name: "Event", active_session_id: 1 };
+      });
+      renderRoute();
+
+      const button = await screen.findByRole("button", { name: "Set Saturday as the active session" });
+      expect(
+        screen.queryByRole("button", { name: "Set Sunday as the active session" })
+      ).not.toBeInTheDocument();
+      fireEvent.click(button);
+
+      await waitFor(() => expect(activated).toEqual({ session_id: 1 }));
+    });
+
+    it("deletes a session only after its name is typed", async () => {
+      let deleted: string | null = null;
+      stub([SATURDAY, SUNDAY], null, (path, options) => {
+        if (options.method === "DELETE") deleted = path;
+        return undefined;
+      });
+      renderRoute();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Delete session Saturday" }));
+      const dialog = await screen.findByRole("alertdialog");
+      const confirm = within(dialog).getByRole("button", { name: "Delete session" });
+      expect(confirm).toBeDisabled();
+
+      fireEvent.change(within(dialog).getByLabelText('Type "Saturday" to confirm'), {
+        target: { value: "Saturday" },
+      });
+      expect(confirm).toBeEnabled();
+      fireEvent.click(confirm);
+
+      await waitFor(() => expect(deleted).toBe("/api/sessions/1"));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    });
+
+    it("warns that deleting the active session leaves none active", async () => {
+      stub([SATURDAY], 1);
+      renderRoute();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Delete session Saturday" }));
+
+      expect(await screen.findByRole("alertdialog")).toHaveTextContent(
+        "It's the active session, so no session will be active afterwards."
+      );
+    });
+
+    it("disables Delete for a session with scored matches and says why", async () => {
+      stub([{ ...SATURDAY, has_scored_matches: true }], null);
+      renderRoute();
+
+      const button = await screen.findByRole("button", { name: "Delete session Saturday" });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute(
+        "title",
+        "This session has scored matches, so it can't be deleted."
+      );
+    });
+
+    it("keeps the dialog open with the server's message when the delete is refused", async () => {
+      stub([SATURDAY], null, () => new ApiError(409, "This session has scored matches, so it can't be deleted."));
+      renderRoute();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Delete session Saturday" }));
+      const dialog = await screen.findByRole("alertdialog");
+      fireEvent.change(within(dialog).getByLabelText('Type "Saturday" to confirm'), {
+        target: { value: "Saturday" },
+      });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Delete session" }));
+
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+        "This session has scored matches"
+      );
+    });
   });
 });

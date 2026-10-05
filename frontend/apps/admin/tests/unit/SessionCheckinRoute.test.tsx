@@ -21,6 +21,7 @@ const SESSION: SessionRead = {
   label: "Saturday",
   session_date: null,
   timezone: null,
+  has_scored_matches: false,
 };
 
 function TestLayout() {

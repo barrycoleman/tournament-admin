@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { apiRequest } from "@tournament-admin/shared";
@@ -23,6 +23,7 @@ export function SessionFieldsRoute() {
   const [firstFieldName, setFirstFieldName] = useState("");
   const [newFieldNames, setNewFieldNames] = useState<Record<number, string>>({});
   const [newSetName, setNewSetName] = useState("");
+  const [copySourceId, setCopySourceId] = useState("");
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [cardErrors, setCardErrors] = useState<Record<number, string>>({});
   const generic = t("errors.generic");
@@ -39,6 +40,22 @@ export function SessionFieldsRoute() {
     queryKey: ["divisions"],
     queryFn: () => apiRequest<Division[]>("/api/divisions"),
   });
+
+  const { data: sessions } = useQuery({
+    queryKey: ["sessions"],
+    queryFn: () => apiRequest<SessionRead[]>("/api/sessions"),
+  });
+  const otherSessions = (sessions ?? []).filter((candidate) => candidate.id !== session.id);
+  // Shares each session's own Fields-tab cache key, so this is usually free.
+  const otherFieldSets = useQueries({
+    queries: otherSessions.map((candidate) => ({
+      queryKey: ["fieldSets", candidate.id],
+      queryFn: () => apiRequest<FieldSetRead[]>(`/api/field-sets?session_id=${candidate.id}`),
+    })),
+  });
+  const copySources = otherSessions.filter(
+    (_candidate, index) => (otherFieldSets[index]?.data?.length ?? 0) > 0
+  );
 
   function refresh() {
     queryClient.invalidateQueries({ queryKey: ["fieldSets", session.id] });
@@ -74,6 +91,18 @@ export function SessionFieldsRoute() {
     },
     onError: (error, { fieldSetId }) => {
       if (fieldSetId !== null) setCardError(fieldSetId, apiErrorMessage(error, generic));
+    },
+  });
+
+  const copyMutation = useMutation({
+    mutationFn: (sourceSessionId: number) =>
+      apiRequest<FieldSetRead[]>(`/api/sessions/${session.id}/copy-fields`, {
+        method: "POST",
+        body: { source_session_id: sourceSessionId },
+      }),
+    onSuccess: () => {
+      setCopySourceId("");
+      refresh();
     },
   });
 
@@ -167,6 +196,43 @@ export function SessionFieldsRoute() {
           {createFieldMutation.isError && createFieldMutation.variables?.fieldSetId === null && (
             <p className="alert alert-danger" role="alert">
               {apiErrorMessage(createFieldMutation.error, generic)}
+            </p>
+          )}
+          {copySources.length > 0 && (
+            <form
+              className="form-actions"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (copySourceId) copyMutation.mutate(Number(copySourceId));
+              }}
+            >
+              <label className="field-set-card__division">
+                <span>{t("sessions.fields.copyFromLabel")}</span>
+                <select
+                  className="select"
+                  value={copySourceId}
+                  onChange={(event) => setCopySourceId(event.target.value)}
+                >
+                  <option value="">{t("sessions.fields.copyFromPlaceholder")}</option>
+                  {copySources.map((source) => (
+                    <option key={source.id} value={source.id}>
+                      {source.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="submit"
+                className="btn btn-small"
+                disabled={!copySourceId || copyMutation.isPending}
+              >
+                {t("sessions.fields.copyAction")}
+              </button>
+            </form>
+          )}
+          {copyMutation.isError && (
+            <p className="alert alert-danger" role="alert">
+              {apiErrorMessage(copyMutation.error, generic)}
             </p>
           )}
         </div>
