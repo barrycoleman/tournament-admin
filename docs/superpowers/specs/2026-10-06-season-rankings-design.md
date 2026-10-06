@@ -19,7 +19,8 @@ A league is an event with more than one session. Each session already ranks its 
 
 - **Only qualification matches count.** Finals never count toward any ranking, even a mid-season finals. Practice never counts either. A mid-season finals may feed awards later, but it has no bearing on standings.
 - **Head-to-head season standings are total win points** (2 for a win, 1 for a tie, 0 for a loss) over every qualification match in every session. Nothing is ever dropped. A team that misses a session simply earns fewer win points; that is the penalty.
-- **Cooperative session rankings** drop the lowest-scoring matches. By default the count comes from the tier table (0–3 played → 0 dropped, 4–7 → 1, 8–11 → 2, 12–15 → 3, 16+ → 4). The admin may instead choose **no drops** or **drop the lowest P**.
+- **Cooperative session rankings** drop the lowest-scoring matches. By default the drop allowance comes from the tier table, applied to the team's *scheduled* qualification matches (0–3 scheduled → 0 dropped, 4–7 → 1, 8–11 → 2, 12–15 → 3, 16+ → 4). The admin may instead choose **no drops** or **drop the lowest P**.
+- **Drops are earned as matches are scored, measured against the schedule.** With S scheduled matches and an allowance of P, nothing is dropped until more than S − P matches are scored. Each match scored after that earns one drop. For example, 10 scheduled with P = 3 drops nothing through the 7th scored match, and one more on each of the 8th, 9th and 10th.
 - **Cooperative season rankings** have three admin settings:
   - **Keep the best N matches.** Blank means all.
   - **"Only use matches counted in a session ranking."** A match its session dropped is left out of the season.
@@ -134,13 +135,14 @@ These are today's filters, applied identically to the session and the season.
 
 ### 2.2 Cooperative session ranking
 
-`session_drops(records, settings) -> set[int]` returns the match ids dropped for one team in one session.
+`session_drops(records, scheduled, settings) -> set[int]` returns the match ids dropped for one team in one session. `scheduled` is the number of qualification matches the team is scheduled into in that session, whatever their status. Finals and practice matches are excluded, as in 2.1.
 
-1. **Drop count D:**
-   - `tiered`: `suggest_exclusion_count(len(records))`, counting every record, forced zeroes included.
+1. **Drop allowance P:**
+   - `tiered`: `suggest_exclusion_count(scheduled)`.
    - `none`: 0.
    - `lowest`: `session_drop_count`.
-2. **Choosing the drops.** Sort the records by `(score, match_id)` ascending. Walk the list and drop each record that is **droppable at session level** until D are dropped or the list runs out.
+2. **Drops earned so far.** D = min(P, max(0, len(records) − (scheduled − P))). Drops are earned only as the last P scheduled matches are scored. For example, with 10 scheduled and P = 3, nothing is dropped through the 7th scored match. The 8th, 9th and 10th each earn one drop. Extending the schedule raises `scheduled`, and the next recompute reflects it.
+3. **Choosing the drops.** Sort the records by `(score, match_id)` ascending. Walk the list and drop each record that is **droppable at session level** until D are dropped or the list runs out.
    - **Droppable** means neither no-show nor DQ, or a no-show with `session_drop_no_show`, or a DQ with `session_drop_dq`.
    - The `match_id` tie-break only makes the result repeatable; dropping either of two equal scores gives the same average.
    - If every record would be dropped (e.g. `lowest` with P ≥ matches played), the drops stop when one record is left.
@@ -152,7 +154,7 @@ These are today's filters, applied identically to the session and the season.
 `season_score(records, session_drops_by_match, settings) -> float`, for one team across all sessions:
 
 1. **Pool.** All of the team's records.
-   - With `season_only_session_counted`, remove every record whose match was dropped by its session (`session_drops_by_match`, computed with 2.2 per session).
+   - With `season_only_session_counted`, remove every record whose match was dropped by its session. The `session_drops_by_match` input is computed with 2.2 per session, using that session's scheduled count for the team.
    - **Except:** a record that is **not droppable at season level** stays in the pool even if its session dropped it. Season-droppable uses the same rule as session-droppable, with the season flags.
 2. **Forced** = pool records not droppable at season level. **Others** = the rest of the pool.
 3. **Kept.**
@@ -189,6 +191,8 @@ Callers:
 - **Session deletion** only ever removes unscored sessions, so it needs no recompute.
 
 A team appears in a ranking only if it has at least one qualifying match record in that scope.
+
+Both cooperative recomputes need each team's scheduled count per session. That count is the number of qualification matches, in any status, whose alliances include the team. It is gathered in one query per scope alongside the records.
 
 ## Section 3: Admin UI
 
@@ -233,7 +237,7 @@ A new `panel` section on Event Setup. It is shown only when `game_model == "coop
 
 **Session drops:**
 - Radio buttons:
-  - "Drop by matches played (recommended)". The tier table appears as helper text.
+  - "Drop by matches scheduled (recommended)". The tier table appears as helper text, with a note that drops are earned as the last scheduled matches are scored.
   - "No drops".
   - "Drop the lowest [P] matches". The number input is enabled only when this option is selected.
 - Checkboxes: "No-shows can be dropped", "DQs can be dropped".
@@ -265,8 +269,9 @@ A new `panel` section on Event Setup. It is shown only when `game_model == "coop
 ## Section 5: Testing
 
 **pytest — pure rules (`tests/test_ranking_rules.py`):**
-- Tier boundaries: 0, 3, 4, 7, 8, 11, 12, 15, 16 and 30 matches.
-- `none` and `lowest`. `lowest` with P ≥ played keeps one.
+- Tier boundaries on scheduled count: 0, 3, 4, 7, 8, 11, 12, 15, 16 and 30 matches.
+- Earned drops: 10 scheduled, P = 3, at 5, 7, 8, 9 and 10 scored gives 0, 0, 1, 2 and 3 drops. 16 scheduled under `tiered` earns its 4 drops on the 13th to 16th scored.
+- `none` and `lowest`. `lowest` with P ≥ scheduled still keeps one record.
 - A protected no-show or DQ is skipped, so the next-lowest is dropped instead. Each flag is tested independently.
 - Deterministic tie-break on equal scores.
 - Every worked example in 2.3, plus:
@@ -282,7 +287,8 @@ A new `panel` section on Event Setup. It is shown only when `game_model == "coop
   - `game_model` in the response
   - a save recomputes existing session and season rows
 - Cooperative across two sessions:
-  - session rows use the tier table by default
+  - session rows use the tier table on scheduled matches by default, dropping nothing mid-session until the earned threshold is reached
+  - extending a round raises the scheduled count and changes the drops on the next recompute
   - season rows follow N, the minimum and the checkbox
   - finals and practice matches never change either
 - Head-to-head across two sessions:
