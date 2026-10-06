@@ -17,6 +17,7 @@ import { SessionCheckinRoute } from "./routes/SessionCheckinRoute";
 import { SessionFieldsRoute } from "./routes/SessionFieldsRoute";
 import { SessionScheduleRoute } from "./routes/SessionScheduleRoute";
 import { SessionMatchesRoute } from "./routes/SessionMatchesRoute";
+import { SessionRankingsRoute } from "./routes/SessionRankingsRoute";
 import { FrontDeskCheckinRoute } from "./routes/FrontDeskCheckinRoute";
 
 async function isPickerMode(): Promise<boolean> {
@@ -130,6 +131,7 @@ export const router = createBrowserRouter([
           { path: "fields", element: <SessionFieldsRoute /> },
           { path: "schedule", element: <SessionScheduleRoute /> },
           { path: "matches", element: <SessionMatchesRoute /> },
+          { path: "rankings", element: <SessionRankingsRoute /> },
         ],
       },
     ],

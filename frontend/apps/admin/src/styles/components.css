@@ -1114,3 +1114,34 @@
 .fit-status--stale {
   opacity: 0.6;
 }
+
+/* Rankings */
+.table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.rankings-group + .rankings-group {
+  margin-top: var(--space-6);
+}
+.rankings-rules {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-4);
+}
+.settings-group {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--space-6);
+}
+.settings-group legend {
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.settings-number {
+  max-width: 8rem;
+}

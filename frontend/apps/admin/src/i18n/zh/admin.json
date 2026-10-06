@@ -21,6 +21,7 @@
     "eventSetupLink": "赛事与插件",
     "rolesLink": "角色密码",
     "dismiss": "关闭",
+    "seasonRankingsLink": "赛季排名",
     "divisionsLink": "分组",
     "teamsLink": "队伍",
     "sessionsLink": "场次",
@@ -119,6 +120,7 @@
     "checkinTab": "签到",
     "fieldsTab": "场地",
     "matchesTab": "比赛",
+    "rankingsTab": "排名",
     "scheduleTab": "赛程",
     "schedule": {
       "readiness": {
@@ -362,6 +364,54 @@
     "submit": "更新密码",
     "success": "密码已更新。",
     "genericError": "出错了。"
+  },
+  "rankings": {
+    "loading": "正在加载排名...",
+    "empty": "暂无排名。资格赛比赛计分后将显示排名。",
+    "noDivision": "无分组",
+    "tableLabel": "排名",
+    "columnRank": "名次",
+    "columnTeam": "队伍",
+    "columnName": "名称",
+    "columnScore": "得分",
+    "columnMatchesPlayed": "已赛场次",
+    "columnWinPoints": "胜点",
+    "columnStrength": "赛程强度",
+    "seasonHeading": "赛季排名",
+    "seasonTabsLabel": "排名类型",
+    "teamworkTab": "团队赛",
+    "rules": {
+      "plainAverage": "所有资格赛比赛的平均分。",
+      "keepBest_other": "取最佳 {{count}} 场",
+      "minimum": "最少 {{count}} 场",
+      "onlySessionCounted": "仅使用计入场次排名的比赛"
+    },
+    "settings": {
+      "heading": "排名设置",
+      "intro": "这些设置适用于所有分组。缺席或取消资格始终记 0 分；这些设置只决定该 0 分能否被去掉。",
+      "sessionLegend": "场次排名",
+      "modeTiered": "按已排比赛数去掉（推荐）",
+      "tieredHint": "已排 0–3 场：不去掉 · 4–7：1 · 8–11：2 · 12–15：3 · 16 场及以上：4。去掉的名额在最后几场已排比赛计分时获得。",
+      "modeNone": "不去掉",
+      "modeLowest": "去掉固定数量的最低分比赛",
+      "dropCountLabel": "去掉的场数",
+      "noShowLabel": "缺席可被去掉",
+      "dqLabel": "取消资格可被去掉",
+      "seasonLegend": "赛季排名",
+      "keepBestLabel": "保留最佳场数",
+      "keepBestHint": "留空则计入所有比赛。",
+      "onlySessionCountedLabel": "仅使用计入场次排名的比赛",
+      "minimumLabel": "最少场数",
+      "minimumHint": "计入场数不足的队伍，其余场次记 0 分。0 表示没有最少场数。",
+      "save": "保存排名设置",
+      "saved": "设置已保存，排名已重新计算。",
+      "errors": {
+        "dropCount": "请输入 1 或以上的整数。",
+        "keepBest": "请输入 1 或以上的整数，或留空。",
+        "minimum": "请输入 0 或以上的整数。",
+        "minimumAboveKeepBest": "最少场数不能多于保留的场数。"
+      }
+    }
   },
   "debugPanel": {
     "toggle": "调试事件",

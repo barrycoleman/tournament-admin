@@ -138,3 +138,33 @@ export interface ParticipationRead {
   team_id: number;
   checked_in: boolean;
 }
+
+export type GameModel = "head_to_head" | "cooperative_score";
+export type SessionDropMode = "tiered" | "none" | "lowest";
+
+export interface RankingRead {
+  session_id: number | null;
+  division_id: number | null;
+  team_id: number;
+  win_points: number;
+  strength_of_schedule: number;
+  average_score: number;
+  matches_played: number;
+  rank: number;
+}
+
+export interface RankingSettingsValues {
+  session_drop_mode: SessionDropMode;
+  session_drop_count: number;
+  session_drop_no_show: boolean;
+  session_drop_dq: boolean;
+  season_keep_best: number | null;
+  season_only_session_counted: boolean;
+  season_minimum: number;
+  season_drop_no_show: boolean;
+  season_drop_dq: boolean;
+}
+
+export interface RankingSettingsRead extends RankingSettingsValues {
+  game_model: GameModel | null;
+}

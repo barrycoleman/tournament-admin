@@ -21,6 +21,7 @@
     "eventSetupLink": "Event & plugins",
     "rolesLink": "Role passwords",
     "dismiss": "Dismiss",
+    "seasonRankingsLink": "Season rankings",
     "divisionsLink": "Divisions",
     "teamsLink": "Teams",
     "sessionsLink": "Sessions",
@@ -119,6 +120,7 @@
     "checkinTab": "Check-In",
     "fieldsTab": "Fields",
     "matchesTab": "Matches",
+    "rankingsTab": "Rankings",
     "scheduleTab": "Schedule",
     "schedule": {
       "readiness": {
@@ -364,6 +366,55 @@
     "submit": "Update password",
     "success": "Password updated.",
     "genericError": "Something went wrong."
+  },
+  "rankings": {
+    "loading": "Loading rankings...",
+    "empty": "No rankings yet. Rankings appear once qualification matches are scored.",
+    "noDivision": "No division",
+    "tableLabel": "Rankings",
+    "columnRank": "Rank",
+    "columnTeam": "Team",
+    "columnName": "Name",
+    "columnScore": "Score",
+    "columnMatchesPlayed": "Matches played",
+    "columnWinPoints": "Win points",
+    "columnStrength": "Strength of schedule",
+    "seasonHeading": "Season rankings",
+    "seasonTabsLabel": "Ranking type",
+    "teamworkTab": "Teamwork",
+    "rules": {
+      "plainAverage": "Average of every qualification match.",
+      "keepBest_one": "best {{count}} match",
+      "keepBest_other": "best {{count}} matches",
+      "minimum": "minimum {{count}}",
+      "onlySessionCounted": "only matches counted in a session ranking"
+    },
+    "settings": {
+      "heading": "Ranking settings",
+      "intro": "These apply to every division. A no-show or DQ always scores 0; these settings only decide whether that zero can be dropped.",
+      "sessionLegend": "Session rankings",
+      "modeTiered": "Drop by matches scheduled (recommended)",
+      "tieredHint": "0–3 scheduled: none · 4–7: 1 · 8–11: 2 · 12–15: 3 · 16 or more: 4. Drops are earned as the last scheduled matches are scored.",
+      "modeNone": "No drops",
+      "modeLowest": "Drop a set number of lowest matches",
+      "dropCountLabel": "Matches to drop",
+      "noShowLabel": "No-shows can be dropped",
+      "dqLabel": "DQs can be dropped",
+      "seasonLegend": "Season rankings",
+      "keepBestLabel": "Keep best matches",
+      "keepBestHint": "Leave blank to count every match.",
+      "onlySessionCountedLabel": "Only use matches counted in a session ranking",
+      "minimumLabel": "Minimum matches",
+      "minimumHint": "Teams with fewer counted matches get zeroes for the rest. 0 means no minimum.",
+      "save": "Save ranking settings",
+      "saved": "Settings saved. Rankings recalculated.",
+      "errors": {
+        "dropCount": "Enter a whole number of 1 or more.",
+        "keepBest": "Enter a whole number of 1 or more, or leave blank.",
+        "minimum": "Enter a whole number of 0 or more.",
+        "minimumAboveKeepBest": "Minimum can't be more than the number of matches kept."
+      }
+    }
   },
   "debugPanel": {
     "toggle": "Debug events",
