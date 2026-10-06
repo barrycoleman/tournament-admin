@@ -1145,3 +1145,7 @@
 .settings-number {
   max-width: 8rem;
 }
+
+.field__error {
+  color: var(--color-danger);
+}

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import QRCode from "qrcode";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
+import { RankingSettingsPanel } from "../rankings/RankingSettingsPanel";
+import { RANKING_SETTINGS_KEY } from "../rankings/useRankingSettings";
 import type { EventRead, PluginSummary, ServerInfo } from "../types";
 
 function PluginList({
@@ -49,7 +51,10 @@ function PluginList({
         method: "POST",
         body: { name },
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event"] });
+      queryClient.invalidateQueries({ queryKey: RANKING_SETTINGS_KEY });
+    },
   });
 
   function handleFileChange(changeEvent: ChangeEvent<HTMLInputElement>) {
@@ -159,6 +164,7 @@ export function EventSetupRoute() {
         installLabelKey="eventSetup.installLabel"
         installSubmitKey="eventSetup.installSchedulerSubmit"
       />
+      <RankingSettingsPanel />
       <ServerInfoPanel />
     </div>
   );
