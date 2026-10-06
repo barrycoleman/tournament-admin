@@ -12,6 +12,7 @@ import { SettingsRolesRoute } from "./routes/SettingsRolesRoute";
 import { DivisionsRoute } from "./routes/DivisionsRoute";
 import { TeamsRoute } from "./routes/TeamsRoute";
 import { SessionsRoute } from "./routes/SessionsRoute";
+import { SeasonRankingsRoute } from "./routes/SeasonRankingsRoute";
 import { SessionDetailLayout } from "./routes/SessionDetailLayout";
 import { SessionCheckinRoute } from "./routes/SessionCheckinRoute";
 import { SessionFieldsRoute } from "./routes/SessionFieldsRoute";
@@ -118,6 +119,7 @@ export const router = createBrowserRouter([
       { path: "divisions", element: <DivisionsRoute /> },
       { path: "teams", element: <TeamsRoute /> },
       { path: "sessions", element: <SessionsRoute /> },
+      { path: "rankings", element: <SeasonRankingsRoute /> },
       { path: "checkin", element: <FrontDeskCheckinRoute /> },
       {
         path: "sessions/:sessionId",

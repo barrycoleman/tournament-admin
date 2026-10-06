@@ -95,6 +95,9 @@ export function AppShell() {
             <NavLink to="/sessions" className={navLinkClassName}>
               {t("shell.sessionsLink")}
             </NavLink>
+            <NavLink to="/rankings" className={navLinkClassName}>
+              {t("shell.seasonRankingsLink")}
+            </NavLink>
           </nav>
         )}
         {role === "front_desk" && (
