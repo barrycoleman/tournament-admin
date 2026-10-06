@@ -48,3 +48,24 @@ export async function buildBalancedSchedulerPluginZip(): Promise<string> {
   });
   return outPath;
 }
+
+const COOPERATIVE_GAME_PLUGIN_DIR = path.resolve(
+  __dirname,
+  "../../../../../../server/tests/fixtures/plugins/games/cooperative-game"
+);
+
+/** Only manifest.json and plugin.py, for the same reason as the balanced scheduler's zip. */
+export async function buildCooperativeGamePluginZip(): Promise<string> {
+  const outPath = path.join(os.tmpdir(), `cooperative-game-${Date.now()}.zip`);
+  await new Promise<void>((resolve, reject) => {
+    const output = createWriteStream(outPath);
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    output.on("close", () => resolve());
+    archive.on("error", reject);
+    archive.pipe(output);
+    archive.file(path.join(COOPERATIVE_GAME_PLUGIN_DIR, "manifest.json"), { name: "manifest.json" });
+    archive.file(path.join(COOPERATIVE_GAME_PLUGIN_DIR, "plugin.py"), { name: "plugin.py" });
+    void archive.finalize();
+  });
+  return outPath;
+}

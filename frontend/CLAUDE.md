@@ -132,7 +132,7 @@ Beyond the bootstrap/auth screens above, the authenticated app
 create/edit, plus per-row Set active and Delete; Delete is disabled with a
 `title` explaining why when `SessionRead.has_scored_matches`, and otherwise
 asks for the session's name in `ConfirmDialog`), `/sessions/:sessionId` (index-redirects to
-`/sessions/:sessionId/checkin`), `/sessions/:sessionId/{checkin,fields,schedule,matches}` (the session
+`/sessions/:sessionId/checkin`), `/sessions/:sessionId/{checkin,fields,schedule,matches,rankings}` (the session
 tabs, all rendered through `SessionDetailLayout`'s tab-strip `Outlet`
 context — see the session-checkin and fields-schedule-ui design specs;
 the layout's header also carries the "Set as active session" control; the Fields tab's empty state offers "copy fields from" any other session that has field sets, via `POST /api/sessions/{id}/copy-fields`), and `/checkin` (a
@@ -177,6 +177,20 @@ the Schedule and Matches tabs share, kept live off `/ws/session/{id}`;
 `DELETE /api/schedule` broadcasts nothing, so anything that clears a round
 invalidates that key itself. Match times always render in the session's
 timezone (`src/matchTime.ts`), never the browser's.
+
+Rankings live in `src/rankings/`. `useRankingGroups(scope)` fetches every
+division's rankings plus `division_id = null` (a single-division event's
+scheduled matches carry no division) and returns only non-empty groups;
+`RankingsView` renders them through `RankingTables`, with columns chosen by
+`game_model` from `GET /api/ranking-settings` (`useRankingSettings`, key
+`["rankingSettings"]`). The session Rankings tab invalidates
+`["rankings", sessionId]` off `/ws/session/{id}`; `/rankings` (Season
+rankings, a Teamwork tab for now — skills tabs come later) invalidates
+`["rankings", "season"]` off `/ws/active-session`, the only channel that
+carries event-wide `ranking_updated`. Event Setup's `RankingSettingsPanel`
+renders only for `cooperative_score`; its form logic (`settingsDraft.ts`) is
+pure and unit-tested, and choosing a game plugin invalidates the settings
+query so the panel appears without a reload.
 
 `AppShell.tsx`'s nav is gated per role, the same pattern repeated for
 each: `role === "admin"` renders the full admin nav (Divisions, Teams,
@@ -249,6 +263,12 @@ be deleted) must sort after `team*.spec.ts` — the team-grid specs assume
 a small roster and break once their new row is virtualized out of view.
 That is why the schedule spec is named `z_sessionSchedule.spec.ts` (it also
 deletes any extra divisions earlier specs left, to start single-division).
+
+A scenario the shared event can't host (its game plugin can't change once
+chosen) starts its own backend and Vite server with
+`tests/e2e/fixtures/isolatedServer.ts`, as `cooperativeRankings.spec.ts`
+does on ports 8125/5185. `zz_seasonRankings.spec.ts` runs last for the same
+reason as `z_sessionSchedule.spec.ts`.
 
 `playwright.config.ts` uses `channel: "chrome"` — the machine's installed
 Google Chrome — rather than Playwright's own managed Chromium download,
