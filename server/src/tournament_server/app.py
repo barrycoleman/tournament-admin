@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from tournament_server import audit, device_auth  # noqa: F401  (audit registers
 from tournament_server import models  # noqa: F401  (registers all tables)
 from tournament_server import match_control, realtime
 from tournament_server.db import make_engine, make_session_factory, utc_now
-from tournament_server.migrations import ensure_schema_current
+from tournament_server.migrations import MigrationOutcome, ensure_schema_current
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
 from tournament_server.services.role_credentials import backfill_role_credentials
@@ -127,6 +128,29 @@ async def _recover_in_flight_matches(app: FastAPI) -> None:
         db.close()
 
 
+def _recompute_rankings_after_upgrade(app: FastAPI, session_factory) -> None:
+    """Rebuild every ranking row once after a schema upgrade.
+
+    Migrations can change the ranking rules or add scopes (season rows) without
+    touching the stored rows; nothing else recomputes them until a score is
+    saved. Skips quietly when the event or its game plugin is missing, and
+    never fails startup.
+    """
+    from tournament_server.services.ranking import recompute_all_rankings
+
+    try:
+        with session_factory() as db:
+            event_row = db.execute(select(Event)).scalars().first()
+            if event_row is None or event_row.game_plugin_name is None:
+                return
+            plugin = app.state.game_plugins.get(event_row.game_plugin_name)
+            if plugin is None:
+                return
+            recompute_all_rankings(app, db, plugin, event_row.id)
+    except Exception:  # noqa: BLE001 - a ranking rebuild must not block startup
+        logging.getLogger(__name__).exception("Ranking recompute after upgrade failed")
+
+
 def create_app(
     db_path: str | None = None,
     plugins_root: str | None = None,
@@ -154,7 +178,7 @@ def create_app(
 
     engine = make_engine(settings.db_path)
     session_factory = make_session_factory(engine)
-    ensure_schema_current(engine, settings.db_path)
+    migration_outcome = ensure_schema_current(engine, settings.db_path)
 
     # Self-heal the "every event has >= 1 division" invariant at startup,
     # independent of which ensure_schema_current path was taken above (a
@@ -195,6 +219,9 @@ def create_app(
     app.state.picker_config_path = config_path if config_path is not None else resolve_config_path()
     realtime.init_realtime_state(app)
     match_control.init_match_timer_state(app)
+
+    if migration_outcome is MigrationOutcome.UPGRADED:
+        _recompute_rankings_after_upgrade(app, session_factory)
 
     @app.middleware("http")
     async def actor_middleware(request: Request, call_next):

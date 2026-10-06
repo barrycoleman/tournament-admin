@@ -196,3 +196,46 @@ def test_head_to_head_season_totals_win_points_across_sessions(client):
     assert {t: season[t]["strength_of_schedule"] for t in (t1, t2, t3)} == {t1: 2.0, t2: 8.0, t3: 1.0}
     assert [season[t]["rank"] for t in (t1, t3, t2)] == [1, 2, 3]
     assert all(row["session_id"] is None for row in season.values())
+
+
+def test_finals_scoring_leaves_season_rows_unchanged(cooperative_client):
+    client = cooperative_client
+    t1, t2 = _cooperative_event(client)
+    s1 = _session(client, "Session 1")
+    client.post("/api/fields", json={"session_id": s1, "name": "Field 1"})
+    extra = [
+        client.post("/api/teams", json={"number": str(n), "name": f"Team {n}"}).json()["id"]
+        for n in (3, 4)
+    ]
+    teams = [t1, t2, *extra]
+    for number, (team, objects) in enumerate(zip(teams, (40, 30, 20, 10)), start=1):
+        _score_cooperative(client, _match(client, s1, number, team, team), objects)
+    season_before = _rows(client, event_wide="true")
+    assert set(season_before) == set(teams)
+
+    started = client.post("/api/finals/start", json={"session_id": s1, "bracket_size": 2})
+    assert started.status_code in (200, 201), started.text
+    bracket = started.json()
+    finals_match = client.get(f"/api/matches/{bracket['runs'][0]['match_id']}").json()
+    _score_cooperative(client, finals_match, 5, station=finals_match["alliances"][0]["station"])
+    _put_settings(client)  # recomputes every scope
+
+    assert _rows(client, event_wide="true") == season_before
+
+
+def test_scoring_does_not_create_a_settings_row_but_get_returns_defaults(cooperative_client):
+    from sqlalchemy import func, select
+
+    from tournament_server.models.ranking_settings import RankingSettings
+
+    client = cooperative_client
+    t1, t2 = _cooperative_event(client)
+    s1 = _session(client, "Session 1")
+    _score_cooperative(client, _match(client, s1, 1, t1, t2), 5)
+
+    factory = client.app.state.session_factory
+    with factory() as db:
+        assert db.execute(select(func.count()).select_from(RankingSettings)).scalar_one() == 0
+    response = client.get("/api/ranking-settings")
+    assert response.status_code == 200
+    assert {k: response.json()[k] for k in DEFAULT_SETTINGS} == DEFAULT_SETTINGS

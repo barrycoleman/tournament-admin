@@ -172,7 +172,7 @@ id, or `None` if it has zero or more than one) lets both of those queries
 treat an *omitted* `division_id` request parameter as "the event's sole
 division" specifically for `Team` rows, while leaving every other
 entity's `division_id` resolution (`Match`, `FieldSet`, `Ranking`,
-`RankingConfiguration`, `FinalsBracket` all key off their own request
+`FinalsBracket` all key off their own request
 parameter, never off a team's) and every multi-division event's behavior
 completely unchanged.
 
@@ -315,7 +315,8 @@ for that match while the other alliance's teams keep their real score).
 `strength_of_schedule` stay at their defaults and are meaningless for this
 game model. A game plugin's `rank_teams()` receives a different
 `team_results` shape depending on its declared `game_model` — see
-`services/ranking.py`'s `_compute_cooperative_score_team_results`.
+`services/ranking.py`'s `_cooperative_session_stats` / `_cooperative_season_stats`
+(the pure rules are in `services/ranking_rules.py`).
 
 Ranking rules live in `RankingSettings` (`GET`/`PUT /api/ranking-settings`,
 one row per event, shared by every division, created with defaults on first

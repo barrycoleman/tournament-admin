@@ -671,3 +671,88 @@ def test_ranking_configuration_converts_to_ranking_settings(tmp_path, configurat
         assert len(rows) == 1
         assert dict(rows[0]) == {**expected, "season_only_session_counted": 0}
     assert "ranking_configurations" not in inspect(engine).get_table_names()
+
+
+def test_upgrade_recomputes_rankings_once_at_startup(tmp_path):
+    """Migrations never touch stored ranking rows, so a database upgraded from before
+    season rankings would show an empty season until the next score save. create_app
+    rebuilds the rankings once after an upgrade."""
+    import json
+    import shutil
+
+    db_path = str(tmp_path / "upgrade_rankings.db")
+    command.upgrade(_make_alembic_config(db_path), "f6b2d4c8e1a7")
+
+    raw_engine = create_engine(f"sqlite:///{db_path}")
+    with raw_engine.connect() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO events (id, name, active_session_id, game_plugin_name, created_at) "
+                "VALUES (1, 'League', 1, 'example-game', '2026-01-01 00:00:00')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO sessions (id, event_id, label, session_date, timezone) "
+                "VALUES (1, 1, 'Saturday', '2026-11-07', 'America/Los_Angeles')"
+            )
+        )
+        for team_id in (1, 2):
+            connection.execute(
+                text(
+                    "INSERT INTO teams (id, event_id, number, name, tiebreaker_seed) "
+                    "VALUES (:id, 1, :number, :name, :id)"
+                ),
+                {"id": team_id, "number": str(100 + team_id), "name": f"Team {team_id}"},
+            )
+        connection.execute(
+            text(
+                "INSERT INTO matches (id, session_id, division_id, round_type, match_number, "
+                "status, phase, paused) VALUES (1, 1, NULL, 'qualification', 1, 'completed', "
+                "'not_started', 0)"
+            )
+        )
+        # Team 1 scores 3 * 5 = 15; team 2 scores 3 * 1 + 10 = 13 (see the example plugin).
+        sheets = {1: {"high_balls": 5, "auto_winner": "tie"},
+                  2: {"high_balls": 1, "auto_winner": "red"}}
+        for alliance_id, station in ((1, "red"), (2, "blue")):
+            connection.execute(
+                text("INSERT INTO alliances (id, match_id, station) VALUES (:id, 1, :station)"),
+                {"id": alliance_id, "station": station},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO alliance_teams (alliance_id, team_id) VALUES (:id, :id)"
+                ),
+                {"id": alliance_id},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO score_records (alliance_id, plugin_name, plugin_version, "
+                    "data_json, no_show, dq, sitting, submitted_at) VALUES (:id, 'example-game', "
+                    "'1.0.0', :data, 0, 0, 0, '2026-11-07 17:00:00')"
+                ),
+                {"id": alliance_id, "data": json.dumps(sheets[alliance_id])},
+            )
+        connection.execute(
+            text("INSERT INTO role_credentials (role, password_hash) VALUES ('admin', :hash)"),
+            {"hash": hash_password(TEST_PASSWORD)},
+        )
+        assert connection.execute(text("SELECT COUNT(*) FROM rankings")).scalar_one() == 0
+        connection.commit()
+    raw_engine.dispose()
+
+    from conftest import FIXTURE_EXAMPLE_PLUGIN
+
+    plugins_root = tmp_path / "plugins"
+    shutil.copytree(FIXTURE_EXAMPLE_PLUGIN, plugins_root / "games" / "example-game")
+
+    app = create_app(db_path=db_path, plugins_root=str(plugins_root))
+    with TestClient(app) as client:
+        login = client.post("/api/auth/login", json={"role": "admin", "password": TEST_PASSWORD})
+        assert login.status_code == 200, login.text
+        client.headers["Authorization"] = f"Bearer {login.json()['access_token']}"
+        response = client.get("/api/rankings", params={"event_wide": "true"})
+    assert response.status_code == 200, response.text
+    rows = response.json()
+    assert [(row["team_id"], row["rank"]) for row in rows] == [(1, 1), (2, 2)]

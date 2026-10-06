@@ -37,7 +37,14 @@ def load_rules(db: Session) -> RankingRules:
     event = get_the_event(db)
     if event is None:
         return RankingRules()
-    return rules_from_settings(load_ranking_settings(db, event.id))
+    # Read-only: this runs on the score-save path, where two concurrent first
+    # saves inserting a defaults row would collide on the unique event index.
+    settings = db.execute(
+        select(RankingSettings).where(RankingSettings.event_id == event.id)
+    ).scalars().first()
+    if settings is None:
+        return RankingRules()
+    return rules_from_settings(settings)
 
 
 def settings_error(rules: RankingRules) -> str | None:
