@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from alembic import command
 from auth_helpers import TEST_PASSWORD
 from fastapi.testclient import TestClient
@@ -592,3 +594,79 @@ def test_playing_windows_upgrade_keeps_existing_schedule_generations(tmp_path):
     assert round_["match_count"] == 2
     assert round_["locked"] is False
     assert round_["outside_playing_windows"] is False
+
+
+@pytest.mark.parametrize(
+    "configurations, expected",
+    [
+        (
+            [(1, None, "exclude", 2, 1, 0)],
+            {"session_drop_mode": "lowest", "session_drop_count": 2,
+             "session_drop_no_show": 1, "session_drop_dq": 0,
+             "season_keep_best": None, "season_minimum": 0,
+             "season_drop_no_show": 1, "season_drop_dq": 0},
+        ),
+        (
+            [(1, None, "include", 5, 0, 1)],
+            {"session_drop_mode": "tiered", "session_drop_count": 1,
+             "session_drop_no_show": 0, "session_drop_dq": 1,
+             "season_keep_best": 5, "season_minimum": 5,
+             "season_drop_no_show": 0, "season_drop_dq": 1},
+        ),
+        (
+            [(1, 1, "exclude", 1, 0, 0)],
+            {"session_drop_mode": "lowest", "session_drop_count": 1,
+             "session_drop_no_show": 0, "session_drop_dq": 0,
+             "season_keep_best": None, "season_minimum": 0,
+             "season_drop_no_show": 0, "season_drop_dq": 0},
+        ),
+        (
+            # The event-wide row wins over a lower-id per-division row.
+            [(1, 1, "include", 3, 0, 0), (2, None, "exclude", 1, 0, 0)],
+            {"session_drop_mode": "lowest", "session_drop_count": 1,
+             "session_drop_no_show": 0, "session_drop_dq": 0,
+             "season_keep_best": None, "season_minimum": 0,
+             "season_drop_no_show": 0, "season_drop_dq": 0},
+        ),
+        ([], None),
+    ],
+)
+def test_ranking_configuration_converts_to_ranking_settings(tmp_path, configurations, expected):
+    db_path = str(tmp_path / "ranking_configuration.db")
+    config = _make_alembic_config(db_path)
+    command.upgrade(config, "f6b2d4c8e1a7")  # the revision before ranking_settings
+
+    raw_engine = create_engine(f"sqlite:///{db_path}")
+    with raw_engine.connect() as connection:
+        connection.execute(
+            text("INSERT INTO events (id, name, created_at) VALUES (1, 'League', '2026-01-01 00:00:00')")
+        )
+        connection.execute(text("INSERT INTO divisions (id, event_id, name) VALUES (1, 1, 'Rookie')"))
+        for row_id, division_id, mode, count, no_show, dq in configurations:
+            connection.execute(
+                text(
+                    "INSERT INTO ranking_configurations (id, event_id, division_id, mode, count, "
+                    "allow_drop_no_show, allow_drop_dq) VALUES (:id, 1, :division_id, :mode, :count, "
+                    ":no_show, :dq)"
+                ),
+                {"id": row_id, "division_id": division_id, "mode": mode, "count": count,
+                 "no_show": no_show, "dq": dq},
+            )
+        connection.commit()
+    raw_engine.dispose()
+
+    engine = make_engine(db_path)
+    assert ensure_schema_current(engine, db_path) == MigrationOutcome.UPGRADED
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT session_drop_mode, session_drop_count, session_drop_no_show, session_drop_dq, "
+                "season_keep_best, season_minimum, season_drop_no_show, season_drop_dq, "
+                "season_only_session_counted FROM ranking_settings WHERE event_id = 1"
+            )
+        ).mappings().all()
+    if expected is None:
+        assert rows == []
+    else:
+        assert len(rows) == 1
+        assert dict(rows[0]) == {**expected, "season_only_session_counted": 0}

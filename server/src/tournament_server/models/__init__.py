@@ -14,6 +14,7 @@ from tournament_server.models.password_encryption_key import PasswordEncryptionK
 from tournament_server.models.playing_window import SessionPlayingWindow
 from tournament_server.models.ranking import Ranking
 from tournament_server.models.ranking_configuration import RankingConfiguration
+from tournament_server.models.ranking_settings import RankingSettings
 from tournament_server.models.role_credential import RoleCredential
 from tournament_server.models.schedule_generation import ScheduleGeneration
 from tournament_server.models.score_record import ScoreRecord
@@ -38,6 +39,7 @@ __all__ = [
     "Match",
     "PasswordEncryptionKey",
     "Ranking",
+    "RankingSettings",
     "RankingConfiguration",
     "RoleCredential",
     "ScheduleGeneration",

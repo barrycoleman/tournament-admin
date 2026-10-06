@@ -397,3 +397,27 @@ def recompute_event_rankings(
         app, "ranking_updated",
         {"session_id": None, "division_id": division_id, "event_wide": True},
     )
+
+
+def recompute_all_rankings(
+    app: "FastAPI", db: Session, plugin: LoadedPlugin, event_id: int
+) -> None:
+    """Every session's rankings, then the season's, for each division with qualification matches.
+
+    Called after the ranking settings change.
+    """
+    session_ids = select(TournamentSession.id).where(TournamentSession.event_id == event_id)
+    scopes = db.execute(
+        select(Match.session_id, Match.division_id)
+        .where(
+            Match.session_id.in_(session_ids),
+            Match.finals_bracket_id.is_(None),
+            Match.round_type != "practice",
+        )
+        .distinct()
+        .order_by(Match.session_id, Match.division_id)
+    ).all()
+    for session_id, division_id in scopes:
+        recompute_rankings(app, db, plugin, session_id, division_id)
+    for division_id in dict.fromkeys(division_id for _, division_id in scopes):
+        recompute_event_rankings(app, db, plugin, event_id, division_id)
