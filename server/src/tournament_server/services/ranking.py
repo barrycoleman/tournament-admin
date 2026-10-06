@@ -21,18 +21,6 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
 
 
-def suggest_exclusion_count(total_matches: int) -> int:
-    if total_matches >= 16:
-        return 4
-    if total_matches >= 12:
-        return 3
-    if total_matches >= 8:
-        return 2
-    if total_matches >= 4:
-        return 1
-    return 0
-
-
 def _compute_average_score(
     match_records: list[dict[str, Any]], config: Any
 ) -> tuple[float, int]:
