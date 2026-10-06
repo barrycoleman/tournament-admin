@@ -90,14 +90,14 @@ Head-to-head events ignore every setting. The API still stores and returns them,
 
 ### 1.3 Migration and removal
 
-One Alembic revision:
+Two Alembic revisions. The first creates and converts; the second, which ships with the model's removal, drops the old table:
 1. Creates `ranking_settings`.
 2. Converts an existing `ranking_configurations` row. The event-wide row (`division_id IS NULL`) wins; otherwise the lowest-id row is used.
    - `exclude` with count P becomes `session_drop_mode = lowest`, `session_drop_count = P`.
    - `include` with count N becomes `season_keep_best = N`, `season_minimum = N`. This is exactly today's include behaviour: keep the top N and zero-pad the shortfall.
    - `allow_drop_no_show` / `allow_drop_dq` copy into both the session pair and the season pair.
    - With no row, no settings row is written; defaults apply on first read.
-3. Drops `ranking_configurations`.
+3. Drops `ranking_configurations` (second revision).
 
 The `RankingConfiguration` model, its schemas, `routers/ranking_configuration.py` and `tests/test_ranking_configuration.py` are removed. `tests/test_cooperative_scoring.py` moves to the new endpoint. No frontend code uses the old endpoint.
 
