@@ -18,7 +18,6 @@ from tournament_server.models.field import Field
 from tournament_server.models.field_set import FieldSet
 from tournament_server.models.match import Match
 from tournament_server.models.participation import SessionParticipation
-from tournament_server.models.ranking import Ranking
 from tournament_server.models.schedule_generation import ScheduleGeneration
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.session import TournamentSession
@@ -732,53 +731,20 @@ def clear_schedule(
     if db.get(TournamentSession, session_id) is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Delete stale rankings first. This is correct even when matches from
-    # other, untouched round_types remain: the recompute step below rebuilds
-    # them from whatever completed matches survive, or leaves them empty if
-    # nothing does.
-    ranking_query = select(Ranking).where(Ranking.session_id == session_id)
-    if division_id is None:
-        ranking_query = ranking_query.where(Ranking.division_id.is_(None))
-    else:
-        ranking_query = ranking_query.where(Ranking.division_id == division_id)
-    for ranking in db.execute(ranking_query).scalars().all():
-        db.delete(ranking)
-    db.flush()
-
     matches_deleted = _delete_round(db, session_id, division_id, round_type)
 
     db.commit()
 
-    # Best-effort: rebuild rankings from whatever completed matches remain
-    # for this (session_id, division_id) — e.g. other round_types that this
-    # call never touched. If the event or its game plugin isn't available,
-    # skip silently rather than turning a successful deletion into a 500;
-    # the rankings for this division were already cleared above.
+    # Best-effort: rebuild rankings from whatever qualifying matches remain
+    # for this (session_id, division_id) and for the season. Each recompute
+    # replaces its scope's rows, so a team left with no match loses its row.
+    # If the event or its game plugin isn't available, skip silently rather
+    # than turning a successful deletion into a 500.
     event = get_the_event(db)
     if event is not None and event.game_plugin_name is not None:
         game_plugin = request.app.state.game_plugins.get(event.game_plugin_name)
         if game_plugin is not None:
             recompute_rankings(request.app, db, game_plugin, session_id, division_id)
-
-            # Delete stale event-wide rankings before recomputing them, for
-            # the same reason the session-scoped rankings above are deleted
-            # first: a team whose event-wide completed-match count just
-            # dropped to zero would otherwise be left with a stale row,
-            # since recompute_event_rankings only touches rows for teams
-            # still present in its freshly-computed results.
-            event_ranking_query = select(Ranking).where(Ranking.session_id.is_(None))
-            if division_id is None:
-                event_ranking_query = event_ranking_query.where(
-                    Ranking.division_id.is_(None)
-                )
-            else:
-                event_ranking_query = event_ranking_query.where(
-                    Ranking.division_id == division_id
-                )
-            for ranking in db.execute(event_ranking_query).scalars().all():
-                db.delete(ranking)
-            db.commit()
-
             recompute_event_rankings(request.app, db, game_plugin, event.id, division_id)
 
     return {"matches_deleted": matches_deleted}

@@ -35,7 +35,6 @@ from tournament_server.routers import (
     picker,
     playing_windows,
     plugins,
-    ranking_configuration,
     ranking_settings,
     rankings,
     schedule,
@@ -236,7 +235,6 @@ def create_app(
     app.include_router(plugins.scheduler_router)
     app.include_router(matches.router)
     app.include_router(scores.router)
-    app.include_router(ranking_configuration.router)
     app.include_router(rankings.router)
     app.include_router(ranking_settings.router)
     app.include_router(schedule.router)

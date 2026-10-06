@@ -1,138 +1,46 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from tournament_server.deps import get_the_event
 from tournament_server.models.alliance import Alliance, AllianceTeam
 from tournament_server.models.match import Match
 from tournament_server.models.ranking import Ranking
-from tournament_server.models.ranking_configuration import RankingConfiguration
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
 from tournament_server.plugin_registry.loader import LoadedPlugin
 from tournament_server.realtime import broadcast_active_session, broadcast_for_session
+from tournament_server.services.ranking_rules import (
+    MatchRecord,
+    RankingRules,
+    season_score,
+    session_drops,
+    session_score,
+)
+from tournament_server.services.ranking_settings import load_rules
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
-
-def _compute_average_score(
-    match_records: list[dict[str, Any]], config: Any
-) -> tuple[float, int]:
-    matches_played = len(match_records)
-    if matches_played == 0:
-        return 0.0, 0
-
-    scores = [r["score"] for r in match_records]
-
-    if config is None:
-        return sum(scores) / matches_played, matches_played
-
-    return _apply_ranking_configuration(match_records, scores, config), matches_played
+# A team's numbers before the plugin orders them, keyed by Ranking column:
+# win_points/strength_of_schedule (head-to-head) or
+# average_score/matches_played (cooperative).
+TeamStats = dict[str, Any]
 
 
-def _apply_ranking_configuration(
-    match_records: list[dict[str, Any]], scores: list[int], config: Any
-) -> float:
-    def droppable(record: dict[str, Any]) -> bool:
-        if not record["no_show"] and not record["dq"]:
-            return True
-        if record["no_show"] and config.allow_drop_no_show:
-            return True
-        if record["dq"] and config.allow_drop_dq:
-            return True
-        return False
-
-    if config.mode == "exclude":
-        indices_by_score_asc = sorted(range(len(scores)), key=lambda i: scores[i])
-        dropped: set[int] = set()
-        for i in indices_by_score_asc:
-            if len(dropped) >= config.count:
-                break
-            if droppable(match_records[i]):
-                dropped.add(i)
-        remaining = [scores[i] for i in range(len(scores)) if i not in dropped]
-        if not remaining:
-            return 0.0
-        return sum(remaining) / len(remaining)
-
-    # include mode: keep the top `count`, zero-pad the shortfall.
-    kept = sorted(scores, reverse=True)[: config.count]
-    total = sum(kept)
-    return total / config.count
-
-
-def _compute_cooperative_score_team_results(
-    db: Session, plugin: LoadedPlugin, matches: list[Match], config: Any
-) -> list[dict[str, Any]]:
-    team_match_records: dict[int, list[dict[str, Any]]] = {}
-
-    for match in matches:
-        alliances = db.execute(
-            select(Alliance).where(Alliance.match_id == match.id)
-        ).scalars().all()
-        for alliance in alliances:
-            score_record = db.execute(
-                select(ScoreRecord).where(ScoreRecord.alliance_id == alliance.id)
-            ).scalars().first()
-            if score_record is None:
-                continue
-            effective_score = (
-                0
-                if (score_record.no_show or score_record.dq)
-                else plugin.module.calculate_score(json.loads(score_record.data_json))
-            )
-            team_ids = [
-                row.team_id
-                for row in db.execute(
-                    select(AllianceTeam).where(AllianceTeam.alliance_id == alliance.id)
-                ).scalars().all()
-            ]
-            for team_id in team_ids:
-                team_match_records.setdefault(team_id, []).append(
-                    {
-                        "score": effective_score,
-                        "no_show": score_record.no_show,
-                        "dq": score_record.dq,
-                    }
-                )
-
-    if not team_match_records:
+def _qualification_matches(
+    db: Session, session_ids: list[int], division_id: int | None
+) -> list[Match]:
+    """Every qualification match in scope, in any status. Practice and finals never count."""
+    if not session_ids:
         return []
-
-    team_ids = list(team_match_records.keys())
-    teams = {
-        team.id: team
-        for team in db.execute(select(Team).where(Team.id.in_(team_ids))).scalars().all()
-    }
-
-    team_results = []
-    for team_id, records in team_match_records.items():
-        average_score, matches_played = _compute_average_score(records, config)
-        team_results.append(
-            {
-                "team_id": team_id,
-                "average_score": average_score,
-                "matches_played": matches_played,
-                "tiebreaker_seed": teams[team_id].tiebreaker_seed,
-            }
-        )
-    return team_results
-
-
-def recompute_rankings(
-    app: "FastAPI", db: Session, plugin: LoadedPlugin, session_id: int, division_id: int | None
-) -> None:
-    game_model = plugin.module.match_format()["game_model"]
-
     query = select(Match).where(
-        Match.session_id == session_id,
-        Match.status == "completed",
+        Match.session_id.in_(session_ids),
         Match.finals_bracket_id.is_(None),
         Match.round_type != "practice",
     )
@@ -140,179 +48,206 @@ def recompute_rankings(
         query = query.where(Match.division_id.is_(None))
     else:
         query = query.where(Match.division_id == division_id)
-    matches = db.execute(query).scalars().all()
+    return list(db.execute(query.order_by(Match.id)).scalars().all())
 
-    if game_model == "cooperative_score":
-        event = get_the_event(db)
-        config = None
-        if event is not None:
-            division_filter = (
-                RankingConfiguration.division_id.is_(None)
-                if division_id is None
-                else RankingConfiguration.division_id == division_id
-            )
-            config = db.execute(
-                select(RankingConfiguration).where(
-                    RankingConfiguration.event_id == event.id, division_filter
-                )
-            ).scalars().first()
-        team_results = _compute_cooperative_score_team_results(db, plugin, matches, config)
-        if not team_results:
-            return
-        ranked = plugin.module.rank_teams(team_results)
-        for entry in ranked:
-            division_filter = (
-                Ranking.division_id.is_(None)
-                if division_id is None
-                else Ranking.division_id == division_id
-            )
-            existing = db.execute(
-                select(Ranking).where(
-                    Ranking.session_id == session_id,
-                    division_filter,
-                    Ranking.team_id == entry["team_id"],
-                )
-            ).scalars().first()
-            if existing is None:
-                db.add(
-                    Ranking(
-                        session_id=session_id,
-                        division_id=division_id,
-                        team_id=entry["team_id"],
-                        average_score=entry["average_score"],
-                        matches_played=entry["matches_played"],
-                        rank=entry["rank"],
-                    )
-                )
-            else:
-                existing.average_score = entry["average_score"]
-                existing.matches_played = entry["matches_played"]
-                existing.rank = entry["rank"]
-        db.commit()
-        broadcast_for_session(
-            app, db, session_id, "ranking_updated",
-            {"session_id": session_id, "division_id": division_id, "event_wide": False},
-        )
-        return
 
-    win_points: dict[int, int] = {}
-    match_alliance_teams: dict[int, dict[int, list[int]]] = {}
-
-    for match in matches:
-        alliances = db.execute(
-            select(Alliance).where(Alliance.match_id == match.id)
+def _alliances(db: Session, match_id: int) -> list[Alliance]:
+    return list(
+        db.execute(
+            select(Alliance).where(Alliance.match_id == match_id).order_by(Alliance.id)
         ).scalars().all()
-        if len(alliances) != 2:
-            continue
+    )
 
-        alliance_teams: dict[int, list[int]] = {}
-        alliance_scores: dict[int, int] = {}
-        incomplete = False
-        for alliance in alliances:
-            team_ids = [
-                row.team_id
-                for row in db.execute(
-                    select(AllianceTeam).where(AllianceTeam.alliance_id == alliance.id)
-                )
-                .scalars()
-                .all()
-            ]
-            alliance_teams[alliance.id] = team_ids
 
-            score_record = db.execute(
-                select(ScoreRecord).where(ScoreRecord.alliance_id == alliance.id)
-            ).scalars().first()
-            if score_record is None:
-                incomplete = True
-                break
-            if score_record.no_show or score_record.dq:
-                alliance_scores[alliance.id] = 0
-            else:
-                alliance_scores[alliance.id] = plugin.module.calculate_score(
-                    json.loads(score_record.data_json)
-                )
-        if incomplete:
-            continue
-
-        alliance_ids = list(alliance_teams.keys())
-        score_a = alliance_scores[alliance_ids[0]]
-        score_b = alliance_scores[alliance_ids[1]]
-        if score_a > score_b:
-            points = {alliance_ids[0]: 2, alliance_ids[1]: 0}
-        elif score_b > score_a:
-            points = {alliance_ids[0]: 0, alliance_ids[1]: 2}
-        else:
-            points = {alliance_ids[0]: 1, alliance_ids[1]: 1}
-
-        for alliance_id, team_ids in alliance_teams.items():
-            for team_id in team_ids:
-                win_points[team_id] = win_points.get(team_id, 0) + points[alliance_id]
-
-        match_alliance_teams[match.id] = alliance_teams
-
-    if not win_points:
-        return
-
-    strength_of_schedule: dict[int, float] = {team_id: 0.0 for team_id in win_points}
-    for alliance_teams in match_alliance_teams.values():
-        alliance_ids = list(alliance_teams.keys())
-        teams_a = alliance_teams[alliance_ids[0]]
-        teams_b = alliance_teams[alliance_ids[1]]
-        opponent_points_for_a = sum(win_points.get(t, 0) for t in teams_b)
-        opponent_points_for_b = sum(win_points.get(t, 0) for t in teams_a)
-        for team_id in teams_a:
-            strength_of_schedule[team_id] += opponent_points_for_a
-        for team_id in teams_b:
-            strength_of_schedule[team_id] += opponent_points_for_b
-
-    team_ids = list(win_points.keys())
-    teams = {
-        team.id: team
-        for team in db.execute(select(Team).where(Team.id.in_(team_ids))).scalars().all()
-    }
-
-    team_results = [
-        {
-            "team_id": team_id,
-            "win_points": win_points[team_id],
-            "strength_of_schedule": strength_of_schedule[team_id],
-            "tiebreaker_seed": teams[team_id].tiebreaker_seed,
-        }
-        for team_id in team_ids
+def _team_ids(db: Session, alliance_id: int) -> list[int]:
+    return [
+        row.team_id
+        for row in db.execute(
+            select(AllianceTeam).where(AllianceTeam.alliance_id == alliance_id)
+        ).scalars().all()
     ]
 
-    ranked = plugin.module.rank_teams(team_results)
 
-    for entry in ranked:
-        division_filter = (
-            Ranking.division_id.is_(None)
-            if division_id is None
-            else Ranking.division_id == division_id
-        )
-        existing = db.execute(
-            select(Ranking).where(
-                Ranking.session_id == session_id,
-                division_filter,
-                Ranking.team_id == entry["team_id"],
+def _score_record(db: Session, alliance_id: int) -> ScoreRecord | None:
+    return db.execute(
+        select(ScoreRecord).where(ScoreRecord.alliance_id == alliance_id)
+    ).scalars().first()
+
+
+def _effective_score(plugin: LoadedPlugin, record: ScoreRecord) -> int:
+    if record.no_show or record.dq:
+        return 0
+    return plugin.module.calculate_score(json.loads(record.data_json))
+
+
+def _scheduled_counts(db: Session, matches: list[Match]) -> dict[tuple[int, int], int]:
+    """(session_id, team_id) -> qualification matches the team is scheduled into, in any status."""
+    counts: dict[tuple[int, int], int] = defaultdict(int)
+    for match in matches:
+        for alliance in _alliances(db, match.id):
+            for team_id in _team_ids(db, alliance.id):
+                counts[(match.session_id, team_id)] += 1
+    return counts
+
+
+def _cooperative_records(
+    db: Session, plugin: LoadedPlugin, matches: list[Match]
+) -> dict[int, list[MatchRecord]]:
+    records: dict[int, list[MatchRecord]] = defaultdict(list)
+    for match in matches:
+        if match.status != "completed":
+            continue
+        for alliance in _alliances(db, match.id):
+            score_record = _score_record(db, alliance.id)
+            if score_record is None:
+                continue
+            record = MatchRecord(
+                match_id=match.id,
+                session_id=match.session_id,
+                score=_effective_score(plugin, score_record),
+                no_show=score_record.no_show,
+                dq=score_record.dq,
             )
-        ).scalars().first()
-        if existing is None:
+            for team_id in _team_ids(db, alliance.id):
+                records[team_id].append(record)
+    return records
+
+
+def _cooperative_session_stats(
+    db: Session, plugin: LoadedPlugin, matches: list[Match], rules: RankingRules
+) -> dict[int, TeamStats]:
+    scheduled = _scheduled_counts(db, matches)
+    stats: dict[int, TeamStats] = {}
+    for team_id, records in _cooperative_records(db, plugin, matches).items():
+        dropped = session_drops(records, scheduled[(records[0].session_id, team_id)], rules)
+        stats[team_id] = {
+            "average_score": session_score(records, dropped),
+            "matches_played": len(records),
+        }
+    return stats
+
+
+def _cooperative_season_stats(
+    db: Session, plugin: LoadedPlugin, matches: list[Match], rules: RankingRules
+) -> dict[int, TeamStats]:
+    scheduled = _scheduled_counts(db, matches)
+    stats: dict[int, TeamStats] = {}
+    for team_id, records in _cooperative_records(db, plugin, matches).items():
+        session_dropped: set[int] = set()
+        if rules.season_only_session_counted:
+            by_session: dict[int, list[MatchRecord]] = defaultdict(list)
+            for record in records:
+                by_session[record.session_id].append(record)
+            for session_id, session_records in by_session.items():
+                session_dropped |= session_drops(
+                    session_records, scheduled[(session_id, team_id)], rules
+                )
+        stats[team_id] = {
+            "average_score": season_score(records, session_dropped, rules),
+            "matches_played": len(records),
+        }
+    return stats
+
+
+def _head_to_head_stats(
+    db: Session, plugin: LoadedPlugin, matches: list[Match]
+) -> dict[int, TeamStats]:
+    """Win points (2/1/0) and strength of schedule (opponents' win points) over `matches`."""
+    win_points: dict[int, int] = {}
+    played: list[tuple[list[int], list[int]]] = []
+    for match in matches:
+        if match.status != "completed":
+            continue
+        alliances = _alliances(db, match.id)
+        if len(alliances) != 2:
+            continue
+        sides: list[list[int]] = []
+        scores: list[int] = []
+        for alliance in alliances:
+            record = _score_record(db, alliance.id)
+            if record is None:
+                break
+            sides.append(_team_ids(db, alliance.id))
+            scores.append(_effective_score(plugin, record))
+        if len(scores) != 2:
+            continue
+        if scores[0] > scores[1]:
+            points = (2, 0)
+        elif scores[1] > scores[0]:
+            points = (0, 2)
+        else:
+            points = (1, 1)
+        for side, side_points in zip(sides, points):
+            for team_id in side:
+                win_points[team_id] = win_points.get(team_id, 0) + side_points
+        played.append((sides[0], sides[1]))
+
+    strength = {team_id: 0.0 for team_id in win_points}
+    for side_a, side_b in played:
+        for team_id in side_a:
+            strength[team_id] += sum(win_points[t] for t in side_b)
+        for team_id in side_b:
+            strength[team_id] += sum(win_points[t] for t in side_a)
+    return {
+        team_id: {"win_points": win_points[team_id], "strength_of_schedule": strength[team_id]}
+        for team_id in win_points
+    }
+
+
+def _stats(
+    db: Session, plugin: LoadedPlugin, matches: list[Match], *, season: bool
+) -> dict[int, TeamStats]:
+    if plugin.module.match_format()["game_model"] == "cooperative_score":
+        rules = load_rules(db)
+        if season:
+            return _cooperative_season_stats(db, plugin, matches, rules)
+        return _cooperative_session_stats(db, plugin, matches, rules)
+    return _head_to_head_stats(db, plugin, matches)
+
+
+def _replace_rankings(
+    db: Session,
+    plugin: LoadedPlugin,
+    session_id: int | None,
+    division_id: int | None,
+    stats: dict[int, TeamStats],
+) -> None:
+    """Replace the scope's rows with the plugin-ordered `stats`; a team with no
+    qualifying match in scope ends up with no row."""
+    session_filter = (
+        Ranking.session_id.is_(None) if session_id is None else Ranking.session_id == session_id
+    )
+    division_filter = (
+        Ranking.division_id.is_(None) if division_id is None else Ranking.division_id == division_id
+    )
+    db.execute(delete(Ranking).where(session_filter, division_filter))
+    if stats:
+        seeds = {
+            team.id: team.tiebreaker_seed
+            for team in db.execute(select(Team).where(Team.id.in_(list(stats)))).scalars().all()
+        }
+        team_results = [
+            {"team_id": team_id, **values, "tiebreaker_seed": seeds[team_id]}
+            for team_id, values in stats.items()
+        ]
+        for entry in plugin.module.rank_teams(team_results):
             db.add(
                 Ranking(
                     session_id=session_id,
                     division_id=division_id,
                     team_id=entry["team_id"],
-                    win_points=entry["win_points"],
-                    strength_of_schedule=entry["strength_of_schedule"],
                     rank=entry["rank"],
+                    **stats[entry["team_id"]],
                 )
             )
-        else:
-            existing.win_points = entry["win_points"]
-            existing.strength_of_schedule = entry["strength_of_schedule"]
-            existing.rank = entry["rank"]
-
     db.commit()
+
+
+def recompute_rankings(
+    app: "FastAPI", db: Session, plugin: LoadedPlugin, session_id: int, division_id: int | None
+) -> None:
+    matches = _qualification_matches(db, [session_id], division_id)
+    _replace_rankings(db, plugin, session_id, division_id, _stats(db, plugin, matches, season=False))
     broadcast_for_session(
         app, db, session_id, "ranking_updated",
         {"session_id": session_id, "division_id": division_id, "event_wide": False},
@@ -322,77 +257,15 @@ def recompute_rankings(
 def recompute_event_rankings(
     app: "FastAPI", db: Session, plugin: LoadedPlugin, event_id: int, division_id: int | None
 ) -> None:
-    game_model = plugin.module.match_format()["game_model"]
-    if game_model != "cooperative_score":
-        return
-
+    """The season standings: every session's qualification matches, for both game models."""
     session_ids = [
         row.id
         for row in db.execute(
             select(TournamentSession).where(TournamentSession.event_id == event_id)
         ).scalars().all()
     ]
-    if not session_ids:
-        return
-
-    query = select(Match).where(
-        Match.session_id.in_(session_ids),
-        Match.status == "completed",
-        Match.finals_bracket_id.is_(None),
-        Match.round_type != "practice",
-    )
-    if division_id is None:
-        query = query.where(Match.division_id.is_(None))
-    else:
-        query = query.where(Match.division_id == division_id)
-    matches = db.execute(query).scalars().all()
-
-    division_filter = (
-        RankingConfiguration.division_id.is_(None)
-        if division_id is None
-        else RankingConfiguration.division_id == division_id
-    )
-    config = db.execute(
-        select(RankingConfiguration).where(
-            RankingConfiguration.event_id == event_id, division_filter
-        )
-    ).scalars().first()
-
-    team_results = _compute_cooperative_score_team_results(db, plugin, matches, config)
-    if not team_results:
-        return
-    ranked = plugin.module.rank_teams(team_results)
-
-    for entry in ranked:
-        ranking_division_filter = (
-            Ranking.division_id.is_(None)
-            if division_id is None
-            else Ranking.division_id == division_id
-        )
-        existing = db.execute(
-            select(Ranking).where(
-                Ranking.session_id.is_(None),
-                ranking_division_filter,
-                Ranking.team_id == entry["team_id"],
-            )
-        ).scalars().first()
-        if existing is None:
-            db.add(
-                Ranking(
-                    session_id=None,
-                    division_id=division_id,
-                    team_id=entry["team_id"],
-                    average_score=entry["average_score"],
-                    matches_played=entry["matches_played"],
-                    rank=entry["rank"],
-                )
-            )
-        else:
-            existing.average_score = entry["average_score"]
-            existing.matches_played = entry["matches_played"]
-            existing.rank = entry["rank"]
-
-    db.commit()
+    matches = _qualification_matches(db, session_ids, division_id)
+    _replace_rankings(db, plugin, None, division_id, _stats(db, plugin, matches, season=True))
     broadcast_active_session(
         app, "ranking_updated",
         {"session_id": None, "division_id": division_id, "event_wide": True},

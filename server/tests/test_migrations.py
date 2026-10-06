@@ -670,3 +670,4 @@ def test_ranking_configuration_converts_to_ranking_settings(tmp_path, configurat
     else:
         assert len(rows) == 1
         assert dict(rows[0]) == {**expected, "season_only_session_counted": 0}
+    assert "ranking_configurations" not in inspect(engine).get_table_names()

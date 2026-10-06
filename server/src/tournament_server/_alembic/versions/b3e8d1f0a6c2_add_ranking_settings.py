@@ -50,27 +50,28 @@ def upgrade() -> None:
     ).fetchall()
     converted: set[int] = set()
     for row in rows:
-        if row.event_id in converted:
+        m = row._mapping
+        if m["event_id"] in converted:
             continue
-        converted.add(row.event_id)
+        converted.add(m["event_id"])
         values = {
-            "event_id": row.event_id,
+            "event_id": m["event_id"],
             "session_drop_mode": "tiered",
             "session_drop_count": 1,
-            "session_drop_no_show": bool(row.allow_drop_no_show),
-            "session_drop_dq": bool(row.allow_drop_dq),
+            "session_drop_no_show": bool(m["allow_drop_no_show"]),
+            "session_drop_dq": bool(m["allow_drop_dq"]),
             "season_keep_best": None,
             "season_only_session_counted": False,
             "season_minimum": 0,
-            "season_drop_no_show": bool(row.allow_drop_no_show),
-            "season_drop_dq": bool(row.allow_drop_dq),
+            "season_drop_no_show": bool(m["allow_drop_no_show"]),
+            "season_drop_dq": bool(m["allow_drop_dq"]),
         }
-        if row.mode == "exclude":
+        if m["mode"] == "exclude":
             values["session_drop_mode"] = "lowest"
-            values["session_drop_count"] = row.count
-        elif row.mode == "include":
-            values["season_keep_best"] = row.count
-            values["season_minimum"] = row.count
+            values["session_drop_count"] = m["count"]
+        elif m["mode"] == "include":
+            values["season_keep_best"] = m["count"]
+            values["season_minimum"] = m["count"]
         bind.execute(
             sa.text(
                 "INSERT INTO ranking_settings (event_id, session_drop_mode, session_drop_count, "

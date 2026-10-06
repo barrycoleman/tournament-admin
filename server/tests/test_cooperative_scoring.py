@@ -1,3 +1,6 @@
+from ranking_helpers import DEFAULT_SETTINGS
+
+
 def _setup_cooperative_match(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
@@ -192,11 +195,11 @@ def test_cooperative_score_ranking_is_average_no_win_loss(cooperative_client):
     assert rows[t2]["rank"] == 3
 
 
-def test_exclude_mode_drops_lowest_non_protected_match(cooperative_client):
+def test_lowest_mode_drops_lowest_non_protected_match(cooperative_client):
     client = cooperative_client
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
-    client.post("/api/ranking-configuration", json={"mode": "exclude", "count": 1})
+    client.put("/api/ranking-settings", json={**DEFAULT_SETTINGS, "session_drop_mode": "lowest", "session_drop_count": 1})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
     t1 = client.post("/api/teams", json={"number": "1", "name": "Team One"}).json()["id"]
     t2 = client.post("/api/teams", json={"number": "2", "name": "Team Two"}).json()["id"]
@@ -231,16 +234,13 @@ def test_exclude_mode_drops_lowest_non_protected_match(cooperative_client):
     assert rows[t1]["matches_played"] == 3
 
 
-def test_exclude_mode_protects_no_show_match_until_toggle_allows_dropping_it(
+def test_lowest_mode_protects_no_show_match_until_toggle_allows_dropping_it(
     cooperative_client,
 ):
     client = cooperative_client
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
-    client.post(
-        "/api/ranking-configuration",
-        json={"mode": "exclude", "count": 1, "allow_drop_no_show": False},
-    )
+    client.put("/api/ranking-settings", json={**DEFAULT_SETTINGS, "session_drop_mode": "lowest", "session_drop_count": 1})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
     t1 = client.post("/api/teams", json={"number": "1", "name": "Team One"}).json()["id"]
     t2 = client.post("/api/teams", json={"number": "2", "name": "Team Two"}).json()["id"]
@@ -294,16 +294,15 @@ def test_exclude_mode_protects_no_show_match_until_toggle_allows_dropping_it(
 
     # Flip the toggle: the no_show match becomes droppable and, being the
     # lowest score, is the one actually dropped: (10 + 20) / 2 = 15.0.
-    client.post(
-        "/api/ranking-configuration",
-        json={"mode": "exclude", "count": 1, "allow_drop_no_show": True},
-    )
-    # Re-submitting a score (any alliance in the session) triggers a ranking
-    # recompute against the now-updated configuration.
-    match_id, red_id, plan = matches[0]
-    client.post(
-        f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {"objects_scored": plan["objects_scored"]}, "no_show": plan["no_show"]},
+    # Saving the settings recomputes every ranking against the new rules.
+    client.put(
+        "/api/ranking-settings",
+        json={
+            **DEFAULT_SETTINGS,
+            "session_drop_mode": "lowest",
+            "session_drop_count": 1,
+            "session_drop_no_show": True,
+        },
     )
 
     response = client.get(f"/api/rankings?session_id={session_id}")
@@ -311,11 +310,11 @@ def test_exclude_mode_protects_no_show_match_until_toggle_allows_dropping_it(
     assert rows[t1]["average_score"] == 15.0
 
 
-def test_include_mode_zero_pads_a_team_with_fewer_matches_than_count(cooperative_client):
+def test_season_minimum_zero_pads_a_team_with_fewer_matches(cooperative_client):
     client = cooperative_client
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
-    client.post("/api/ranking-configuration", json={"mode": "include", "count": 3})
+    client.put("/api/ranking-settings", json={**DEFAULT_SETTINGS, "season_keep_best": 3, "season_minimum": 3})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
     t1 = client.post("/api/teams", json={"number": "1", "name": "Team One"}).json()["id"]
     t2 = client.post("/api/teams", json={"number": "2", "name": "Team Two"}).json()["id"]
@@ -339,7 +338,7 @@ def test_include_mode_zero_pads_a_team_with_fewer_matches_than_count(cooperative
         json={"data": {"objects_scored": 15}},
     )
 
-    response = client.get(f"/api/rankings?session_id={session_id}")
+    response = client.get("/api/rankings?event_wide=true")
     rows = {row["team_id"]: row for row in response.json()}
 
     # T1 played 1 real match scoring 30; count=3 pads in 2 zero matches:

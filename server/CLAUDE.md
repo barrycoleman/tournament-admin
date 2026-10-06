@@ -317,24 +317,29 @@ game model. A game plugin's `rank_teams()` receives a different
 `team_results` shape depending on its declared `game_model` — see
 `services/ranking.py`'s `_compute_cooperative_score_team_results`.
 
-`RankingConfiguration` (`POST`/`GET /api/ranking-configuration`, one per
-event/division) lets an organizer exclude a team's lowest N matches or
-keep only their highest N (zero-padding the shortfall if they played
-fewer than N), with separate toggles for whether `no_show`/`dq` matches
-are eligible to be excluded. It's consulted only for `cooperative_score`
-ranking — `head_to_head` has no concept of dropping a match.
-`services/ranking.py`'s `suggest_exclusion_count(total_matches)` computes
-the spec's tiered default suggestion for that exclusion count, but it's a
-pure function that no endpoint calls yet — a future UI or endpoint would
-need to invoke it explicitly rather than assuming the server already
-applies it as a default.
+Ranking rules live in `RankingSettings` (`GET`/`PUT /api/ranking-settings`,
+one row per event, shared by every division, created with defaults on first
+read; `GET` also reports the event's `game_model`). They apply only to
+`cooperative_score`: how a session drops a team's lowest matches (`tiered`,
+the default, takes the drop allowance from the tier table on the team's
+*scheduled* qualification matches; `none`; or `lowest` P), whether a no-show
+or DQ zero may be dropped (separately for sessions and for the season — the
+zero itself is always counted), and how the season combines matches (keep
+best N, only matches a session counted, a minimum that zero-fills the
+shortfall). Drops are earned only as the last scheduled matches are scored:
+with 10 scheduled and P = 3, nothing drops until the 8th is scored. Every
+rule is a pure function in `services/ranking_rules.py`, unit-tested in
+`tests/test_ranking_rules.py`; `services/ranking.py` only gathers records and
+writes rows. A `PUT` recomputes every session and season ranking
+(`recompute_all_rankings`).
 
-`GET /api/rankings?event_wide=true` returns standings aggregated across
-every session in the event (a `Ranking` row with `session_id: null`),
-recomputed alongside the normal per-session ranking whenever a
-`cooperative_score` score is submitted or a schedule is cleared. This is
-what makes a multi-session league's overall standings work; `head_to_head`
-never populates this (`recompute_event_rankings` no-ops for it).
+`GET /api/rankings?event_wide=true` returns season standings (`Ranking` rows
+with `session_id: null`), recomputed alongside the session ranking on every
+score save and round clear, for **both** game models: head-to-head season
+standings are total win points over every session's qualification matches
+(nothing dropped), with strength of schedule from season win points. Finals
+and practice matches never count anywhere. Each recompute *replaces* its
+scope's rows, so a team with no qualifying match left has no row.
 
 ## Finals
 
