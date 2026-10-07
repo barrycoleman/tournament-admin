@@ -673,6 +673,27 @@ def test_ranking_configuration_converts_to_ranking_settings(tmp_path, configurat
     assert "ranking_configurations" not in inspect(engine).get_table_names()
 
 
+def test_existing_sessions_read_as_open_after_the_finalize_migration(tmp_path):
+    db_path = str(tmp_path / "finalize.db")
+    command.upgrade(_make_alembic_config(db_path), "c5f2a9e4b7d1")  # the revision before
+    raw_engine = create_engine(f"sqlite:///{db_path}")
+    with raw_engine.connect() as connection:
+        connection.execute(
+            text("INSERT INTO events (id, name, created_at) VALUES (1, 'League', '2026-01-01 00:00:00')")
+        )
+        connection.execute(text("INSERT INTO sessions (id, event_id, label) VALUES (1, 1, 'Saturday')"))
+        connection.commit()
+    raw_engine.dispose()
+
+    engine = make_engine(db_path)
+    assert ensure_schema_current(engine, db_path) == MigrationOutcome.UPGRADED
+    with engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT qualification_finalized_at, qualification_drops FROM sessions WHERE id = 1")
+        ).one()
+    assert tuple(row) == (None, None)
+
+
 def test_upgrade_recomputes_rankings_once_at_startup(tmp_path):
     """Migrations never touch stored ranking rows, so a database upgraded from before
     season rankings would show an empty season until the next score save. create_app

@@ -163,3 +163,10 @@ def test_patch_session_rejects_front_desk(client):
         headers=bearer(front_desk_token),
     )
     assert response.status_code == 403
+
+
+def test_session_read_reports_qualification_open(client):
+    client.post("/api/event", json={"name": "League"})
+    created = client.post("/api/sessions", json={"label": "Saturday"}).json()
+    assert created["qualification_finalized_at"] is None
+    assert created["qualification_drops"] is None

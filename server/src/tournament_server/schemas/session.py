@@ -28,6 +28,10 @@ class SessionRead(BaseModel):
     # Whether any match in the session has a score; a scored session can't
     # be deleted.
     has_scored_matches: bool = False
+    # When qualification was finalized, and each played count's drops; both
+    # null while qualification is open.
+    qualification_finalized_at: dt.datetime | None = None
+    qualification_drops: dict[str, int] | None = None
 
 
 class CopyFieldsRequest(BaseModel):
