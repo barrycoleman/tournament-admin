@@ -239,3 +239,41 @@ def test_scoring_does_not_create_a_settings_row_but_get_returns_defaults(coopera
     response = client.get("/api/ranking-settings")
     assert response.status_code == 200
     assert {k: response.json()[k] for k in DEFAULT_SETTINGS} == DEFAULT_SETTINGS
+
+
+def _recompute_statement_count(client, s1: int) -> int:
+    """SQL statements one session recompute plus one season recompute issue."""
+    from sqlalchemy import event, text
+
+    from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
+
+    app = client.app
+    plugin = app.state.game_plugins["cooperative-game"]
+    statements: list[str] = []
+
+    def count(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    with app.state.session_factory() as db:
+        engine = db.get_bind()
+        event.listen(engine, "before_cursor_execute", count)
+        try:
+            event_id = db.execute(text("SELECT id FROM events")).scalar_one()
+            recompute_rankings(app, db, plugin, s1, None)
+            recompute_event_rankings(app, db, plugin, event_id, None)
+        finally:
+            event.remove(engine, "before_cursor_execute", count)
+    return len(statements)
+
+
+def test_recompute_statement_count_does_not_grow_with_match_count(cooperative_client):
+    client = cooperative_client
+    t1, t2 = _cooperative_event(client)
+    s1 = _session(client, "Session 1")
+    for number in range(1, 3):
+        _score_cooperative(client, _match(client, s1, number, t1, t2), 5)
+    small = _recompute_statement_count(client, s1)
+    for number in range(3, 11):
+        _score_cooperative(client, _match(client, s1, number, t1, t2), 5)
+    large = _recompute_statement_count(client, s1)
+    assert large == small

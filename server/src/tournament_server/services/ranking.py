@@ -51,27 +51,42 @@ def _qualification_matches(
     return list(db.execute(query.order_by(Match.id)).scalars().all())
 
 
-def _alliances(db: Session, match_id: int) -> list[Alliance]:
-    return list(
-        db.execute(
-            select(Alliance).where(Alliance.match_id == match_id).order_by(Alliance.id)
-        ).scalars().all()
-    )
+_IN_CHUNK = 500  # stay well under SQLite's bound-parameter limit
 
 
-def _team_ids(db: Session, alliance_id: int) -> list[int]:
-    return [
-        row.team_id
-        for row in db.execute(
-            select(AllianceTeam).where(AllianceTeam.alliance_id == alliance_id)
-        ).scalars().all()
-    ]
+def _chunks(ids: list[int]):
+    for start in range(0, len(ids), _IN_CHUNK):
+        yield ids[start : start + _IN_CHUNK]
 
 
-def _score_record(db: Session, alliance_id: int) -> ScoreRecord | None:
-    return db.execute(
-        select(ScoreRecord).where(ScoreRecord.alliance_id == alliance_id)
-    ).scalars().first()
+class _ScopeData:
+    """A scope's alliances, their teams and score records, loaded in three IN queries
+    instead of per-match lookups."""
+
+    def __init__(self, db: Session, matches: list[Match]) -> None:
+        self.alliances: dict[int, list[Alliance]] = defaultdict(list)
+        self.team_ids: dict[int, list[int]] = defaultdict(list)
+        self.records: dict[int, ScoreRecord] = {}
+        alliance_ids: list[int] = []
+        for chunk in _chunks([match.id for match in matches]):
+            for alliance in db.execute(
+                select(Alliance).where(Alliance.match_id.in_(chunk)).order_by(Alliance.id)
+            ).scalars():
+                self.alliances[alliance.match_id].append(alliance)
+                alliance_ids.append(alliance.id)
+        for chunk in _chunks(alliance_ids):
+            for row in db.execute(
+                select(AllianceTeam)
+                .where(AllianceTeam.alliance_id.in_(chunk))
+                .order_by(AllianceTeam.id)
+            ).scalars():
+                self.team_ids[row.alliance_id].append(row.team_id)
+            for record in db.execute(
+                select(ScoreRecord)
+                .where(ScoreRecord.alliance_id.in_(chunk))
+                .order_by(ScoreRecord.id)
+            ).scalars():
+                self.records.setdefault(record.alliance_id, record)
 
 
 def _effective_score(plugin: LoadedPlugin, record: ScoreRecord) -> int:
@@ -80,25 +95,27 @@ def _effective_score(plugin: LoadedPlugin, record: ScoreRecord) -> int:
     return plugin.module.calculate_score(json.loads(record.data_json))
 
 
-def _scheduled_counts(db: Session, matches: list[Match]) -> dict[tuple[int, int], int]:
+def _scheduled_counts(
+    data: _ScopeData, matches: list[Match]
+) -> dict[tuple[int, int], int]:
     """(session_id, team_id) -> qualification matches the team is scheduled into, in any status."""
     counts: dict[tuple[int, int], int] = defaultdict(int)
     for match in matches:
-        for alliance in _alliances(db, match.id):
-            for team_id in _team_ids(db, alliance.id):
+        for alliance in data.alliances[match.id]:
+            for team_id in data.team_ids[alliance.id]:
                 counts[(match.session_id, team_id)] += 1
     return counts
 
 
 def _cooperative_records(
-    db: Session, plugin: LoadedPlugin, matches: list[Match]
+    data: _ScopeData, plugin: LoadedPlugin, matches: list[Match]
 ) -> dict[int, list[MatchRecord]]:
     records: dict[int, list[MatchRecord]] = defaultdict(list)
     for match in matches:
         if match.status != "completed":
             continue
-        for alliance in _alliances(db, match.id):
-            score_record = _score_record(db, alliance.id)
+        for alliance in data.alliances[match.id]:
+            score_record = data.records.get(alliance.id)
             if score_record is None:
                 continue
             record = MatchRecord(
@@ -108,17 +125,17 @@ def _cooperative_records(
                 no_show=score_record.no_show,
                 dq=score_record.dq,
             )
-            for team_id in _team_ids(db, alliance.id):
+            for team_id in data.team_ids[alliance.id]:
                 records[team_id].append(record)
     return records
 
 
 def _cooperative_session_stats(
-    db: Session, plugin: LoadedPlugin, matches: list[Match], rules: RankingRules
+    data: _ScopeData, plugin: LoadedPlugin, matches: list[Match], rules: RankingRules
 ) -> dict[int, TeamStats]:
-    scheduled = _scheduled_counts(db, matches)
+    scheduled = _scheduled_counts(data, matches)
     stats: dict[int, TeamStats] = {}
-    for team_id, records in _cooperative_records(db, plugin, matches).items():
+    for team_id, records in _cooperative_records(data, plugin, matches).items():
         dropped = session_drops(records, scheduled[(records[0].session_id, team_id)], rules)
         stats[team_id] = {
             "average_score": session_score(records, dropped),
@@ -128,11 +145,11 @@ def _cooperative_session_stats(
 
 
 def _cooperative_season_stats(
-    db: Session, plugin: LoadedPlugin, matches: list[Match], rules: RankingRules
+    data: _ScopeData, plugin: LoadedPlugin, matches: list[Match], rules: RankingRules
 ) -> dict[int, TeamStats]:
-    scheduled = _scheduled_counts(db, matches)
+    scheduled = _scheduled_counts(data, matches)
     stats: dict[int, TeamStats] = {}
-    for team_id, records in _cooperative_records(db, plugin, matches).items():
+    for team_id, records in _cooperative_records(data, plugin, matches).items():
         session_dropped: set[int] = set()
         if rules.season_only_session_counted:
             by_session: dict[int, list[MatchRecord]] = defaultdict(list)
@@ -150,7 +167,7 @@ def _cooperative_season_stats(
 
 
 def _head_to_head_stats(
-    db: Session, plugin: LoadedPlugin, matches: list[Match]
+    data: _ScopeData, plugin: LoadedPlugin, matches: list[Match]
 ) -> dict[int, TeamStats]:
     """Win points (2/1/0) and strength of schedule (opponents' win points) over `matches`."""
     win_points: dict[int, int] = {}
@@ -158,16 +175,16 @@ def _head_to_head_stats(
     for match in matches:
         if match.status != "completed":
             continue
-        alliances = _alliances(db, match.id)
+        alliances = data.alliances[match.id]
         if len(alliances) != 2:
             continue
         sides: list[list[int]] = []
         scores: list[int] = []
         for alliance in alliances:
-            record = _score_record(db, alliance.id)
+            record = data.records.get(alliance.id)
             if record is None:
                 break
-            sides.append(_team_ids(db, alliance.id))
+            sides.append(data.team_ids[alliance.id])
             scores.append(_effective_score(plugin, record))
         if len(scores) != 2:
             continue
@@ -197,12 +214,13 @@ def _head_to_head_stats(
 def _stats(
     db: Session, plugin: LoadedPlugin, matches: list[Match], *, season: bool
 ) -> dict[int, TeamStats]:
+    data = _ScopeData(db, matches)
     if plugin.module.match_format()["game_model"] == "cooperative_score":
         rules = load_rules(db)
         if season:
-            return _cooperative_season_stats(db, plugin, matches, rules)
-        return _cooperative_session_stats(db, plugin, matches, rules)
-    return _head_to_head_stats(db, plugin, matches)
+            return _cooperative_season_stats(data, plugin, matches, rules)
+        return _cooperative_session_stats(data, plugin, matches, rules)
+    return _head_to_head_stats(data, plugin, matches)
 
 
 def _replace_rankings(
