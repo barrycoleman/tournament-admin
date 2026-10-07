@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from tournament_server.db import utc_now
@@ -25,7 +25,13 @@ NOT_PLAYED_START_DETAIL = "This match was not played; reopen qualification to ru
 FINALS_NEED_FINALIZE_DETAIL = "Finalize this session's qualification before generating finals."
 FINALS_EXIST_DETAIL = "Delete this session's finals brackets before reopening qualification"
 
+MATCHES_CHANGED_DETAIL = "Matches changed while finalizing; try again."
+
 _IDLE_PHASES = ("not_started", "ended")
+
+
+class QualificationConflictError(Exception):
+    """The session's matches changed under a finalize; the caller should roll back and report a 409."""
 
 
 def is_finalized(session_obj: TournamentSession) -> bool:
@@ -125,8 +131,22 @@ def blocker_detail(blockers: list[dict]) -> str:
 
 
 def finalize(db: Session, session_obj: TournamentSession, state: FinalizeState, drops: dict[str, int]) -> None:
-    for match in state.unplayed:
-        match.status = NOT_PLAYED
+    unplayed_ids = [m.id for m in state.unplayed]
+    if unplayed_ids:
+        # Conditional write: a score saved after finalize_state read the matches must not be overwritten.
+        scored = select(Alliance.match_id).join(ScoreRecord, ScoreRecord.alliance_id == Alliance.id)
+        result = db.execute(
+            update(Match)
+            .where(
+                Match.id.in_(unplayed_ids),
+                Match.status.not_in(("completed", NOT_PLAYED)),
+                Match.id.not_in(scored),
+            )
+            .values(status=NOT_PLAYED)
+            .execution_options(synchronize_session="fetch")
+        )
+        if result.rowcount != len(unplayed_ids):
+            raise QualificationConflictError(MATCHES_CHANGED_DETAIL)
     session_obj.qualification_finalized_at = utc_now()
     session_obj.qualification_drops = dict(drops)
     db.flush()

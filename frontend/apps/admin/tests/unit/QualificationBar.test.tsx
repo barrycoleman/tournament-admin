@@ -123,6 +123,19 @@ describe("QualificationBar", () => {
     ).toBeInTheDocument();
   });
 
+  it("refreshes the sessions and the preview when reopening fails", async () => {
+    const { invalidate } = renderBar(FINALIZED);
+    vi.mocked(apiRequest).mockRejectedValue(new ApiError(409, "Qualification is not finalized for this session"));
+    fireEvent.click(screen.getByRole("button", { name: "Reopen qualification" }));
+    const dialog = screen.getByRole("alertdialog");
+    invalidate.mockClear();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reopen qualification" }));
+    expect(await screen.findByText("Qualification is not finalized for this session")).toBeInTheDocument();
+    const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey);
+    expect(keys).toContainEqual(["sessions"]);
+    expect(keys).toContainEqual(["qualification-preview", 1]);
+  });
+
   it("refreshes on qualification_status_changed", async () => {
     const { invalidate } = renderBar(OPEN);
     expect(useRealtimeChannel).toHaveBeenCalledWith(expect.objectContaining({ path: "/ws/session/1" }));

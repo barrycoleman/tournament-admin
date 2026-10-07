@@ -28,14 +28,23 @@ def _setup(client):
 def test_finals_require_finalized_qualification(cooperative_client):
     client = cooperative_client
     s1, _, _, _ = _setup(client)
+    # Two more teams so four ranked teams can fill a bracket of 2 alliances of 2.
+    t3 = client.post("/api/teams", json={"number": "3", "name": "Three"}).json()["id"]
+    t4 = client.post("/api/teams", json={"number": "4", "name": "Four"}).json()["id"]
+    other = client.post("/api/matches", json={
+        "session_id": s1, "round_type": "qualification", "match_number": 3, "field_id": None,
+        "alliances": [{"station": "red", "team_ids": [t3]}, {"station": "blue", "team_ids": [t4]}],
+    }).json()
+    for alliance in other["alliances"]:
+        assert client.post(
+            f"/api/matches/{other['id']}/alliances/{alliance['id']}/score", json={"data": {"objects_scored": 4}}
+        ).status_code == 200
     refused = client.post("/api/finals/start", json={"session_id": s1, "bracket_size": 2})
     assert refused.status_code == 409
     assert refused.json()["detail"] == "Finalize this session's qualification before generating finals."
     finalize_qualification(client, s1)
     started = client.post("/api/finals/start", json={"session_id": s1, "bracket_size": 2})
-    # Two ranked teams cannot fill a bracket of 2 alliances of 2, but that
-    # 422 proves the finalize gate was passed.
-    assert started.status_code != 409, started.text
+    assert started.status_code in (200, 201), started.text
 
 
 def test_not_played_match_cannot_be_scored_or_started(cooperative_client):

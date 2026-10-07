@@ -1,6 +1,7 @@
 import pytest
 
 from ranking_helpers import DEFAULT_SETTINGS, finalize_qualification
+from tournament_server.services import qualification
 
 
 def _event(client, plugin="cooperative-game", team_count=4) -> list[int]:
@@ -332,3 +333,28 @@ def test_finalize_needs_admin(cooperative_client):
     assert raw.post(
         f"/api/sessions/{s1}/qualification/finalize", json={"drops": {}}, headers=scorer
     ).status_code == 403
+
+
+def test_finalize_conflicts_when_a_score_lands_after_the_state_was_read(cooperative_client, monkeypatch):
+    client = cooperative_client
+    s1, _, first, _ = _uneven_session(client)
+    raced = first[8]  # unplayed when the state is read, scored right after
+    real = qualification.finalize_state
+
+    def stale_state(db, session_id):
+        state = real(db, session_id)
+        _score(client, raced, 3)
+        return state
+
+    monkeypatch.setattr(qualification, "finalize_state", stale_state)
+    response = _finalize(client, s1, {"7": 1, "8": 2})
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "Matches changed while finalizing; try again."
+
+    monkeypatch.undo()
+    assert _preview(client, s1)["finalized"] is False
+    session = next(s for s in client.get("/api/sessions").json() if s["id"] == s1)
+    assert session["qualification_finalized_at"] is None
+    statuses = {m["id"]: m["status"] for m in client.get("/api/matches", params={"session_id": s1}).json()}
+    assert statuses[raced["id"]] == "completed"
+    assert statuses[first[9]["id"]] == "scheduled"

@@ -30,6 +30,11 @@ export function QualificationBar({ session }: { session: SessionRead }) {
       setDialog(null);
       refresh();
     },
+    // A failed reopen may have partly committed; refetch so the bar is not stale.
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      queryClient.invalidateQueries({ queryKey: qualificationPreviewKey(session.id) });
+    },
   });
 
   if (session.qualification_finalized_at) {

@@ -29,6 +29,7 @@ const HEAD_TO_HEAD: QualificationPreview = { ...COOPERATIVE, game_model: "head_t
 function renderDialog(preview: QualificationPreview, onDone = vi.fn(), onCancel = vi.fn()) {
   const i18n = initI18n({ en: { translation: enAdmin } });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidate = vi.spyOn(queryClient, "invalidateQueries");
   render(
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
@@ -36,7 +37,7 @@ function renderDialog(preview: QualificationPreview, onDone = vi.fn(), onCancel 
       </I18nextProvider>
     </QueryClientProvider>
   );
-  return { onDone, onCancel };
+  return { onDone, onCancel, invalidate };
 }
 
 beforeEach(() => {
@@ -116,5 +117,15 @@ describe("FinalizeDialog", () => {
     ).toBeInTheDocument();
     expect(onDone).not.toHaveBeenCalled();
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  });
+
+  it("refreshes the sessions and the preview when finalize fails", async () => {
+    vi.mocked(apiRequest).mockRejectedValue(new ApiError(409, "Qualification is already finalized for this session"));
+    const { invalidate } = renderDialog(COOPERATIVE);
+    fireEvent.click(screen.getByRole("button", { name: "Finalize" }));
+    expect(await screen.findByText("Qualification is already finalized for this session")).toBeInTheDocument();
+    const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey);
+    expect(keys).toContainEqual(["sessions"]);
+    expect(keys).toContainEqual(["qualification-preview", 1]);
   });
 });

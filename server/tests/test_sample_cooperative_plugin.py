@@ -1,4 +1,3 @@
-from ranking_helpers import finalize_qualification
 """The sample cooperative game that ships with the server.
 
 Unlike the fixtures under tests/fixtures/plugins/, this plugin is part of
@@ -16,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from auth_helpers import TEST_PASSWORD
 from plugin_helpers import zip_fixture_plugin
+from ranking_helpers import finalize_qualification
 from schedule_helpers import schedule, set_playing_windows
 from tournament_server.app import create_app
 from tournament_server.cli import main

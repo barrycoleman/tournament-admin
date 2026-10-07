@@ -231,6 +231,11 @@ Otherwise it reverts `not_played` → `scheduled`, clears both columns, recomput
   - head-to-head finalize confirmation;
   - Reopen refused with a finals bracket present (bracket created through the API).
 
+## Known limitations
+
+- Finalize commits the session and match changes together with the first ranking write. Ranking scopes after that commit one by one, as every other recompute does. If a plugin's ranking crashes partway, some rankings stay stale until the next recompute.
+- Played counts are session-wide, but ranking scopes are per division. A team that played in two divisions of one session gets the drops for its per-division count, which may be a different row or 0.
+
 ## Out of scope
 
 - A Finals page in the admin app (the gate is enforced on the server; see 4.3).

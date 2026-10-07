@@ -1,11 +1,12 @@
 import { useId, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest } from "@tournament-admin/shared";
 import { Modal } from "../components/Modal";
 import { apiErrorMessage } from "../apiErrorMessage";
 import type { QualificationPreview, SessionRead } from "../types";
 import { draftFromRows, validateDraft } from "./finalizeDraft";
+import { qualificationPreviewKey } from "./useQualificationPreview";
 
 interface FinalizeDialogProps {
   sessionId: number;
@@ -21,10 +22,16 @@ export function FinalizeDialog({ sessionId, preview: openedWith, onDone, onCance
   const headingId = useId();
   const [draft, setDraft] = useState(() => draftFromRows(preview.rows));
   const { drops, errors } = validateDraft(preview.rows, draft);
+  const queryClient = useQueryClient();
   const mutation = useMutation({
     mutationFn: (body: { drops: Record<string, number> }) =>
       apiRequest<SessionRead>(`/api/sessions/${sessionId}/qualification/finalize`, { method: "POST", body }),
     onSuccess: onDone,
+    // A failed finalize may have partly committed (or lost a race); refetch so the bar is not stale.
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      queryClient.invalidateQueries({ queryKey: qualificationPreviewKey(sessionId) });
+    },
   });
   const cooperative = preview.game_model === "cooperative_score";
 

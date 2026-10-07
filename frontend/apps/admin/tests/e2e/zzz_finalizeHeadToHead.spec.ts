@@ -1,3 +1,4 @@
+// Runs on the shared E2E event; the zzz_ prefix makes it run after zz_seasonRankings, whose season assertions it would otherwise disturb.
 import fs from "node:fs";
 import { test, expect } from "@playwright/test";
 import { E2E_EVENT_NAME, E2E_EVENT_PASSWORD } from "./fixtures/testEvent";

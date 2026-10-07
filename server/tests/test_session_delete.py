@@ -1,8 +1,8 @@
-from ranking_helpers import finalize_qualification
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from auth_helpers import bearer, login_as
+from ranking_helpers import finalize_qualification
 from schedule_helpers import schedule, set_playing_windows
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
 from tournament_server.models.bracket_matchup import BracketMatchup

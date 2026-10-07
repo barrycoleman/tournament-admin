@@ -92,7 +92,11 @@ def finalize(
                 status_code=422,
                 detail=f"Teams that played {played} can drop between 0 and {int(played) - 1} matches",
             )
-    qualification.finalize(db, session_obj, state, payload.drops)
+    try:
+        qualification.finalize(db, session_obj, state, payload.drops)
+    except qualification.QualificationConflictError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _after_change(request, db, session_obj, plugin)
 
 
