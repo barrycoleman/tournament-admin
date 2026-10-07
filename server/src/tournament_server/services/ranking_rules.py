@@ -63,14 +63,30 @@ def session_drop_allowance(scheduled: int, rules: RankingRules) -> int:
     return suggest_exclusion_count(scheduled)
 
 
-def session_drops(records: list[MatchRecord], scheduled: int, rules: RankingRules) -> set[int]:
+def suggest_finalize_drops(played: int, rules: RankingRules) -> int:
+    """The finalize dialog's starting value for teams that played `played` matches:
+    the session drop setting applied to what was played, never dropping every match."""
+    return max(0, min(session_drop_allowance(played, rules), played - 1))
+
+
+def session_drops(
+    records: list[MatchRecord],
+    scheduled: int,
+    rules: RankingRules,
+    finalized_drops: int | None = None,
+) -> set[int]:
     """Match ids dropped from one team's ranking in one session.
 
-    Drops are earned only as the last `allowance` scheduled matches are
-    scored, and a team's last record is never dropped.
+    While the session is open, drops are earned only as the last `allowance`
+    scheduled matches are scored. Once qualification is finalized,
+    `finalized_drops` (the admin's number for this team's played count)
+    applies immediately. Either way a team's last record is never dropped.
     """
-    allowance = session_drop_allowance(scheduled, rules)
-    earned = min(allowance, max(0, len(records) - (scheduled - allowance)))
+    if finalized_drops is None:
+        allowance = session_drop_allowance(scheduled, rules)
+        earned = min(allowance, max(0, len(records) - (scheduled - allowance)))
+    else:
+        earned = finalized_drops
     earned = min(earned, max(0, len(records) - 1))
     dropped: set[int] = set()
     for record in sorted(records, key=lambda r: (r.score, r.match_id)):

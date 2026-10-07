@@ -8,6 +8,7 @@ from tournament_server.services.ranking_rules import (
     session_drops,
     session_score,
     suggest_exclusion_count,
+    suggest_finalize_drops,
 )
 
 
@@ -130,3 +131,41 @@ def test_season_checkbox_off_versus_on():
     records = [rec(1, 10), rec(2, 20), rec(3, 30)]
     assert season_score(records, {1}, RankingRules()) == 20.0
     assert season_score(records, {1}, RankingRules(season_only_session_counted=True)) == 25.0
+
+
+def test_finalized_drops_apply_immediately_without_the_earning_gate():
+    records = ascending(8)  # 10..80; 10 were scheduled, so open-session tiers would earn nothing yet
+    assert session_drops(records, 10, RankingRules()) == set()
+    assert session_drops(records, 10, RankingRules(), finalized_drops=2) == {1, 2}
+
+
+def test_finalized_drops_never_drop_the_last_record():
+    assert session_drops(ascending(2), 2, RankingRules(), finalized_drops=5) == {1}
+    assert session_drops(ascending(1), 1, RankingRules(), finalized_drops=1) == set()
+
+
+def test_finalized_drops_respect_no_show_and_dq_settings():
+    records = [rec(1, 0, no_show=True), rec(2, 0, dq=True), rec(3, 30), rec(4, 40)]
+    assert session_drops(records, 4, RankingRules(), finalized_drops=1) == {3}
+    allow = RankingRules(session_drop_no_show=True)
+    assert session_drops(records, 4, allow, finalized_drops=1) == {1}
+
+
+def test_finalized_zero_drops_nothing():
+    assert session_drops(ascending(8), 8, RankingRules(), finalized_drops=0) == set()
+
+
+@pytest.mark.parametrize(
+    "rules, played, expected",
+    [
+        (RankingRules(), 7, 1),
+        (RankingRules(), 8, 2),
+        (RankingRules(), 1, 0),
+        (RankingRules(session_drop_mode="lowest", session_drop_count=3), 8, 3),
+        (RankingRules(session_drop_mode="lowest", session_drop_count=3), 2, 1),  # capped at played - 1
+        (RankingRules(session_drop_mode="none"), 8, 0),
+        (RankingRules(session_drop_mode="lowest", session_drop_count=3), 0, 0),
+    ],
+)
+def test_suggest_finalize_drops(rules, played, expected):
+    assert suggest_finalize_drops(played, rules) == expected
