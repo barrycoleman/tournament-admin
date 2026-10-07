@@ -109,6 +109,7 @@ All three endpoints are under `/api/sessions/{session_id}/qualification`.
 `blockers` lists reasons finalizing is not possible right now, each as `{"code": ..., "count": n}`:
 - `in_progress`: a qualification match whose phase is not `not_started` or `ended` (running or paused);
 - `ended_unscored`: a qualification match whose phase is `ended` but which has no score yet;
+- `partially_scored`: a qualification match that is not `completed` but has a score on at least one alliance (a head-to-head match with only one side entered);
 - `no_matches`: the session has no qualification matches.
 
 For head-to-head, `rows` is `[]`.
