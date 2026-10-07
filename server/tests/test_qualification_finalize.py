@@ -290,6 +290,35 @@ def test_finalize_and_reopen_broadcast_status(cooperative_client):
             events.append(socket.receive_json())
         changed = next(e for e in events if e["event"] == "qualification_status_changed")
         assert changed["data"] == {"session_id": s1, "finalized": True}
+        assert client.post(f"/api/sessions/{s1}/qualification/reopen").status_code == 200
+        events = []
+        while not any(e["event"] == "qualification_status_changed" for e in events):
+            events.append(socket.receive_json())
+        changed = next(e for e in events if e["event"] == "qualification_status_changed")
+        assert changed["data"] == {"session_id": s1, "finalized": False}
+
+
+def test_finalize_is_atomic_when_the_recompute_fails(cooperative_client, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    client = cooperative_client
+    s1, _, first, _ = _uneven_session(client)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("recompute failed")
+
+    monkeypatch.setattr("tournament_server.routers.qualification.recompute_all_rankings", boom)
+    raw = TestClient(client.app, raise_server_exceptions=False)
+    response = raw.post(
+        f"/api/sessions/{s1}/qualification/finalize",
+        json={"drops": {"7": 1, "8": 2}},
+        headers={"Authorization": client.headers["Authorization"]},
+    )
+    assert response.status_code == 500
+    monkeypatch.undo()
+    assert _preview(client, s1)["finalized"] is False
+    statuses = {m["id"]: m["status"] for m in client.get("/api/matches", params={"session_id": s1}).json()}
+    assert statuses[first[9]["id"]] == "scheduled"
 
 
 def test_finalize_needs_admin(cooperative_client):

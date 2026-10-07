@@ -129,7 +129,7 @@ def finalize(db: Session, session_obj: TournamentSession, state: FinalizeState, 
         match.status = NOT_PLAYED
     session_obj.qualification_finalized_at = utc_now()
     session_obj.qualification_drops = dict(drops)
-    db.commit()
+    db.flush()
 
 
 def reopen(db: Session, session_obj: TournamentSession) -> None:
@@ -138,4 +138,4 @@ def reopen(db: Session, session_obj: TournamentSession) -> None:
             match.status = "scheduled"
     session_obj.qualification_finalized_at = None
     session_obj.qualification_drops = None
-    db.commit()
+    db.flush()

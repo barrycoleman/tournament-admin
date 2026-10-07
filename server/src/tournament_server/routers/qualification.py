@@ -35,6 +35,7 @@ def _is_cooperative(plugin) -> bool:
 def _after_change(request: Request, db: Session, session_obj: TournamentSession, plugin) -> SessionRead:
     event = get_the_event(db)
     recompute_all_rankings(request.app, db, plugin, event.id)
+    db.commit()
     finalized = qualification.is_finalized(session_obj)
     broadcast_for_session(
         request.app, db, session_obj.id, "qualification_status_changed",
