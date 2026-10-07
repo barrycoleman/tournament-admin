@@ -1,3 +1,6 @@
+from ranking_helpers import finalize_qualification
+
+
 def _setup_ranked_teams(client, count: int) -> tuple[int, list[int]]:
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
@@ -41,6 +44,7 @@ def _rank_teams_directly(cooperative_client, session_id: int, team_ids: list[int
             f"/api/matches/{match['id']}/alliances/{red_id}/score",
             json={"data": {"objects_scored": (len(team_ids) - i) * step}},
         )
+    finalize_qualification(cooperative_client, session_id)
 
 
 def _rank_teams_for_division(
@@ -69,6 +73,7 @@ def _rank_teams_for_division(
             f"/api/matches/{match['id']}/alliances/{red_id}/score",
             json={"data": {"objects_scored": (len(team_ids) - i) * step}},
         )
+    finalize_qualification(cooperative_client, session_id)
 
 
 def test_start_finals_seed_pairing_forms_alliances_immediately(cooperative_client):
@@ -180,6 +185,7 @@ def _rank_teams_directly_head_to_head(client, session_id: int, team_ids: list[in
             f"/api/matches/{match['id']}/alliances/{blue_id}/score",
             json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
         )
+    finalize_qualification(client, session_id)
 
 
 def test_start_finals_single_elimination_accepts_wins_to_advance_list(client):
@@ -667,6 +673,7 @@ def test_captain_pick_rejects_out_of_turn_pick(captain_pick_client):
         json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
     )
 
+    finalize_qualification(client, session_id)
     bracket = client.post(
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 2},
@@ -750,6 +757,7 @@ def test_captain_pick_rejects_already_claimed_partner(captain_pick_client):
         json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
     )
 
+    finalize_qualification(client, session_id)
     bracket = client.post(
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 2},
@@ -829,6 +837,7 @@ def test_captain_pick_completes_bracket_once_every_captain_has_picked(captain_pi
         json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
     )
 
+    finalize_qualification(client, session_id)
     bracket = client.post(
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 2},
@@ -889,6 +898,7 @@ def test_starting_a_score_chase_bracket_creates_the_first_run_for_the_worst_seed
             json={"data": {"objects_scored": (4 - i) * 10}},
         )
 
+    finalize_qualification(client, session_id)
     bracket = client.post(
         "/api/finals/start", json={"session_id": session_id, "bracket_size": 2}
     ).json()
@@ -935,6 +945,7 @@ def test_field_allocation_round_robins_across_multiple_fields(cooperative_client
             json={"data": {"objects_scored": (4 - i) * 10}},
         )
 
+    finalize_qualification(client, session_id)
     bracket = client.post(
         "/api/finals/start", json={"session_id": session_id, "bracket_size": 2}
     ).json()
@@ -973,6 +984,7 @@ def _setup_and_start_score_chase(client, scores: list[int]):
             json={"data": {"objects_scored": (len(team_ids) - i) * 10}},
         )
 
+    finalize_qualification(client, session_id)
     bracket = client.post(
         "/api/finals/start", json={"session_id": session_id, "bracket_size": len(scores)}
     ).json()
@@ -1124,6 +1136,7 @@ def test_resubmitting_a_completed_run_does_not_create_an_extra_run(cooperative_c
             json={"data": {"objects_scored": (4 - i) * 10}},
         )
 
+    finalize_qualification(client, session_id)
     bracket = client.post(
         "/api/finals/start", json={"session_id": session_id, "bracket_size": 2}
     ).json()
@@ -1470,6 +1483,7 @@ def test_start_finals_captain_pick_succeeds_in_a_single_division_event(captain_p
         json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
     )
 
+    finalize_qualification(client, session_id)
     response = client.post(
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 2},
@@ -1971,6 +1985,7 @@ def test_score_chase_run_labels_are_sequential_with_no_suffix(cooperative_client
             json={"data": {"objects_scored": (4 - i) * 10}},
         )
 
+    finalize_qualification(client, session_id)
     client.post("/api/finals/start", json={"session_id": session_id, "bracket_size": 2})
 
     matches = client.get(f"/api/matches?session_id={session_id}").json()

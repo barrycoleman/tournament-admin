@@ -1,4 +1,4 @@
-from ranking_helpers import DEFAULT_SETTINGS
+from ranking_helpers import DEFAULT_SETTINGS, finalize_qualification
 
 
 def _cooperative_event(client) -> tuple[int, int]:
@@ -213,6 +213,7 @@ def test_finals_scoring_leaves_season_rows_unchanged(cooperative_client):
     season_before = _rows(client, event_wide="true")
     assert set(season_before) == set(teams)
 
+    finalize_qualification(client, s1)
     started = client.post("/api/finals/start", json={"session_id": s1, "bracket_size": 2})
     assert started.status_code in (200, 201), started.text
     bracket = started.json()

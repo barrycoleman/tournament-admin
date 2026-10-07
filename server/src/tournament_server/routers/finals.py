@@ -32,6 +32,7 @@ from tournament_server.schemas.finals import (
     FinalsRunRead,
     FinalsStartRequest,
 )
+from tournament_server.services import qualification
 from tournament_server.services.deletion import delete_finals_bracket
 from tournament_server.services.finals import (
     expand_wins_to_advance,
@@ -139,7 +140,8 @@ def start_finals(
     event = get_the_event(db)
     if event is None:
         raise HTTPException(status_code=404, detail="Event not initialized")
-    if db.get(TournamentSession, payload.session_id) is None:
+    session_obj = db.get(TournamentSession, payload.session_id)
+    if session_obj is None:
         raise HTTPException(status_code=404, detail="Session not found")
     if payload.division_id is not None and db.get(Division, payload.division_id) is None:
         raise HTTPException(status_code=404, detail="Division not found")
@@ -266,6 +268,9 @@ def start_finals(
                     f"bracket of size {payload.bracket_size}"
                 ),
             )
+
+    if not qualification.is_finalized(session_obj):
+        raise HTTPException(status_code=409, detail=qualification.FINALS_NEED_FINALIZE_DETAIL)
 
     ranking_query = select(Ranking).where(Ranking.session_id == payload.session_id)
     if payload.division_id is None:

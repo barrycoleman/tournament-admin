@@ -1,3 +1,4 @@
+from ranking_helpers import finalize_qualification
 """The sample cooperative game that ships with the server.
 
 Unlike the fixtures under tests/fixtures/plugins/, this plugin is part of
@@ -239,6 +240,7 @@ def test_seed_paired_score_chase_finals_run_to_completion(sample_client):
         ).json()
         _score(sample_client, match["id"], match["alliances"][0]["id"], score)
 
+    finalize_qualification(sample_client, session_id)
     response = sample_client.post(
         "/api/finals/start", json={"session_id": session_id, "bracket_size": 2}
     )

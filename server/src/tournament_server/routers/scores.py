@@ -17,6 +17,7 @@ from tournament_server.models.match import Match
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.realtime import broadcast_for_session, broadcast_new_finals_matches
 from tournament_server.schemas.score_record import ScoreRecordRead, ScoreSubmit
+from tournament_server.services import qualification
 from tournament_server.services.finals import advance_score_chase, advance_single_elimination
 from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
 
@@ -56,6 +57,8 @@ def submit_score(
     alliance = db.get(Alliance, alliance_id)
     if alliance is None or alliance.match_id != match_id:
         raise HTTPException(status_code=404, detail="Alliance not found on this match")
+    if match.status == qualification.NOT_PLAYED:
+        raise HTTPException(status_code=409, detail=qualification.NOT_PLAYED_SCORE_DETAIL)
 
     submitted_by = (
         device_friendly_name if device_friendly_name is not None else audit.current_actor.get()

@@ -334,6 +334,22 @@ rule is a pure function in `services/ranking_rules.py`, unit-tested in
 writes rows. A `PUT` recomputes every session and season ranking
 (`recompute_all_rankings`).
 
+A session's qualification is closed with `POST
+/api/sessions/{id}/qualification/finalize` (body `{"drops": {...}}`, one
+drop count per played-match count; `GET .../finalize-preview` returns the
+suggested drops and the blockers) and reopened with `POST
+.../qualification/reopen`. Finalizing marks every qualification match that
+was never scored `not_played` (it counts for nobody and is excluded from the
+schedule) and applies the chosen drops per played count instead of waiting
+for the last scheduled matches. It is refused (409) while a qualification
+match is in progress, ended but unscored, or partly scored, or when the
+session has no qualification matches. Reopen is refused while the session
+has a finals bracket. Guards while finalized: `POST /api/finals/start` 409s
+until the session is finalized; a `not_played` match cannot be scored or
+started; creating a non-practice match, generating a non-practice round and
+clearing a non-practice round of the schedule are refused. Correcting the
+score of an already-completed match stays allowed.
+
 `GET /api/rankings?event_wide=true` returns season standings (`Ranking` rows
 with `session_id: null`), recomputed alongside the session ranking on every
 score save and round clear, for **both** game models: head-to-head season
@@ -352,6 +368,8 @@ qualification-stage `teams_per_alliance` — formed once via `POST
 /api/finals/start` (immediately, for `seed_pairing`) or via a sequence of
 `POST /api/finals/{id}/pick` calls in strict seed order (for
 `captain_pick`).
+
+`POST /api/finals/start` 409s until the session's qualification is finalized.
 
 `single_elimination` brackets use `BracketMatchup` (`id, bracket_id,
 round_number, position, matchup_number, alliance_a_id, alliance_b_id,
@@ -795,6 +813,8 @@ truth for that richer shape):
   `event_wide` is true, `session_id` is null, matching the event-wide
   `Ranking` row's own null `session_id`.
 - `active_session_changed` — `{active_session_id}`.
+- `qualification_status_changed` — `{session_id, finalized}` (via
+  `broadcast_for_session`), on finalize and reopen.
 
 Routing: `realtime.broadcast_for_session` always sends on
 `session:<id>`, and additionally on `active-session` when that session

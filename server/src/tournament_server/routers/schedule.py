@@ -31,6 +31,7 @@ from tournament_server.schemas.schedule import (
     ScheduleRoundsRead,
     ScheduledRoundRead,
 )
+from tournament_server.services import qualification
 from tournament_server.services.deletion import delete_matches
 from tournament_server.services.playing_windows import load_windows
 from tournament_server.services.schedule_timing import (
@@ -344,6 +345,8 @@ def generate_schedule(
     session_obj = db.get(TournamentSession, payload.session_id)
     if session_obj is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    if qualification.is_finalized(session_obj) and any(r.round_type != "practice" for r in payload.rounds):
+        raise HTTPException(status_code=409, detail=qualification.FINALIZED_SCHEDULE_DETAIL)
     if payload.division_id is not None and db.get(Division, payload.division_id) is None:
         raise HTTPException(status_code=404, detail="Division not found")
 
@@ -728,8 +731,11 @@ def clear_schedule(
     db: Session = Depends(get_db),
     _role: str = Depends(require_admin),
 ) -> dict[str, int]:
-    if db.get(TournamentSession, session_id) is None:
+    session_obj = db.get(TournamentSession, session_id)
+    if session_obj is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    if qualification.is_finalized(session_obj) and round_type != "practice":
+        raise HTTPException(status_code=409, detail=qualification.FINALIZED_SCHEDULE_DETAIL)
 
     matches_deleted = _delete_round(db, session_id, division_id, round_type)
 

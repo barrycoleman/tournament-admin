@@ -1,3 +1,4 @@
+from ranking_helpers import finalize_qualification
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -121,6 +122,7 @@ def test_delete_session_removes_an_unscored_finals_bracket(cooperative_client):
             f"/api/matches/{match['id']}/alliances/{red_id}/score",
             json={"data": {"objects_scored": (4 - i) * 10}},
         )
+    finalize_qualification(client, session_id)
     started = client.post("/api/finals/start", json={"session_id": session_id, "bracket_size": 2})
     assert started.status_code == 201, started.text
     # Remove the qualification scores the seeding needed, leaving a bracket

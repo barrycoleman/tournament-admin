@@ -32,6 +32,7 @@ from tournament_server.schemas.match import (
     MatchRead,
     MatchResetRequest,
 )
+from tournament_server.services import qualification
 from tournament_server.services.match_labeling import match_label
 
 router = APIRouter(prefix="/api/matches", tags=["matches"])
@@ -119,8 +120,11 @@ def create_match(
         raise HTTPException(
             status_code=422, detail="No session_id given and no active session is set"
         )
-    if db.get(TournamentSession, session_id) is None:
+    session_obj = db.get(TournamentSession, session_id)
+    if session_obj is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    if qualification.is_finalized(session_obj) and payload.round_type != "practice":
+        raise HTTPException(status_code=409, detail=qualification.FINALIZED_SCHEDULE_DETAIL)
 
     game_plugin = get_game_plugin_for_event(request, db)
     alliance_count = game_plugin.module.match_format()["alliance_count"]
@@ -324,6 +328,8 @@ def start_match(
     match = db.get(Match, match_id)
     if match is None:
         raise HTTPException(status_code=404, detail="Match not found")
+    if match.status == qualification.NOT_PLAYED:
+        raise HTTPException(status_code=409, detail=qualification.NOT_PLAYED_START_DETAIL)
     if match.phase != "not_started":
         raise HTTPException(
             status_code=409, detail=f"Match is not in not_started (currently {match.phase})"
