@@ -139,6 +139,7 @@ test.describe.serial("cooperative rankings and ranking settings", () => {
     });
     expect(saved.ok()).toBeTruthy();
     await expect(cell(page, "C1", 3)).toHaveText("15.00"); // (20 + 10 + 30) / 4, without a reload
+    await expect(page.getByText("Best 4 matches · minimum 4")).toBeVisible();
   });
 
   test("a minimum above the kept matches is refused", async ({ page, request }) => {

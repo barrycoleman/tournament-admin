@@ -4,7 +4,7 @@ import { useRealtimeChannel, type RealtimeEvent } from "@tournament-admin/shared
 import { RankingsView } from "../rankings/RankingsView";
 import { describeSeasonRules } from "../rankings/seasonRulesSummary";
 import { rankingsKeyPrefix } from "../rankings/useRankingGroups";
-import { useRankingSettings } from "../rankings/useRankingSettings";
+import { RANKING_SETTINGS_KEY, useRankingSettings } from "../rankings/useRankingSettings";
 
 const SEASON_SCOPE = { kind: "season" as const };
 
@@ -23,6 +23,8 @@ export function SeasonRankingsRoute() {
       const data = realtimeEvent.data as { event_wide?: boolean } | null;
       if (realtimeEvent.event === "ranking_updated" && data?.event_wide) {
         queryClient.invalidateQueries({ queryKey: rankingsKeyPrefix(SEASON_SCOPE) });
+        // A settings change recomputes everything, so the rules sentence follows.
+        queryClient.invalidateQueries({ queryKey: RANKING_SETTINGS_KEY });
       }
     },
   });

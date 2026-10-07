@@ -113,11 +113,16 @@ describe("SeasonRankingsRoute", () => {
     const fetches = () =>
       vi.mocked(apiRequest).mock.calls.filter(([path]) => path === "/api/rankings?event_wide=true").length;
     const before = fetches();
+    const settingsFetches = () =>
+      vi.mocked(apiRequest).mock.calls.filter(([path]) => path === "/api/ranking-settings").length;
+    const settingsBefore = settingsFetches();
     act(() => onEvent?.({ event: "ranking_updated", data: { session_id: 3, event_wide: false } }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fetches()).toBe(before);
+    expect(settingsFetches()).toBe(settingsBefore);
 
     act(() => onEvent?.({ event: "ranking_updated", data: { session_id: null, event_wide: true } }));
     await waitFor(() => expect(fetches()).toBeGreaterThan(before));
+    await waitFor(() => expect(settingsFetches()).toBeGreaterThan(settingsBefore));
   });
 });

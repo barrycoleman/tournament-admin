@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initI18n } from "@tournament-admin/shared";
@@ -66,6 +66,12 @@ describe("RankingSettingsPanel", () => {
     stub("head_to_head");
     const { container } = renderPanel();
     await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/ranking-settings"));
+    // Let the request's promise settle and React apply the result before asserting absence.
+    const request = vi.mocked(apiRequest).mock.results[0].value as Promise<unknown>;
+    await act(async () => {
+      await request;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(container).toBeEmptyDOMElement();
   });
 

@@ -128,8 +128,13 @@ test.describe.serial("head-to-head session and season rankings", () => {
 
   test("head-to-head events have no ranking settings panel", async ({ page }) => {
     await loginAsAdmin(page);
+    const settingsResponse = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/ranking-settings"
+    );
     await page.goto("/events/setup");
     await expect(page.getByRole("heading", { name: "Game plugins" })).toBeVisible();
+    // The panel hides itself only once the settings (and so the game model) have loaded.
+    expect((await settingsResponse).ok()).toBeTruthy();
     await expect(page.getByRole("heading", { name: "Ranking settings" })).toHaveCount(0);
   });
 });
