@@ -22,6 +22,8 @@ const SESSION: SessionRead = {
   session_date: null,
   timezone: null,
   has_scored_matches: true,
+  qualification_finalized_at: null,
+  qualification_drops: null,
 };
 const TEAMS = [
   { id: 1, number: "101", name: "Alpha", division_id: 7 },

@@ -13,7 +13,7 @@ vi.mock("@tournament-admin/shared", async (importOriginal) => {
 });
 import { apiRequest } from "@tournament-admin/shared";
 
-const SESSION: SessionRead = { id: 1, event_id: 1, label: "Weekend", session_date: "2026-11-07", timezone: "America/Los_Angeles", has_scored_matches: false };
+const SESSION: SessionRead = { id: 1, event_id: 1, label: "Weekend", session_date: "2026-11-07", timezone: "America/Los_Angeles", has_scored_matches: false, qualification_finalized_at: null, qualification_drops: null };
 const WINDOWS: PlayingWindowRead[] = [
   { date: "2026-11-07", start_time: "09:00", end_time: "12:00", start_utc: "2026-11-07T17:00:00Z", end_utc: "2026-11-07T20:00:00Z" },
   { date: "2026-11-08", start_time: "09:00", end_time: "15:00", start_utc: "2026-11-08T17:00:00Z", end_utc: "2026-11-08T23:00:00Z" },

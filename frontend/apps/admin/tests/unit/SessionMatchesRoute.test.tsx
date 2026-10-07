@@ -22,6 +22,8 @@ const SESSION: SessionRead = {
   session_date: "2026-11-07",
   timezone: "America/Los_Angeles",
   has_scored_matches: false,
+  qualification_finalized_at: null,
+  qualification_drops: null,
 };
 const TEAMS = [
   { id: 1, number: "101", name: "Alpha", division_id: 1 },
@@ -71,6 +73,8 @@ const MATCHES: MatchRead[] = [
 function stub(matches: MatchRead[]) {
   vi.mocked(apiRequest).mockImplementation(async (path: string) => {
     if (path === "/api/matches?session_id=1") return matches as never;
+    if (path === "/api/sessions/1/qualification/finalize-preview")
+      return { finalized: false, game_model: "head_to_head", rows: [], unplayed_matches: 0, blockers: [] } as never;
     if (path === "/api/teams") return TEAMS as never;
     if (path === "/api/fields?session_id=1") return [{ id: 100, field_set_id: 10, name: "Field A" }] as never;
     if (path === "/api/divisions") return [{ id: 1, event_id: 1, name: "Division 1", target_team_count: null }] as never;
@@ -159,5 +163,13 @@ describe("SessionMatchesRoute", () => {
     const before = matchFetches();
     act(() => onEvent?.({ event: "new_match_created", data: {} } as RealtimeEvent));
     await waitFor(() => expect(matchFetches()).toBeGreaterThan(before));
+  });
+
+  it("labels a not-played match and shows the qualification bar", async () => {
+    stub([{ ...MATCHES[0], status: "not_played" }, MATCHES[1]]);
+    renderMatches();
+
+    expect(await screen.findByRole("gridcell", { name: "Not played" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Finalize qualification" })).toBeInTheDocument();
   });
 });

@@ -32,6 +32,10 @@ export interface SessionRead {
   timezone: string | null;
   /** A session with a scored match can't be deleted. */
   has_scored_matches: boolean;
+  /** When qualification was finalized; null while it is open. */
+  qualification_finalized_at: string | null;
+  /** Played count -> drops chosen at finalize; {} for head-to-head; null while open. */
+  qualification_drops: Record<string, number> | null;
 }
 
 export interface FieldSetRead {
@@ -167,4 +171,14 @@ export interface RankingSettingsValues {
 
 export interface RankingSettingsRead extends RankingSettingsValues {
   game_model: GameModel | null;
+}
+
+export type QualificationBlockerCode = "no_matches" | "in_progress" | "ended_unscored" | "partially_scored";
+
+export interface QualificationPreview {
+  finalized: boolean;
+  game_model: GameModel;
+  rows: { played: number; teams: number; suggested: number }[];
+  unplayed_matches: number;
+  blockers: { code: QualificationBlockerCode; count: number }[];
 }

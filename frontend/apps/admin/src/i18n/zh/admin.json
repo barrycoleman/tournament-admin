@@ -103,6 +103,33 @@
     "elimination": "淘汰赛"
   },
   "sessions": {
+    "qualification": {
+      "finalize": "确认资格赛结果",
+      "finalizedOn": "资格赛已于 {{date}} 确认。现在可以生成决赛。",
+      "reopen": "重新开放资格赛",
+      "reopenHeading": "重新开放资格赛？",
+      "reopenBody": "标记为未进行的比赛将回到赛程中，已选择的舍弃场次将被清除。",
+      "blocker": {
+        "no_matches": "本场次没有资格赛比赛。",
+        "in_progress_one": "{{count}} 场比赛正在进行。",
+        "in_progress_other": "{{count}} 场比赛正在进行。",
+        "ended_unscored_one": "{{count}} 场比赛已结束但没有成绩。",
+        "ended_unscored_other": "{{count}} 场比赛已结束但没有成绩。",
+        "partially_scored_one": "{{count}} 场比赛只录入了部分成绩。",
+        "partially_scored_other": "{{count}} 场比赛只录入了部分成绩。"
+      },
+      "dialogHeading": "确认资格赛结果",
+      "dialogIntro": "不再进行资格赛比赛。请选择每支队伍舍弃多少场最低分比赛。",
+      "dialogIntroHeadToHead": "不再进行资格赛比赛。排名将使用目前已进行的比赛。",
+      "rowLabel_one": "已赛 {{played}} 场（{{count}} 支队伍）",
+      "rowLabel_other": "已赛 {{played}} 场（{{count}} 支队伍）",
+      "rowError": "请输入 0 到 {{max}} 之间的整数。",
+      "notPlayed_one": "{{count}} 场未进行的比赛将标记为未进行。",
+      "notPlayed_other": "{{count}} 场未进行的比赛将标记为未进行。",
+      "confirm": "确认",
+      "cancel": "取消",
+      "genericError": "出错了。"
+    },
     "heading": "场次",
     "columnLabel": "场次名称",
     "columnDate": "日期",
@@ -277,7 +304,8 @@
       "columnStatus": "状态",
       "status": {
         "scheduled": "已排定",
-        "completed": "已完成"
+        "completed": "已完成",
+        "not_played": "未进行"
       },
       "noTime": "—",
       "divisionFilterLabel": "组别",

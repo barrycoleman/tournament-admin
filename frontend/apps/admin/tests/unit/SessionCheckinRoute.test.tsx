@@ -22,6 +22,8 @@ const SESSION: SessionRead = {
   session_date: null,
   timezone: null,
   has_scored_matches: false,
+  qualification_finalized_at: null,
+  qualification_drops: null,
 };
 
 function TestLayout() {

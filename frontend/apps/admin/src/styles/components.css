@@ -657,6 +657,25 @@
   margin-bottom: 0;
 }
 
+/* The Matches page's finalize / reopen qualification strip. */
+.qualification-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.qualification-bar__status {
+  margin: 0;
+}
+
+.qualification-bar__blockers {
+  margin: 0;
+  padding-inline-start: var(--space-4);
+  color: var(--color-text-secondary);
+}
+
 /* ---------- Dialogs (native-feeling, no backdrop-blur decoration) ---------- */
 
 /* A native <dialog> opened with showModal() (components/Modal.tsx): the

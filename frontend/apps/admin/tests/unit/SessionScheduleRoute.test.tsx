@@ -31,6 +31,8 @@ const SESSION: SessionRead = {
   session_date: "2026-11-07",
   timezone: "America/Los_Angeles",
   has_scored_matches: false,
+  qualification_finalized_at: null,
+  qualification_drops: null,
 };
 const ONE_DIVISION: Division[] = [{ id: 1, event_id: 1, name: "Division 1", target_team_count: null }];
 const TWO_DIVISIONS: Division[] = [

@@ -103,6 +103,33 @@
     "elimination": "Elimination"
   },
   "sessions": {
+    "qualification": {
+      "finalize": "Finalize qualification",
+      "finalizedOn": "Qualification finalized on {{date}}. Finals can now be generated.",
+      "reopen": "Reopen qualification",
+      "reopenHeading": "Reopen qualification?",
+      "reopenBody": "Matches marked Not played return to the schedule and the chosen drops are cleared.",
+      "blocker": {
+        "no_matches": "This session has no qualification matches.",
+        "in_progress_one": "{{count}} match is in progress.",
+        "in_progress_other": "{{count}} matches are in progress.",
+        "ended_unscored_one": "{{count}} match has ended but has no score.",
+        "ended_unscored_other": "{{count}} matches have ended but have no score.",
+        "partially_scored_one": "{{count}} match is only partly scored.",
+        "partially_scored_other": "{{count}} matches are only partly scored."
+      },
+      "dialogHeading": "Finalize qualification",
+      "dialogIntro": "No more qualification matches will be played. Choose how many of each team's lowest matches to drop.",
+      "dialogIntroHeadToHead": "No more qualification matches will be played. Rankings will use the matches played so far.",
+      "rowLabel_one": "{{played}} played ({{count}} team)",
+      "rowLabel_other": "{{played}} played ({{count}} teams)",
+      "rowError": "Enter a whole number from 0 to {{max}}.",
+      "notPlayed_one": "{{count}} unplayed match will be marked Not played.",
+      "notPlayed_other": "{{count}} unplayed matches will be marked Not played.",
+      "confirm": "Finalize",
+      "cancel": "Cancel",
+      "genericError": "Something went wrong."
+    },
     "heading": "Sessions",
     "columnLabel": "Session name",
     "columnDate": "Date",
@@ -279,7 +306,8 @@
       "columnStatus": "Status",
       "status": {
         "scheduled": "Scheduled",
-        "completed": "Completed"
+        "completed": "Completed",
+        "not_played": "Not played"
       },
       "noTime": "—",
       "divisionFilterLabel": "Division",

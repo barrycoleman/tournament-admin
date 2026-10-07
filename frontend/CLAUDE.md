@@ -178,6 +178,16 @@ the Schedule and Matches tabs share, kept live off `/ws/session/{id}`;
 invalidates that key itself. Match times always render in the session's
 timezone (`src/matchTime.ts`), never the browser's.
 
+Qualification finalizing lives in `src/qualification/`: `QualificationBar`
+(rendered above the Matches page's filter toolbar) offers Finalize, or the
+blocker sentences when the server says it can't yet, or "finalized on ..."
+with Reopen; `FinalizeDialog` collects per-played-count drops (pure logic in
+`finalizeDraft.ts`). The preview query key is `["qualification-preview",
+sessionId]`, kept live off `/ws/session/{id}`. The future Finals page must
+disable its generate action while `qualification_finalized_at` is null, with
+the message "Finalize qualification on the Matches page before generating
+finals." and a link to `/sessions/{id}/matches`.
+
 Rankings live in `src/rankings/`. `useRankingGroups(scope)` fetches every
 division's rankings plus `division_id = null` (a single-division event's
 scheduled matches carry no division) and returns only non-empty groups;

@@ -9,6 +9,7 @@ import { formatMatchTime, spansMultipleDays } from "../matchTime";
 import { useSessionMatches } from "../useSessionMatches";
 import type { Division, FieldRead, SessionRead, TeamSummary } from "../types";
 import { roundTypeLabel } from "../roundTypeLabel";
+import { QualificationBar } from "../qualification/QualificationBar";
 
 interface MatchGridRow {
   id: number;
@@ -140,6 +141,7 @@ export function SessionMatchesRoute() {
 
   return (
     <div>
+      <QualificationBar session={session} />
       <div className="toolbar toolbar--filters">
         {multiDivision && (
           <label className="field">
