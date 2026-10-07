@@ -14,7 +14,9 @@ interface FinalizeDialogProps {
   onCancel: () => void;
 }
 
-export function FinalizeDialog({ sessionId, preview, onDone, onCancel }: FinalizeDialogProps) {
+export function FinalizeDialog({ sessionId, preview: openedWith, onDone, onCancel }: FinalizeDialogProps) {
+  // Snapshot at open: rows and draft must stay in step. The server rejects stale data.
+  const [preview] = useState(() => openedWith);
   const { t } = useTranslation();
   const headingId = useId();
   const [draft, setDraft] = useState(() => draftFromRows(preview.rows));

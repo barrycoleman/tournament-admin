@@ -128,7 +128,8 @@
       "notPlayed_other": "{{count}} 场未进行的比赛将标记为未进行。",
       "confirm": "确认",
       "cancel": "取消",
-      "genericError": "出错了。"
+      "genericError": "出错了。",
+      "retry": "重试"
     },
     "heading": "场次",
     "columnLabel": "场次名称",

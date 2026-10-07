@@ -78,7 +78,7 @@ describe("QualificationBar", () => {
 
   it("shows a finalized session and reopens it after confirmation", async () => {
     renderBar(FINALIZED);
-    expect(screen.getByText(/^Qualification finalized on/)).toBeInTheDocument();
+    expect(screen.getByText("Qualification finalized on Oct 7, 2026, 11:00 AM. Finals can now be generated.")).toBeInTheDocument();
     vi.mocked(apiRequest).mockResolvedValue({ id: 1 } as never);
     fireEvent.click(screen.getByRole("button", { name: "Reopen qualification" }));
     const dialog = screen.getByRole("alertdialog", { name: "Reopen qualification?" });
@@ -87,6 +87,27 @@ describe("QualificationBar", () => {
       expect(apiRequest).toHaveBeenCalledWith("/api/sessions/1/qualification/reopen", { method: "POST" })
     );
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  });
+
+  it("explains a failed preview and retries it", async () => {
+    const i18n = initI18n({ en: { translation: enAdmin } });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.mocked(apiRequest).mockRejectedValue(new ApiError(500, "Preview exploded"));
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <QualificationBar session={OPEN} />
+        </I18nextProvider>
+      </QueryClientProvider>
+    );
+    expect(await screen.findByText("Preview exploded")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Finalize qualification" })).toBeDisabled();
+    vi.mocked(apiRequest).mockClear();
+    vi.mocked(apiRequest).mockResolvedValue(preview([]) as never);
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/sessions/1/qualification/finalize-preview"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Finalize qualification" })).toBeEnabled());
+    expect(screen.queryByText("Preview exploded")).not.toBeInTheDocument();
   });
 
   it("shows the server's reason when reopening is refused", async () => {

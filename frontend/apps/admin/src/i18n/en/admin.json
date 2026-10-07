@@ -128,7 +128,8 @@
       "notPlayed_other": "{{count}} unplayed matches will be marked Not played.",
       "confirm": "Finalize",
       "cancel": "Cancel",
-      "genericError": "Something went wrong."
+      "genericError": "Something went wrong.",
+      "retry": "Retry"
     },
     "heading": "Sessions",
     "columnLabel": "Session name",

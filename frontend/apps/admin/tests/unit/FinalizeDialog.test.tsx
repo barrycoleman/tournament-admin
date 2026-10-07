@@ -53,6 +53,24 @@ describe("FinalizeDialog", () => {
     expect(screen.getByText("5 unplayed matches will be marked Not played.")).toBeInTheDocument();
   });
 
+  it("keeps its rows when a refetch adds a played count while open", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const i18n = initI18n({ en: { translation: enAdmin } });
+    const queryClient = new QueryClient();
+    const tree = (preview: QualificationPreview) => (
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <FinalizeDialog sessionId={1} preview={preview} onDone={vi.fn()} onCancel={vi.fn()} />
+        </I18nextProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree(COOPERATIVE));
+    rerender(tree({ ...COOPERATIVE, rows: [...COOPERATIVE.rows, { played: 9, teams: 2, suggested: 3 }] }));
+    expect(screen.getAllByRole("spinbutton")).toHaveLength(2);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
   it("flags an out-of-range value and disables Finalize", () => {
     renderDialog(COOPERATIVE);
     fireEvent.change(screen.getByRole("spinbutton", { name: "7 played (4 teams)" }), { target: { value: "7" } });

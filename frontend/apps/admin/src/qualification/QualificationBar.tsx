@@ -13,7 +13,7 @@ export function QualificationBar({ session }: { session: SessionRead }) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const blockersId = useId();
-  const { data: preview } = useQualificationPreview(session.id);
+  const { data: preview, error: previewError, refetch } = useQualificationPreview(session.id);
   const [dialog, setDialog] = useState<"finalize" | "reopen" | null>(null);
 
   function refresh() {
@@ -33,9 +33,12 @@ export function QualificationBar({ session }: { session: SessionRead }) {
   });
 
   if (session.qualification_finalized_at) {
-    const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" }).format(
-      new Date(session.qualification_finalized_at)
-    );
+    const formatted = new Intl.DateTimeFormat(i18n.language, {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: session.timezone ?? "UTC",
+    }).format(new Date(session.qualification_finalized_at));
+    const date = session.timezone ? formatted : `${formatted} UTC`;
     return (
       <div className="qualification-bar">
         <p className="qualification-bar__status">{t("sessions.qualification.finalizedOn", { date })}</p>
@@ -73,6 +76,16 @@ export function QualificationBar({ session }: { session: SessionRead }) {
       >
         {t("sessions.qualification.finalize")}
       </button>
+      {previewError && (
+        <>
+          <p className="alert alert-danger qualification-bar__status" role="alert">
+            {apiErrorMessage(previewError, t("sessions.qualification.genericError"))}
+          </p>
+          <button type="button" className="btn" onClick={() => refetch()}>
+            {t("sessions.qualification.retry")}
+          </button>
+        </>
+      )}
       {blockers.length > 0 && (
         <ul id={blockersId} className="qualification-bar__blockers">
           {blockers.map((blocker) => (
