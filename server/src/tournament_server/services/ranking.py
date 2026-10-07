@@ -95,12 +95,34 @@ def _effective_score(plugin: LoadedPlugin, record: ScoreRecord) -> int:
     return plugin.module.calculate_score(json.loads(record.data_json))
 
 
+def _finalized_drops(db: Session, matches: list[Match]) -> dict[int, dict[str, int] | None]:
+    """session_id -> its finalize drops map, or None while that session's qualification is open."""
+    session_ids = sorted({match.session_id for match in matches})
+    if not session_ids:
+        return {}
+    return {
+        row.id: row.qualification_drops
+        for row in db.execute(
+            select(TournamentSession).where(TournamentSession.id.in_(session_ids))
+        ).scalars()
+    }
+
+
+def _drops_for(finalized: dict[int, dict[str, int] | None], session_id: int, played: int) -> int | None:
+    drops = finalized.get(session_id)
+    if drops is None:
+        return None
+    return drops.get(str(played), 0)
+
+
 def _scheduled_counts(
     data: _ScopeData, matches: list[Match]
 ) -> dict[tuple[int, int], int]:
     """(session_id, team_id) -> qualification matches the team is scheduled into, in any status."""
     counts: dict[tuple[int, int], int] = defaultdict(int)
     for match in matches:
+        if match.status == "not_played":
+            continue
         for alliance in data.alliances[match.id]:
             for team_id in data.team_ids[alliance.id]:
                 counts[(match.session_id, team_id)] += 1
@@ -131,12 +153,17 @@ def _cooperative_records(
 
 
 def _cooperative_session_stats(
-    data: _ScopeData, plugin: LoadedPlugin, matches: list[Match], rules: RankingRules
+    data: _ScopeData, plugin: LoadedPlugin, matches: list[Match], rules: RankingRules,
+    finalized: dict[int, dict[str, int] | None],
 ) -> dict[int, TeamStats]:
     scheduled = _scheduled_counts(data, matches)
     stats: dict[int, TeamStats] = {}
     for team_id, records in _cooperative_records(data, plugin, matches).items():
-        dropped = session_drops(records, scheduled[(records[0].session_id, team_id)], rules)
+        session_id = records[0].session_id
+        dropped = session_drops(
+            records, scheduled[(session_id, team_id)], rules,
+            _drops_for(finalized, session_id, len(records)),
+        )
         stats[team_id] = {
             "average_score": session_score(records, dropped),
             "matches_played": len(records),
@@ -145,7 +172,8 @@ def _cooperative_session_stats(
 
 
 def _cooperative_season_stats(
-    data: _ScopeData, plugin: LoadedPlugin, matches: list[Match], rules: RankingRules
+    data: _ScopeData, plugin: LoadedPlugin, matches: list[Match], rules: RankingRules,
+    finalized: dict[int, dict[str, int] | None],
 ) -> dict[int, TeamStats]:
     scheduled = _scheduled_counts(data, matches)
     stats: dict[int, TeamStats] = {}
@@ -157,7 +185,8 @@ def _cooperative_season_stats(
                 by_session[record.session_id].append(record)
             for session_id, session_records in by_session.items():
                 session_dropped |= session_drops(
-                    session_records, scheduled[(session_id, team_id)], rules
+                    session_records, scheduled[(session_id, team_id)], rules,
+                    _drops_for(finalized, session_id, len(session_records)),
                 )
         stats[team_id] = {
             "average_score": season_score(records, session_dropped, rules),
@@ -217,9 +246,10 @@ def _stats(
     data = _ScopeData(db, matches)
     if plugin.module.match_format()["game_model"] == "cooperative_score":
         rules = load_rules(db)
+        finalized = _finalized_drops(db, matches)
         if season:
-            return _cooperative_season_stats(data, plugin, matches, rules)
-        return _cooperative_session_stats(data, plugin, matches, rules)
+            return _cooperative_season_stats(data, plugin, matches, rules, finalized)
+        return _cooperative_session_stats(data, plugin, matches, rules, finalized)
     return _head_to_head_stats(data, plugin, matches)
 
 
