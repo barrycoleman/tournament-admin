@@ -14,7 +14,9 @@ The season rankings spec (`2026-10-06-season-rankings-design.md`) built the Seas
 
 **Decisions made during design (user-confirmed):**
 
-- **Entry happens in the admin app.** Each session gets a Skills page. It is the first screen that draws a plugin scoresheet.
+- **Entry happens in the admin app now, and in the scorer app later.**
+  - In this spec, each session gets a Skills page in the admin app. It is the first screen that draws a plugin scoresheet.
+  - The future scorer app must also score skills, alongside teamwork matches. A field scorer chooses skills, picks the team and, when the game has more than one type, the type, then gets a scoring page like a teamwork match's, specific to that type. See 4.5.
 - **Attempts allowed:** an event-wide number per type (default 3), which a session may override.
 - **One event switch**, "Run skills challenges", is off by default. With it off, skills pages and tabs are hidden and new attempts are refused. An event that runs only skills simply never schedules qualification matches.
 - **Every attempt is recorded.**
@@ -216,7 +218,7 @@ The tab sits in the session navigation beside Matches and Rankings, and is shown
   - **Use event setting** clears the override.
 - **Record an attempt:**
   - **Team picker:** a searchable picker over teams checked in for this session, matched by number or name.
-  - **Type buttons:** one per type, in plugin order.
+  - **Type buttons:** one per type, in plugin order. When the game has only one type, the buttons are hidden and that type is used.
   - **Attempt count:** "Attempt {n} of {allowed}".
   - **Scoresheet:** drawn from the type's schema. The widgets are `counter` (− value +, clamped to min/max), `toggle`, `select` and `radio`, each with its label, and an icon where the schema gives one.
   - **Save attempt:** posts the attempt, then shows "Saved: {score} points" and resets the sheet to defaults for the next run.
@@ -247,7 +249,16 @@ The tab sits in the session navigation beside Matches and Rankings, and is shown
 
 ### 4.4 Shared scoresheet components
 
-The scoresheet form and its widgets live in `frontend/apps/admin/src/scoresheet/`. They take a field list and a value map and know nothing about skills, so a future match-scoring screen or scorer app can reuse them.
+The scoresheet form and its widgets live in `frontend/packages/shared/src/scoresheet/`. They take a field list and a value map and know nothing about skills or the admin app, so the scorer app can reuse them for both skills and teamwork matches. Their UI strings come through the caller's `t(...)`. The admin app wires them to its translation files.
+
+### 4.5 Requirements carried to the future scorer app
+
+The scorer app is not built in this spec. When its spec is written, it **must** include skills scoring next to teamwork match scoring, using the APIs in Section 3:
+
+1. A field scorer, signed in as scorer or referee on an admitted device, chooses between scoring a teamwork match and scoring a skills run.
+2. For a skills run, they pick the team from the session's checked-in teams, then pick the skills type. The type step is skipped when the game has only one type.
+3. They get a full scoring page for that type, like a teamwork match's scoring page, drawn from `GET /api/skills/types/{key}/schema` with the shared scoresheet components. Each type can have its own page because each has its own schema.
+4. Saving posts to `POST /api/sessions/{id}/skills/attempts`. The page shows the attempt number and the attempts remaining, and the same 409/422 messages as the admin page.
 
 ## Section 5: Error handling summary
 
@@ -324,7 +335,7 @@ The scoresheet form and its widgets live in `frontend/apps/admin/src/scoresheet/
 
 ## Out of scope
 
-- A dedicated scorer or tablet app. The API is ready for it, and the scoresheet components are shared.
+- Building the scorer app. Its skills requirements are recorded in 4.5 so its own spec picks them up.
 - A skills finalize or lock.
 - Per-division skills rankings.
 - Plugin-defined skills tie-breaks (`rank_skills`).
