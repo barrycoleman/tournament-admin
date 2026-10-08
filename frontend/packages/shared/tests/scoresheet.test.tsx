@@ -114,6 +114,24 @@ describe("ScoresheetForm", () => {
     expect(latest.zone).toBe("far");
   });
 
+  it("shows a disabled blank choice, not the first option, while a select has no valid value", () => {
+    render(<Harness initial={{ balls: 0, parked: false, level: 1 }} />);
+    const select = screen.getByLabelText("Zone") as HTMLSelectElement;
+    expect(select).toHaveValue("");
+    expect(select.selectedOptions[0]).toBeDisabled();
+    expect(screen.getAllByRole("option")).toHaveLength(3);
+    fireEvent.change(select, { target: { value: "far" } });
+    expect(latest.zone).toBe("far");
+    expect(screen.getByLabelText("Zone")).toHaveValue("far");
+    // The blank choice goes away once the value is one of the options.
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+  });
+
+  it("also shows the blank choice for a value that is not among the options", () => {
+    render(<Harness initial={{ balls: 0, parked: false, zone: "bogus", level: 1 }} />);
+    expect(screen.getByLabelText("Zone")).toHaveValue("");
+  });
+
   it("returns numeric radio options as numbers and shows the icon decoratively", () => {
     render(<Harness />);
     expect(screen.getByRole("group", { name: "Level" })).toBeInTheDocument();

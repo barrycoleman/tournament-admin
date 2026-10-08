@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest } from "@tournament-admin/shared";
 import { apiErrorMessage } from "../apiErrorMessage";
+import { useSkillsLiveUpdates } from "../skills/liveUpdates";
 import { useSkillsSettings } from "../skills/useSkillsSettings";
 import type { EventRead, SessionRead } from "../types";
 
@@ -24,6 +25,9 @@ export function SessionDetailLayout() {
     queryFn: () => apiRequest<EventRead>("/api/event"),
   });
   const skills = useSkillsSettings();
+  // The one /ws/active-session subscription for every session tab (Skills, Rankings), so
+  // the Skills tab itself appears and disappears live.
+  useSkillsLiveUpdates();
   const activateMutation = useMutation({
     mutationFn: (id: number) =>
       apiRequest<EventRead>("/api/event/active-session", {

@@ -6,7 +6,6 @@ import { RankingTabs, skillsTabOf, useRankingTabs } from "../rankings/RankingTab
 import { RankingsView } from "../rankings/RankingsView";
 import { rankingsKeyPrefix } from "../rankings/useRankingGroups";
 import { SkillsRankingsPanel } from "../skills/SkillsRankingsPanel";
-import { useSkillsLiveUpdates } from "../skills/liveUpdates";
 import type { SessionRead } from "../types";
 
 export function SessionRankingsRoute() {
@@ -22,7 +21,6 @@ export function SessionRankingsRoute() {
       }
     },
   });
-  useSkillsLiveUpdates();
   const { tabs, selected, select, types } = useRankingTabs();
   const skillsTab = skillsTabOf(selected);
 

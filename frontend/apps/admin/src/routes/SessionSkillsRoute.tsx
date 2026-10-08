@@ -5,7 +5,6 @@ import { apiRequest } from "@tournament-admin/shared";
 import { AttemptsTable } from "../skills/AttemptsTable";
 import { RecordAttemptForm } from "../skills/RecordAttemptForm";
 import { SessionAttemptsSettings } from "../skills/SessionAttemptsSettings";
-import { useSkillsLiveUpdates } from "../skills/liveUpdates";
 import { useSessionSkills, useSkillsAttempts } from "../skills/useSessionSkills";
 import { useSkillsSettings } from "../skills/useSkillsSettings";
 import type { ParticipationRead, SessionRead, TeamSummary } from "../types";
@@ -13,7 +12,6 @@ import type { ParticipationRead, SessionRead, TeamSummary } from "../types";
 export function SessionSkillsRoute() {
   const { t } = useTranslation();
   const { session } = useOutletContext<{ session: SessionRead }>();
-  useSkillsLiveUpdates();
   const settings = useSkillsSettings();
   const sessionSkills = useSessionSkills(session.id);
   const attempts = useSkillsAttempts(session.id);

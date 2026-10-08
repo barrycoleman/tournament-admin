@@ -246,26 +246,12 @@ describe("SessionSkillsRoute", () => {
     expect(calls("POST", "/api/sessions/1/skills/attempts")).toHaveLength(1);
   });
 
-  it("refetches this session's attempts on skills_changed from the active-session channel", async () => {
-    let onEvent: ((event: RealtimeEvent) => void) | undefined;
-    vi.mocked(useRealtimeChannel).mockImplementation((options) => {
-      if (options.path === "/ws/active-session") onEvent = options.onEvent;
-      return { connected: true };
-    });
+  it("leaves the active-session subscription to the session layout", async () => {
     stub();
     renderSkills();
-    const region = await recordRegion();
-    await pickTeam(region, "101 Alpha");
-    await within(region).findByLabelText("Score");
-    const fetches = () => calls("GET", "/api/sessions/1/skills/attempts").length;
-    const before = fetches();
-
-    act(() => onEvent?.({ event: "skills_changed", data: { session_id: 2 } }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(fetches()).toBe(before);
-
-    act(() => onEvent?.({ event: "skills_changed", data: { session_id: 1 } }));
-    await waitFor(() => expect(fetches()).toBeGreaterThan(before));
+    await recordRegion();
+    const paths = vi.mocked(useRealtimeChannel).mock.calls.map(([options]) => options.path);
+    expect(paths).not.toContain("/ws/active-session");
   });
 
   it("shows a violation for an unknown field in the alert above Save", async () => {

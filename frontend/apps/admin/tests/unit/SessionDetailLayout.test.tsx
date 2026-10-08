@@ -1,18 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { ApiError, initI18n } from "@tournament-admin/shared";
+import { ApiError, initI18n, type RealtimeEvent } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
 import { SessionDetailLayout } from "../../src/routes/SessionDetailLayout";
 
 vi.mock("@tournament-admin/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tournament-admin/shared")>();
-  return { ...actual, apiRequest: vi.fn() };
+  return { ...actual, apiRequest: vi.fn(), useRealtimeChannel: vi.fn() };
 });
 
-import { apiRequest } from "@tournament-admin/shared";
+import { apiRequest, useRealtimeChannel } from "@tournament-admin/shared";
+
+beforeEach(() => {
+  vi.mocked(useRealtimeChannel).mockReset();
+  vi.mocked(useRealtimeChannel).mockReturnValue({ connected: true });
+});
 
 function renderAt(path: string) {
   const i18n = initI18n({ en: { translation: enAdmin } });
@@ -146,5 +151,28 @@ describe("SessionDetailLayout", () => {
     await screen.findByRole("heading", { name: "Saturday" });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(screen.queryByRole("link", { name: "Skills" })).not.toBeInTheDocument();
+  });
+
+  it("shows the Skills tab when skills_settings_changed arrives after skills turn on", async () => {
+    let enabled = false;
+    let onEvent: ((event: RealtimeEvent) => void) | undefined;
+    vi.mocked(useRealtimeChannel).mockImplementation((options) => {
+      if (options.path === "/ws/active-session") onEvent = options.onEvent;
+      return { connected: true };
+    });
+    vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+      if (path === "/api/sessions") return [SATURDAY] as never;
+      if (path === "/api/event") return eventWithActiveSession(1) as never;
+      if (path === "/api/skills/settings") return { enabled, attempts: {}, types: [] } as never;
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderAt("/sessions/1/checkin");
+    await screen.findByRole("heading", { name: "Saturday" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole("link", { name: "Skills" })).not.toBeInTheDocument();
+
+    enabled = true;
+    act(() => onEvent?.({ event: "skills_settings_changed", data: {} }));
+    expect(await screen.findByRole("link", { name: "Skills" })).toBeInTheDocument();
   });
 });

@@ -97,6 +97,8 @@ function optionFor(field: ScoresheetField, text: string): ScoresheetValue {
 }
 
 function SelectField({ field, value, onChange, id, errorId }: FieldProps) {
+  const options = field.options ?? [];
+  const hasChoice = value !== undefined && options.some((option) => String(option) === String(value));
   return (
     <div className="scoresheet__field">
       <label className="scoresheet__label" htmlFor={id}>
@@ -106,12 +108,18 @@ function SelectField({ field, value, onChange, id, errorId }: FieldProps) {
       <select
         id={id}
         className="input select"
-        value={value === undefined ? "" : String(value)}
+        value={hasChoice ? String(value) : ""}
         aria-invalid={errorId ? true : undefined}
         aria-describedby={errorId}
         onChange={(event) => onChange(optionFor(field, event.target.value))}
       >
-        {(field.options ?? []).map((option) => (
+        {/* Without this the browser would show the first option while the state stays unset. */}
+        {!hasChoice && (
+          <option value="" disabled>
+            {"—"}
+          </option>
+        )}
+        {options.map((option) => (
           <option key={String(option)} value={String(option)}>
             {String(option)}
           </option>

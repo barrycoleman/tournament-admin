@@ -209,7 +209,7 @@ Skills challenges live in `src/skills/`.
   - `RecordAttemptForm`: `TeamPicker` over checked-in teams (`["participants", sessionId]`, shared with Check-In), type buttons hidden for a one-type game, and the shared scoresheet;
   - `AttemptsTable`: the team filter, plus `EditAttemptDialog` for admin edit and delete.
 - **Rankings:** both rankings pages use `RankingTabs`/`useRankingTabs` (Teamwork, each type, Overall Skills). A skills tab renders `SkillsRankingsPanel` (key `["skillsRankings", sessionId | "season", tab]`).
-- **Live updates:** every skills event reaches `/ws/active-session`, so skills UI listens there through `useSkillsLiveUpdates` / `handleSkillsEvent`.
+- **Live updates:** every skills event reaches `/ws/active-session`, so skills UI listens there through `useSkillsLiveUpdates` / `handleSkillsEvent`, mounted once in `SessionDetailLayout` (which also keeps the Skills tab live); session tabs must not mount it again.
 - **Scoresheet forms:** they come from `@tournament-admin/shared`'s `ScoresheetForm`, which takes the caller's `t` (`useScoresheetT`) and knows nothing about skills. The future scorer app reuses it for skills and teamwork. A 422's per-field `violations` reach it through `ApiError.body` (`violationsByField`).
 
 `AppShell.tsx`'s nav is gated per role, the same pattern repeated for
