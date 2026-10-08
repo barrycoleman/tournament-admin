@@ -287,7 +287,9 @@ deletes any extra divisions earlier specs left, to start single-division).
 A scenario the shared event can't host (its game plugin can't change once
 chosen) starts its own backend and Vite server with
 `tests/e2e/fixtures/isolatedServer.ts`, as `cooperativeRankings.spec.ts`
-does on ports 8125/5185. `zz_seasonRankings.spec.ts` runs last for the same
+does on ports 8125/5185, `finalizeQualification.spec.ts` on 8127/5187, and
+`skillsChallenges.spec.ts` (the shipped sample game, with skills on) on
+8128/5188. `zz_seasonRankings.spec.ts` runs last for the same
 reason as `z_sessionSchedule.spec.ts`.
 
 `playwright.config.ts` uses `channel: "chrome"` — the machine's installed

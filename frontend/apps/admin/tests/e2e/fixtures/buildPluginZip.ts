@@ -69,3 +69,24 @@ export async function buildCooperativeGamePluginZip(): Promise<string> {
   });
   return outPath;
 }
+
+const SAMPLE_COOPERATIVE_PLUGIN_DIR = path.resolve(
+  __dirname,
+  "../../../../../../server/plugins/games/sample_cooperative"
+);
+
+/** The game that ships with the server (two skills types). Only manifest.json and plugin.py. */
+export async function buildSampleCooperativePluginZip(): Promise<string> {
+  const outPath = path.join(os.tmpdir(), `sample-cooperative-${Date.now()}.zip`);
+  await new Promise<void>((resolve, reject) => {
+    const output = createWriteStream(outPath);
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    output.on("close", () => resolve());
+    archive.on("error", reject);
+    archive.pipe(output);
+    archive.file(path.join(SAMPLE_COOPERATIVE_PLUGIN_DIR, "manifest.json"), { name: "manifest.json" });
+    archive.file(path.join(SAMPLE_COOPERATIVE_PLUGIN_DIR, "plugin.py"), { name: "plugin.py" });
+    void archive.finalize();
+  });
+  return outPath;
+}

@@ -122,6 +122,10 @@ field.
 - **SkillsAttempt** — same shape as ScoreRecord for the separate
   driver/programming skills track: `session_id, division_id, team_id,
   skills_type, data (JSON), attempt_number`.
+  *As built (see `2026-10-08-skills-challenges-design.md`): `division_id`
+  and `attempt_number` were dropped. Skills rank event-wide, and attempt
+  numbers are derived from `(recorded_at, id)`. The score, plugin name and
+  version, and `recorded_at`/`updated_at` were added.*
 - **EliminationBracket** — `division_id, round, wins_to_advance,
   seed_overrides[], unavailable_teams[(team_id, reason)]`.
 - **InspectionRecord** — `session_id, team_id, status (not_started /
@@ -210,6 +214,8 @@ Interface (documented as a `typing.Protocol`/ABC):
   random tiebreaker seed).
 - `skills_scoresheet_schema()` / `calculate_skills_score()` — same shape
   as above, for the separate skills-challenge track.
+  *As built: both take the skills type key, and a required
+  `skills_types()` lists the types in tie-break priority order.*
 
 Plugin authors are told to keep field `name`s stable across versions:
 because scoresheets are stored as plain JSON using those names, old data
