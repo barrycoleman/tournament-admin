@@ -32,9 +32,11 @@ The season rankings spec (`2026-10-06-season-rankings-design.md`) built the Seas
   - Teams still level share the rank.
 - **Skills are ranked across the whole event**, never per division.
 - **Only teams checked in for the session** may record attempts.
-- **Corrections:**
-  - An attempt can be edited, which re-scores it and keeps its place, at any time, including in past sessions.
-  - An attempt can be deleted, which gives the team that attempt back.
+- **Corrections are admin only.**
+  - An admin can edit an attempt, which re-scores it and keeps its place, at any time, including in past sessions.
+  - An admin can delete an attempt, which gives the team that attempt back.
+  - Once a scorer or referee has submitted an attempt, they cannot edit or delete it. They ask an admin.
+  - **The same rule now applies to teamwork match scores** (Section 3.6): once a match alliance's score has been submitted, only an admin can change it.
   - An attempt that happened but scored nothing is saved as 0 and uses up an attempt.
 - **Plugin contract:** types become a function argument (approach 1). See Section 2.
 - **The attempts table has a team filter** that narrows as you type. The use case is an admin finding what was recorded for one team in order to fix an error.
@@ -173,10 +175,10 @@ All rankings are computed by one pure function. Its inputs are the attempts for 
     - team not checked in for this session: "Team {number} is not checked in for this session.";
     - no attempts left: "Team {number} has used all {n} {label} attempts.".
   - **422:** unknown type, unknown team, or scoresheet violations (2.2).
-- **`PUT /api/skills/attempts/{id}`** takes `{"data"}`, re-scores the attempt and keeps its place. It returns 404 if the attempt is unknown, 409 if skills are off, and 422 for scoresheet violations.
-- **`DELETE /api/skills/attempts/{id}`** returns 204. It returns 404 if the attempt is unknown and 409 if skills are off.
+- **`PUT /api/skills/attempts/{id}`** (admin only) takes `{"data"}`, re-scores the attempt and keeps its place. It returns 404 if the attempt is unknown, 409 if skills are off, and 422 for scoresheet violations.
+- **`DELETE /api/skills/attempts/{id}`** (admin only) returns 204. It returns 404 if the attempt is unknown and 409 if skills are off.
 
-Editing and deleting are allowed in any session, past or active.
+Admins may edit and delete in any session, past or active.
 
 ### 3.4 Rankings
 
@@ -190,10 +192,20 @@ Editing and deleting are allowed in any session, past or active.
 ### 3.5 Permissions
 
 - **Settings and session overrides:** `admin`.
-- **Create, edit and delete attempts:** the same guard as match score entry (`routers/scores.py`): scorers and referees on an admitted device. `admin` is also allowed, so the admin app's Skills page can record attempts.
+- **Create attempts:** the same guard as match score entry (`routers/scores.py`): scorers and referees on an admitted device, plus `admin` (which needs no device), so the admin app's Skills page can record attempts.
+- **Edit and delete attempts:** `admin` only. Scorers and referees get 403: "Only an admin can change a submitted skills attempt."
 - **Every read:** any signed-in role.
 
-### 3.6 Realtime
+### 3.6 Teamwork score corrections become admin only
+
+`POST /api/matches/{match_id}/alliances/{alliance_id}/score` currently upserts, so any scorer can overwrite an existing score. It changes as follows:
+
+- If a `ScoreRecord` already exists for the alliance and the caller is not `admin`, the request is refused with **409**: "This score has already been submitted; ask an admin to correct it."
+- The first submission from scorers and referees on an admitted device is unchanged.
+- Admin submissions still create or overwrite, so corrections, including after finalizing qualification, still work from the admin side.
+- Existing tests and E2E helpers that re-submit a score as a scorer are updated to correct it as admin.
+
+### 3.7 Realtime
 
 - **`skills_changed {"session_id"}`:** sent after an attempt is created, edited or deleted. It goes to the session channel and to the active-session channel, which is where Season Rankings listens.
 - **`skills_settings_changed {"session_id": id | null}`:** sent after an event settings change (with `null`), or after a session override change (with that id). It goes to the active-session channel and, for an override, to that session's channel.
@@ -259,12 +271,15 @@ The scorer app is not built in this spec. When its spec is written, it **must** 
 2. For a skills run, they pick the team from the session's checked-in teams, then pick the skills type. The type step is skipped when the game has only one type.
 3. They get a full scoring page for that type, like a teamwork match's scoring page, drawn from `GET /api/skills/types/{key}/schema` with the shared scoresheet components. Each type can have its own page because each has its own schema.
 4. Saving posts to `POST /api/sessions/{id}/skills/attempts`. The page shows the attempt number and the attempts remaining, and the same 409/422 messages as the admin page.
+5. Once saved, an attempt cannot be edited or deleted from the scorer app; it shows that corrections go through an admin. The same applies to teamwork match scores in the scorer app (3.6).
 
 ## Section 5: Error handling summary
 
 | Situation | Result |
 |---|---|
 | Record, edit or delete with skills off | 409 |
+| Scorer or referee edits or deletes an attempt | 403 |
+| Scorer or referee re-submits an existing teamwork score | 409 |
 | Team not checked in | 409; the team is missing from the picker |
 | No attempts left | 409; Save is disabled with the reason |
 | Scoresheet field out of range, wrong type, missing or unknown | 422 with per-field violations, shown beside the fields |
@@ -294,7 +309,8 @@ The scorer app is not built in this spec. When its spec is written, it **must** 
   - derived numbering after a delete;
   - every 409 and 422;
   - lowering the allowed number keeping existing attempts;
-  - permissions by role and admitted device;
+  - permissions by role and admitted device, including scorer/referee edit and delete refused with 403;
+  - teamwork score re-submission refused for scorer/referee with 409 and allowed for admin;
   - both broadcasts;
   - session deletion removing attempts;
   - the rankings endpoint for every tab and both scopes.
