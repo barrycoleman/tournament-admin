@@ -5,6 +5,8 @@ import QRCode from "qrcode";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { RankingSettingsPanel } from "../rankings/RankingSettingsPanel";
 import { RANKING_SETTINGS_KEY } from "../rankings/useRankingSettings";
+import { SkillsSettingsPanel } from "../skills/SkillsSettingsPanel";
+import { SKILLS_SETTINGS_KEY } from "../skills/useSkillsSettings";
 import type { EventRead, PluginSummary, ServerInfo } from "../types";
 
 function PluginList({
@@ -54,6 +56,7 @@ function PluginList({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event"] });
       queryClient.invalidateQueries({ queryKey: RANKING_SETTINGS_KEY });
+      queryClient.invalidateQueries({ queryKey: SKILLS_SETTINGS_KEY });
     },
   });
 
@@ -165,6 +168,7 @@ export function EventSetupRoute() {
         installSubmitKey="eventSetup.installSchedulerSubmit"
       />
       <RankingSettingsPanel />
+      <SkillsSettingsPanel />
       <ServerInfoPanel />
     </div>
   );

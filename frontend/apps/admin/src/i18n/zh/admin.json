@@ -442,6 +442,19 @@
       }
     }
   },
+  "skills": {
+    "settings": {
+      "heading": "技能挑战赛",
+      "enabledLabel": "举办技能挑战赛",
+      "attemptsLegend": "每支队伍每个场次的尝试次数",
+      "attemptsLabel": "{{label}} 尝试次数",
+      "attemptsError": "请输入 1 到 20 之间的整数。",
+      "noPlugin": "请先在上方选择比赛插件，再设置技能挑战赛。",
+      "noTypes": "此比赛没有技能挑战赛。",
+      "save": "保存技能赛设置",
+      "saved": "技能赛设置已保存。"
+    }
+  },
   "debugPanel": {
     "toggle": "调试事件",
     "empty": "尚未收到任何事件。"

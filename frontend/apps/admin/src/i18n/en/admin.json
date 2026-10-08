@@ -445,6 +445,19 @@
       }
     }
   },
+  "skills": {
+    "settings": {
+      "heading": "Skills challenges",
+      "enabledLabel": "Run skills challenges",
+      "attemptsLegend": "Attempts each team gets per session",
+      "attemptsLabel": "{{label}} attempts",
+      "attemptsError": "Enter a whole number from 1 to 20.",
+      "noPlugin": "Choose a game plugin above before setting up skills challenges.",
+      "noTypes": "This game has no skills challenges.",
+      "save": "Save skills settings",
+      "saved": "Skills settings saved."
+    }
+  },
   "debugPanel": {
     "toggle": "Debug events",
     "empty": "No events received yet."

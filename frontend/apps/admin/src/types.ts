@@ -1,3 +1,5 @@
+import type { ScoresheetValues } from "@tournament-admin/shared";
+
 export interface EventRead {
   id: number;
   name: string;
@@ -181,4 +183,49 @@ export interface QualificationPreview {
   rows: { played: number; teams: number; suggested: number }[];
   unplayed_matches: number;
   blockers: { code: QualificationBlockerCode; count: number }[];
+}
+
+export interface SkillsType {
+  key: string;
+  label: string;
+}
+
+export interface SkillsSettingsRead {
+  enabled: boolean;
+  /** Every plugin type's allowed attempts per session, 3 where unset. */
+  attempts: Record<string, number>;
+  /** In tie-break priority order; [] before a game plugin is chosen or for a game with no skills. */
+  types: SkillsType[];
+}
+
+export interface SessionSkillsType extends SkillsType {
+  /** The effective allowed attempts in this session. */
+  allowed: number;
+}
+
+export interface SessionSkillsRead {
+  types: SessionSkillsType[];
+  /** The session's own attempts, or null when it uses the event setting. */
+  override: Record<string, number> | null;
+}
+
+export interface SkillsAttemptRead {
+  id: number;
+  team_id: number;
+  skills_type: string;
+  /** 1, 2, 3, ... per team and type in the session. */
+  number: number;
+  score: number;
+  data: ScoresheetValues;
+  recorded_at: string;
+  updated_at: string;
+}
+
+export interface SkillsRankingRead {
+  rank: number;
+  team_id: number;
+  score: number;
+  /** Best first; for Overall, each type's list in plugin order. */
+  attempts: number[];
+  session_id: number;
 }
