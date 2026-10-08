@@ -118,4 +118,25 @@ describe("apiRequest", () => {
       new ApiError(401, "Session expired")
     );
   });
+
+  it("keeps the parsed error body on ApiError", async () => {
+    const body = { detail: "The scoresheet has errors.", violations: [{ field: "score", message: "Must be at most 999." }] };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(body), { status: 422 }));
+
+    const error = await apiRequest("/api/sessions/1/skills/attempts").catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(422);
+    expect((error as ApiError).detail).toBe("The scoresheet has errors.");
+    expect((error as ApiError).body).toEqual(body);
+  });
+
+  it("gives a null body when the error response isn't JSON", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("oops", { status: 500, statusText: "Server Error" }));
+
+    const error = (await apiRequest("/api/event").catch((caught: unknown) => caught)) as ApiError;
+
+    expect(error.detail).toBe("Server Error");
+    expect(error.body).toBeNull();
+  });
 });

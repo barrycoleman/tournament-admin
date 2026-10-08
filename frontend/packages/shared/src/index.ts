@@ -5,3 +5,4 @@ export * from "./api-client";
 export * from "./auth";
 export * from "./i18n";
 export * from "./realtime";
+export * from "./scoresheet";

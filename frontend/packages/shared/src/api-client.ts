@@ -4,12 +4,15 @@ import { RefreshError, refreshTokens } from "./refresh";
 export class ApiError extends Error {
   status: number;
   detail: string;
+  /** The parsed JSON error body when there was one (e.g. a 422's `violations`), else null. */
+  body: unknown;
 
-  constructor(status: number, detail: string) {
+  constructor(status: number, detail: string, body: unknown = null) {
     super(detail);
     this.name = "ApiError";
     this.status = status;
     this.detail = detail;
+    this.body = body;
   }
 }
 
@@ -20,12 +23,12 @@ export interface ApiRequestOptions {
   isFormData?: boolean;
 }
 
-async function readErrorDetail(response: Response): Promise<string> {
+async function readError(response: Response): Promise<{ detail: string; body: unknown }> {
   try {
-    const body = (await response.json()) as { detail?: string };
-    return body.detail ?? response.statusText;
+    const body = (await response.json()) as { detail?: string } | null;
+    return { detail: body?.detail ?? response.statusText, body };
   } catch {
-    return response.statusText;
+    return { detail: response.statusText, body: null };
   }
 }
 
@@ -73,7 +76,8 @@ export async function apiRequest<T>(
   }
 
   if (!response.ok) {
-    throw new ApiError(response.status, await readErrorDetail(response));
+    const { detail, body } = await readError(response);
+    throw new ApiError(response.status, detail, body);
   }
 
   if (response.status === 204) {
