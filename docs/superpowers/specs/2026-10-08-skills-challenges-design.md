@@ -156,7 +156,9 @@ All rankings are computed by one pure function. Its inputs are the attempts for 
 - **`GET /api/skills/settings`** (any signed-in role) returns `{"enabled": bool, "attempts": {key: int}, "types": [{"key", "label"}]}`. `attempts` covers every plugin type, with 3 filled in where unset. With no game plugin selected, `types` is `[]`.
 - **`PUT /api/skills/settings`** (admin) takes `{"enabled": bool, "attempts": {key: int}}`.
   - **422:** a key is not a plugin type, or a value is not an integer from 1 to 20.
-  - **409:** `enabled: true` while the plugin has no types: "This game has no skills challenges."
+  - **409:**
+    - no game plugin is selected for the event yet: "Choose a game plugin before setting up skills challenges.";
+    - `enabled: true` while the plugin has no types: "This game has no skills challenges."
   - On success it returns the GET shape and broadcasts `skills_settings_changed`.
 - **`GET /api/sessions/{id}/skills`** (any signed-in role) returns `{"types": [{"key", "label", "allowed"}], "override": {key: int} | null}`. It returns 404 if the session is unknown.
 - **`PUT /api/sessions/{id}/skills`** (admin) takes `{"attempts": {key: int} | null}`. `null` clears the override. The 422 rules match the event settings. On success it returns the GET shape and broadcasts `skills_settings_changed`.
@@ -219,7 +221,15 @@ A new **Skills challenges** panel sits beside the ranking settings panel:
 - one number input per type (1–20), labelled with the plugin's labels;
 - a Save button.
 
-If the plugin has no types, the panel says "This game has no skills challenges" and the switch is disabled. Validation errors appear inline.
+The panel sits below the Game plugins panel, where the plugin is chosen. Once chosen, the plugin can't be changed, so the types stay the same for the life of the event.
+
+| State | Panel |
+|---|---|
+| No game plugin chosen (`event.game_plugin_name` is null) | Shown but disabled (switch, numbers and Save), with "Choose a game plugin above before setting up skills challenges." |
+| Plugin chosen, no skills types | Disabled, with "This game has no skills challenges." |
+| Plugin chosen with skills types | Enabled |
+
+When a plugin is selected on the same page, the panel becomes enabled without a reload: selecting refreshes the event and skills settings queries. Validation errors appear inline.
 
 ### 4.2 Session Skills page (`/sessions/:sessionId/skills`)
 
@@ -286,6 +296,7 @@ The scorer app is not built in this spec. When its spec is written, it **must** 
 | Unknown type or team on create | 422 |
 | Unknown session, attempt, schema type or rankings tab | 404 |
 | Settings: unknown type key, or attempts outside 1–20 | 422 |
+| Change skills settings before a game plugin is chosen | 409; the panel is disabled with the reason |
 | Enable skills for a game without skills types | 409 |
 | Rankings with both or neither of `session_id`/`season` | 422 |
 
@@ -303,7 +314,7 @@ The scorer app is not built in this spec. When its spec is written, it **must** 
   - shared ranks with skip numbering.
 - **Scoresheet validation:** each data type and each failure (range, step, bool-as-int, enum option, missing, unknown).
 - **API:**
-  - settings defaults, update, 422s, and the 409 for a game with no skills;
+  - settings defaults, update, 422s, the 409 before a plugin is chosen, and the 409 for a game with no skills;
   - session override set and cleared, with effective allowed values;
   - attempt create, edit and delete;
   - derived numbering after a delete;
@@ -328,7 +339,7 @@ The scorer app is not built in this spec. When its spec is written, it **must** 
 - each scoresheet widget (including counter clamping);
 - the record form (attempt count, disabled when used up, field errors, reset after save);
 - the attempts table (filter as you type, no-match message, edit dialog, delete confirmation);
-- the Event Setup panel (including the no-skills plugin);
+- the Event Setup panel: disabled with no plugin chosen, disabled for a no-skills plugin, enabled after selecting a plugin without a reload;
 - the session override form;
 - the rankings tab strips (skills tabs hidden when off).
 
