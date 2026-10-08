@@ -1168,3 +1168,17 @@
 .field__error {
   color: var(--color-danger);
 }
+.scoresheet { display: grid; gap: var(--space-3); margin-block: var(--space-3); }
+.scoresheet__label { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 600; }
+.scoresheet__icon { font-size: var(--text-lg); }
+.scoresheet__counter { display: inline-flex; align-items: center; gap: var(--space-2); }
+.scoresheet__count { width: 6ch; text-align: center; }
+.scoresheet__radio { border: 0; margin: 0; padding: 0; }
+.skills-attempts-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-block-end: var(--space-4); }
+.skills-attempts-line > p { margin: 0; }
+.skills-type-buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-block: var(--space-3); }
+.team-picker__list { list-style: none; margin: var(--space-2) 0 0; padding: 0; max-height: 12rem; overflow-y: auto; border: var(--border-width) solid var(--color-border); border-radius: var(--radius-sm); }
+.team-picker__list [role="option"] { padding: var(--space-2) var(--space-3); cursor: pointer; }
+.team-picker__list [role="option"]:hover,
+.team-picker__list [role="option"]:focus-visible { background: var(--color-bg-sunken); }
+.team-picker__selected { display: flex; align-items: center; gap: var(--space-2); margin: 0; }

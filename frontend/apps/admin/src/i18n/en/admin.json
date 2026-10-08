@@ -356,7 +356,8 @@
     "deleteBody": "This removes the session's schedule, finals, playing times, fields, check-ins and rankings. Teams and divisions are kept.",
     "deleteActiveNote": "It's the active session, so no session will be active afterwards.",
     "deletePhrasePrompt": "Type \"{{name}}\" to confirm",
-    "deleteConfirm": "Delete session"
+    "deleteConfirm": "Delete session",
+    "skillsTab": "Skills"
   },
   "frontDeskCheckin": {
     "heading": "Team Check-In",
@@ -456,6 +457,34 @@
       "noTypes": "This game has no skills challenges.",
       "save": "Save skills settings",
       "saved": "Skills settings saved."
+    },
+    "page": {
+      "loading": "Loading skills...",
+      "off": "Skills challenges are turned off for this event.",
+      "offLink": "Go to Event Setup",
+      "attemptsHeading": "Attempts allowed",
+      "attemptsEntry": "{{label}} {{allowed}}",
+      "attemptsLine": "{{entries}} ({{source}})",
+      "sourceEvent": "event setting",
+      "sourceSession": "this session",
+      "change": "Change for this session",
+      "useEvent": "Use event setting",
+      "overrideLegend": "Attempts allowed in this session",
+      "overrideSave": "Save for this session",
+      "overrideCancel": "Cancel"
+    },
+    "record": {
+      "heading": "Record an attempt",
+      "teamLabel": "Team",
+      "teamPlaceholder": "Type a team number or name",
+      "noTeams": "No checked-in team matches.",
+      "changeTeam": "Change team",
+      "pickTeam": "Pick a checked-in team to record an attempt.",
+      "typeLegend": "Skills type",
+      "attemptCount": "Attempt {{n}} of {{allowed}}",
+      "usedUp": "Team {{number}} has used all {{n}} {{label}} attempts.",
+      "save": "Save attempt",
+      "saved": "Saved: {{score}} points"
     }
   },
   "debugPanel": {
@@ -466,5 +495,9 @@
     "network": "Network error.",
     "generic": "Something went wrong.",
     "pluginInstallFailed": "Install failed."
+  },
+  "scoresheet": {
+    "decrease": "Decrease {{label}}",
+    "increase": "Increase {{label}}"
   }
 }

@@ -124,4 +124,27 @@ describe("SessionDetailLayout", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Set as active session" }));
     expect(await screen.findByText("Active session")).toBeInTheDocument();
   });
+
+  it("shows the Skills tab between Matches and Rankings only while skills are on", async () => {
+    let enabled = true;
+    vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+      if (path === "/api/sessions") return [SATURDAY] as never;
+      if (path === "/api/event") return eventWithActiveSession(1) as never;
+      if (path === "/api/skills/settings") return { enabled, attempts: {}, types: [] } as never;
+      throw new Error(`unexpected request: ${path}`);
+    });
+    const { unmount } = renderAt("/sessions/1/checkin");
+    const skills = await screen.findByRole("link", { name: "Skills" });
+    expect(skills).toHaveAttribute("href", "/sessions/1/skills");
+    const names = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(names.indexOf("Skills")).toBe(names.indexOf("Matches") + 1);
+    expect(names.indexOf("Rankings")).toBe(names.indexOf("Skills") + 1);
+    unmount();
+
+    enabled = false;
+    renderAt("/sessions/1/checkin");
+    await screen.findByRole("heading", { name: "Saturday" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole("link", { name: "Skills" })).not.toBeInTheDocument();
+  });
 });

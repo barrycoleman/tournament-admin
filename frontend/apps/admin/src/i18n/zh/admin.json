@@ -354,7 +354,8 @@
     "deleteBody": "这将删除该场次的赛程、决赛、比赛时段、场地、签到和排名。队伍和组别会保留。",
     "deleteActiveNote": "这是当前场次，删除后将没有当前场次。",
     "deletePhrasePrompt": "输入“{{name}}”以确认",
-    "deleteConfirm": "删除场次"
+    "deleteConfirm": "删除场次",
+    "skillsTab": "技能赛"
   },
   "frontDeskCheckin": {
     "heading": "队伍签到",
@@ -453,6 +454,34 @@
       "noTypes": "此比赛没有技能挑战赛。",
       "save": "保存技能赛设置",
       "saved": "技能赛设置已保存。"
+    },
+    "page": {
+      "loading": "正在加载技能赛...",
+      "off": "本赛事已关闭技能挑战赛。",
+      "offLink": "前往赛事设置",
+      "attemptsHeading": "允许的尝试次数",
+      "attemptsEntry": "{{label}} {{allowed}}",
+      "attemptsLine": "{{entries}}（{{source}}）",
+      "sourceEvent": "赛事设置",
+      "sourceSession": "本场次",
+      "change": "为本场次修改",
+      "useEvent": "使用赛事设置",
+      "overrideLegend": "本场次允许的尝试次数",
+      "overrideSave": "为本场次保存",
+      "overrideCancel": "取消"
+    },
+    "record": {
+      "heading": "记录一次尝试",
+      "teamLabel": "队伍",
+      "teamPlaceholder": "输入队伍编号或名称",
+      "noTeams": "没有匹配的已签到队伍。",
+      "changeTeam": "更换队伍",
+      "pickTeam": "请选择一支已签到的队伍来记录尝试。",
+      "typeLegend": "技能类型",
+      "attemptCount": "第 {{n}} 次，共 {{allowed}} 次",
+      "usedUp": "{{number}} 队已用完全部 {{n}} 次{{label}}尝试。",
+      "save": "保存尝试",
+      "saved": "已保存：{{score}} 分"
     }
   },
   "debugPanel": {
@@ -463,5 +492,9 @@
     "network": "网络错误。",
     "generic": "出错了。",
     "pluginInstallFailed": "安装失败。"
+  },
+  "scoresheet": {
+    "decrease": "减少{{label}}",
+    "increase": "增加{{label}}"
   }
 }

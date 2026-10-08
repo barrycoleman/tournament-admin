@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest } from "@tournament-admin/shared";
 import { apiErrorMessage } from "../apiErrorMessage";
+import { useSkillsSettings } from "../skills/useSkillsSettings";
 import type { EventRead, SessionRead } from "../types";
 
 function tabLinkClassName({ isActive }: { isActive: boolean }): string | undefined {
@@ -22,6 +23,7 @@ export function SessionDetailLayout() {
     queryKey: ["event"],
     queryFn: () => apiRequest<EventRead>("/api/event"),
   });
+  const skills = useSkillsSettings();
   const activateMutation = useMutation({
     mutationFn: (id: number) =>
       apiRequest<EventRead>("/api/event/active-session", {
@@ -99,6 +101,11 @@ export function SessionDetailLayout() {
         <NavLink to={`/sessions/${session.id}/matches`} className={tabLinkClassName}>
           {t("sessions.matchesTab")}
         </NavLink>
+        {skills.data?.enabled && (
+          <NavLink to={`/sessions/${session.id}/skills`} className={tabLinkClassName}>
+            {t("sessions.skillsTab")}
+          </NavLink>
+        )}
         <NavLink to={`/sessions/${session.id}/rankings`} className={tabLinkClassName}>
           {t("sessions.rankingsTab")}
         </NavLink>
