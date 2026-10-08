@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -26,11 +26,13 @@ from tournament_server.schemas.skills import (
     SkillsAttemptCreate,
     SkillsAttemptRead,
     SkillsAttemptUpdate,
+    SkillsRankingRowRead,
     SkillsSettingsBody,
     SkillsSettingsRead,
 )
 from tournament_server.services import skills
-from tournament_server.services.skills_rules import DEFAULT_ATTEMPTS, attempts_error, scoresheet_violations
+from tournament_server.services.skills_ranking import OVERALL, AttemptScore, rank_skills, session_order_key
+from tournament_server.services.skills_rules import DEFAULT_ATTEMPTS, attempts_error, scoresheet_violations, skills_depth
 
 router = APIRouter(tags=["skills"])
 
@@ -318,3 +320,48 @@ def delete_skills_attempt(
     db.commit()
     _broadcast_skills_changed(request, session_id)
     return Response(status_code=204)
+
+
+@router.get("/api/skills/rankings", response_model=list[SkillsRankingRowRead])
+def get_skills_rankings(
+    request: Request,
+    tab: str = Query(...),
+    session_id: int | None = Query(None),
+    season: bool = Query(False),
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
+) -> list[SkillsRankingRowRead]:
+    if (session_id is not None) == season:
+        raise HTTPException(status_code=422, detail="Give exactly one of session_id or season=true")
+    event = get_event_or_404(db)
+    type_keys = [t["key"] for t in skills.plugin_types(get_optional_game_plugin(request, event))]
+    if tab != OVERALL and tab not in type_keys:
+        raise HTTPException(status_code=404, detail="Unknown rankings tab")
+    if season:
+        sessions = list(
+            db.execute(select(TournamentSession).where(TournamentSession.event_id == event.id)).scalars().all()
+        )
+    else:
+        sessions = [_session_or_404(db, session_id)]
+    allowed = {s.id: skills.session_allowed(db, s, type_keys) for s in sessions}
+    attempts = db.execute(
+        select(SkillsAttempt).where(SkillsAttempt.session_id.in_(list(allowed)))
+    ).scalars().all()
+    team_numbers = {
+        team.id: team.number
+        for team in db.execute(select(Team).where(Team.event_id == event.id)).scalars().all()
+    }
+    rows = rank_skills(
+        [AttemptScore(a.session_id, a.team_id, a.skills_type, a.score) for a in attempts],
+        type_keys,
+        tab,
+        skills_depth(allowed.values()),
+        {s.id: session_order_key(s.session_date, s.id) for s in sessions},
+        team_numbers,
+    )
+    return [
+        SkillsRankingRowRead(
+            rank=row.rank, team_id=row.team_id, score=row.score, attempts=row.attempts, session_id=row.session_id
+        )
+        for row in rows
+    ]

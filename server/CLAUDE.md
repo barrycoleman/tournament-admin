@@ -386,6 +386,12 @@ Attempts are recorded with `POST /api/sessions/{id}/skills/attempts` (`{team_id,
 
 `data` is validated against the type's schema before any plugin code runs (`skills_rules.scoresheet_violations`). A 422 lists `violations: [{field, message}]`. Attempt numbers are not stored. They are derived per team and type from `(recorded_at, id)`, so a delete moves later attempts up. Only an admin may `PUT` (re-score in place) or `DELETE` (give the attempt back) `/api/skills/attempts/{id}`. Other roles get 403 "Only an admin can change a submitted skills attempt." Deleting a session deletes its attempts.
 
+Skills rankings are never stored. `GET /api/skills/rankings?tab={overall|<type>}` with exactly one of `session_id` or `season=true` computes them on each request through the pure `services/skills_ranking.rank_skills`, which Awards can reuse.
+- **A type tab** ranks each team's attempts of that type, best first, compared entry by entry. A missing entry ranks below 0.
+- **Overall** is the sum of each type's best, tie-broken by each type's best in plugin order, then by the sums of second-best, third-best, ... as deep as the most attempts any type allows.
+- **The season** uses each team's single best session (the greatest key, and the earlier session by date then id when two are equal), never a mix.
+- Equal keys share a rank (1, 2, 2, 4), ordered by team number.
+
 ## Finals
 
 A game plugin declares `alliance_selection` (`captain_pick` or
