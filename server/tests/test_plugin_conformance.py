@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from tournament_server.plugin_registry.conformance import run_conformance_checks
 
 FIXTURE_EXAMPLE_PLUGIN = (
@@ -38,13 +40,17 @@ def rank_teams(team_results):
     return [{{**r, "rank": i + 1}} for i, r in enumerate(ordered)]
 
 
-def skills_scoresheet_schema():
+def skills_types():
+    return [{{"key": "driver", "label": "Driver"}}]
+
+
+def skills_scoresheet_schema(skills_type):
     return [{{"name": "x", "label": "X", "data_type": "integer", "widget": "counter",
              "min": 0, "max": 10, "step": 1, "options": None, "icon": None,
              "scope": "team", "default": 0}}]
 
 
-def calculate_skills_score(scoresheet):
+def calculate_skills_score(skills_type, scoresheet):
     return int(scoresheet.get("x", 0))
 '''
 
@@ -151,13 +157,17 @@ def rank_teams(team_results):
     return [{**r, "rank": i + 1} for i, r in enumerate(ordered)]
 
 
-def skills_scoresheet_schema():
+def skills_types():
+    return [{"key": "driver", "label": "Driver"}]
+
+
+def skills_scoresheet_schema(skills_type):
     return [{"name": "x", "label": "X", "data_type": "integer", "widget": "counter",
              "min": 0, "max": 10, "step": 1, "options": None, "icon": None,
              "scope": "team", "default": 0}]
 
 
-def calculate_skills_score(scoresheet):
+def calculate_skills_score(skills_type, scoresheet):
     return int(scoresheet.get("x", 0))
 '''
     )
@@ -213,13 +223,17 @@ def rank_teams(team_results):
     return [{**r, "rank": i + 1} for i, r in enumerate(ordered)]
 
 
-def skills_scoresheet_schema():
+def skills_types():
+    return [{"key": "driver", "label": "Driver"}]
+
+
+def skills_scoresheet_schema(skills_type):
     return [{"name": "x", "label": "X", "data_type": "integer", "widget": "counter",
              "min": 0, "max": 10, "step": 1, "options": None, "icon": None,
              "scope": "team", "default": 0}]
 
 
-def calculate_skills_score(scoresheet):
+def calculate_skills_score(skills_type, scoresheet):
     return int(scoresheet.get("x", 0))
 '''
     )
@@ -430,3 +444,146 @@ def test_a_non_integer_default_cycle_time_fails(tmp_path):
     check = next(c for c in report.checks if c.name == "match_format() shape")
     assert not check.passed
     assert "default_cycle_time_seconds must be an integer" in check.message
+
+
+_SKILLS_BASE = '''
+def match_format():
+    return {
+        "alliance_count": 2,
+        "teams_per_alliance": 2,
+        "autonomous_seconds": 15,
+        "driver_seconds": 105,
+        "round_types": ["practice", "qualification", "elimination"],
+        "game_model": "head_to_head",
+        "alliance_selection": "captain_pick",
+        "finals_format": "single_elimination",
+    }
+
+
+def _field(name, scope):
+    return {"name": name, "label": name.upper(), "data_type": "integer", "widget": "counter",
+            "min": 0, "max": 10, "step": 1, "options": None, "icon": None,
+            "scope": scope, "default": 0}
+
+
+def scoresheet_schema():
+    return [_field("x", "alliance")]
+
+
+def calculate_score(scoresheet):
+    return int(scoresheet.get("x", 0))
+
+
+def validate(scoresheet):
+    return []
+
+
+def rank_teams(team_results):
+    ordered = sorted(team_results, key=lambda r: -r["win_points"])
+    return [{**r, "rank": i + 1} for i, r in enumerate(ordered)]
+'''
+
+_GOOD_SKILLS = '''
+def skills_types():
+    return [{"key": "autonomous", "label": "Autonomous"}, {"key": "driver", "label": "Driver"}]
+
+
+def skills_scoresheet_schema(skills_type):
+    return [_field("x", "team")]
+
+
+def calculate_skills_score(skills_type, scoresheet):
+    return int(scoresheet.get("x", 0))
+'''
+
+
+def _write_skills_plugin(tmp_path, skills_code: str):
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(
+            {"name": "skills-variant", "version": "1.0.0", "kind": "game", "display_name": "Skills Variant"}
+        )
+    )
+    (tmp_path / "plugin.py").write_text(_SKILLS_BASE + skills_code)
+    return tmp_path
+
+
+def _named(report, name):
+    return next(c for c in report.checks if c.name == name)
+
+
+def test_valid_skills_types_pass_with_a_check_per_type(tmp_path):
+    report = run_conformance_checks(_write_skills_plugin(tmp_path, _GOOD_SKILLS))
+    assert report.passed, [c for c in report.checks if not c.passed]
+    names = [c.name for c in report.checks]
+    assert "skills_types() shape" in names
+    for key in ("autonomous", "driver"):
+        assert f"skills_scoresheet_schema({key!r}) shape" in names
+        assert f"calculate_skills_score({key!r}) determinism" in names
+
+
+def test_an_empty_type_list_passes_and_skips_per_type_checks(tmp_path):
+    code = _GOOD_SKILLS.replace(
+        'return [{"key": "autonomous", "label": "Autonomous"}, {"key": "driver", "label": "Driver"}]',
+        "return []",
+    ).replace('return [_field("x", "team")]', "return []")
+    report = run_conformance_checks(_write_skills_plugin(tmp_path, code))
+    assert report.passed, [c for c in report.checks if not c.passed]
+    assert not any(c.name.startswith("skills_scoresheet_schema(") for c in report.checks)
+    assert not any(c.name.startswith("calculate_skills_score(") for c in report.checks)
+
+
+@pytest.mark.parametrize(
+    ("types_literal", "message"),
+    [
+        ('[{"key": "driver", "label": "Driver"}, {"key": "driver", "label": "Again"}]', "duplicate"),
+        ('[{"key": "Driver", "label": "Driver"}]', "must match"),
+        ('[{"key": "driver-1", "label": "Driver"}]', "must match"),
+        ('[{"key": 5, "label": "Driver"}]', "must match"),
+        ('[{"key": "overall", "label": "Overall"}]', "reserved"),
+        ('[{"key": "driver", "label": "  "}]', "non-empty label"),
+        ('[{"key": "driver", "label": 7}]', "non-empty label"),
+        ('[{"key": "driver"}]', "exactly"),
+        ('[{"key": "driver", "label": "Driver", "icon": None}]', "exactly"),
+        ('["driver"]', "exactly"),
+        ('{"key": "driver", "label": "Driver"}', "must return a list"),
+    ],
+)
+def test_bad_skills_types_fail(tmp_path, types_literal, message):
+    code = _GOOD_SKILLS.replace(
+        '[{"key": "autonomous", "label": "Autonomous"}, {"key": "driver", "label": "Driver"}]', types_literal
+    )
+    report = run_conformance_checks(_write_skills_plugin(tmp_path, code))
+    check = _named(report, "skills_types() shape")
+    assert not check.passed
+    assert message in check.message
+    assert not report.passed
+
+
+def test_an_invalid_schema_for_one_type_fails_only_that_type(tmp_path):
+    code = _GOOD_SKILLS.replace(
+        'return [_field("x", "team")]',
+        'field = _field("x", "team")\n'
+        '    if skills_type == "driver":\n'
+        '        del field["default"]\n'
+        "    return [field]",
+    )
+    report = run_conformance_checks(_write_skills_plugin(tmp_path, code))
+    assert _named(report, "skills_scoresheet_schema('autonomous') shape").passed
+    driver = _named(report, "skills_scoresheet_schema('driver') shape")
+    assert not driver.passed
+    assert "default" in driver.message
+    skipped = _named(report, "calculate_skills_score('driver') determinism")
+    assert not skipped.passed
+    assert "skipped" in skipped.message
+    assert _named(report, "calculate_skills_score('autonomous') determinism").passed
+
+
+def test_non_int_skills_scoring_fails(tmp_path):
+    code = _GOOD_SKILLS.replace(
+        'return int(scoresheet.get("x", 0))',
+        'return float(scoresheet.get("x", 0)) if skills_type == "driver" else int(scoresheet.get("x", 0))',
+    )
+    report = run_conformance_checks(_write_skills_plugin(tmp_path, code))
+    check = _named(report, "calculate_skills_score('driver') determinism")
+    assert not check.passed
+    assert "int" in check.message

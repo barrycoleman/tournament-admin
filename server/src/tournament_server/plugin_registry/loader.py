@@ -15,6 +15,7 @@ REQUIRED_GAME_PLUGIN_FUNCTIONS = (
     "calculate_score",
     "validate",
     "rank_teams",
+    "skills_types",
     "skills_scoresheet_schema",
     "calculate_skills_score",
 )

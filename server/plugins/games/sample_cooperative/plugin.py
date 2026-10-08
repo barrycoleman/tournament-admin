@@ -80,13 +80,21 @@ def rank_teams(team_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{**result, "rank": index + 1} for index, result in enumerate(ordered)]
 
 
-# Skills isn't designed yet; until it is, a skills run is scored the same
-# way, by one team.
+# Skills challenges: one team alone on the field. Autonomous is listed first,
+# so its best breaks Overall ties before Driver's (see the skills spec, 2.3).
 
 
-def skills_scoresheet_schema() -> list[dict[str, Any]]:
+def skills_types() -> list[dict[str, str]]:
+    return [
+        {"key": "autonomous", "label": "Autonomous"},
+        {"key": "driver", "label": "Driver"},
+    ]
+
+
+def skills_scoresheet_schema(skills_type: str) -> list[dict[str, Any]]:
+    # Both types are a single number entered by the referee.
     return [_score_field("team")]
 
 
-def calculate_skills_score(scoresheet: dict[str, Any]) -> int:
-    return calculate_score(scoresheet)
+def calculate_skills_score(skills_type: str, scoresheet: dict[str, Any]) -> int:
+    return int(scoresheet.get("score", 0))

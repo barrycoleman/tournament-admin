@@ -88,7 +88,11 @@ def rank_teams(team_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{**r, "rank": i + 1} for i, r in enumerate(ordered)]
 
 
-def skills_scoresheet_schema() -> list[dict[str, Any]]:
+def skills_types() -> list[dict[str, str]]:
+    return [{"key": "driver", "label": "Driver"}]
+
+
+def skills_scoresheet_schema(skills_type: str) -> list[dict[str, Any]]:
     return [
         {
             "name": "objects_scored",
@@ -106,5 +110,5 @@ def skills_scoresheet_schema() -> list[dict[str, Any]]:
     ]
 
 
-def calculate_skills_score(scoresheet: dict[str, Any]) -> int:
+def calculate_skills_score(skills_type: str, scoresheet: dict[str, Any]) -> int:
     return scoresheet.get("objects_scored", 0) * 2

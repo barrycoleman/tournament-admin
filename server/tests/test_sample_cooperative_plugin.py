@@ -78,7 +78,7 @@ def test_the_score_is_the_number_entered():
     assert module.calculate_score({"score": 0}) == 0
     assert module.calculate_score({"score": 57}) == 57
     assert module.calculate_score({}) == 0
-    assert module.calculate_skills_score({"score": 42}) == 42
+    assert module.calculate_skills_score("driver", {"score": 42}) == 42
 
 
 @pytest.mark.parametrize(
@@ -270,3 +270,14 @@ def test_sample_game_declares_a_five_minute_default_cycle_time():
     namespace: dict = {}
     exec(compile(plugin_path.read_text(), str(plugin_path), "exec"), namespace)
     assert namespace["match_format"]()["default_cycle_time_seconds"] == 300
+
+
+def test_skills_types_are_autonomous_then_driver_scored_as_entered():
+    module = load_plugin(SAMPLE_PLUGIN, GAME_PLUGIN_KIND).module
+    assert module.skills_types() == [
+        {"key": "autonomous", "label": "Autonomous"},
+        {"key": "driver", "label": "Driver"},
+    ]
+    for key in ("autonomous", "driver"):
+        assert [f["name"] for f in module.skills_scoresheet_schema(key)] == ["score"]
+        assert module.calculate_skills_score(key, {"score": 34}) == 34

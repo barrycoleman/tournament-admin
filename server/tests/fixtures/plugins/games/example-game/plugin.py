@@ -101,23 +101,52 @@ def rank_teams(team_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{**r, "rank": i + 1} for i, r in enumerate(ordered)]
 
 
-def skills_scoresheet_schema() -> list[dict[str, Any]]:
+def skills_types() -> list[dict[str, str]]:
     return [
-        {
-            "name": "objects_scored",
-            "label": "Objects Scored",
-            "data_type": "integer",
-            "widget": "counter",
-            "min": 0,
-            "max": 30,
-            "step": 1,
-            "options": None,
-            "icon": None,
-            "scope": "team",
-            "default": 0,
-        },
+        {"key": "autonomous", "label": "Autonomous"},
+        {"key": "driver", "label": "Driver"},
     ]
 
 
-def calculate_skills_score(scoresheet: dict[str, Any]) -> int:
-    return scoresheet.get("objects_scored", 0) * 2
+def _objects_field() -> dict[str, Any]:
+    return {
+        "name": "objects_scored",
+        "label": "Objects Scored",
+        "data_type": "integer",
+        "widget": "counter",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "options": None,
+        "icon": None,
+        "scope": "team",
+        "default": 0,
+    }
+
+
+def skills_scoresheet_schema(skills_type: str) -> list[dict[str, Any]]:
+    fields = [_objects_field()]
+    if skills_type == "autonomous":
+        fields.append(
+            {
+                "name": "parked",
+                "label": "Robot Parked",
+                "data_type": "boolean",
+                "widget": "toggle",
+                "min": None,
+                "max": None,
+                "step": None,
+                "options": None,
+                "icon": None,
+                "scope": "team",
+                "default": False,
+            }
+        )
+    return fields
+
+
+def calculate_skills_score(skills_type: str, scoresheet: dict[str, Any]) -> int:
+    score = scoresheet.get("objects_scored", 0) * 2
+    if skills_type == "autonomous" and scoresheet.get("parked"):
+        score += 4
+    return score

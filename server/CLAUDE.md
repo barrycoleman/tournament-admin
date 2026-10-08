@@ -38,15 +38,17 @@ containing `manifest.json` (`name`, `version`, `kind`, `display_name`) and
 `plugin.py`. Two plugin kinds exist, sharing one generic registry
 (`plugin_registry/loader.py`'s `PluginKind`, `load_plugin`,
 `discover_plugins`): a **game** plugin (`kind: "game"`, folder
-`plugins/games/<name>/`) must define seven module-level functions —
+`plugins/games/<name>/`) must define eight module-level functions —
 `match_format`, `scoresheet_schema`, `calculate_score`, `validate`,
-`rank_teams`, `skills_scoresheet_schema`, `calculate_skills_score` (see
+`rank_teams`, `skills_types`, `skills_scoresheet_schema`, `calculate_skills_score` (see
 `GAME_PLUGIN_KIND` for the authoritative list, and
 `tests/fixtures/plugins/games/example-game/plugin.py` for a complete
 working example); a **scheduler** plugin (`kind: "scheduler"`, folder
 `plugins/schedulers/<name>/`) must define one — `generate_schedule` (see
 `SCHEDULER_PLUGIN_KIND`, and `plugins/schedulers/simple_random/plugin.py`
 for a complete working example).
+
+Skills challenges: `skills_types()` returns the game's skills types as `[{"key", "label"}]` in tie-break priority order. Keys are unique, match `^[a-z0-9_]+$`, and must not be `overall` (the rankings tab that sums every type). An empty list means the game has no skills. `skills_scoresheet_schema(skills_type)` and `calculate_skills_score(skills_type, scoresheet)` take the type key. Conformance checks the types' shape, then each type's schema and its scoring (an int, deterministic on the defaults sheet), and skips the per-type checks for an empty list. The sample game has `autonomous` then `driver`, each a single `score` counter.
 
 One game plugin ships with the server, `plugins/games/sample_cooperative/`
 ("Sample Cooperative Game"): two teams per match share one score entered

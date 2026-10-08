@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,9 @@ VALID_SCOPES = {"alliance", "team"}
 VALID_GAME_MODELS = {"head_to_head", "cooperative_score"}
 VALID_ALLIANCE_SELECTIONS = {"captain_pick", "seed_pairing"}
 VALID_FINALS_FORMATS = {"single_elimination", "score_chase"}
+_SKILLS_KEY_PATTERN = re.compile(r"[a-z0-9_]+")
+# "overall" names the rankings tab that sums every type, so no type may use it.
+RESERVED_SKILLS_KEYS = {"overall"}
 _REQUIRED_FIELD_KEYS = {
     "name",
     "label",
@@ -113,17 +117,11 @@ def _run_game_checks(plugin) -> ConformanceReport:
     )
     checks.append(schema_result)
 
-    skills_schema_result = _safe_check(
-        "skills_scoresheet_schema() shape",
-        lambda: _check_scoresheet_schema(plugin.module, "skills_scoresheet_schema"),
-    )
-    checks.append(skills_schema_result)
-
     if schema_result.passed:
         checks.append(
             _safe_check(
                 "calculate_score() determinism",
-                lambda: _check_calculate_score(plugin.module, "calculate_score"),
+                lambda: _check_calculate_score(plugin.module),
             )
         )
         checks.append(
@@ -143,21 +141,24 @@ def _run_game_checks(plugin) -> ConformanceReport:
             )
         )
 
-    if skills_schema_result.passed:
-        checks.append(
-            _safe_check(
-                "calculate_skills_score() determinism",
-                lambda: _check_calculate_score(plugin.module, "calculate_skills_score"),
+    types_result = _safe_check("skills_types() shape", lambda: _check_skills_types(plugin.module))
+    checks.append(types_result)
+    if types_result.passed:
+        for key in [t["key"] for t in plugin.module.skills_types()]:
+            schema_check = _safe_check(
+                f"skills_scoresheet_schema({key!r}) shape",
+                lambda key=key: _check_skills_scoresheet_schema(plugin.module, key),
             )
-        )
-    else:
-        checks.append(
-            CheckResult(
-                "calculate_skills_score() determinism",
-                False,
-                "skipped: skills_scoresheet_schema() is invalid",
-            )
-        )
+            checks.append(schema_check)
+            score_name = f"calculate_skills_score({key!r}) determinism"
+            if schema_check.passed:
+                checks.append(
+                    _safe_check(score_name, lambda key=key: _check_calculate_skills_score(plugin.module, key))
+                )
+            else:
+                checks.append(
+                    CheckResult(score_name, False, f"skipped: skills_scoresheet_schema({key!r}) is invalid")
+                )
 
     checks.append(
         _safe_check(
@@ -243,82 +244,92 @@ def _check_match_format(module: Any) -> CheckResult:
 
 
 def _check_scoresheet_schema(module: Any, function_name: str) -> CheckResult:
-    fields = getattr(module, function_name)()
+    return _check_fields(f"{function_name}() shape", getattr(module, function_name)())
+
+
+def _check_skills_scoresheet_schema(module: Any, key: str) -> CheckResult:
+    return _check_fields(f"skills_scoresheet_schema({key!r}) shape", module.skills_scoresheet_schema(key))
+
+
+def _check_fields(check_name: str, fields: Any) -> CheckResult:
     if not isinstance(fields, list) or not fields:
-        return CheckResult(
-            f"{function_name}() shape", False, "must be a non-empty list"
-        )
+        return CheckResult(check_name, False, "must be a non-empty list")
     for field_def in fields:
         missing = _REQUIRED_FIELD_KEYS - field_def.keys()
         if missing:
             return CheckResult(
-                f"{function_name}() shape",
+                check_name,
                 False,
-                f"field {field_def.get('name', '?')!r} missing keys: "
-                f"{sorted(missing)}",
+                f"field {field_def.get('name', '?')!r} missing keys: {sorted(missing)}",
             )
         if field_def["data_type"] not in VALID_DATA_TYPES:
             return CheckResult(
-                f"{function_name}() shape",
-                False,
-                f"field {field_def['name']!r} has invalid data_type "
-                f"{field_def['data_type']!r}",
+                check_name, False, f"field {field_def['name']!r} has invalid data_type {field_def['data_type']!r}"
             )
         if field_def["widget"] not in VALID_WIDGETS:
             return CheckResult(
-                f"{function_name}() shape",
-                False,
-                f"field {field_def['name']!r} has invalid widget "
-                f"{field_def['widget']!r}",
+                check_name, False, f"field {field_def['name']!r} has invalid widget {field_def['widget']!r}"
             )
         if field_def["scope"] not in VALID_SCOPES:
             return CheckResult(
-                f"{function_name}() shape",
-                False,
-                f"field {field_def['name']!r} has invalid scope "
-                f"{field_def['scope']!r}",
+                check_name, False, f"field {field_def['name']!r} has invalid scope {field_def['scope']!r}"
             )
         if field_def["data_type"] == "enum" and not field_def.get("options"):
-            return CheckResult(
-                f"{function_name}() shape",
-                False,
-                f"enum field {field_def['name']!r} must declare options",
-            )
-    return CheckResult(f"{function_name}() shape", True)
+            return CheckResult(check_name, False, f"enum field {field_def['name']!r} must declare options")
+    return CheckResult(check_name, True)
 
 
-def _sample_scoresheet(module: Any, function_name: str) -> dict[str, Any]:
-    schema_fn_name = (
-        "scoresheet_schema"
-        if function_name == "calculate_score"
-        else "skills_scoresheet_schema"
-    )
-    fields = getattr(module, schema_fn_name)()
+def _defaults(fields: list[dict[str, Any]]) -> dict[str, Any]:
     return {f["name"]: f["default"] for f in fields}
 
 
-def _check_calculate_score(module: Any, function_name: str) -> CheckResult:
-    fn = getattr(module, function_name)
-    sample = _sample_scoresheet(module, function_name)
-    first = fn(sample)
-    second = fn(sample)
+def _check_deterministic_int(check_name: str, score) -> CheckResult:
+    first = score()
+    second = score()
     if first != second:
-        return CheckResult(
-            f"{function_name}() determinism",
-            False,
-            "calling with the same input twice produced different results",
-        )
+        return CheckResult(check_name, False, "calling with the same input twice produced different results")
     if not isinstance(first, int):
-        return CheckResult(
-            f"{function_name}() determinism",
-            False,
-            f"must return an int, got {type(first).__name__}",
-        )
-    return CheckResult(f"{function_name}() determinism", True)
+        return CheckResult(check_name, False, f"must return an int, got {type(first).__name__}")
+    return CheckResult(check_name, True)
+
+
+def _check_calculate_score(module: Any) -> CheckResult:
+    sample = _defaults(module.scoresheet_schema())
+    return _check_deterministic_int("calculate_score() determinism", lambda: module.calculate_score(sample))
+
+
+def _check_calculate_skills_score(module: Any, key: str) -> CheckResult:
+    sample = _defaults(module.skills_scoresheet_schema(key))
+    return _check_deterministic_int(
+        f"calculate_skills_score({key!r}) determinism",
+        lambda: module.calculate_skills_score(key, sample),
+    )
+
+
+def _check_skills_types(module: Any) -> CheckResult:
+    name = "skills_types() shape"
+    types = module.skills_types()
+    if not isinstance(types, list):
+        return CheckResult(name, False, "must return a list")
+    seen: set[str] = set()
+    for item in types:
+        if not isinstance(item, dict) or set(item) != {"key", "label"}:
+            return CheckResult(name, False, "each type must be a dict with exactly 'key' and 'label'")
+        key, label = item["key"], item["label"]
+        if not isinstance(key, str) or not _SKILLS_KEY_PATTERN.fullmatch(key):
+            return CheckResult(name, False, f"type key {key!r} must match ^[a-z0-9_]+$")
+        if key in RESERVED_SKILLS_KEYS:
+            return CheckResult(name, False, f"type key {key!r} is reserved")
+        if key in seen:
+            return CheckResult(name, False, f"duplicate type key {key!r}")
+        seen.add(key)
+        if not isinstance(label, str) or not label.strip():
+            return CheckResult(name, False, f"type {key!r} needs a non-empty label")
+    return CheckResult(name, True)
 
 
 def _check_validate(module: Any) -> CheckResult:
-    sample = _sample_scoresheet(module, "calculate_score")
+    sample = _defaults(module.scoresheet_schema())
     result = module.validate(sample)
     if not isinstance(result, list):
         return CheckResult("validate() shape", False, "must return a list")

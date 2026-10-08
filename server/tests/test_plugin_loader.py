@@ -68,3 +68,20 @@ def test_load_plugin_generic_matches_load_game_plugin():
 def test_load_plugin_rejects_mismatched_kind():
     with pytest.raises(PluginLoadError, match="expected 'scheduler'"):
         load_plugin(FIXTURE_EXAMPLE_PLUGIN, SCHEDULER_PLUGIN_KIND)
+
+
+def test_game_plugin_without_skills_types_fails_to_load(tmp_path):
+    import shutil
+
+    plugin_dir = tmp_path / "no-skills-types"
+    shutil.copytree(FIXTURE_EXAMPLE_PLUGIN, plugin_dir)
+    manifest = json.loads((plugin_dir / "manifest.json").read_text())
+    manifest["name"] = "no-skills-types"
+    (plugin_dir / "manifest.json").write_text(json.dumps(manifest))
+    text = (plugin_dir / "plugin.py").read_text()
+    stripped = text.replace("def skills_types(", "def _not_skills_types(")
+    assert stripped != text, "fixture setup did not find skills_types"
+    (plugin_dir / "plugin.py").write_text(stripped)
+
+    with pytest.raises(PluginLoadError, match="skills_types"):
+        load_game_plugin(plugin_dir)
