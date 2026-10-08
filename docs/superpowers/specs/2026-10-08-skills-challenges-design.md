@@ -37,6 +37,7 @@ The season rankings spec (`2026-10-06-season-rankings-design.md`) built the Seas
   - An admin can delete an attempt, which gives the team that attempt back.
   - Once a scorer or referee has submitted an attempt, they cannot edit or delete it. They ask an admin.
   - **The same rule now applies to teamwork match scores** (Section 3.6): once a match alliance's score has been submitted, only an admin can change it.
+  - Today every saved score, teamwork or skills, is a submitted score. A later **live scoring** spec, written before the scorer app, adds draft scores. A scorer will save in-progress drafts that can be overwritten, are ignored by rankings and checks, and are shown live on audience displays. Submitting will finalize the score. The admin-only rule here applies to submitted scores, so it carries over unchanged.
   - An attempt that happened but scored nothing is saved as 0 and uses up an attempt.
 - **Plugin contract:** types become a function argument (approach 1). See Section 2.
 - **The attempts table has a team filter** that narrows as you type. The use case is an admin finding what was recorded for one team in order to fix an error.
@@ -206,6 +207,7 @@ Admins may edit and delete in any session, past or active.
 - The first submission from scorers and referees on an admitted device is unchanged.
 - Admin submissions still create or overwrite, so corrections, including after finalizing qualification, still work from the admin side.
 - Existing tests and E2E helpers that re-submit a score as a scorer are updated to correct it as admin.
+- Draft (in-progress) scores, which scorers may overwrite until they submit, come in the later live scoring spec and are out of scope here.
 
 ### 3.7 Realtime
 
@@ -281,7 +283,7 @@ The scorer app is not built in this spec. When its spec is written, it **must** 
 2. For a skills run, they pick the team from the session's checked-in teams, then pick the skills type. The type step is skipped when the game has only one type.
 3. They get a full scoring page for that type, like a teamwork match's scoring page, drawn from `GET /api/skills/types/{key}/schema` with the shared scoresheet components. Each type can have its own page because each has its own schema.
 4. Saving posts to `POST /api/sessions/{id}/skills/attempts`. The page shows the attempt number and the attempts remaining, and the same 409/422 messages as the admin page.
-5. Once saved, an attempt cannot be edited or deleted from the scorer app; it shows that corrections go through an admin. The same applies to teamwork match scores in the scorer app (3.6).
+5. With the live scoring spec, the scorer app sends in-progress drafts as the scorer works and submits to finalize. Once submitted, an attempt cannot be edited or deleted from the scorer app; it shows that corrections go through an admin. The same applies to teamwork match scores in the scorer app (3.6).
 
 ## Section 5: Error handling summary
 
@@ -362,6 +364,7 @@ The scorer app is not built in this spec. When its spec is written, it **must** 
 
 ## Out of scope
 
+- Draft and in-progress scores, live score broadcasts and audience displays, for both teamwork and skills. These belong to a separate live scoring spec, written before the scorer app.
 - Building the scorer app. Its skills requirements are recorded in 4.5 so its own spec picks them up.
 - A skills finalize or lock.
 - Per-division skills rankings.
