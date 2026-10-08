@@ -5,7 +5,7 @@ import { apiRequest, defaultValues, ScoresheetForm, type ScoresheetValues } from
 import { apiErrorMessage } from "../apiErrorMessage";
 import type { SessionSkillsType, SkillsAttemptRead, TeamSummary } from "../types";
 import { attemptStatus } from "./recordForm";
-import { violationsByField } from "./scoresheetErrors";
+import { splitViolations } from "./scoresheetErrors";
 import { TeamPicker } from "./TeamPicker";
 import { skillsAttemptsKey, useSkillsSchema } from "./useSessionSkills";
 import { useScoresheetT } from "./useScoresheetT";
@@ -57,7 +57,10 @@ export function RecordAttemptForm({
       inFlight.current = false;
     },
   });
-  const fieldErrors = violationsByField(mutation.error);
+  const split = splitViolations(
+    mutation.error,
+    fields.map((field) => field.name)
+  );
 
   function resetFeedback() {
     setSavedScore(null);
@@ -81,6 +84,7 @@ export function RecordAttemptForm({
         selectedId={teamId}
         onSelect={(id) => {
           setTeamId(id);
+          setValues(null);
           resetFeedback();
         }}
       />
@@ -116,7 +120,7 @@ export function RecordAttemptForm({
         <ScoresheetForm
           fields={fields}
           values={current}
-          errors={fieldErrors ?? {}}
+          errors={split?.byField ?? {}}
           t={scoresheetT}
           idPrefix={`${headingId}-sheet`}
           onChange={(next) => {
@@ -125,9 +129,9 @@ export function RecordAttemptForm({
           }}
         />
       )}
-      {mutation.isError && !fieldErrors && (
+      {mutation.isError && (!split || split.other.length > 0) && (
         <p className="alert alert-danger" role="alert">
-          {apiErrorMessage(mutation.error, t("errors.generic"))}
+          {split ? split.other.join(" ") : apiErrorMessage(mutation.error, t("errors.generic"))}
         </p>
       )}
       {savedScore !== null && (

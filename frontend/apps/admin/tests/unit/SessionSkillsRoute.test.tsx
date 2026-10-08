@@ -254,7 +254,9 @@ describe("SessionSkillsRoute", () => {
     });
     stub();
     renderSkills();
-    await recordRegion();
+    const region = await recordRegion();
+    await pickTeam(region, "101 Alpha");
+    await within(region).findByLabelText("Score");
     const fetches = () => calls("GET", "/api/sessions/1/skills/attempts").length;
     const before = fetches();
 
@@ -264,5 +266,54 @@ describe("SessionSkillsRoute", () => {
 
     act(() => onEvent?.({ event: "skills_changed", data: { session_id: 1 } }));
     await waitFor(() => expect(fetches()).toBeGreaterThan(before));
+  });
+
+  it("shows a violation for an unknown field in the alert above Save", async () => {
+    stub({
+      onPost: () =>
+        new ApiError(422, "The scoresheet has errors.", {
+          detail: "The scoresheet has errors.",
+          violations: [{ field: "mystery", message: "Mystery is wrong." }],
+        }),
+    });
+    renderSkills();
+    const region = await recordRegion();
+    await pickTeam(region, "202 Bravo");
+    await within(region).findByLabelText("Score");
+    fireEvent.click(within(region).getByRole("button", { name: "Save attempt" }));
+    expect(await within(region).findByRole("alert")).toHaveTextContent("Mystery is wrong.");
+  });
+
+  it("splits a mixed 422: the known field beside it, the unknown one in the alert", async () => {
+    stub({
+      onPost: () =>
+        new ApiError(422, "The scoresheet has errors.", {
+          detail: "The scoresheet has errors.",
+          violations: [
+            { field: "score", message: "Must be at most 999." },
+            { field: "mystery", message: "Mystery is wrong." },
+          ],
+        }),
+    });
+    renderSkills();
+    const region = await recordRegion();
+    await pickTeam(region, "202 Bravo");
+    fireEvent.change(await within(region).findByLabelText("Score"), { target: { value: "1000" } });
+    fireEvent.click(within(region).getByRole("button", { name: "Save attempt" }));
+    expect(await within(region).findByText("Must be at most 999.")).toBeInTheDocument();
+    expect(within(region).getByRole("alert")).toHaveTextContent("Mystery is wrong.");
+    expect(within(region).getByRole("alert")).not.toHaveTextContent("Must be at most 999.");
+  });
+
+  it("starts the next team's sheet from the defaults", async () => {
+    stub();
+    renderSkills();
+    const region = await recordRegion();
+    await pickTeam(region, "202 Bravo");
+    fireEvent.change(await within(region).findByLabelText("Score"), { target: { value: "25" } });
+    expect(within(region).getByLabelText("Score")).toHaveValue("25");
+    fireEvent.click(within(region).getByRole("button", { name: "Change team" }));
+    await pickTeam(region, "101 Alpha");
+    expect(await within(region).findByLabelText("Score")).toHaveValue("0");
   });
 });
