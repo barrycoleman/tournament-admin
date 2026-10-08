@@ -22,6 +22,20 @@ def get_the_event(db: Session) -> Event | None:
     return db.execute(select(Event)).scalars().first()
 
 
+def get_event_or_404(db: Session) -> Event:
+    event = get_the_event(db)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not initialized")
+    return event
+
+
+def get_optional_game_plugin(request: Request, event: Event) -> LoadedPlugin | None:
+    """The event's loaded game plugin, or None when none is selected (or loaded)."""
+    if event.game_plugin_name is None:
+        return None
+    return request.app.state.game_plugins.get(event.game_plugin_name)
+
+
 def get_session_id(
     session_id: int | None = Query(None),
     db: Session = Depends(get_db),

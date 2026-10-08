@@ -360,6 +360,10 @@ standings are total win points over every session's qualification matches
 and practice matches never count anywhere. Each recompute *replaces* its
 scope's rows, so a team with no qualifying match left has no row.
 
+## Skills challenges
+
+An event runs skills challenges when an admin turns them on (`PUT /api/skills/settings`, `{enabled, attempts}`). Turning them on needs a game plugin (409 "Choose a game plugin before setting up skills challenges.") with at least one skills type (409 "This game has no skills challenges."). `skills_settings` holds one row per event, created on the first save; until then reads return the defaults (off, 3 attempts per type). `attempts` maps a type key to the attempts each team gets per session (1-20; a missing type means 3). A session may override it (`PUT /api/sessions/{id}/skills`, `{"attempts": {...} | null}`, stored in `sessions.skills_attempts`, with `{}` stored as null). A type missing from the override falls back to the event setting (`services/skills_rules.effective_allowed`). `GET /api/skills/types/{key}/schema` returns one type's scoresheet fields.
+
 ## Finals
 
 A game plugin declares `alliance_selection` (`captain_pick` or
@@ -815,6 +819,10 @@ truth for that richer shape):
   `event_wide` is true, `session_id` is null, matching the event-wide
   `Ranking` row's own null `session_id`.
 - `active_session_changed` — `{active_session_id}`.
+- `skills_settings_changed` — `{session_id}`. It is `null` for an event
+  settings change (active-session channel only). It is the session's id
+  for an override change (that session's channel and the active-session
+  channel).
 - `qualification_status_changed` — `{session_id, finalized}` (via
   `broadcast_for_session`), on finalize and reopen.
 
