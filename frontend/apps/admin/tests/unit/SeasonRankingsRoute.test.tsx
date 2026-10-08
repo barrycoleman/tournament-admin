@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -38,12 +38,27 @@ const ROW: RankingRead = {
   matches_played: 4,
 };
 
-function stub(settings: Partial<RankingSettingsRead> = {}) {
+const SKILL_TYPES = [
+  { key: "autonomous", label: "Autonomous" },
+  { key: "driver", label: "Driver" },
+];
+
+function stub(settings: Partial<RankingSettingsRead> = {}, skillsEnabled = false) {
   vi.mocked(apiRequest).mockImplementation(async (path: string) => {
     if (path === "/api/ranking-settings") return { ...SETTINGS, ...settings } as never;
     if (path === "/api/divisions") return [] as never;
     if (path === "/api/teams") return [{ id: 1, number: "101", name: "Alpha", division_id: null }] as never;
     if (path === "/api/rankings?event_wide=true") return [ROW] as never;
+    if (path === "/api/skills/settings") {
+      return { enabled: skillsEnabled, attempts: { autonomous: 3, driver: 3 }, types: SKILL_TYPES } as never;
+    }
+    if (path === "/api/sessions") {
+      return [{ id: 4, event_id: 1, label: "Saturday", session_date: null, timezone: null, has_scored_matches: false,
+        qualification_finalized_at: null, qualification_drops: null }] as never;
+    }
+    if (path === "/api/skills/rankings?tab=overall&season=true") {
+      return [{ rank: 1, team_id: 1, score: 54, attempts: [34, 20], session_id: 4 }] as never;
+    }
     throw new Error(`unexpected request: ${path}`);
   });
 }
@@ -124,5 +139,45 @@ describe("SeasonRankingsRoute", () => {
     act(() => onEvent?.({ event: "ranking_updated", data: { session_id: null, event_wide: true } }));
     await waitFor(() => expect(fetches()).toBeGreaterThan(before));
     await waitFor(() => expect(settingsFetches()).toBeGreaterThan(settingsBefore));
+  });
+
+  it("hides the skills tabs while skills are off", async () => {
+    stub();
+    renderSeason();
+    await screen.findByRole("row", { name: /Alpha/ });
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/skills/settings"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Teamwork"]);
+  });
+
+  it("shows season skills from the best session, naming it", async () => {
+    stub({}, true);
+    renderSeason();
+    fireEvent.click(await screen.findByRole("tab", { name: "Overall Skills" }));
+    const table = await screen.findByRole("table", { name: "Overall Skills" });
+    expect(within(table).getByRole("columnheader", { name: "From session" })).toBeInTheDocument();
+    const row = within(table).getAllByRole("row")[1];
+    expect(row).toHaveTextContent("54");
+    expect(row).toHaveTextContent("34 · 20");
+    expect(await within(row).findByText("Saturday")).toBeInTheDocument();
+    expect(screen.getByText(/Season scores come from the team's best session\.$/)).toBeInTheDocument();
+  });
+
+  it("refetches season skills rankings on skills_changed", async () => {
+    let onEvent: ((event: RealtimeEvent) => void) | undefined;
+    vi.mocked(useRealtimeChannel).mockImplementation((options) => {
+      onEvent = options.onEvent;
+      return { connected: true };
+    });
+    stub({}, true);
+    renderSeason();
+    fireEvent.click(await screen.findByRole("tab", { name: "Overall Skills" }));
+    await screen.findByRole("table", { name: "Overall Skills" });
+    const fetches = () =>
+      vi.mocked(apiRequest).mock.calls.filter(([path]) => path === "/api/skills/rankings?tab=overall&season=true")
+        .length;
+    const before = fetches();
+    act(() => onEvent?.({ event: "skills_changed", data: { session_id: 4 } }));
+    await waitFor(() => expect(fetches()).toBeGreaterThan(before));
   });
 });

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
 import { initI18n, type RealtimeEvent } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
 import { SessionRankingsRoute } from "../../src/routes/SessionRankingsRoute";
-import type { Division, GameModel, RankingRead, RankingSettingsRead, SessionRead } from "../../src/types";
+import type { Division, GameModel, RankingRead, RankingSettingsRead, SessionRead, SkillsRankingRead } from "../../src/types";
 
 vi.mock("@tournament-admin/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tournament-admin/shared")>();
@@ -60,15 +60,32 @@ function settings(game_model: GameModel): RankingSettingsRead {
   };
 }
 
+const SKILL_TYPES = [
+  { key: "autonomous", label: "Autonomous" },
+  { key: "driver", label: "Driver" },
+];
+
 function stub({
   gameModel = "cooperative_score",
   divisions = [],
   rankings = {},
-}: { gameModel?: GameModel; divisions?: Division[]; rankings?: Record<string, RankingRead[]> }) {
+  skillsEnabled = false,
+  skillsRankings = {},
+}: {
+  gameModel?: GameModel;
+  divisions?: Division[];
+  rankings?: Record<string, RankingRead[]>;
+  skillsEnabled?: boolean;
+  skillsRankings?: Record<string, SkillsRankingRead[]>;
+}) {
   vi.mocked(apiRequest).mockImplementation(async (path: string) => {
     if (path === "/api/ranking-settings") return settings(gameModel) as never;
     if (path === "/api/divisions") return divisions as never;
     if (path === "/api/teams") return TEAMS as never;
+    if (path === "/api/skills/settings") {
+      return { enabled: skillsEnabled, attempts: { autonomous: 3, driver: 3 }, types: SKILL_TYPES } as never;
+    }
+    if (path.startsWith("/api/skills/rankings?")) return (skillsRankings[path] ?? []) as never;
     if (path in rankings) return rankings[path] as never;
     if (path.startsWith("/api/rankings?")) return [] as never;
     throw new Error(`unexpected request: ${path}`);
@@ -175,7 +192,7 @@ describe("SessionRankingsRoute", () => {
   it("refetches when the session channel reports a ranking update", async () => {
     let onEvent: ((event: RealtimeEvent) => void) | undefined;
     vi.mocked(useRealtimeChannel).mockImplementation((options) => {
-      onEvent = options.onEvent;
+      if (options.path === "/ws/session/1") onEvent = options.onEvent;
       return { connected: true };
     });
     stub({ rankings: { "/api/rankings?session_id=1": [ranking(1, 1)] } });
@@ -188,5 +205,51 @@ describe("SessionRankingsRoute", () => {
     const before = fetches();
     act(() => onEvent?.({ event: "ranking_updated", data: { session_id: 1 } }));
     await waitFor(() => expect(fetches()).toBeGreaterThan(before));
+  });
+
+  it("shows only the Teamwork tab while skills are off", async () => {
+    stub({ rankings: { "/api/rankings?session_id=1": [ranking(1, 1)] } });
+    renderRankings();
+    await screen.findByRole("row", { name: /Alpha/ });
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/skills/settings"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Teamwork"]);
+  });
+
+  it("adds a tab per skills type and Overall Skills, and shows a skills table", async () => {
+    stub({
+      skillsEnabled: true,
+      skillsRankings: {
+        "/api/skills/rankings?tab=overall&session_id=1": [
+          { rank: 1, team_id: 2, score: 58, attempts: [28, 30], session_id: 1 },
+          { rank: 2, team_id: 1, score: 54, attempts: [20, 34], session_id: 1 },
+        ],
+      },
+    });
+    renderRankings();
+    await screen.findByRole("tab", { name: "Overall Skills" });
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Teamwork",
+      "Autonomous",
+      "Driver",
+      "Overall Skills",
+    ]);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Overall Skills" }));
+    expect(screen.getByRole("tab", { name: "Overall Skills" })).toHaveAttribute("aria-selected", "true");
+    const table = await screen.findByRole("table", { name: "Overall Skills" });
+    const rows = within(table).getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("202");
+    expect(rows[1]).toHaveTextContent("58");
+    expect(rows[1]).toHaveTextContent("28 · 30");
+    expect(within(table).queryByRole("columnheader", { name: "From session" })).not.toBeInTheDocument();
+    expect(screen.getByText(/^Sum of each team's best attempt/)).toBeInTheDocument();
+  });
+
+  it("shows the empty state on a skills tab with no attempts", async () => {
+    stub({ skillsEnabled: true });
+    renderRankings();
+    fireEvent.click(await screen.findByRole("tab", { name: "Driver" }));
+    expect(await screen.findByText("No skills attempts recorded yet.")).toBeInTheDocument();
   });
 });

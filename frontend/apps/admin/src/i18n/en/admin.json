@@ -447,6 +447,18 @@
     }
   },
   "skills": {
+    "rankings": {
+      "overallTab": "Overall Skills",
+      "loading": "Loading skills rankings...",
+      "empty": "No skills attempts recorded yet.",
+      "columnAttempts": "Attempts",
+      "columnSession": "From session",
+      "overallRule": "Sum of each team's best attempt in each type in one session. Ties go to the higher {{bests}}, then the higher second-best attempts, and so on.",
+      "typeBest": "{{label}} best",
+      "bestsJoin": ", then ",
+      "typeRule": "Each team's best {{label}} attempt. Ties go to the higher second-best attempt, and so on.",
+      "seasonRule": "Season scores come from the team's best session."
+    },
     "settings": {
       "heading": "Skills challenges",
       "enabledLabel": "Run skills challenges",

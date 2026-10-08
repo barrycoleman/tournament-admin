@@ -132,7 +132,7 @@ Beyond the bootstrap/auth screens above, the authenticated app
 create/edit, plus per-row Set active and Delete; Delete is disabled with a
 `title` explaining why when `SessionRead.has_scored_matches`, and otherwise
 asks for the session's name in `ConfirmDialog`), `/sessions/:sessionId` (index-redirects to
-`/sessions/:sessionId/checkin`), `/sessions/:sessionId/{checkin,fields,schedule,matches,rankings}` (the session
+`/sessions/:sessionId/checkin`), `/sessions/:sessionId/{checkin,fields,schedule,matches,skills,rankings}` (the session
 tabs, all rendered through `SessionDetailLayout`'s tab-strip `Outlet`
 context — see the session-checkin and fields-schedule-ui design specs;
 the layout's header also carries the "Set as active session" control; the Fields tab's empty state offers "copy fields from" any other session that has field sets, via `POST /api/sessions/{id}/copy-fields`), and `/checkin` (a
@@ -195,12 +195,22 @@ scheduled matches carry no division) and returns only non-empty groups;
 `game_model` from `GET /api/ranking-settings` (`useRankingSettings`, key
 `["rankingSettings"]`). The session Rankings tab invalidates
 `["rankings", sessionId]` off `/ws/session/{id}`; `/rankings` (Season
-rankings, a Teamwork tab for now — skills tabs come later) invalidates
+rankings) invalidates
 `["rankings", "season"]` off `/ws/active-session`, the only channel that
 carries event-wide `ranking_updated`. Event Setup's `RankingSettingsPanel`
 renders only for `cooperative_score`; its form logic (`settingsDraft.ts`) is
 pure and unit-tested, and choosing a game plugin invalidates the settings
 query so the panel appears without a reload.
+
+Skills challenges live in `src/skills/`.
+- **Settings:** `useSkillsSettings` (key `["skillsSettings"]`) drives everything. Event Setup's `SkillsSettingsPanel` is shown disabled, with the reason, until a game with skills types is chosen. Selecting a plugin invalidates that key, so it enables without a reload.
+- **Skills page:** the session Skills tab (`SessionSkillsRoute`) appears only while skills are on. Opened directly while they are off, it says so and links to Event Setup. It holds:
+  - `SessionAttemptsSettings`: the attempts line and the session override;
+  - `RecordAttemptForm`: `TeamPicker` over checked-in teams (`["participants", sessionId]`, shared with Check-In), type buttons hidden for a one-type game, and the shared scoresheet;
+  - `AttemptsTable`: the team filter, plus `EditAttemptDialog` for admin edit and delete.
+- **Rankings:** both rankings pages use `RankingTabs`/`useRankingTabs` (Teamwork, each type, Overall Skills). A skills tab renders `SkillsRankingsPanel` (key `["skillsRankings", sessionId | "season", tab]`).
+- **Live updates:** every skills event reaches `/ws/active-session`, so skills UI listens there through `useSkillsLiveUpdates` / `handleSkillsEvent`.
+- **Scoresheet forms:** they come from `@tournament-admin/shared`'s `ScoresheetForm`, which takes the caller's `t` (`useScoresheetT`) and knows nothing about skills. The future scorer app reuses it for skills and teamwork. A 422's per-field `violations` reach it through `ApiError.body` (`violationsByField`).
 
 `AppShell.tsx`'s nav is gated per role, the same pattern repeated for
 each: `role === "admin"` renders the full admin nav (Divisions, Teams,

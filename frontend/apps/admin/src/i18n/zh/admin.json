@@ -444,6 +444,18 @@
     }
   },
   "skills": {
+    "rankings": {
+      "overallTab": "技能赛总分",
+      "loading": "正在加载技能赛排名...",
+      "empty": "尚未记录任何技能赛尝试。",
+      "columnAttempts": "尝试",
+      "columnSession": "来自场次",
+      "overallRule": "每支队伍在同一场次中各类型最佳尝试之和。平分时依次比较{{bests}}，再比较第二佳尝试之和，依此类推。",
+      "typeBest": "{{label}}最佳成绩",
+      "bestsJoin": "、",
+      "typeRule": "每支队伍的最佳{{label}}尝试。平分时比较第二佳尝试，依此类推。",
+      "seasonRule": "赛季成绩取自该队最佳的一个场次。"
+    },
     "settings": {
       "heading": "技能挑战赛",
       "enabledLabel": "举办技能挑战赛",
