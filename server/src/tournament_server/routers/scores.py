@@ -47,14 +47,16 @@ def _overwrites_a_submitted_partner(
     db: Session, match_id: int, alliance_id: int, data: dict
 ) -> bool:
     """True when another alliance on the match has a submitted (not mirrored)
-    record whose data differs from `data`."""
+    record whose data differs from `data`. A DQ or no-show record is skipped:
+    its data never counts toward a score."""
     partner_records = db.execute(
         select(ScoreRecord)
         .join(Alliance, Alliance.id == ScoreRecord.alliance_id)
         .where(Alliance.match_id == match_id, Alliance.id != alliance_id)
     ).scalars().all()
     return any(
-        not record.mirrored and json.loads(record.data_json) != data for record in partner_records
+        not (record.mirrored or record.dq or record.no_show) and json.loads(record.data_json) != data
+        for record in partner_records
     )
 
 

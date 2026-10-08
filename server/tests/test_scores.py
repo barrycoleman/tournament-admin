@@ -487,3 +487,18 @@ def test_an_admin_correction_through_the_partner_mirrors_back(cooperative_client
     _, _, red_id, _, blue_path = _cooperative_scorer(client)
     assert client.post(blue_path, json={"data": {"objects_scored": 25}}).status_code == 200
     assert _score_record(client, red_id).data_json == '{"objects_scored": 25}'
+
+
+def test_a_scorer_may_score_the_partner_of_a_disqualified_alliance(cooperative_client):
+    client = cooperative_client
+    match_id, red_id, blue_id = _setup_cooperative_match(client)
+    raw = client.__class__(client.app)
+    scorer = {**bearer(login_as(raw, "scorer")), "X-Device-Token": admitted_device_token(client)}
+    blue_path = f"/api/matches/{match_id}/alliances/{blue_id}/score"
+    red_path = f"/api/matches/{match_id}/alliances/{red_id}/score"
+    assert raw.post(blue_path, json={"data": {"objects_scored": 3}, "dq": True}, headers=scorer).status_code == 200
+    red = raw.post(red_path, json={"data": {"objects_scored": 10}}, headers=scorer)
+    assert red.status_code == 200, red.text
+    red_record, blue_record = _score_record(client, red_id), _score_record(client, blue_id)
+    assert (red_record.data_json, red_record.mirrored) == ('{"objects_scored": 10}', False)
+    assert (blue_record.dq, blue_record.mirrored) == (True, False)

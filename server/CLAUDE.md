@@ -318,8 +318,10 @@ record may be submitted by a scorer or referee once it exists, so the
 post-hoc DQ above works from a scorer device the first time. A non-admin
 submission that would mirror (no `dq`/`no_show`) is also refused with the
 same 409, before anything is written, when it would change a partner's
-submitted (not mirrored) data; resubmitting identical data is allowed.
-So once a score is submitted, every change to its data needs an admin.
+submitted (not mirrored) data; resubmitting identical data is allowed, and
+a partner marked `dq` or `no_show` is skipped because its data never counts
+(so scoring red after blue's DQ works from a scorer device). So once a
+counting score is submitted, every change to its data needs an admin.
 
 Qualification ranking for `cooperative_score` is average score, not
 win/tie/loss — each alliance in a completed match is credited
