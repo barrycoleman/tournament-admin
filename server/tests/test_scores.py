@@ -1,4 +1,8 @@
+from sqlalchemy import select
+
 from auth_helpers import bearer, login_as
+from skills_helpers import admitted_device_token
+from tournament_server.models.score_record import ScoreRecord
 
 
 def _setup_match(client):
@@ -151,20 +155,14 @@ def test_submit_score_403s_for_attendee(client):
 def test_submit_score_succeeds_for_scorer_and_referee(client):
     match_id, red_id, blue_id = _setup_match(client)
     raw = client.__class__(client.app)
+    device_token = admitted_device_token(client)
 
-    device = raw.post("/api/devices/register").json()
-    device_id = next(
-        d["id"] for d in client.get("/api/devices").json()
-        if d["friendly_name"] == device["friendly_name"]
-    )
-    client.post(f"/api/devices/{device_id}/admit")
-
-    for role in ("scorer", "referee"):
+    for role, alliance_id in (("scorer", red_id), ("referee", blue_id)):
         token = login_as(raw, role)
         response = raw.post(
-            f"/api/matches/{match_id}/alliances/{red_id}/score",
+            f"/api/matches/{match_id}/alliances/{alliance_id}/score",
             json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
-            headers={**bearer(token), "X-Device-Token": device["device_token"]},
+            headers={**bearer(token), "X-Device-Token": device_token},
         )
         assert response.status_code == 200, f"{role} should be able to submit a score"
 
@@ -368,3 +366,88 @@ def test_admin_with_admitted_device_still_gets_device_attribution(client):
     )
     assert response.status_code == 200
     assert response.json()["submitted_by_device"] == device["friendly_name"]
+
+
+def test_only_an_admin_can_correct_a_submitted_score(client):
+    match_id, red_id, _ = _setup_match(client)
+    raw = client.__class__(client.app)
+    device_token = admitted_device_token(client)
+    path = f"/api/matches/{match_id}/alliances/{red_id}/score"
+    first = {"data": {"high_balls": 1, "low_balls": 0, "auto_winner": "tie"}}
+    second = {"data": {"high_balls": 5, "low_balls": 2, "auto_winner": "tie"}}
+
+    scorer = {**bearer(login_as(raw, "scorer")), "X-Device-Token": device_token}
+    assert raw.post(path, json=first, headers=scorer).status_code == 200
+    for role in ("scorer", "referee"):
+        headers = {**bearer(login_as(raw, role)), "X-Device-Token": device_token}
+        refused = raw.post(path, json=second, headers=headers)
+        assert refused.status_code == 409, role
+        assert refused.json()["detail"] == "This score has already been submitted; ask an admin to correct it."
+
+    corrected = client.post(path, json=second)
+    assert corrected.status_code == 200
+    assert corrected.json()["computed_score"] == 17
+
+
+def _setup_cooperative_match(client):
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    t1 = client.post("/api/teams", json={"number": "1", "name": "Team One"}).json()["id"]
+    t2 = client.post("/api/teams", json={"number": "2", "name": "Team Two"}).json()["id"]
+    match = client.post(
+        "/api/matches",
+        json={
+            "session_id": session_id,
+            "round_type": "qualification",
+            "match_number": 1,
+            "field_id": None,
+            "alliances": [
+                {"station": "red", "team_ids": [t1]},
+                {"station": "blue", "team_ids": [t2]},
+            ],
+        },
+    ).json()
+    red_id = next(a["id"] for a in match["alliances"] if a["station"] == "red")
+    blue_id = next(a["id"] for a in match["alliances"] if a["station"] == "blue")
+    return match["id"], red_id, blue_id
+
+
+def _score_record(client, alliance_id) -> ScoreRecord:
+    with client.app.state.session_factory() as db:
+        return db.execute(select(ScoreRecord).where(ScoreRecord.alliance_id == alliance_id)).scalars().one()
+
+
+def test_a_mirrored_cooperative_copy_can_be_submitted_once_by_a_scorer(cooperative_client):
+    client = cooperative_client
+    match_id, red_id, blue_id = _setup_cooperative_match(client)
+    raw = client.__class__(client.app)
+    scorer = {**bearer(login_as(raw, "scorer")), "X-Device-Token": admitted_device_token(client)}
+    red_path = f"/api/matches/{match_id}/alliances/{red_id}/score"
+    blue_path = f"/api/matches/{match_id}/alliances/{blue_id}/score"
+
+    assert raw.post(red_path, json={"data": {"objects_scored": 10}}, headers=scorer).status_code == 200
+    assert _score_record(client, red_id).mirrored is False
+    assert _score_record(client, blue_id).mirrored is True
+
+    blue = raw.post(blue_path, json={"data": {"objects_scored": 10}, "dq": True}, headers=scorer)
+    assert blue.status_code == 200, blue.text
+    assert blue.json()["dq"] is True
+    assert _score_record(client, blue_id).mirrored is False
+
+    for path in (red_path, blue_path):
+        refused = raw.post(path, json={"data": {"objects_scored": 12}}, headers=scorer)
+        assert refused.status_code == 409
+        assert refused.json()["detail"] == "This score has already been submitted; ask an admin to correct it."
+    for path in (red_path, blue_path):
+        assert client.post(path, json={"data": {"objects_scored": 12}}).status_code == 200
+
+
+def test_mirroring_into_a_submitted_record_keeps_it_submitted(cooperative_client):
+    client = cooperative_client
+    match_id, red_id, blue_id = _setup_cooperative_match(client)
+    client.post(f"/api/matches/{match_id}/alliances/{blue_id}/score", json={"data": {"objects_scored": 3}})
+    client.post(f"/api/matches/{match_id}/alliances/{red_id}/score", json={"data": {"objects_scored": 10}})
+    blue = _score_record(client, blue_id)
+    assert blue.mirrored is False
+    assert blue.data_json == '{"objects_scored": 10}'

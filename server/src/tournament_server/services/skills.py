@@ -3,11 +3,14 @@ each session's allowed attempts. The pure rules live in skills_rules.py and
 the ranking in skills_ranking.py."""
 from __future__ import annotations
 
+from collections import Counter
+from typing import Iterable
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server.models.session import TournamentSession
-from tournament_server.models.skills import SkillsSettings
+from tournament_server.models.skills import SkillsAttempt, SkillsSettings
 from tournament_server.plugin_registry.loader import LoadedPlugin
 from tournament_server.services.skills_rules import effective_allowed
 
@@ -42,3 +45,13 @@ def event_attempts(db: Session, event_id: int) -> dict[str, int]:
 
 def session_allowed(db: Session, session_obj: TournamentSession, type_keys: list[str]) -> dict[str, int]:
     return effective_allowed(type_keys, event_attempts(db, session_obj.event_id), session_obj.skills_attempts)
+
+
+def attempt_numbers(attempts: Iterable[SkillsAttempt]) -> dict[int, int]:
+    """attempt id -> its number: 1, 2, 3, ... per team and type, by (recorded_at, id)."""
+    seen: Counter[tuple[int, str]] = Counter()
+    numbers: dict[int, int] = {}
+    for attempt in sorted(attempts, key=lambda a: (a.recorded_at, a.id)):
+        seen[(attempt.team_id, attempt.skills_type)] += 1
+        numbers[attempt.id] = seen[(attempt.team_id, attempt.skills_type)]
+    return numbers

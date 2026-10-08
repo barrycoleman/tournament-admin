@@ -57,3 +57,23 @@ def next_event(socket, name: str) -> dict:
         message = socket.receive_json()
         if message["event"] == name:
             return message
+
+
+def record_attempt(
+    client,
+    session_id: int,
+    team_id: int,
+    skills_type: str = "driver",
+    objects: int = 5,
+    parked: bool = False,
+    headers: dict | None = None,
+):
+    """POSTs an example-game attempt: score = objects * 2 (+4 for a parked autonomous run)."""
+    data: dict = {"objects_scored": objects}
+    if skills_type == "autonomous":
+        data["parked"] = parked
+    return client.post(
+        f"/api/sessions/{session_id}/skills/attempts",
+        json={"team_id": team_id, "skills_type": skills_type, "data": data},
+        headers=headers or {},
+    )

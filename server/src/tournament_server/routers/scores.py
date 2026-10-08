@@ -23,6 +23,8 @@ from tournament_server.services.ranking import recompute_event_rankings, recompu
 
 router = APIRouter(prefix="/api/matches", tags=["scores"])
 
+SCORE_ALREADY_SUBMITTED_DETAIL = "This score has already been submitted; ask an admin to correct it."
+
 
 def _to_score_record_read(record: ScoreRecord, computed_score: int) -> ScoreRecordRead:
     return ScoreRecordRead(
@@ -48,7 +50,7 @@ def submit_score(
     payload: ScoreSubmit,
     request: Request,
     db: Session = Depends(get_db),
-    _role: str = Depends(require_scorer_or_referee),
+    role: str = Depends(require_scorer_or_referee),
     device_friendly_name: str | None = Depends(require_admitted_device),
 ) -> ScoreRecordRead:
     match = db.get(Match, match_id)
@@ -59,6 +61,15 @@ def submit_score(
         raise HTTPException(status_code=404, detail="Alliance not found on this match")
     if match.status == qualification.NOT_PLAYED:
         raise HTTPException(status_code=409, detail=qualification.NOT_PLAYED_SCORE_DETAIL)
+    existing = db.execute(
+        select(ScoreRecord).where(ScoreRecord.alliance_id == alliance_id)
+    ).scalars().first()
+    # Once submitted, only an admin may correct it (skills spec 3.6). A copy
+    # the cooperative mirror wrote was never submitted for this alliance, so
+    # a scorer may still submit it once. Drafts, which scorers may overwrite,
+    # belong to the later live-scoring spec.
+    if existing is not None and not existing.mirrored and role != "admin":
+        raise HTTPException(status_code=409, detail=SCORE_ALREADY_SUBMITTED_DETAIL)
 
     submitted_by = (
         device_friendly_name if device_friendly_name is not None else audit.current_actor.get()
@@ -89,9 +100,6 @@ def submit_score(
         )
 
     now = utc_now()
-    existing = db.execute(
-        select(ScoreRecord).where(ScoreRecord.alliance_id == alliance_id)
-    ).scalars().first()
 
     if existing is None:
         record = ScoreRecord(
@@ -102,6 +110,7 @@ def submit_score(
             no_show=payload.no_show,
             dq=payload.dq,
             sitting=payload.sitting,
+            mirrored=False,
             submitted_by_device=submitted_by,
             submitted_at=now,
             saved_at=now,
@@ -112,6 +121,7 @@ def submit_score(
         existing.no_show = payload.no_show
         existing.dq = payload.dq
         existing.sitting = payload.sitting
+        existing.mirrored = False
         existing.submitted_by_device = submitted_by
         existing.submitted_at = now
         existing.saved_at = now
@@ -146,6 +156,7 @@ def submit_score(
                     no_show=False,
                     dq=False,
                     sitting=False,
+                    mirrored=True,
                     submitted_by_device=submitted_by,
                     submitted_at=now,
                     saved_at=now,

@@ -270,6 +270,8 @@ go stale relative to the plugin's logic. A Match becomes `"completed"` once
 every Alliance has a saved `ScoreRecord`, which triggers a ranking recompute
 for its session/division.
 
+Once an alliance has a `ScoreRecord`, only an admin may change it. A scorer or referee re-submitting gets 409 "This score has already been submitted; ask an admin to correct it." Their first submission (on an admitted device) is unchanged, and admin submissions still create or overwrite, including after qualification is finalized. Draft scores that scorers may overwrite belong to the later live-scoring spec. The one exception is a record the cooperative mirror created (`ScoreRecord.mirrored` is true): it was never submitted for that alliance, so a scorer or referee may submit it once, which clears the flag (see Cooperative scoring).
+
 Win-point allocation (2/1/0 for win/tie/loss) and strength-of-schedule
 (sum of opponents' current win points) are computed by the core server,
 not the plugin — see `services/ranking.py`. The plugin's `rank_teams()`
@@ -308,6 +310,13 @@ end up scored identically unless one is independently marked `no_show` or
 `dq` afterward (a post-hoc DQ ruling is just a second submission directly
 to that one alliance with `dq: true` — see `routers/scores.py`'s
 `submit_score`).
+
+A record the mirror *creates* for the other alliance has `mirrored = True`;
+mirroring into a record that already exists leaves its flag alone, and any
+direct submission to an alliance sets it to `False`. Only a `mirrored`
+record may be submitted by a scorer or referee once it exists, so the
+post-hoc DQ above works from a scorer device the first time, and every
+later change to either alliance needs an admin.
 
 Qualification ranking for `cooperative_score` is average score, not
 win/tie/loss — each alliance in a completed match is credited
@@ -363,6 +372,14 @@ scope's rows, so a team with no qualifying match left has no row.
 ## Skills challenges
 
 An event runs skills challenges when an admin turns them on (`PUT /api/skills/settings`, `{enabled, attempts}`). Turning them on needs a game plugin (409 "Choose a game plugin before setting up skills challenges.") with at least one skills type (409 "This game has no skills challenges."). `skills_settings` holds one row per event, created on the first save; until then reads return the defaults (off, 3 attempts per type). `attempts` maps a type key to the attempts each team gets per session (1-20; a missing type means 3). A session may override it (`PUT /api/sessions/{id}/skills`, `{"attempts": {...} | null}`, stored in `sessions.skills_attempts`, with `{}` stored as null). A type missing from the override falls back to the event setting (`services/skills_rules.effective_allowed`). `GET /api/skills/types/{key}/schema` returns one type's scoresheet fields.
+
+Attempts are recorded with `POST /api/sessions/{id}/skills/attempts` (`{team_id, skills_type, data}`). Scorers and referees use it on an admitted device, and an admin needs no device. It refuses:
+- 409 while skills are off;
+- 409 for a team not checked in for the session;
+- 409 once the team has used the effective allowed number for that type (lowering the number keeps existing attempts);
+- 422 for an unknown type or team, or for scoresheet violations.
+
+`data` is validated against the type's schema before any plugin code runs (`skills_rules.scoresheet_violations`). A 422 lists `violations: [{field, message}]`. Attempt numbers are not stored. They are derived per team and type from `(recorded_at, id)`, so a delete moves later attempts up. Only an admin may `PUT` (re-score in place) or `DELETE` (give the attempt back) `/api/skills/attempts/{id}`. Other roles get 403 "Only an admin can change a submitted skills attempt." Deleting a session deletes its attempts.
 
 ## Finals
 
@@ -823,6 +840,11 @@ truth for that richer shape):
   settings change (active-session channel only). It is the session's id
   for an override change (that session's channel and the active-session
   channel).
+- `skills_changed` — `{session_id}`. It is sent after an attempt is
+  created, edited or deleted. It goes to that session's channel and always
+  to the active-session channel (via `broadcast_session` plus
+  `broadcast_active_session`, not `broadcast_for_session`), because Season
+  Rankings listens there.
 - `qualification_status_changed` — `{session_id, finalized}` (via
   `broadcast_for_session`), on finalize and reopen.
 
