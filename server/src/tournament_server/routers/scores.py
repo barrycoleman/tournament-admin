@@ -43,6 +43,21 @@ def _to_score_record_read(record: ScoreRecord, computed_score: int) -> ScoreReco
     )
 
 
+def _overwrites_a_submitted_partner(
+    db: Session, match_id: int, alliance_id: int, data: dict
+) -> bool:
+    """True when another alliance on the match has a submitted (not mirrored)
+    record whose data differs from `data`."""
+    partner_records = db.execute(
+        select(ScoreRecord)
+        .join(Alliance, Alliance.id == ScoreRecord.alliance_id)
+        .where(Alliance.match_id == match_id, Alliance.id != alliance_id)
+    ).scalars().all()
+    return any(
+        not record.mirrored and json.loads(record.data_json) != data for record in partner_records
+    )
+
+
 @router.post("/{match_id}/alliances/{alliance_id}/score", response_model=ScoreRecordRead)
 def submit_score(
     match_id: int,
@@ -99,6 +114,13 @@ def submit_score(
             detail=f"Plugin could not score this scoresheet: {exc}",
         )
 
+    game_model = plugin.module.match_format()["game_model"]
+    mirrors = game_model == "cooperative_score" and not (payload.no_show or payload.dq)
+    if mirrors and role != "admin" and _overwrites_a_submitted_partner(db, match_id, alliance_id, payload.data):
+        # Mirroring would change the partner's submitted score, which only an
+        # admin may do; refuse before writing anything.
+        raise HTTPException(status_code=409, detail=SCORE_ALREADY_SUBMITTED_DETAIL)
+
     now = utc_now()
 
     if existing is None:
@@ -135,12 +157,11 @@ def submit_score(
         {"match_id": match_id, "alliance_id": alliance_id},
     )
 
-    game_model = plugin.module.match_format()["game_model"]
     all_alliances = db.execute(
         select(Alliance).where(Alliance.match_id == match_id)
     ).scalars().all()
 
-    if game_model == "cooperative_score" and not (payload.no_show or payload.dq):
+    if mirrors:
         for other_alliance in all_alliances:
             if other_alliance.id == alliance_id:
                 continue

@@ -315,8 +315,11 @@ A record the mirror *creates* for the other alliance has `mirrored = True`;
 mirroring into a record that already exists leaves its flag alone, and any
 direct submission to an alliance sets it to `False`. Only a `mirrored`
 record may be submitted by a scorer or referee once it exists, so the
-post-hoc DQ above works from a scorer device the first time, and every
-later change to either alliance needs an admin.
+post-hoc DQ above works from a scorer device the first time. A non-admin
+submission that would mirror (no `dq`/`no_show`) is also refused with the
+same 409, before anything is written, when it would change a partner's
+submitted (not mirrored) data; resubmitting identical data is allowed.
+So once a score is submitted, every change to its data needs an admin.
 
 Qualification ranking for `cooperative_score` is average score, not
 win/tie/loss — each alliance in a completed match is credited

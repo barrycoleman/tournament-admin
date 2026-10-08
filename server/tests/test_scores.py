@@ -451,3 +451,39 @@ def test_mirroring_into_a_submitted_record_keeps_it_submitted(cooperative_client
     blue = _score_record(client, blue_id)
     assert blue.mirrored is False
     assert blue.data_json == '{"objects_scored": 10}'
+
+
+def _cooperative_scorer(client):
+    match_id, red_id, blue_id = _setup_cooperative_match(client)
+    raw = client.__class__(client.app)
+    scorer = {**bearer(login_as(raw, "scorer")), "X-Device-Token": admitted_device_token(client)}
+    red_path = f"/api/matches/{match_id}/alliances/{red_id}/score"
+    blue_path = f"/api/matches/{match_id}/alliances/{blue_id}/score"
+    assert raw.post(red_path, json={"data": {"objects_scored": 10}}, headers=scorer).status_code == 200
+    return raw, scorer, red_id, blue_id, blue_path
+
+
+def test_a_scorer_cannot_change_a_submitted_score_through_its_mirror(cooperative_client):
+    client = cooperative_client
+    raw, scorer, red_id, blue_id, blue_path = _cooperative_scorer(client)
+    refused = raw.post(blue_path, json={"data": {"objects_scored": 25}}, headers=scorer)
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == "This score has already been submitted; ask an admin to correct it."
+    red, blue = _score_record(client, red_id), _score_record(client, blue_id)
+    assert (red.data_json, red.mirrored) == ('{"objects_scored": 10}', False)
+    assert (blue.data_json, blue.mirrored) == ('{"objects_scored": 10}', True)
+
+
+def test_a_scorer_may_submit_the_mirrored_partner_with_the_same_data(cooperative_client):
+    client = cooperative_client
+    raw, scorer, red_id, blue_id, blue_path = _cooperative_scorer(client)
+    assert raw.post(blue_path, json={"data": {"objects_scored": 10}}, headers=scorer).status_code == 200
+    assert _score_record(client, blue_id).mirrored is False
+    assert _score_record(client, red_id).data_json == '{"objects_scored": 10}'
+
+
+def test_an_admin_correction_through_the_partner_mirrors_back(cooperative_client):
+    client = cooperative_client
+    _, _, red_id, _, blue_path = _cooperative_scorer(client)
+    assert client.post(blue_path, json={"data": {"objects_scored": 25}}).status_code == 200
+    assert _score_record(client, red_id).data_json == '{"objects_scored": 25}'
