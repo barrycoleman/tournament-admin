@@ -215,3 +215,37 @@ def test_sessions_report_whether_they_have_scored_matches(client):
     assert listed == {scored_id: True, unscored_id: False}
     assert patched["has_scored_matches"] is True
     assert created["has_scored_matches"] is False
+
+
+def test_delete_session_removes_its_skills_attempts(client):
+    from tournament_server.models.skills import SkillsAttempt
+
+    _setup_event(client)
+    session_id, team_ids = _scheduled_session(client)
+    other_id, other_team_ids = _scheduled_session(client, "Sunday")
+    db = client.app.state.session_factory()
+    try:
+        for sid, team_id in ((session_id, team_ids[0]), (other_id, other_team_ids[0])):
+            db.add(
+                SkillsAttempt(
+                    session_id=sid,
+                    team_id=team_id,
+                    skills_type="driver",
+                    data_json='{"objects_scored": 5}',
+                    score=10,
+                    plugin_name="example-game",
+                    plugin_version="1.0.0",
+                )
+            )
+        db.commit()
+    finally:
+        db.close()
+
+    assert client.delete(f"/api/sessions/{session_id}").status_code == 204
+
+    db = client.app.state.session_factory()
+    try:
+        assert _count(db, SkillsAttempt, SkillsAttempt.session_id == session_id) == 0
+        assert _count(db, SkillsAttempt, SkillsAttempt.session_id == other_id) == 1
+    finally:
+        db.close()

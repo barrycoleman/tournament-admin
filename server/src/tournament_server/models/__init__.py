@@ -20,6 +20,7 @@ from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.scoring_device import ScoringDevice
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.signing_key import SigningKey
+from tournament_server.models.skills import SkillsAttempt, SkillsSettings
 from tournament_server.models.team import Team
 
 __all__ = [
@@ -46,6 +47,8 @@ __all__ = [
     "SessionParticipation",
     "SessionPlayingWindow",
     "SigningKey",
+    "SkillsAttempt",
+    "SkillsSettings",
     "TournamentSession",
     "Team",
 ]

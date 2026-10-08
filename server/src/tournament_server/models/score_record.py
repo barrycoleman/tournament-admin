@@ -22,6 +22,8 @@ class ScoreRecord(Base):
     no_show: Mapped[bool] = mapped_column(Boolean, default=False)
     dq: Mapped[bool] = mapped_column(Boolean, default=False)
     sitting: Mapped[bool] = mapped_column(Boolean, default=False)
+    # True when this record was written by mirroring a skills score.
+    mirrored: Mapped[bool] = mapped_column(Boolean, default=False)
     submitted_by_device: Mapped[str | None] = mapped_column(String(200), default=None)
     submitted_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utc_now)
     saved_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, default=None)

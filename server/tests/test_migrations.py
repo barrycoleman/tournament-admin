@@ -777,3 +777,37 @@ def test_upgrade_recomputes_rankings_once_at_startup(tmp_path):
     assert response.status_code == 200, response.text
     rows = response.json()
     assert [(row["team_id"], row["rank"]) for row in rows] == [(1, 1), (2, 2)]
+
+
+def test_skills_migration_adds_tables_and_leaves_sessions_without_override(tmp_path):
+    db_path = str(tmp_path / "skills.db")
+    command.upgrade(_make_alembic_config(db_path), "d8e4b2a6c9f3")  # the revision before
+    raw_engine = create_engine(f"sqlite:///{db_path}")
+    with raw_engine.connect() as connection:
+        connection.execute(
+            text("INSERT INTO events (id, name, created_at) VALUES (1, 'League', '2026-01-01 00:00:00')")
+        )
+        connection.execute(text("INSERT INTO sessions (id, event_id, label) VALUES (1, 1, 'Saturday')"))
+        connection.execute(
+            text(
+                "INSERT INTO score_records (alliance_id, plugin_name, plugin_version, "
+                "data_json, no_show, dq, sitting, submitted_at) VALUES (1, 'example-game', "
+                "'1.0.0', '{}', 0, 0, 0, '2026-01-01 00:00:00')"
+            )
+        )
+        connection.commit()
+    raw_engine.dispose()
+
+    engine = make_engine(db_path)
+    assert ensure_schema_current(engine, db_path) == MigrationOutcome.UPGRADED
+    inspector = inspect(engine)
+    assert {"skills_settings", "skills_attempts"} <= set(inspector.get_table_names())
+    assert "ix_skills_attempts_session_team_type" in {
+        index["name"] for index in inspector.get_indexes("skills_attempts")
+    }
+    assert "mirrored" in {column["name"] for column in inspector.get_columns("score_records")}
+    with engine.connect() as connection:
+        override = connection.execute(text("SELECT skills_attempts FROM sessions WHERE id = 1")).scalar_one()
+        mirrored = connection.execute(text("SELECT mirrored FROM score_records WHERE alliance_id = 1")).scalar_one()
+    assert override is None
+    assert not mirrored

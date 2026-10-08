@@ -23,6 +23,7 @@ from tournament_server.models.ranking import Ranking
 from tournament_server.models.schedule_generation import ScheduleGeneration
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.session import TournamentSession
+from tournament_server.models.skills import SkillsAttempt
 
 
 def delete_matches(db: Session, matches: Iterable[Match]) -> None:
@@ -104,7 +105,7 @@ def delete_session(db: Session, session_obj: TournamentSession) -> bool:
     ).scalars().all():
         delete_finals_bracket(db, bracket)
     delete_matches(db, db.execute(select(Match).where(Match.session_id == session_id)).scalars().all())
-    for model in (ScheduleGeneration, Ranking, SessionParticipation, SessionPlayingWindow):
+    for model in (ScheduleGeneration, Ranking, SessionParticipation, SessionPlayingWindow, SkillsAttempt):
         for row in db.execute(select(model).where(model.session_id == session_id)).scalars().all():
             db.delete(row)
     for field_set in db.execute(

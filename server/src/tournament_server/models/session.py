@@ -23,3 +23,6 @@ class TournamentSession(Base):
     # Played count (as a string key) -> matches each such team drops, e.g.
     # {"7": 1, "8": 2}; {} for a finalized head-to-head session.
     qualification_drops: Mapped[dict[str, int] | None] = mapped_column(JSON, default=None)
+    # Per-session skills attempts override (type key -> allowed attempts);
+    # NULL uses the event setting, and a type missing here falls back to it.
+    skills_attempts: Mapped[dict[str, int] | None] = mapped_column(JSON, default=None)
