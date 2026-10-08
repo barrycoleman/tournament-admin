@@ -482,6 +482,26 @@
       "usedUp": "{{number}} 队已用完全部 {{n}} 次{{label}}尝试。",
       "save": "保存尝试",
       "saved": "已保存：{{score}} 分"
+    },
+    "table": {
+      "heading": "尝试记录",
+      "filterLabel": "查找队伍",
+      "noMatch": "没有队伍匹配“{{text}}”",
+      "empty": "本场次尚未记录任何尝试。",
+      "columnTeam": "队伍",
+      "columnOverall": "总分",
+      "editAttempt": "编辑 {{number}} 队第 {{n}} 次{{label}}尝试：{{score}} 分",
+      "emptySlot": "—"
+    },
+    "edit": {
+      "heading": "{{number}} 队 · 第 {{n}} 次{{label}}尝试",
+      "save": "保存",
+      "cancel": "取消",
+      "delete": "删除尝试",
+      "deleteHeading": "删除这次尝试？",
+      "deleteBody": "{{number}} 队将重新获得这次{{label}}尝试。",
+      "deleteConfirm": "删除尝试",
+      "deleteCancel": "保留尝试"
     }
   },
   "debugPanel": {

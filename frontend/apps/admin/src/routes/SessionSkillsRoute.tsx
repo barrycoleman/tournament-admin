@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, useOutletContext } from "react-router-dom";
 import { apiRequest } from "@tournament-admin/shared";
+import { AttemptsTable } from "../skills/AttemptsTable";
 import { RecordAttemptForm } from "../skills/RecordAttemptForm";
 import { SessionAttemptsSettings } from "../skills/SessionAttemptsSettings";
 import { useSkillsLiveUpdates } from "../skills/liveUpdates";
@@ -63,6 +64,12 @@ export function SessionSkillsRoute() {
         types={sessionSkills.data.types}
         teams={checkedIn}
         attempts={attempts.data}
+      />
+      <AttemptsTable
+        sessionId={session.id}
+        types={sessionSkills.data.types}
+        attempts={attempts.data}
+        teams={teams.data}
       />
     </div>
   );

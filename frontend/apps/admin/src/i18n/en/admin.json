@@ -485,6 +485,26 @@
       "usedUp": "Team {{number}} has used all {{n}} {{label}} attempts.",
       "save": "Save attempt",
       "saved": "Saved: {{score}} points"
+    },
+    "table": {
+      "heading": "Attempts",
+      "filterLabel": "Find team",
+      "noMatch": "No teams match '{{text}}'",
+      "empty": "No attempts recorded in this session yet.",
+      "columnTeam": "Team",
+      "columnOverall": "Overall",
+      "editAttempt": "Edit {{label}} attempt {{n}} for team {{number}}: {{score}} points",
+      "emptySlot": "—"
+    },
+    "edit": {
+      "heading": "{{label}} attempt {{n}} · Team {{number}}",
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete attempt",
+      "deleteHeading": "Delete this attempt?",
+      "deleteBody": "Team {{number}} gets this {{label}} attempt back.",
+      "deleteConfirm": "Delete attempt",
+      "deleteCancel": "Keep attempt"
     }
   },
   "debugPanel": {
