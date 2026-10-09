@@ -26,15 +26,18 @@ function storeValidTokens(role = "admin"): void {
   );
 }
 
-function renderShell() {
+function renderShell(path = "/") {
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <MemoryRouter initialEntries={["/"]}>
+        <MemoryRouter initialEntries={[path]}>
           <Routes>
             <Route path="/" element={<AuthenticatedLayout />}>
               <Route index element={<p>dashboard content</p>} />
+              <Route path="teams" element={<p>teams content</p>} />
+              <Route path="rankings" element={<p>rankings content</p>} />
+              <Route path="judge/awards" element={<p>judge awards content</p>} />
             </Route>
             <Route path="/login" element={<p>login screen</p>} />
           </Routes>
@@ -79,5 +82,20 @@ describe("AuthenticatedLayout", () => {
     });
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     expect(screen.queryByText("dashboard content")).not.toBeInTheDocument();
+  });
+
+  it("sends a judge away from admin pages to the judge awards page", () => {
+    storeValidTokens("judge");
+    renderShell("/teams");
+
+    expect(screen.getByText("judge awards content")).toBeInTheDocument();
+    expect(screen.queryByText("teams content")).not.toBeInTheDocument();
+  });
+
+  it("lets a judge stay on season rankings", () => {
+    storeValidTokens("judge");
+    renderShell("/rankings");
+
+    expect(screen.getByText("rankings content")).toBeInTheDocument();
   });
 });

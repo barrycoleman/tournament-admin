@@ -22,6 +22,8 @@
     "rolesLink": "Role passwords",
     "dismiss": "Dismiss",
     "seasonRankingsLink": "Season rankings",
+    "judgeAwardsLink": "Awards",
+    "judgeSessionRankingsLink": "Session rankings",
     "divisionsLink": "Divisions",
     "teamsLink": "Teams",
     "sessionsLink": "Sessions",
@@ -650,5 +652,9 @@
       "confirm": "Finalize awards",
       "checking": "Checking awards…"
     }
+  },
+  "judge": {
+    "noActiveSession": "No session is active. Ask an admin to set the active session.",
+    "loading": "Loading…"
   }
 }

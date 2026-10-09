@@ -107,6 +107,19 @@ export function AppShell() {
             </NavLink>
           </nav>
         )}
+        {role === "judge" && (
+          <nav className="app-nav" ref={navRef}>
+            <NavLink to="/judge/awards" className={navLinkClassName}>
+              {t("shell.judgeAwardsLink")}
+            </NavLink>
+            <NavLink to="/judge/rankings" className={navLinkClassName}>
+              {t("shell.judgeSessionRankingsLink")}
+            </NavLink>
+            <NavLink to="/rankings" className={navLinkClassName}>
+              {t("shell.seasonRankingsLink")}
+            </NavLink>
+          </nav>
+        )}
         <main className="app-main">
           <Outlet />
           {role === "admin" && <DebugEventPanel />}

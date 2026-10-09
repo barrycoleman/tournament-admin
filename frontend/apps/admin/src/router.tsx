@@ -21,6 +21,8 @@ import { SessionMatchesRoute } from "./routes/SessionMatchesRoute";
 import { SessionSkillsRoute } from "./routes/SessionSkillsRoute";
 import { SessionRankingsRoute } from "./routes/SessionRankingsRoute";
 import { SessionAwardsRoute } from "./routes/SessionAwardsRoute";
+import { JudgeLayout } from "./routes/JudgeLayout";
+import { JudgeAwardsRoute } from "./routes/JudgeAwardsRoute";
 import { FrontDeskCheckinRoute } from "./routes/FrontDeskCheckinRoute";
 
 async function isPickerMode(): Promise<boolean> {
@@ -123,6 +125,15 @@ export const router = createBrowserRouter([
       { path: "sessions", element: <SessionsRoute /> },
       { path: "rankings", element: <SeasonRankingsRoute /> },
       { path: "checkin", element: <FrontDeskCheckinRoute /> },
+      {
+        path: "judge",
+        element: <JudgeLayout />,
+        children: [
+          { index: true, loader: () => redirect("/judge/awards") },
+          { path: "awards", element: <JudgeAwardsRoute /> },
+          { path: "rankings", element: <SessionRankingsRoute /> },
+        ],
+      },
       {
         path: "sessions/:sessionId",
         element: <SessionDetailLayout />,

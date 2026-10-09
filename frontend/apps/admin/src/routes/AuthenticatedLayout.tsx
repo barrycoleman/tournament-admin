@@ -1,6 +1,7 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { hasValidTokens, useAuth } from "@tournament-admin/shared";
 import { AppShell } from "../components/AppShell";
+import { judgeAllowedPath } from "../routeGuards";
 
 export function AuthenticatedLayout() {
   // `isAuthenticated` comes from context so this guard re-evaluates when
@@ -11,10 +12,14 @@ export function AuthenticatedLayout() {
   // logged-out user sitting on the dashboard until they navigated by hand.
   // Both are checked: storage can also be cleared out of band, e.g. by a
   // logout in another tab.
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, role } = useAuth();
+  const location = useLocation();
 
   if (!isAuthenticated || !hasValidTokens()) {
     return <Navigate to="/login" replace />;
+  }
+  if (role === "judge" && !judgeAllowedPath(location.pathname)) {
+    return <Navigate to="/judge/awards" replace />;
   }
   return <AppShell />;
 }

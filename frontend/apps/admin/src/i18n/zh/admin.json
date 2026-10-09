@@ -22,6 +22,8 @@
     "rolesLink": "角色密码",
     "dismiss": "关闭",
     "seasonRankingsLink": "赛季排名",
+    "judgeAwardsLink": "奖项",
+    "judgeSessionRankingsLink": "场次排名",
     "divisionsLink": "分组",
     "teamsLink": "队伍",
     "sessionsLink": "场次",
@@ -647,5 +649,9 @@
       "confirm": "确定奖项",
       "checking": "正在检查奖项…"
     }
+  },
+  "judge": {
+    "noActiveSession": "当前没有进行中的场次。请管理员设置当前场次。",
+    "loading": "加载中…"
   }
 }

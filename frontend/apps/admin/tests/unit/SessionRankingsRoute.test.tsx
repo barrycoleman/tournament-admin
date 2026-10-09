@@ -253,3 +253,27 @@ describe("SessionRankingsRoute", () => {
     expect(await screen.findByText("No skills attempts recorded yet.")).toBeInTheDocument();
   });
 });
+
+describe("SessionRankingsRoute channel", () => {
+  it("listens on the channel its outlet context names", async () => {
+    stub({});
+    const i18n = initI18n({ en: { translation: enAdmin } });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const router = createMemoryRouter([
+      {
+        path: "/",
+        element: <Outlet context={{ session: SESSION, channelPath: "/ws/active-session" }} />,
+        children: [{ index: true, element: <SessionRankingsRoute /> }],
+      },
+    ]);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <RouterProvider router={router} />
+        </I18nextProvider>
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(useRealtimeChannel).toHaveBeenCalled());
+    expect(vi.mocked(useRealtimeChannel).mock.calls[0][0].path).toBe("/ws/active-session");
+  });
+});

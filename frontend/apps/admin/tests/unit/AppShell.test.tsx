@@ -49,6 +49,21 @@ describe("AppShell role-gated navigation", () => {
     expect(screen.queryByRole("link", { name: "Sessions" })).not.toBeInTheDocument();
   });
 
+  it("shows a judge the Awards, Session rankings and Season rankings links only", () => {
+    vi.mocked(useAuth).mockReturnValue({
+      role: "judge",
+      isAuthenticated: true,
+      login: vi.fn(),
+      logout: vi.fn(),
+    });
+    renderShell();
+
+    expect(screen.getByRole("link", { name: "Awards" })).toHaveAttribute("href", "/judge/awards");
+    expect(screen.getByRole("link", { name: "Session rankings" })).toHaveAttribute("href", "/judge/rankings");
+    expect(screen.getByRole("link", { name: "Season rankings" })).toHaveAttribute("href", "/rankings");
+    expect(screen.queryByRole("link", { name: "Teams" })).not.toBeInTheDocument();
+  });
+
   it("shows the full admin nav including Sessions for the admin role", () => {
     vi.mocked(useAuth).mockReturnValue({
       role: "admin",

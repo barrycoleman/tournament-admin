@@ -25,10 +25,18 @@ export function indexLoader(): Response | null {
       if (role === "front_desk") {
         return redirect("/checkin");
       }
+      if (role === "judge") {
+        return redirect("/judge/awards");
+      }
     } catch {
       // Malformed/undecodable token -- leave routing to rootLoader's
       // own auth flow rather than failing this loader.
     }
   }
   return null;
+}
+
+/** The only pages a judge can open: the judge pages and season rankings. */
+export function judgeAllowedPath(pathname: string): boolean {
+  return pathname === "/rankings" || pathname === "/judge" || pathname.startsWith("/judge/");
 }

@@ -10,11 +10,11 @@ import type { SessionRead } from "../types";
 
 export function SessionRankingsRoute() {
   const { t } = useTranslation();
-  const { session } = useOutletContext<{ session: SessionRead }>();
+  const { session, channelPath } = useOutletContext<{ session: SessionRead; channelPath?: string }>();
   const queryClient = useQueryClient();
   const scope = { kind: "session" as const, sessionId: session.id };
   useRealtimeChannel({
-    path: `/ws/session/${session.id}`,
+    path: channelPath ?? `/ws/session/${session.id}`,
     onEvent: (realtimeEvent: RealtimeEvent) => {
       if (realtimeEvent.event === "ranking_updated") {
         queryClient.invalidateQueries({ queryKey: rankingsKeyPrefix(scope) });
