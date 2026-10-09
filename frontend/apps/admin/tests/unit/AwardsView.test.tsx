@@ -94,11 +94,21 @@ function stub() {
   });
 }
 
-function renderView(mode: "admin" | "judge" = "admin") {
+function renderView(mode: "admin" | "judge" = "admin", withFinalize = false) {
   const i18n = initI18n({ en: { translation: enAdmin } });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter([
-    { path: "/", element: <AwardsView session={SESSION} mode={mode} channelPath="/ws/session/5" /> },
+    {
+      path: "/",
+      element: (
+        <AwardsView
+          session={SESSION}
+          mode={mode}
+          channelPath="/ws/session/5"
+          finalizeControl={withFinalize ? () => <button type="button">Finalize awards</button> : undefined}
+        />
+      ),
+    },
   ]);
   return render(
     <QueryClientProvider client={queryClient}>
@@ -209,6 +219,17 @@ describe("AwardsView", () => {
     expect(screen.getByRole("button", { name: "Add award" })).toBeDisabled();
     expect(screen.getAllByRole("button", { name: "Edit" })[0]).toBeDisabled();
     expect(screen.getByRole("button", { name: "Unfinalize" })).toBeEnabled();
+  });
+
+  it("shows the finalize control until awards are finalized, then Unfinalize replaces it", async () => {
+    const { unmount } = renderView("admin", true);
+    expect(await screen.findByRole("button", { name: "Finalize awards" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Unfinalize" })).not.toBeInTheDocument();
+    unmount();
+    awards = { ...awards, awards_finalized_at: "2026-10-10T18:00:00Z" };
+    renderView("admin", true);
+    expect(await screen.findByRole("button", { name: "Unfinalize" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Finalize awards" })).not.toBeInTheDocument();
   });
 
   it("shows only judged awards and no admin controls in judge mode", async () => {

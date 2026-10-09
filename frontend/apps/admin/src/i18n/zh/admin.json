@@ -618,6 +618,34 @@
       "ruleChangeConfirmHeading": "清除 {{name}} 的获奖者？",
       "ruleChangeConfirmBody": "更改获奖者的产生方式会清除该奖项已录入的获奖者。",
       "ruleChangeConfirm": "保存并清除获奖者"
+    },
+    "winner": {
+      "chooseAction": "选择获奖者",
+      "clearAction": "清除",
+      "overrideAction": "调整",
+      "removeOverrideAction": "取消调整",
+      "chooseHeading": "选择 {{name}} 的获奖者",
+      "overrideHeading": "调整 {{name}}",
+      "searchLabel": "查找队伍",
+      "teamsLabel": "队伍",
+      "reasonLabel": "调整原因",
+      "noTeams": "没有符合条件的本场次队伍。",
+      "save": "保存",
+      "warnSession": "本场次已获得评审奖项",
+      "warnSeason": "本赛季已获得评审奖项",
+      "otherAwards": "已获：{{list}}",
+      "pickTeam": "请选择一支队伍。",
+      "pickTeams": "请至少选择一支队伍。",
+      "reasonRequired": "请输入原因。"
+    },
+    "finalize": {
+      "heading": "确定奖项？",
+      "body": "确定后将保存当前的自动获奖者，之后的成绩变化不会再影响它们；取消确定前不能编辑奖项。",
+      "warningsIntro": "请先检查：",
+      "warning": "{{award}}（{{slot}}）：{{status}}",
+      "noWarnings": "每个奖项都有获奖者。",
+      "confirm": "确定奖项",
+      "checking": "正在检查奖项…"
     }
   }
 }

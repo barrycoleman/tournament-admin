@@ -621,6 +621,34 @@
       "ruleChangeConfirmHeading": "Clear the winners of {{name}}?",
       "ruleChangeConfirmBody": "Changing how the winner is chosen clears the winners already entered for this award.",
       "ruleChangeConfirm": "Save and clear winners"
+    },
+    "winner": {
+      "chooseAction": "Choose winner",
+      "clearAction": "Clear",
+      "overrideAction": "Override",
+      "removeOverrideAction": "Remove override",
+      "chooseHeading": "Choose the winner of {{name}}",
+      "overrideHeading": "Override {{name}}",
+      "searchLabel": "Find a team",
+      "teamsLabel": "Teams",
+      "reasonLabel": "Reason for the override",
+      "noTeams": "No teams entered in this session match.",
+      "save": "Save",
+      "warnSession": "Already won a judged award this session",
+      "warnSeason": "Already won a judged award this season",
+      "otherAwards": "Also won: {{list}}",
+      "pickTeam": "Choose a team.",
+      "pickTeams": "Choose at least one team.",
+      "reasonRequired": "Enter a reason."
+    },
+    "finalize": {
+      "heading": "Finalize awards?",
+      "body": "Finalizing stores today's automatic winners. Later score changes no longer change them, and awards can't be edited until you unfinalize.",
+      "warningsIntro": "Check these first:",
+      "warning": "{{award}} ({{slot}}): {{status}}",
+      "noWarnings": "Every award has a winner.",
+      "confirm": "Finalize awards",
+      "checking": "Checking awards…"
     }
   }
 }
