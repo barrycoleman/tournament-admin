@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from tournament_server.deps import get_the_event
@@ -21,6 +21,7 @@ from tournament_server.models.team import Team
 from tournament_server.plugin_registry.loader import LoadedPlugin
 from tournament_server.services import skills as skills_service
 from tournament_server.services.skills_ranking import OVERALL, SkillsRankingRow
+from tournament_server.services.team_assignment import get_sole_division_id
 
 NOTE_UNKNOWN_SKILLS_TYPE = "unknown_skills_type"
 NOTE_SKILLS_DISABLED = "skills_disabled"
@@ -34,8 +35,16 @@ class Resolution:
     note: str | None = None
 
 
-def _division_filter(column, division_id: int | None):
-    return column.is_(None) if division_id is None else column == division_id
+def _division_match(column, db: Session, division_id: int | None):
+    """Rows of the slot's division. A single-division event schedules, ranks
+    and runs finals with no division id, so for the event's sole division a
+    row with no division counts as that division's too."""
+    if division_id is None:
+        return column.is_(None)
+    event = get_the_event(db)
+    if event is not None and get_sole_division_id(db, event.id) == division_id:
+        return or_(column == division_id, column.is_(None))
+    return column == division_id
 
 
 def _teamwork_ranking(db: Session, plugin: LoadedPlugin | None, award: Award, division_id: int | None) -> Resolution:
@@ -44,7 +53,7 @@ def _teamwork_ranking(db: Session, plugin: LoadedPlugin | None, award: Award, di
     )
     team_ids = db.execute(
         select(Ranking.team_id)
-        .where(session_filter, _division_filter(Ranking.division_id, division_id), Ranking.rank == award.placement)
+        .where(session_filter, _division_match(Ranking.division_id, db, division_id), Ranking.rank == award.placement)
         .order_by(Ranking.team_id)
     ).scalars().all()
     return Resolution(list(team_ids))
@@ -105,7 +114,10 @@ def _loser(matchup: BracketMatchup) -> int:
 def _finals(db: Session, plugin: LoadedPlugin | None, award: Award, division_id: int | None) -> Resolution:
     bracket = db.execute(
         select(FinalsBracket)
-        .where(FinalsBracket.session_id == award.session_id, _division_filter(FinalsBracket.division_id, division_id))
+        .where(
+            FinalsBracket.session_id == award.session_id,
+            _division_match(FinalsBracket.division_id, db, division_id),
+        )
         .order_by(FinalsBracket.id.desc())
     ).scalars().first()
     if bracket is None:
