@@ -295,38 +295,48 @@ Every list/read endpoint that's scoped to a session (`GET /api/matches`,
 defaulting to `Event.active_session_id` via the shared
 `deps.get_session_id` dependency when omitted.
 
-No-show/DQ handling: an alliance's effective score is `0` wherever it
-matters (the score-submission response, ranking computation) when its
-`ScoreRecord.no_show` or `.dq` is set — this zeroing is core-server logic,
-never passed into the plugin's `calculate_score()`.
+No-show/DQ handling is per team. A score record's flagged teams live in
+`score_record_teams` (`ScoreRecord.teams`; only flagged teams have a row),
+and the score API takes them as `teams: [{team_id, no_show, dq}]` (a team
+not on the alliance, or listed twice, is a 422; unknown fields such as the
+old alliance-level `no_show`/`dq` are refused). `services/team_flags.py`
+owns every rule: in practice and qualification a flagged team gets nothing
+from the match (no win points, no strength of schedule, a 0 in cooperative
+averages) while its partners keep the score, and the alliance scores 0 only
+when every team on it is flagged; in finals one DQ zeroes the alliance and a
+no-show team is carried along unless every team is a no-show. This zeroing
+is core-server logic, never passed into the plugin's `calculate_score()`.
 
 ## Cooperative scoring
 
 A `cooperative_score` match's alliances aren't adversarial — they share
 one physical outcome. Submitting a score to either alliance via the
-existing scoring endpoint mirrors the raw scoresheet data (not the
-`no_show`/`dq`/`sitting` flags) onto the match's other alliance, so both
-end up scored identically unless one is independently marked `no_show` or
-`dq` afterward (a post-hoc DQ ruling is just a second submission directly
-to that one alliance with `dq: true` — see `routers/scores.py`'s
-`submit_score`).
+existing scoring endpoint mirrors the raw scoresheet data (not the team
+flags or `sitting`) onto the match's other alliance, so both end up scored
+identically unless a team is independently flagged afterward. A mirrored
+copy is written with no team flags; mirroring into an existing record leaves
+its team flags alone. A post-hoc DQ ruling is a second submission directly
+to that alliance with `teams: [{team_id, dq: true}]` (see
+`routers/scores.py`'s `submit_score`).
 
 A record the mirror *creates* for the other alliance has `mirrored = True`;
 mirroring into a record that already exists leaves its flag alone, and any
 direct submission to an alliance sets it to `False`. Only a `mirrored`
 record may be submitted by a scorer or referee once it exists, so the
-post-hoc DQ above works from a scorer device the first time. A non-admin
-submission that would mirror (no `dq`/`no_show`) is also refused with the
-same 409, before anything is written, when it would change a partner's
-submitted (not mirrored) data; resubmitting identical data is allowed, and
-a partner marked `dq` or `no_show` is skipped because its data never counts
-(so scoring red after blue's DQ works from a scorer device). So once a
-counting score is submitted, every change to its data needs an admin.
+post-hoc DQ above works from a scorer device the first time. A submission
+mirrors unless every team on its alliance is flagged. A non-admin
+submission that would mirror is also refused with the same 409, before
+anything is written, when it would change a partner's submitted (not
+mirrored) data; resubmitting identical data is allowed, and the overwrite
+guard skips a partner whose teams are all flagged because its data never
+counts (so scoring red after blue's DQ works from a scorer device). So once
+a counting score is submitted, every change to its data needs an admin.
 
 Qualification ranking for `cooperative_score` is average score, not
 win/tie/loss — each alliance in a completed match is credited
-independently to its own member teams (so a DQ'd alliance's teams get `0`
-for that match while the other alliance's teams keep their real score).
+independently to its own member teams. Ranking builds one `MatchRecord`
+per team, so a flagged team gets `0` for that match while its partners and
+the other alliance's teams keep the real score.
 `Ranking.average_score`/`matches_played` hold this; `win_points`/
 `strength_of_schedule` stay at their defaults and are meaningless for this
 game model. A game plugin's `rank_teams()` receives a different
