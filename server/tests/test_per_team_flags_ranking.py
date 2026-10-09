@@ -150,3 +150,31 @@ def test_a_drop_rule_drops_only_the_flagged_teams_match(cooperative_client):
     averages = _averages(client, session_id)
     assert averages[t2] == 15.0  # the DQ'd 0 is dropped -> (10 + 20) / 2
     assert averages[t1] == 25.0
+
+
+def test_a_drop_rule_drops_only_the_no_show_teams_match(cooperative_client):
+    client = cooperative_client
+    session_id, (t1, t2, t3, t4) = _cooperative_event(client)
+    client.put(
+        "/api/ranking-settings",
+        json={**DEFAULT_SETTINGS, "session_drop_mode": "lowest", "session_drop_count": 1},
+    )
+    matches = [_match(client, session_id, n, [t1, t2], [t3, t4]) for n in (1, 2, 3)]
+    _cooperative_score(client, matches[0], 5)  # 10
+    _cooperative_score(client, matches[1], 10)  # 20
+    _cooperative_score(client, matches[2], 15, [{"team_id": t2, "no_show": True}])  # 30, t2 no-show
+
+    averages = _averages(client, session_id)
+    # t1 is unflagged: 10, 20, 30, drop the lowest -> 25.
+    assert averages[t1] == 25.0
+    # t2 has 10, 20, 0 (no-show). No-show matches are protected while session_drop_no_show is
+    # off, so the 10 is dropped instead -> (20 + 0) / 2.
+    assert averages[t2] == 10.0
+
+    client.put(
+        "/api/ranking-settings",
+        json={**DEFAULT_SETTINGS, "session_drop_mode": "lowest", "session_drop_count": 1, "session_drop_no_show": True},
+    )
+    averages = _averages(client, session_id)
+    assert averages[t2] == 15.0  # the no-show 0 is dropped -> (10 + 20) / 2
+    assert averages[t1] == 25.0

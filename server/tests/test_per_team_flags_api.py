@@ -200,3 +200,31 @@ def test_mirroring_keeps_the_partners_own_flags(cooperative_client):
     cooperative_client.post(blue_path, json={"data": {"objects_scored": 5}, "teams": [{"team_id": t3, "dq": True}]})
     cooperative_client.post(red_path, json={"data": {"objects_scored": 10}})
     assert _record(cooperative_client, ids["blue"]) == ('{"objects_scored": 10}', [(t3, False, True)])
+
+
+def _scorer_headers(client):
+    raw = client.__class__(client.app)
+    return raw, {**bearer(login_as(raw, "scorer")), "X-Device-Token": admitted_device_token(client)}
+
+
+def test_a_scorer_cannot_overwrite_a_partly_flagged_partner_with_different_data(cooperative_client):
+    red_path, blue_path, (_, _, t3, _), ids = _setup_cooperative(cooperative_client)
+    raw, scorer = _scorer_headers(cooperative_client)
+    first = raw.post(
+        blue_path, json={"data": {"objects_scored": 5}, "teams": [{"team_id": t3, "dq": True}]}, headers=scorer
+    )
+    assert first.status_code == 200, first.text
+    second = raw.post(red_path, json={"data": {"objects_scored": 10}}, headers=scorer)
+    assert second.status_code == 409, second.text
+    assert _record(cooperative_client, ids["blue"])[0] == '{"objects_scored": 5}'
+
+
+def test_a_scorer_may_submit_matching_data_beside_a_partly_flagged_partner(cooperative_client):
+    red_path, blue_path, (_, _, t3, _), _ = _setup_cooperative(cooperative_client)
+    raw, scorer = _scorer_headers(cooperative_client)
+    first = raw.post(
+        blue_path, json={"data": {"objects_scored": 5}, "teams": [{"team_id": t3, "dq": True}]}, headers=scorer
+    )
+    assert first.status_code == 200, first.text
+    second = raw.post(red_path, json={"data": {"objects_scored": 5}}, headers=scorer)
+    assert second.status_code == 200, second.text

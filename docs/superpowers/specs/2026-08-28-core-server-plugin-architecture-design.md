@@ -115,6 +115,10 @@ field.
   `{"auto": 1, "highballs": 15}` — human-readable, no opaque blob format),
   `no_show, dq, sitting, submitted_by_device, submitted_at, saved_at`
   (null until an admin/scorekeeper commits it as official).
+  *As built (see `2026-10-08-per-team-dq-no-show-design.md`): `no_show`
+  and `dq` moved off ScoreRecord to the `score_record_teams` table
+  (`ScoreRecord.teams`, flagged teams only), and the rules live in
+  `services/team_flags.py`.*
 - **Ranking** — cached per `(session_id, division_id, team_id)`: win
   points, tiebreaker score, rank. Recomputed from ScoreRecords plus the
   plugin's ranking function on every save; the cache is a read
