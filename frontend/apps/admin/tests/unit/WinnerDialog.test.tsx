@@ -115,6 +115,32 @@ describe("WinnerDialog", () => {
     );
   });
 
+  it("never sends a current winner the list doesn't show", async () => {
+    // A season-basis award can resolve to a team not entered this session (Delta).
+    const slot: AwardSlotRead = {
+      ...SLOT,
+      status: "resolved",
+      winners: [
+        { team_id: 1, number: "101", name: "Alpha", organization: null },
+        { team_id: 4, number: "404", name: "Delta", organization: null },
+      ],
+    };
+    const season: AwardRead = {
+      ...DESIGN, id: 41, kind: "performance", source: "teamwork_ranking", basis: "season", placement: 1, slots: [slot],
+    };
+    renderDialog("override", season);
+    expect(await screen.findByRole("checkbox", { name: /101 Alpha/ })).toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: /404 Delta/ })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Reason for the override"), { target: { value: "Withdrew" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith("/api/awards/41/slots/7", {
+        method: "PUT",
+        body: { team_ids: [1], reason: "Withdrew" },
+      })
+    );
+  });
+
   it("shows the server's message when the session is finalized", async () => {
     const base = vi.mocked(apiRequest).getMockImplementation()!;
     vi.mocked(apiRequest).mockImplementation(async (path: string, options?: { method?: string }) => {

@@ -50,12 +50,18 @@ export function WinnerDialog({
     );
   }, [teams.data, participants.data, slot.division_id]);
   const shown = matchTeams(eligible, search);
+  // The slot's current winners can include a team the list doesn't offer (a
+  // season-basis winner not entered this session); only listed teams count.
+  const picked = useMemo(() => {
+    const listed = new Set(eligible.map((team) => team.id));
+    return chosen.filter((id) => listed.has(id));
+  }, [chosen, eligible]);
 
   const save = useMutation({
     mutationFn: () =>
       apiRequest(`/api/awards/${award.id}/slots/${slotKey(slot)}`, {
         method: "PUT",
-        body: mode === "judged" ? { team_id: chosen[0] } : { team_ids: chosen, reason: reason.trim() },
+        body: mode === "judged" ? { team_id: picked[0] } : { team_ids: picked, reason: reason.trim() },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: awardsKey(sessionId) });
@@ -65,7 +71,7 @@ export function WinnerDialog({
   });
 
   function submit() {
-    if (chosen.length === 0) {
+    if (picked.length === 0) {
       setProblem(t(mode === "judged" ? "awards.winner.pickTeam" : "awards.winner.pickTeams"));
       return;
     }
@@ -102,8 +108,8 @@ export function WinnerDialog({
                     mode === "judged"
                       ? [team.id]
                       : e.target.checked
-                        ? [...chosen, team.id]
-                        : chosen.filter((id) => id !== team.id)
+                        ? [...picked, team.id]
+                        : picked.filter((id) => id !== team.id)
                   )
                 }
               />{" "}
