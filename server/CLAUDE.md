@@ -874,6 +874,12 @@ truth for that richer shape):
   `broadcast_for_session`), on finalize and reopen.
 - `awards_changed` — `{session_id}` (via `broadcast_for_session`), after any
   award write, finalize or unfinalize.
+- `finals_changed` — `{session_id, bracket_id}` (via `broadcast_for_session`),
+  after `POST /api/finals/start`, each `POST /api/finals/{id}/pick`,
+  `POST /api/finals/{id}/alliances/{alliance_id}/unavailable` and
+  `DELETE /api/finals/{id}`. These can change finals results (a walkover, a
+  deleted bracket) without creating a match, so `new_match_created` alone
+  doesn't cover them; the Awards page refetches on it.
 
 Routing: `realtime.broadcast_for_session` always sends on
 `session:<id>`, and additionally on `active-session` when that session

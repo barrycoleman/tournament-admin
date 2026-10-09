@@ -153,6 +153,15 @@ describe("AwardsView", () => {
     await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/sessions/5/awards"));
   });
 
+  it.each(["finals_changed", "skills_settings_changed"])("refetches on %s", async (name) => {
+    renderView();
+    await screen.findAllByRole("article");
+    const options = vi.mocked(useRealtimeChannel).mock.calls[0][0];
+    vi.mocked(apiRequest).mockClear();
+    options.onEvent?.({ event: name, data: { session_id: 5 } });
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/sessions/5/awards"));
+  });
+
   it("moves an award down by sending the new order", async () => {
     renderView();
     fireEvent.click(await screen.findByRole("button", { name: "Move Excellence Award down" }));

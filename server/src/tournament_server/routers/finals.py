@@ -22,7 +22,7 @@ from tournament_server.models.ranking import Ranking
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
-from tournament_server.realtime import broadcast_new_finals_matches
+from tournament_server.realtime import broadcast_for_session, broadcast_new_finals_matches
 from tournament_server.schemas.finals import (
     BracketAllianceRead,
     BracketMatchupRead,
@@ -128,6 +128,14 @@ def _to_finals_bracket_read(
         matchups=[
             BracketMatchupRead.model_validate(m, from_attributes=True) for m in matchups
         ],
+    )
+
+
+def _finals_changed(request: Request, db: Session, session_id: int, bracket_id: int) -> None:
+    """A bracket's state changed (started, picked, a walkover, deleted), which
+    can change finals results without any new match being created."""
+    broadcast_for_session(
+        request.app, db, session_id, "finals_changed", {"session_id": session_id, "bracket_id": bracket_id}
     )
 
 
@@ -341,6 +349,7 @@ def start_finals(
 
     db.commit()
     db.refresh(bracket)
+    _finals_changed(request, db, bracket.session_id, bracket.id)
     return _to_finals_bracket_read(bracket, db, game_plugin)
 
 
@@ -449,6 +458,7 @@ def pick_partner(
         broadcast_new_finals_matches(request.app, db, bracket.id, existing_ids)
 
     db.refresh(bracket)
+    _finals_changed(request, db, bracket.session_id, bracket.id)
     game_plugin = get_game_plugin_for_event(request, db)
     return _to_finals_bracket_read(bracket, db, game_plugin)
 
@@ -488,6 +498,7 @@ def mark_alliance_unavailable(
     broadcast_new_finals_matches(request.app, db, bracket.id, existing_ids)
 
     db.refresh(bracket)
+    _finals_changed(request, db, bracket.session_id, bracket.id)
     game_plugin = get_game_plugin_for_event(request, db)
     return _to_finals_bracket_read(bracket, db, game_plugin)
 
@@ -495,6 +506,7 @@ def mark_alliance_unavailable(
 @router.delete("/{bracket_id}", status_code=204)
 def delete_finals(
     bracket_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_admin),
 ) -> Response:
@@ -506,6 +518,8 @@ def delete_finals(
             status_code=409, detail="Cannot delete a completed finals bracket"
         )
 
+    session_id = bracket.session_id
     delete_finals_bracket(db, bracket)
     db.commit()
+    _finals_changed(request, db, session_id, bracket_id)
     return Response(status_code=204)

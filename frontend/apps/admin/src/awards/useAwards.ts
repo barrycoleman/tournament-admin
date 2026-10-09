@@ -12,6 +12,8 @@ export const AWARD_REFRESH_EVENTS: ReadonlySet<string> = new Set([
   "ranking_updated",
   "skills_changed",
   "new_match_created",
+  "finals_changed",
+  "skills_settings_changed",
 ]);
 
 /** The path segment for a slot: its division id, or "event". */

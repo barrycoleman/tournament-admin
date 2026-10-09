@@ -2034,3 +2034,48 @@ def test_match_read_flags_finals_matches(cooperative_client):
     assert finals, "starting a score-chase bracket creates its first run"
     assert all(m["label"].startswith("F") for m in finals)
     assert qualification and all(m["is_finals"] is False for m in qualification)
+
+
+# --- finals_changed broadcasts -------------------------------------------------
+
+
+def _session_socket(client, session_id: int):
+    token = client.headers["Authorization"].removeprefix("Bearer ")
+    return client.websocket_connect(f"/ws/session/{session_id}?token={token}")
+
+
+def test_start_and_delete_broadcast_finals_changed(cooperative_client):
+    from skills_helpers import next_event
+
+    client = cooperative_client
+    session_id, team_ids = _setup_ranked_teams(client, 4)
+    _rank_teams_directly(client, session_id, team_ids)
+    with _session_socket(client, session_id) as socket:
+        bracket = client.post("/api/finals/start", json={"session_id": session_id, "bracket_size": 2}).json()
+        assert next_event(socket, "finals_changed")["data"] == {"session_id": session_id, "bracket_id": bracket["id"]}
+        assert client.delete(f"/api/finals/{bracket['id']}").status_code == 204
+        assert next_event(socket, "finals_changed")["data"] == {"session_id": session_id, "bracket_id": bracket["id"]}
+
+
+def test_pick_and_unavailable_broadcast_finals_changed(client):
+    from skills_helpers import next_event
+
+    session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
+    _rank_teams_directly_head_to_head(client, session_id, team_ids)
+    bracket = client.post(
+        "/api/finals/start", json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": 1}
+    ).json()
+    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
+    unclaimed = [t for t in team_ids if t not in claimed]
+    expected = {"session_id": session_id, "bracket_id": bracket["id"]}
+    with _session_socket(client, session_id) as socket:
+        for i, alliance in enumerate(bracket["alliances"]):
+            response = client.post(
+                f"/api/finals/{bracket['id']}/pick",
+                json={"captain_bracket_alliance_id": alliance["id"], "partner_team_id": unclaimed[i]},
+            )
+            assert response.status_code == 200, response.text
+            assert next_event(socket, "finals_changed")["data"] == expected
+        forfeit = response.json()["matchups"][0]["alliance_b_id"]
+        assert client.post(f"/api/finals/{bracket['id']}/alliances/{forfeit}/unavailable").status_code == 200
+        assert next_event(socket, "finals_changed")["data"] == expected
