@@ -194,44 +194,47 @@ def _cooperative_season_stats(
 def _head_to_head_stats(
     data: _ScopeData, plugin: LoadedPlugin, matches: list[Match]
 ) -> dict[int, TeamStats]:
-    """Win points (2/1/0) and strength of schedule (opponents' win points) over `matches`."""
+    """Win points (2/1/0) and strength of schedule (opponents' win points) over `matches`.
+
+    A team flagged DQ or no-show in a match gets no win points and no strength
+    of schedule from it, but is still listed; its partners keep both.
+    """
     win_points: dict[int, int] = {}
-    played: list[tuple[list[int], list[int]]] = []
+    # (team, its opponents in one match) for every match that earns the team strength of schedule.
+    schedule: list[tuple[int, list[int]]] = []
     for match in matches:
         if match.status != "completed":
             continue
         alliances = data.alliances[match.id]
         if len(alliances) != 2:
             continue
-        sides: list[list[int]] = []
-        scores: list[int] = []
-        for alliance in alliances:
-            record = data.records.get(alliance.id)
-            if record is None:
-                break
-            sides.append(data.team_ids[alliance.id])
-            scores.append(
-                team_flags.effective_score(plugin, record, data.team_ids[alliance.id], finals=False)
-            )
-        if len(scores) != 2:
+        records = [data.records.get(alliance.id) for alliance in alliances]
+        if any(record is None for record in records):
             continue
+        sides = [data.team_ids[alliance.id] for alliance in alliances]
+        scores = [
+            team_flags.effective_score(plugin, record, side, finals=False)
+            for record, side in zip(records, sides)
+        ]
         if scores[0] > scores[1]:
             points = (2, 0)
         elif scores[1] > scores[0]:
             points = (0, 2)
         else:
             points = (1, 1)
-        for side, side_points in zip(sides, points):
+        for index, (side, record, side_points) in enumerate(zip(sides, records, points)):
+            flagged = team_flags.flagged_team_ids(record.teams)
+            opponents = sides[1 - index]
             for team_id in side:
+                if team_id in flagged:
+                    win_points.setdefault(team_id, 0)
+                    continue
                 win_points[team_id] = win_points.get(team_id, 0) + side_points
-        played.append((sides[0], sides[1]))
+                schedule.append((team_id, opponents))
 
     strength = {team_id: 0.0 for team_id in win_points}
-    for side_a, side_b in played:
-        for team_id in side_a:
-            strength[team_id] += sum(win_points[t] for t in side_b)
-        for team_id in side_b:
-            strength[team_id] += sum(win_points[t] for t in side_a)
+    for team_id, opponents in schedule:
+        strength[team_id] += sum(win_points[t] for t in opponents)
     return {
         team_id: {"win_points": win_points[team_id], "strength_of_schedule": strength[team_id]}
         for team_id in win_points
