@@ -94,6 +94,21 @@ def test_finalize_twice_is_409_and_writes_once(client):
         assert len(db.execute(select(AwardWinner)).scalars().all()) == 1
 
 
+def test_a_confirm_that_loses_the_race_is_409_and_writes_nothing(client, monkeypatch):
+    """Two confirms can both pass the up-front open check; only the one that
+    claims the session's finalize column writes a snapshot."""
+    from tournament_server.routers import awards as awards_router
+
+    _, _, _, saturday, _, _ = _setup(client)
+    assert client.post(f"/api/sessions/{saturday}/awards/finalize", json={"confirm": True}).status_code == 200
+    monkeypatch.setattr(awards_router, "_ensure_open", lambda session_obj: None)
+    response = client.post(f"/api/sessions/{saturday}/awards/finalize", json={"confirm": True})
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Unfinalize awards to make changes."
+    with db_session(client) as db:
+        assert len(db.execute(select(AwardWinner)).scalars().all()) == 1
+
+
 def test_unfinalize_keeps_judged_and_override_rows(client):
     first, second, teams, saturday, judged, champion = _setup(client)
     client.put(f"/api/awards/{judged['id']}/slots/event", json={"team_id": teams["B1"]})

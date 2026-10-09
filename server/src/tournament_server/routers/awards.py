@@ -5,7 +5,7 @@ import csv
 import io
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from tournament_server.auth import require_admin, require_any_role, require_role
@@ -397,6 +397,20 @@ def finalize_awards(
                 snapshot.append((award, division_id, state.team_ids))
     if not payload.confirm:
         return FinalizeRead(awards_finalized_at=None, warnings=warnings)
+    # Claim the finalize atomically: of two concurrent confirms only one
+    # sees the column still empty, so only one writes the snapshot.
+    finalized_at = utc_now()
+    claimed = db.execute(
+        update(TournamentSession)
+        .where(TournamentSession.id == session_id, TournamentSession.awards_finalized_at.is_(None))
+        .values(awards_finalized_at=finalized_at)
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=rules.LOCKED_DETAIL)
+    # Mirror it on the loaded row too, so the ORM's audit hook records the change.
+    session_obj.awards_finalized_at = finalized_at
     for award, division_id, team_ids in snapshot:
         for team_id in team_ids:
             db.add(
@@ -405,7 +419,6 @@ def finalize_awards(
                     origin=rules.ORIGIN_FINALIZED, recorded_by="admin",
                 )
             )
-    session_obj.awards_finalized_at = utc_now()
     db.commit()
     _changed(request, db, session_id)
     return FinalizeRead(awards_finalized_at=session_obj.awards_finalized_at, warnings=warnings)
