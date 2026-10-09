@@ -1,3 +1,6 @@
+from ranking_helpers import DEFAULT_SETTINGS
+
+
 def _event(client, count):
     client.post("/api/event", json={"name": "League"})
     client.post("/api/event/game-plugin", json={"name": "example-game"})
@@ -83,3 +86,67 @@ def test_a_tie_with_one_flagged_team(client):
 
     rows = _rows(client, session_id)
     assert {team: points for team, (points, _) in rows.items()} == {t1: 1, t2: 0, t3: 1, t4: 1}
+
+
+def _cooperative_event(client):
+    client.post("/api/event", json={"name": "League"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    teams = [
+        client.post("/api/teams", json={"number": str(n), "name": f"Team {n}"}).json()["id"]
+        for n in range(1, 5)
+    ]
+    return session_id, teams
+
+
+def _cooperative_score(client, match, objects, teams=()):
+    # cooperative-game: 2 points per object; scoring red mirrors onto blue.
+    response = client.post(
+        f"/api/matches/{match['id']}/alliances/{match['red']}/score",
+        json={"data": {"objects_scored": objects}, "teams": list(teams)},
+    )
+    assert response.status_code == 200, response.text
+
+
+def _averages(client, session_id):
+    return {
+        row["team_id"]: row["average_score"]
+        for row in client.get("/api/rankings", params={"session_id": session_id}).json()
+    }
+
+
+def test_a_dqd_cooperative_partner_gets_zero_and_the_other_keeps_the_score(cooperative_client):
+    client = cooperative_client
+    session_id, (t1, t2, t3, t4) = _cooperative_event(client)
+    match = _match(client, session_id, 1, [t1, t2], [t3, t4])
+    _cooperative_score(client, match, 10, [{"team_id": t2, "dq": True}])  # 20, mirrored to blue
+
+    assert _averages(client, session_id) == {t1: 20.0, t2: 0.0, t3: 20.0, t4: 20.0}
+
+
+def test_a_drop_rule_drops_only_the_flagged_teams_match(cooperative_client):
+    client = cooperative_client
+    session_id, (t1, t2, t3, t4) = _cooperative_event(client)
+    client.put(
+        "/api/ranking-settings",
+        json={**DEFAULT_SETTINGS, "session_drop_mode": "lowest", "session_drop_count": 1},
+    )
+    matches = [_match(client, session_id, n, [t1, t2], [t3, t4]) for n in (1, 2, 3)]
+    _cooperative_score(client, matches[0], 5)  # 10
+    _cooperative_score(client, matches[1], 10)  # 20
+    _cooperative_score(client, matches[2], 15, [{"team_id": t2, "dq": True}])  # 30, t2 DQ'd
+
+    averages = _averages(client, session_id)
+    # t1 is unflagged: 10, 20, 30, drop the lowest -> 25.
+    assert averages[t1] == 25.0
+    # t2 has 10, 20, 0 (DQ). DQ matches are protected while session_drop_dq is
+    # off, so the 10 is dropped instead -> (20 + 0) / 2.
+    assert averages[t2] == 10.0
+
+    client.put(
+        "/api/ranking-settings",
+        json={**DEFAULT_SETTINGS, "session_drop_mode": "lowest", "session_drop_count": 1, "session_drop_dq": True},
+    )
+    averages = _averages(client, session_id)
+    assert averages[t2] == 15.0  # the DQ'd 0 is dropped -> (10 + 20) / 2
+    assert averages[t1] == 25.0

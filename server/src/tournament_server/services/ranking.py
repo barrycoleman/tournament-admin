@@ -126,6 +126,9 @@ def _scheduled_counts(
 def _cooperative_records(
     data: _ScopeData, plugin: LoadedPlugin, matches: list[Match]
 ) -> dict[int, list[MatchRecord]]:
+    """One MatchRecord per team per completed match. A flagged team's record
+    scores 0 and carries its own no-show/DQ flag, so the drop rules apply to
+    it alone; its partners get the alliance's score with no flag."""
     records: dict[int, list[MatchRecord]] = defaultdict(list)
     for match in matches:
         if match.status != "completed":
@@ -134,17 +137,20 @@ def _cooperative_records(
             score_record = data.records.get(alliance.id)
             if score_record is None:
                 continue
-            record = MatchRecord(
-                match_id=match.id,
-                session_id=match.session_id,
-                score=team_flags.effective_score(
-                    plugin, score_record, data.team_ids[alliance.id], finals=False
-                ),
-                no_show=any(flag.no_show for flag in score_record.teams),
-                dq=any(flag.dq for flag in score_record.teams),
-            )
-            for team_id in data.team_ids[alliance.id]:
-                records[team_id].append(record)
+            team_ids = data.team_ids[alliance.id]
+            score = team_flags.effective_score(plugin, score_record, team_ids, finals=False)
+            flags = {flag.team_id: flag for flag in score_record.teams}
+            for team_id in team_ids:
+                flag = flags.get(team_id)
+                records[team_id].append(
+                    MatchRecord(
+                        match_id=match.id,
+                        session_id=match.session_id,
+                        score=0 if flag is not None else score,
+                        no_show=flag is not None and flag.no_show,
+                        dq=flag is not None and flag.dq,
+                    )
+                )
     return records
 
 
