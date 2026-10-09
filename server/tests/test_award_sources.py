@@ -275,3 +275,13 @@ def test_skills_no_result_notes(client, enabled, skills_type, note):
     with db_session(client) as db:
         award = _award(saturday, "skills_type", 1, skills_type=skills_type, scope="event")
         assert resolve(db, _plugin(client), award, None) == Resolution([], note=note)
+
+
+@pytest.mark.parametrize("source", ["skills_overall", "skills_type"])
+def test_skills_without_a_loaded_game_plugin_says_skills_are_disabled(client, source):
+    setup_two_divisions(client)
+    saturday = create_session(client)
+    enable_skills(client)
+    with db_session(client) as db:
+        award = _award(saturday, source, 1, skills_type="driver" if source == "skills_type" else None, scope="event")
+        assert resolve(db, None, award, None) == Resolution([], note=NOTE_SKILLS_DISABLED)

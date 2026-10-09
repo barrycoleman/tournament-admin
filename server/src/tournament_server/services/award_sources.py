@@ -154,7 +154,7 @@ def _renumbered(rows: list[SkillsRankingRow]) -> list[tuple[int, int]]:
 
 def _skills(db: Session, plugin: LoadedPlugin | None, award: Award, division_id: int | None) -> Resolution:
     event = get_the_event(db)
-    if event is None or not skills_service.is_enabled(db, event.id):
+    if plugin is None or event is None or not skills_service.is_enabled(db, event.id):
         return Resolution(note=NOTE_SKILLS_DISABLED)
     type_keys = [t["key"] for t in skills_service.plugin_types(plugin)]
     tab = OVERALL if award.source == "skills_overall" else award.skills_type
