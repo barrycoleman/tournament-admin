@@ -138,6 +138,7 @@ field.
   not a curated subset, with before/after values and the acting
   user/device.
 - **Award** — `name, type, session_id/division_id scope, recipient`.
+  *As built (awards spec, 2026-10-09): `Award` is a per-session definition (`name, description, position, scope event|division, division_ids, kind judged|performance, source, skills_type, basis, placement`); recipients live in `AwardWinner` (`award_id, division_id, team_id, origin judged|override|finalized, override_reason, presented`). See `docs/superpowers/specs/2026-10-09-awards-design.md`.*
 - **Device** — Raspberry Pi / unattended kiosk displays only. `device_id,
   name, ip, display_type (audience / pit / field-queue),
   assigned_field_or_division, last_seen`.

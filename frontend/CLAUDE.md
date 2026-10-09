@@ -235,6 +235,8 @@ without importing `router.tsx` itself — that file's module-level
 soon as it's imported, which isn't safe to trigger from a plain Vitest
 unit test under jsdom.
 
+**Awards** (`src/awards/`): the session Awards tab (`/sessions/:id/awards`) lists a session's awards in ceremony order with each slot's winners and status, and lets an admin add, edit, reorder, copy, delete, override, finalize and export them. `AwardsView` takes a `mode` (`admin` or `judge`) and a realtime `channelPath`, and refetches on `awards_changed` and on anything that moves a result (`AWARD_REFRESH_EVENTS`). Judges log into the same app and see only `/judge/awards` (judged awards, choose and clear winners), `/judge/rankings` (session rankings) and `/rankings`, always for the active session; `JudgeLayout` provides the session and the `/ws/active-session` channel, because the per-session channel is admin-only. `AuthenticatedLayout` sends a judge anywhere else back to `/judge/awards`.
+
 ## Auth & token handling
 
 Both the access token and the rotating refresh token live in
@@ -289,7 +291,7 @@ chosen) starts its own backend and Vite server with
 `tests/e2e/fixtures/isolatedServer.ts`, as `cooperativeRankings.spec.ts`
 does on ports 8125/5185, `finalizeQualification.spec.ts` on 8127/5187, and
 `skillsChallenges.spec.ts` (the shipped sample game, with skills on) on
-8128/5188. `zz_seasonRankings.spec.ts` runs last for the same
+8128/5188, and `awards.spec.ts` on 8129/5189. `zz_seasonRankings.spec.ts` runs last for the same
 reason as `z_sessionSchedule.spec.ts`.
 
 `playwright.config.ts` uses `channel: "chrome"` — the machine's installed
