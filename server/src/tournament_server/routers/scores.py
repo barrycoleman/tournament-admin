@@ -15,15 +15,29 @@ from tournament_server.models.alliance import Alliance
 from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.match import Match
 from tournament_server.models.score_record import ScoreRecord
+from tournament_server.models.score_record_team import ScoreRecordTeam
 from tournament_server.realtime import broadcast_for_session, broadcast_new_finals_matches
-from tournament_server.schemas.score_record import ScoreRecordRead, ScoreSubmit
-from tournament_server.services import qualification
+from tournament_server.schemas.score_record import ScoreRecordRead, ScoreSubmit, TeamFlags
+from tournament_server.services import qualification, team_flags
 from tournament_server.services.finals import advance_score_chase, advance_single_elimination
 from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
 
 router = APIRouter(prefix="/api/matches", tags=["scores"])
 
 SCORE_ALREADY_SUBMITTED_DETAIL = "This score has already been submitted; ask an admin to correct it."
+
+
+def _validated_flags(entries: list[TeamFlags], alliance_team_ids: list[int]) -> list[TeamFlags]:
+    """The flagged entries, ordered by team; 422 for a team not on the
+    alliance or listed twice."""
+    seen: set[int] = set()
+    for entry in entries:
+        if entry.team_id not in alliance_team_ids:
+            raise HTTPException(status_code=422, detail=f"Team {entry.team_id} is not on this alliance.")
+        if entry.team_id in seen:
+            raise HTTPException(status_code=422, detail=f"Team {entry.team_id} is listed more than once.")
+        seen.add(entry.team_id)
+    return sorted((entry for entry in entries if entry.no_show or entry.dq), key=lambda entry: entry.team_id)
 
 
 def _to_score_record_read(record: ScoreRecord, computed_score: int) -> ScoreRecordRead:
@@ -33,8 +47,7 @@ def _to_score_record_read(record: ScoreRecord, computed_score: int) -> ScoreReco
         plugin_name=record.plugin_name,
         plugin_version=record.plugin_version,
         data=json.loads(record.data_json),
-        no_show=record.no_show,
-        dq=record.dq,
+        teams=[TeamFlags(team_id=flag.team_id, no_show=flag.no_show, dq=flag.dq) for flag in record.teams],
         sitting=record.sitting,
         submitted_by_device=record.submitted_by_device,
         submitted_at=record.submitted_at,
@@ -47,15 +60,19 @@ def _overwrites_a_submitted_partner(
     db: Session, match_id: int, alliance_id: int, data: dict
 ) -> bool:
     """True when another alliance on the match has a submitted (not mirrored)
-    record whose data differs from `data`. A DQ or no-show record is skipped:
-    its data never counts toward a score."""
+    record whose data differs from `data`. A partner whose teams are all
+    flagged is skipped: its data never counts toward a score."""
     partner_records = db.execute(
         select(ScoreRecord)
         .join(Alliance, Alliance.id == ScoreRecord.alliance_id)
         .where(Alliance.match_id == match_id, Alliance.id != alliance_id)
     ).scalars().all()
     return any(
-        not (record.mirrored or record.dq or record.no_show) and json.loads(record.data_json) != data
+        not record.mirrored
+        and not team_flags.alliance_out(
+            record.teams, team_flags.alliance_team_ids(db, record.alliance_id), finals=False
+        )
+        and json.loads(record.data_json) != data
         for record in partner_records
     )
 
@@ -88,6 +105,10 @@ def submit_score(
     if existing is not None and not existing.mirrored and role != "admin":
         raise HTTPException(status_code=409, detail=SCORE_ALREADY_SUBMITTED_DETAIL)
 
+    alliance_team_ids = team_flags.alliance_team_ids(db, alliance_id)
+    flags = _validated_flags(payload.teams, alliance_team_ids)
+    finals = match.finals_bracket_id is not None
+
     submitted_by = (
         device_friendly_name if device_friendly_name is not None else audit.current_actor.get()
     )
@@ -107,7 +128,7 @@ def submit_score(
     try:
         computed_score = (
             0
-            if (payload.no_show or payload.dq)
+            if team_flags.alliance_out(flags, alliance_team_ids, finals=finals)
             else plugin.module.calculate_score(payload.data)
         )
     except Exception as exc:
@@ -117,7 +138,9 @@ def submit_score(
         )
 
     game_model = plugin.module.match_format()["game_model"]
-    mirrors = game_model == "cooperative_score" and not (payload.no_show or payload.dq)
+    mirrors = game_model == "cooperative_score" and not team_flags.alliance_out(
+        flags, alliance_team_ids, finals=False
+    )
     if mirrors and role != "admin" and _overwrites_a_submitted_partner(db, match_id, alliance_id, payload.data):
         # Mirroring would change the partner's submitted score, which only an
         # admin may do; refuse before writing anything.
@@ -131,19 +154,23 @@ def submit_score(
             plugin_name=plugin.name,
             plugin_version=plugin.version,
             data_json=json.dumps(payload.data),
-            no_show=payload.no_show,
-            dq=payload.dq,
             sitting=payload.sitting,
             mirrored=False,
             submitted_by_device=submitted_by,
             submitted_at=now,
             saved_at=now,
         )
+        record.teams = [ScoreRecordTeam(team_id=f.team_id, no_show=f.no_show, dq=f.dq) for f in flags]
         db.add(record)
     else:
         existing.data_json = json.dumps(payload.data)
-        existing.no_show = payload.no_show
-        existing.dq = payload.dq
+        # Clear and flush before adding, so re-flagging the same team never
+        # meets its old row in the unique constraint.
+        existing.teams.clear()
+        db.flush()
+        existing.teams.extend(
+            ScoreRecordTeam(team_id=f.team_id, no_show=f.no_show, dq=f.dq) for f in flags
+        )
         existing.sitting = payload.sitting
         existing.mirrored = False
         existing.submitted_by_device = submitted_by
@@ -176,8 +203,6 @@ def submit_score(
                     plugin_name=plugin.name,
                     plugin_version=plugin.version,
                     data_json=record.data_json,
-                    no_show=False,
-                    dq=False,
                     sitting=False,
                     mirrored=True,
                     submitted_by_device=submitted_by,

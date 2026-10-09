@@ -186,7 +186,7 @@ def test_both_teams_get_the_score_and_a_dq_zeroes_only_one(sample_client):
     }
     assert rankings == {t1: 57.0, t2: 57.0}
 
-    assert _score(sample_client, match["id"], blue, 57, dq=True)["computed_score"] == 0
+    assert _score(sample_client, match["id"], blue, 57, teams=[{"team_id": t2, "dq": True}])["computed_score"] == 0
     rankings = {
         row["team_id"]: row["average_score"]
         for row in sample_client.get(f"/api/rankings?session_id={session_id}").json()

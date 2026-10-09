@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +14,7 @@ from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
 from tournament_server.plugin_registry.loader import LoadedPlugin
 from tournament_server.realtime import broadcast_active_session, broadcast_for_session
+from tournament_server.services import team_flags
 from tournament_server.services.ranking_rules import (
     MatchRecord,
     RankingRules,
@@ -89,12 +89,6 @@ class _ScopeData:
                 self.records.setdefault(record.alliance_id, record)
 
 
-def _effective_score(plugin: LoadedPlugin, record: ScoreRecord) -> int:
-    if record.no_show or record.dq:
-        return 0
-    return plugin.module.calculate_score(json.loads(record.data_json))
-
-
 def _finalized_drops(db: Session, matches: list[Match]) -> dict[int, dict[str, int] | None]:
     """session_id -> its finalize drops map, or None while that session's qualification is open."""
     session_ids = sorted({match.session_id for match in matches})
@@ -143,9 +137,11 @@ def _cooperative_records(
             record = MatchRecord(
                 match_id=match.id,
                 session_id=match.session_id,
-                score=_effective_score(plugin, score_record),
-                no_show=score_record.no_show,
-                dq=score_record.dq,
+                score=team_flags.effective_score(
+                    plugin, score_record, data.team_ids[alliance.id], finals=False
+                ),
+                no_show=any(flag.no_show for flag in score_record.teams),
+                dq=any(flag.dq for flag in score_record.teams),
             )
             for team_id in data.team_ids[alliance.id]:
                 records[team_id].append(record)
@@ -214,7 +210,9 @@ def _head_to_head_stats(
             if record is None:
                 break
             sides.append(data.team_ids[alliance.id])
-            scores.append(_effective_score(plugin, record))
+            scores.append(
+                team_flags.effective_score(plugin, record, data.team_ids[alliance.id], finals=False)
+            )
         if len(scores) != 2:
             continue
         if scores[0] > scores[1]:

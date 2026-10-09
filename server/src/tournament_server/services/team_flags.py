@@ -10,6 +10,11 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Iterable, Protocol, Sequence
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from tournament_server.models.alliance import AllianceTeam
+
 if TYPE_CHECKING:
     from tournament_server.models.score_record import ScoreRecord
     from tournament_server.plugin_registry.loader import LoadedPlugin
@@ -46,3 +51,13 @@ def effective_score(
     if alliance_out(record.teams, team_ids, finals=finals):
         return 0
     return plugin.module.calculate_score(json.loads(record.data_json))
+
+
+def alliance_team_ids(db: Session, alliance_id: int) -> list[int]:
+    return list(
+        db.execute(
+            select(AllianceTeam.team_id)
+            .where(AllianceTeam.alliance_id == alliance_id)
+            .order_by(AllianceTeam.id)
+        ).scalars()
+    )

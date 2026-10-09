@@ -5,6 +5,18 @@ from skills_helpers import admitted_device_token
 from tournament_server.models.score_record import ScoreRecord
 
 
+def _no_show_body(client, match_id, alliance_id):
+    """Every team on the alliance is a no-show, so the empty sheet is never scored."""
+    alliance = next(
+        a for a in client.get(f"/api/matches/{match_id}").json()["alliances"] if a["id"] == alliance_id
+    )
+    return {
+        "data": {},
+        "teams": [{"team_id": team_id, "no_show": True} for team_id in alliance["team_ids"]],
+        "force": True,
+    }
+
+
 def _setup_match(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "example-game"})
@@ -94,7 +106,7 @@ def test_no_show_zeroes_computed_score(client):
         f"/api/matches/{match_id}/alliances/{red_id}/score",
         json={
             "data": {"high_balls": 5, "low_balls": 2, "auto_winner": "tie"},
-            "no_show": True,
+            "teams": _no_show_body(client, match_id, red_id)["teams"],
         },
     )
     assert response.status_code == 200
@@ -146,7 +158,7 @@ def test_submit_score_403s_for_attendee(client):
 
     response = raw.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        json=_no_show_body(client, match_id, red_id),
         headers=bearer(attendee_token),
     )
     assert response.status_code == 403
@@ -161,7 +173,7 @@ def test_submit_score_succeeds_for_scorer_and_referee(client):
         token = login_as(raw, role)
         response = raw.post(
             f"/api/matches/{match_id}/alliances/{alliance_id}/score",
-            json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+            json=_no_show_body(client, match_id, alliance_id),
             headers={**bearer(token), "X-Device-Token": device_token},
         )
         assert response.status_code == 200, f"{role} should be able to submit a score"
@@ -175,7 +187,7 @@ def test_pending_device_cannot_submit_score_as_scorer(client):
 
     response = raw.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        json=_no_show_body(client, match_id, red_id),
         headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
     )
     assert response.status_code == 403
@@ -188,7 +200,7 @@ def test_missing_device_token_rejected_for_scorer(client):
 
     response = raw.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        json=_no_show_body(client, match_id, red_id),
         headers=bearer(scorer_token),
     )
     assert response.status_code == 401
@@ -201,7 +213,7 @@ def test_unknown_device_token_rejected_for_scorer(client):
 
     response = raw.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        json=_no_show_body(client, match_id, red_id),
         headers={**bearer(scorer_token), "X-Device-Token": "not-a-real-token"},
     )
     assert response.status_code == 401
@@ -231,7 +243,7 @@ def test_idle_device_rejected_until_explicitly_re_admitted(client):
 
     stale_response = raw.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        json=_no_show_body(client, match_id, red_id),
         headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
     )
     assert stale_response.status_code == 403
@@ -242,7 +254,7 @@ def test_idle_device_rejected_until_explicitly_re_admitted(client):
     # access.
     still_rejected = raw.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        json=_no_show_body(client, match_id, red_id),
         headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
     )
     assert still_rejected.status_code == 403
@@ -250,7 +262,7 @@ def test_idle_device_rejected_until_explicitly_re_admitted(client):
     client.post(f"/api/devices/{device_id}/admit")
     fresh_response = raw.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        json=_no_show_body(client, match_id, red_id),
         headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
     )
     assert fresh_response.status_code == 200
@@ -290,7 +302,7 @@ def test_idle_device_not_revived_by_a_successful_non_scoring_request(client):
 
     still_rejected = raw.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        json=_no_show_body(client, match_id, red_id),
         headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
     )
     assert still_rejected.status_code == 403
@@ -310,7 +322,7 @@ def test_revoked_device_cannot_submit_score(client):
 
     response = raw.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        json=_no_show_body(client, match_id, red_id),
         headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
     )
     assert response.status_code == 403
@@ -329,7 +341,7 @@ def test_admitted_device_attributes_the_score_by_friendly_name(client):
 
     response = raw.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        json=_no_show_body(client, match_id, red_id),
         headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
     )
     assert response.status_code == 200
@@ -341,7 +353,7 @@ def test_admin_bypasses_device_gate_entirely(client):
 
     response = client.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        json=_no_show_body(client, match_id, red_id),
     )
     assert response.status_code == 200
 
@@ -361,7 +373,7 @@ def test_admin_with_admitted_device_still_gets_device_attribution(client):
 
     response = client.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json={"data": {}, "no_show": True, "dq": False, "sitting": False, "force": True},
+        json=_no_show_body(client, match_id, red_id),
         headers={"X-Device-Token": device["device_token"]},
     )
     assert response.status_code == 200
@@ -413,6 +425,14 @@ def _setup_cooperative_match(client):
     return match["id"], red_id, blue_id
 
 
+def _only_team(client, match_id, alliance_id) -> int:
+    alliance = next(
+        a for a in client.get(f"/api/matches/{match_id}").json()["alliances"] if a["id"] == alliance_id
+    )
+    (team_id,) = alliance["team_ids"]
+    return team_id
+
+
 def _score_record(client, alliance_id) -> ScoreRecord:
     with client.app.state.session_factory() as db:
         return db.execute(select(ScoreRecord).where(ScoreRecord.alliance_id == alliance_id)).scalars().one()
@@ -430,9 +450,14 @@ def test_a_mirrored_cooperative_copy_can_be_submitted_once_by_a_scorer(cooperati
     assert _score_record(client, red_id).mirrored is False
     assert _score_record(client, blue_id).mirrored is True
 
-    blue = raw.post(blue_path, json={"data": {"objects_scored": 10}, "dq": True}, headers=scorer)
+    blue_team = _only_team(client, match_id, blue_id)
+    blue = raw.post(
+        blue_path,
+        json={"data": {"objects_scored": 10}, "teams": [{"team_id": blue_team, "dq": True}]},
+        headers=scorer,
+    )
     assert blue.status_code == 200, blue.text
-    assert blue.json()["dq"] is True
+    assert blue.json()["teams"] == [{"team_id": blue_team, "no_show": False, "dq": True}]
     assert _score_record(client, blue_id).mirrored is False
 
     for path in (red_path, blue_path):
@@ -496,9 +521,15 @@ def test_a_scorer_may_score_the_partner_of_a_disqualified_alliance(cooperative_c
     scorer = {**bearer(login_as(raw, "scorer")), "X-Device-Token": admitted_device_token(client)}
     blue_path = f"/api/matches/{match_id}/alliances/{blue_id}/score"
     red_path = f"/api/matches/{match_id}/alliances/{red_id}/score"
-    assert raw.post(blue_path, json={"data": {"objects_scored": 3}, "dq": True}, headers=scorer).status_code == 200
+    blue_team = _only_team(client, match_id, blue_id)
+    flagged = raw.post(
+        blue_path,
+        json={"data": {"objects_scored": 3}, "teams": [{"team_id": blue_team, "dq": True}]},
+        headers=scorer,
+    )
+    assert flagged.status_code == 200, flagged.text
     red = raw.post(red_path, json={"data": {"objects_scored": 10}}, headers=scorer)
     assert red.status_code == 200, red.text
     red_record, blue_record = _score_record(client, red_id), _score_record(client, blue_id)
     assert (red_record.data_json, red_record.mirrored) == ('{"objects_scored": 10}', False)
-    assert (blue_record.dq, blue_record.mirrored) == (True, False)
+    assert ([f.dq for f in blue_record.teams], blue_record.mirrored) == ([True], False)

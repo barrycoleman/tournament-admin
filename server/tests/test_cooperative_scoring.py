@@ -55,7 +55,7 @@ def test_dq_on_one_alliance_does_not_affect_the_other(cooperative_client):
 
     dq_response = client.post(
         f"/api/matches/{match_id}/alliances/{blue_id}/score",
-        json={"data": {"objects_scored": 10}, "dq": True},
+        json={"data": {"objects_scored": 10}, "teams": [{"team_id": t2, "dq": True}]},
     )
     assert dq_response.status_code == 200
     assert dq_response.json()["computed_score"] == 0
@@ -66,7 +66,7 @@ def test_dq_on_one_alliance_does_not_affect_the_other(cooperative_client):
     )
     assert red_after.status_code == 200
     assert red_after.json()["computed_score"] == 20
-    assert red_after.json()["dq"] is False
+    assert red_after.json()["teams"] == []
 
 
 def test_no_show_submitted_after_a_real_score_does_not_overwrite_the_real_score(
@@ -84,7 +84,7 @@ def test_no_show_submitted_after_a_real_score_does_not_overwrite_the_real_score(
 
     blue_response = client.post(
         f"/api/matches/{match_id}/alliances/{blue_id}/score",
-        json={"data": {"objects_scored": 0}, "no_show": True},
+        json={"data": {"objects_scored": 0}, "teams": [{"team_id": t2, "no_show": True}]},
     )
     assert blue_response.status_code == 200
     assert blue_response.json()["computed_score"] == 0
@@ -115,7 +115,7 @@ def test_dq_submitted_after_a_real_score_does_not_overwrite_the_real_score(
 
     blue_response = client.post(
         f"/api/matches/{match_id}/alliances/{blue_id}/score",
-        json={"data": {"objects_scored": 0}, "dq": True},
+        json={"data": {"objects_scored": 0}, "teams": [{"team_id": t2, "dq": True}]},
     )
     assert blue_response.status_code == 200
     assert blue_response.json()["computed_score"] == 0
@@ -280,7 +280,10 @@ def test_lowest_mode_protects_no_show_match_until_toggle_allows_dropping_it(
             )
         client.post(
             f"/api/matches/{match['id']}/alliances/{red}/score",
-            json={"data": {"objects_scored": plan["objects_scored"]}, "no_show": plan["no_show"]},
+            json={
+                "data": {"objects_scored": plan["objects_scored"]},
+                "teams": [{"team_id": t1, "no_show": True}] if plan["no_show"] else [],
+            },
         )
 
     response = client.get(f"/api/rankings?session_id={session_id}")

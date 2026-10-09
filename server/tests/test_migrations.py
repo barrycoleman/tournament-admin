@@ -811,3 +811,76 @@ def test_skills_migration_adds_tables_and_leaves_sessions_without_override(tmp_p
         mirrored = connection.execute(text("SELECT mirrored FROM score_records WHERE alliance_id = 1")).scalar_one()
     assert override is None
     assert not mirrored
+
+
+def test_per_team_flags_migration_moves_alliance_flags_onto_each_team(tmp_path):
+    db_path = str(tmp_path / "flags.db")
+    config = _make_alembic_config(db_path)
+    command.upgrade(config, "a7d5e2c8f1b4")  # the revision before
+    raw_engine = create_engine(f"sqlite:///{db_path}")
+    with raw_engine.connect() as connection:
+        connection.execute(
+            text("INSERT INTO events (id, name, created_at) VALUES (1, 'League', '2026-01-01 00:00:00')")
+        )
+        connection.execute(text("INSERT INTO sessions (id, event_id, label) VALUES (1, 1, 'Saturday')"))
+        for team_id in (1, 2, 3, 4):
+            connection.execute(
+                text(
+                    "INSERT INTO teams (id, event_id, number, name, tiebreaker_seed) "
+                    "VALUES (:id, 1, :number, :name, :id)"
+                ),
+                {"id": team_id, "number": str(100 + team_id), "name": f"Team {team_id}"},
+            )
+        connection.execute(
+            text(
+                "INSERT INTO matches (id, session_id, division_id, round_type, match_number, "
+                "status, phase, paused) VALUES (1, 1, NULL, 'qualification', 1, 'completed', "
+                "'not_started', 0)"
+            )
+        )
+        # Alliance 1 (teams 1, 2) was DQ'd, alliance 2 (teams 3, 4) has no flags,
+        # alliance 3 has no teams at all but is marked no-show.
+        for alliance_id, station in ((1, "red"), (2, "blue"), (3, "solo")):
+            connection.execute(
+                text("INSERT INTO alliances (id, match_id, station) VALUES (:id, 1, :station)"),
+                {"id": alliance_id, "station": station},
+            )
+        for alliance_id, team_id in ((1, 1), (1, 2), (2, 3), (2, 4)):
+            connection.execute(
+                text("INSERT INTO alliance_teams (alliance_id, team_id) VALUES (:alliance_id, :team_id)"),
+                {"alliance_id": alliance_id, "team_id": team_id},
+            )
+        for alliance_id, no_show, dq in ((1, 0, 1), (2, 0, 0), (3, 1, 0)):
+            connection.execute(
+                text(
+                    "INSERT INTO score_records (id, alliance_id, plugin_name, plugin_version, "
+                    "data_json, no_show, dq, sitting, mirrored, submitted_at) VALUES (:id, :id, "
+                    "'example-game', '1.0.0', '{}', :no_show, :dq, 0, 0, '2026-01-01 00:00:00')"
+                ),
+                {"id": alliance_id, "no_show": no_show, "dq": dq},
+            )
+        connection.commit()
+    raw_engine.dispose()
+
+    command.upgrade(config, "head")
+    engine = create_engine(f"sqlite:///{db_path}")
+    columns = {column["name"] for column in inspect(engine).get_columns("score_records")}
+    assert {"no_show", "dq"}.isdisjoint(columns)
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT score_record_id, team_id, no_show, dq FROM score_record_teams "
+                "ORDER BY score_record_id, team_id"
+            )
+        ).all()
+    assert [tuple(row) for row in rows] == [(1, 1, 0, 1), (1, 2, 0, 1)]
+    engine.dispose()
+
+    command.downgrade(config, "a7d5e2c8f1b4")
+    engine = create_engine(f"sqlite:///{db_path}")
+    assert "score_record_teams" not in inspect(engine).get_table_names()
+    with engine.connect() as connection:
+        flags = connection.execute(text("SELECT id, no_show, dq FROM score_records ORDER BY id")).all()
+    # Alliance 3 had no teams, so its no-show had no team to move onto and is not restored.
+    assert [tuple(row) for row in flags] == [(1, 0, 1), (2, 0, 0), (3, 0, 0)]
+    engine.dispose()

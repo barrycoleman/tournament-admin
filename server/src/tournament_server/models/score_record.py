@@ -3,9 +3,10 @@ from __future__ import annotations
 import datetime as dt
 
 from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from tournament_server.db import Base, UTCDateTime, utc_now
+from tournament_server.models.score_record_team import ScoreRecordTeam
 
 
 class ScoreRecord(Base):
@@ -19,8 +20,6 @@ class ScoreRecord(Base):
     plugin_name: Mapped[str] = mapped_column(String(200))
     plugin_version: Mapped[str] = mapped_column(String(50))
     data_json: Mapped[str] = mapped_column(Text)
-    no_show: Mapped[bool] = mapped_column(Boolean, default=False)
-    dq: Mapped[bool] = mapped_column(Boolean, default=False)
     sitting: Mapped[bool] = mapped_column(Boolean, default=False)
     # True while this record is only the cooperative mirror's copy of the
     # partner alliance's submission; a direct submission clears it.
@@ -28,3 +27,8 @@ class ScoreRecord(Base):
     submitted_by_device: Mapped[str | None] = mapped_column(String(200), default=None)
     submitted_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utc_now)
     saved_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, default=None)
+
+    # Flagged teams only (DQ or no-show); see services/team_flags.py.
+    teams: Mapped[list[ScoreRecordTeam]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", order_by=ScoreRecordTeam.team_id
+    )

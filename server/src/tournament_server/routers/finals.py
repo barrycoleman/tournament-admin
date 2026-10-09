@@ -32,7 +32,7 @@ from tournament_server.schemas.finals import (
     FinalsRunRead,
     FinalsStartRequest,
 )
-from tournament_server.services import qualification
+from tournament_server.services import qualification, team_flags
 from tournament_server.services.deletion import delete_finals_bracket
 from tournament_server.services.finals import (
     expand_wins_to_advance,
@@ -84,10 +84,11 @@ def _to_finals_bracket_read(
                     select(ScoreRecord).where(ScoreRecord.alliance_id == match_alliance.id)
                 ).scalars().first()
                 if score_record is not None:
-                    score = (
-                        0
-                        if (score_record.no_show or score_record.dq)
-                        else game_plugin.module.calculate_score(json.loads(score_record.data_json))
+                    score = team_flags.effective_score(
+                        game_plugin,
+                        score_record,
+                        team_flags.alliance_team_ids(db, match_alliance.id),
+                        finals=True,
                     )
             runs.append(
                 FinalsRunRead(

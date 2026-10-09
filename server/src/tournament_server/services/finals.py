@@ -13,6 +13,7 @@ from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.finals_result import FinalsResult
 from tournament_server.models.match import Match
 from tournament_server.models.score_record import ScoreRecord
+from tournament_server.services import team_flags
 
 
 def bracket_capacity(bracket_size: int) -> int:
@@ -314,10 +315,8 @@ def advance_single_elimination(
             ).scalars().first()
             if score_record is None:
                 continue
-            effective_score = (
-                0
-                if (score_record.no_show or score_record.dq)
-                else game_plugin.module.calculate_score(json.loads(score_record.data_json))
+            effective_score = team_flags.effective_score(
+                game_plugin, score_record, team_flags.alliance_team_ids(db, alliance.id), finals=True
             )
             bracket_alliance_id = (
                 matchup.alliance_a_id if alliance.station == "red" else matchup.alliance_b_id
@@ -391,10 +390,8 @@ def recompute_finals_results(db: Session, bracket: FinalsBracket, game_plugin) -
         ).scalars().first()
         if score_record is None:
             continue
-        effective_score = (
-            0
-            if (score_record.no_show or score_record.dq)
-            else game_plugin.module.calculate_score(json.loads(score_record.data_json))
+        effective_score = team_flags.effective_score(
+            game_plugin, score_record, team_flags.alliance_team_ids(db, alliance.id), finals=True
         )
         scores[match.bracket_alliance_id] = effective_score
 

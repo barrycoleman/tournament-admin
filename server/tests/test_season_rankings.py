@@ -101,7 +101,7 @@ def test_dq_ruled_after_a_drop_was_earned_stays_counted(cooperative_client):
     _score_cooperative(client, second, 15)  # 30
     assert _rows(client, session_id=s1)[t1]["average_score"] == 30.0
 
-    _score_cooperative(client, second, 15, dq=True)  # t1 is DQ'd in its 30-point match
+    _score_cooperative(client, second, 15, teams=[{"team_id": t1, "dq": True}])  # t1 is DQ'd in its 30-point match
     # The DQ zero can't be dropped, so the 10 is dropped instead.
     assert _rows(client, session_id=s1)[t1]["average_score"] == 0.0
     assert _rows(client, session_id=s1)[t2]["average_score"] == 30.0
