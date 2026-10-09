@@ -24,6 +24,7 @@ from tournament_server.plugin_registry.discovery import (
 )
 from tournament_server.routers import (
     audit_log,
+    awards,
     auth,
     devices,
     divisions,
@@ -268,6 +269,7 @@ def create_app(
     app.include_router(rankings.router)
     app.include_router(ranking_settings.router)
     app.include_router(skills.router)
+    app.include_router(awards.router)
     app.include_router(schedule.router)
     app.include_router(finals.router)
     app.include_router(server_info.router)
