@@ -1,11 +1,15 @@
 """Awards: definitions, winners, finalize, team history and the CSV export."""
 from __future__ import annotations
 
+import csv
+import io
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server.auth import require_admin, require_any_role, require_role
+from tournament_server.db import utc_now
 from tournament_server.deps import get_db, get_event_or_404, get_optional_game_plugin
 from tournament_server.models.award import Award, AwardWinner
 from tournament_server.models.division import Division
@@ -21,6 +25,9 @@ from tournament_server.schemas.award import (
     AwardPatch,
     AwardRead,
     AwardSlotRead,
+    FinalizeBody,
+    FinalizeRead,
+    FinalizeWarningRead,
     SessionAwardsRead,
     TeamAwardEntryRead,
     TeamAwardHistoryRead,
@@ -357,3 +364,94 @@ def team_history(
                         )
                     )
     return [TeamAwardHistoryRead(team_id=team_id, awards=by_team[team_id]) for team_id in sorted(by_team)]
+
+
+WARNING_STATUSES = ("judged_pending", "no_result", "provisional")
+
+
+@router.post("/api/sessions/{session_id}/awards/finalize", response_model=FinalizeRead)
+def finalize_awards(
+    session_id: int,
+    payload: FinalizeBody,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> FinalizeRead:
+    session_obj = _session_or_404(db, session_id)
+    _ensure_open(session_obj)
+    plugin = _plugin(request, db)
+    warnings: list[FinalizeWarningRead] = []
+    snapshot: list[tuple[Award, int | None, list[int]]] = []
+    for award in rules.session_awards(db, session_id):
+        for division_id in rules.slot_division_ids(db, award):
+            state = rules.slot_state(db, plugin, award, division_id)
+            if state.status in WARNING_STATUSES:
+                division = db.get(Division, division_id) if division_id is not None else None
+                warnings.append(
+                    FinalizeWarningRead(
+                        award_id=award.id, award_name=award.name, division_id=division_id,
+                        division_name=division.name if division is not None else None, status=state.status,
+                    )
+                )
+            if state.status in ("resolved", "provisional"):
+                snapshot.append((award, division_id, state.team_ids))
+    if not payload.confirm:
+        return FinalizeRead(awards_finalized_at=None, warnings=warnings)
+    for award, division_id, team_ids in snapshot:
+        for team_id in team_ids:
+            db.add(
+                AwardWinner(
+                    award_id=award.id, division_id=division_id, team_id=team_id,
+                    origin=rules.ORIGIN_FINALIZED, recorded_by="admin",
+                )
+            )
+    session_obj.awards_finalized_at = utc_now()
+    db.commit()
+    _changed(request, db, session_id)
+    return FinalizeRead(awards_finalized_at=session_obj.awards_finalized_at, warnings=warnings)
+
+
+@router.post("/api/sessions/{session_id}/awards/unfinalize", response_model=SessionAwardsRead)
+def unfinalize_awards(
+    session_id: int, request: Request, db: Session = Depends(get_db), _role: str = Depends(require_admin)
+) -> SessionAwardsRead:
+    session_obj = _session_or_404(db, session_id)
+    if session_obj.awards_finalized_at is None:
+        raise HTTPException(status_code=409, detail="Awards are not finalized.")
+    award_ids = [a.id for a in rules.session_awards(db, session_id)]
+    for row in db.execute(
+        select(AwardWinner).where(
+            AwardWinner.award_id.in_(award_ids), AwardWinner.origin == rules.ORIGIN_FINALIZED
+        )
+    ).scalars().all():
+        db.delete(row)
+    session_obj.awards_finalized_at = None
+    db.commit()
+    _changed(request, db, session_id)
+    return _session_read(db, _plugin(request, db), session_obj)
+
+
+CSV_COLUMNS = ["award", "description", "division", "placement", "team_number", "team_name", "organization", "status"]
+
+
+@router.get("/api/sessions/{session_id}/awards.csv")
+def awards_csv(
+    session_id: int, request: Request, db: Session = Depends(get_db), _role: str = Depends(require_any_role)
+) -> Response:
+    session_read = _session_read(db, _plugin(request, db), _session_or_404(db, session_id))
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(CSV_COLUMNS)
+    for award in session_read.awards:
+        placement = "" if award.placement is None else str(award.placement)
+        for slot in award.slots:
+            base = [award.name, award.description or "", slot.division_name or "", placement]
+            if not slot.winners:
+                writer.writerow([*base, "", "", "", slot.status])
+            for team in slot.winners:
+                writer.writerow([*base, team.number, team.name, team.organization or "", slot.status])
+    return Response(
+        content=out.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="awards-{session_id}.csv"'},
+    )

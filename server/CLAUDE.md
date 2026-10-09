@@ -402,6 +402,10 @@ Skills rankings are never stored. `GET /api/skills/rankings?tab={overall|<type>}
 - **The season** uses each team's single best session (the greatest key, and the earlier session by date then id when two are equal), never a mix.
 - Equal keys share a rank (1, 2, 2, 4), ordered by team number.
 
+## Awards
+
+Awards are defined per session (`awards`, ordered by `position`). An award is `judged` (people choose the winner) or `performance` (its winners come from a source at a placement). `scope` is `event` (one slot) or `division` (one slot per division in `division_ids`; `[]` means every division). Sources live in `services/award_sources.py`'s `SOURCES` registry: `teamwork_ranking` (stored `Ranking` rows; `basis` session or season), `finals` (the session's newest bracket for the division; score chase by `FinalsResult.rank`, provisional until complete; single elimination by the round an alliance lost in, then seed), `skills_overall` and `skills_type` (`services/skills.compute_rankings`, filtered to the division and renumbered). Teamwork ranking and finals require division scope; finals require session basis. Automatic winners are computed on read and stored only when an admin finalizes the session (`sessions.awards_finalized_at`), as `award_winners` rows with origin `finalized`; judged entries and admin overrides are stored as `judged` and `override` rows. While a session's awards are finalized, every award write for it returns 409 until `POST .../awards/unfinalize`, which deletes only the `finalized` rows. Admins do everything; judges may set and clear judged slots only (`PUT/DELETE /api/awards/{id}/slots/{division id|event}`); every role can read the awards, the team history, and `GET /api/sessions/{id}/awards.csv`. Every write broadcasts `awards_changed {session_id}` with `broadcast_for_session`.
+
 ## Finals
 
 A game plugin declares `alliance_selection` (`captain_pick` or
@@ -868,6 +872,8 @@ truth for that richer shape):
   Rankings listens there.
 - `qualification_status_changed` — `{session_id, finalized}` (via
   `broadcast_for_session`), on finalize and reopen.
+- `awards_changed` — `{session_id}` (via `broadcast_for_session`), after any
+  award write, finalize or unfinalize.
 
 Routing: `realtime.broadcast_for_session` always sends on
 `session:<id>`, and additionally on `active-session` when that session

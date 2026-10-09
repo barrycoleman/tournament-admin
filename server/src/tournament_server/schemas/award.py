@@ -110,3 +110,22 @@ class TeamAwardEntryRead(BaseModel):
 class TeamAwardHistoryRead(BaseModel):
     team_id: int
     awards: list[TeamAwardEntryRead]
+
+
+class FinalizeBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm: bool = False
+
+
+class FinalizeWarningRead(BaseModel):
+    award_id: int
+    award_name: str
+    division_id: int | None
+    division_name: str | None
+    status: str
+
+
+class FinalizeRead(BaseModel):
+    awards_finalized_at: dt.datetime | None
+    warnings: list[FinalizeWarningRead]
