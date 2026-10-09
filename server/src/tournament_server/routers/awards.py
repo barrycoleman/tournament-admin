@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from tournament_server.auth import require_admin, require_any_role
+from tournament_server.auth import require_admin, require_any_role, require_role
 from tournament_server.deps import get_db, get_event_or_404, get_optional_game_plugin
 from tournament_server.models.award import Award, AwardWinner
 from tournament_server.models.division import Division
+from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
 from tournament_server.plugin_registry.loader import LoadedPlugin
@@ -21,9 +22,13 @@ from tournament_server.schemas.award import (
     AwardRead,
     AwardSlotRead,
     SessionAwardsRead,
+    TeamAwardEntryRead,
+    TeamAwardHistoryRead,
+    WinnerBody,
     WinnerTeamRead,
 )
 from tournament_server.services import awards as rules
+from tournament_server.services.skills_ranking import session_order_key
 
 router = APIRouter(tags=["awards"])
 
@@ -216,3 +221,139 @@ def copy_awards(
     db.commit()
     _changed(request, db, session_id)
     return _session_read(db, _plugin(request, db), session_obj)
+
+
+REASON_MAX = 500
+require_admin_or_judge = require_role("judge")
+
+
+def _slot_or_404(db: Session, award: Award, slot: str) -> int | None:
+    slots = rules.slot_division_ids(db, award)
+    if slot == "event":
+        division_id = None
+    else:
+        try:
+            division_id = int(slot)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Slot not found")
+    if division_id not in slots:
+        raise HTTPException(status_code=404, detail="Slot not found")
+    return division_id
+
+
+def _winner_error(db: Session, session_id: int, division_id: int | None, team_id: int) -> str | None:
+    team = db.get(Team, team_id)
+    if team is None:
+        return f"Team {team_id} not found."
+    if division_id is not None and team.division_id != division_id:
+        return f"Team {team.number} is not in this division."
+    entered = db.execute(
+        select(SessionParticipation.id).where(
+            SessionParticipation.session_id == session_id, SessionParticipation.team_id == team_id
+        )
+    ).first()
+    if entered is None:
+        return f"Team {team.number} is not entered in this session."
+    return None
+
+
+def _guarded_slot(db: Session, award_id: int, slot: str, role: str) -> tuple[Award, int | None]:
+    """404 award, 404 slot, 403 a non-admin on a performance award, 409 finalized."""
+    award = _award_or_404(db, award_id)
+    division_id = _slot_or_404(db, award, slot)
+    if award.kind == rules.PERFORMANCE and role != "admin":
+        raise HTTPException(status_code=403, detail="Only an admin can override a performance award.")
+    _ensure_open(_session_or_404(db, award.session_id))
+    return award, division_id
+
+
+@router.put("/api/awards/{award_id}/slots/{slot}", response_model=AwardRead)
+def set_slot(
+    award_id: int,
+    slot: str,
+    payload: WinnerBody,
+    request: Request,
+    db: Session = Depends(get_db),
+    role: str = Depends(require_admin_or_judge),
+) -> AwardRead:
+    award, division_id = _guarded_slot(db, award_id, slot, role)
+    if award.kind == rules.JUDGED:
+        if payload.team_id is None or payload.team_ids is not None or payload.reason is not None:
+            raise HTTPException(status_code=422, detail="A judged award takes exactly one team_id.")
+        team_ids, origin, reason = [payload.team_id], rules.ORIGIN_JUDGED, None
+    else:
+        reason = (payload.reason or "").strip()
+        if payload.team_id is not None or not payload.team_ids:
+            raise HTTPException(status_code=422, detail="An override takes a non-empty team_ids list.")
+        if len(set(payload.team_ids)) != len(payload.team_ids):
+            raise HTTPException(status_code=422, detail="A team is listed twice.")
+        if not reason or len(reason) > REASON_MAX:
+            raise HTTPException(status_code=422, detail=f"An override needs a reason of 1 to {REASON_MAX} characters.")
+        team_ids, origin = payload.team_ids, rules.ORIGIN_OVERRIDE
+    for team_id in team_ids:
+        error = _winner_error(db, award.session_id, division_id, team_id)
+        if error is not None:
+            raise HTTPException(status_code=422, detail=error)
+    for row in rules.stored_winners(db, award.id, division_id):
+        db.delete(row)
+    db.flush()
+    for team_id in team_ids:
+        db.add(
+            AwardWinner(
+                award_id=award.id, division_id=division_id, team_id=team_id,
+                origin=origin, override_reason=reason, recorded_by=role,
+            )
+        )
+    db.commit()
+    _changed(request, db, award.session_id)
+    return _award_read(db, _plugin(request, db), award)
+
+
+@router.delete("/api/awards/{award_id}/slots/{slot}", response_model=AwardRead)
+def clear_slot(
+    award_id: int,
+    slot: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    role: str = Depends(require_admin_or_judge),
+) -> AwardRead:
+    award, division_id = _guarded_slot(db, award_id, slot, role)
+    for row in rules.stored_winners(db, award.id, division_id):
+        db.delete(row)
+    db.commit()
+    _changed(request, db, award.session_id)
+    return _award_read(db, _plugin(request, db), award)
+
+
+@router.get("/api/sessions/{session_id}/awards/team-history", response_model=list[TeamAwardHistoryRead])
+def team_history(
+    session_id: int, request: Request, db: Session = Depends(get_db), _role: str = Depends(require_any_role)
+) -> list[TeamAwardHistoryRead]:
+    """Each team's awards in this session (stored and live) and in earlier
+    sessions of the season (stored only)."""
+    current = _session_or_404(db, session_id)
+    current_key = session_order_key(current.session_date, current.id)
+    sessions = [
+        s for s in db.execute(
+            select(TournamentSession).where(TournamentSession.event_id == current.event_id)
+        ).scalars().all()
+        if session_order_key(s.session_date, s.id) <= current_key
+    ]
+    sessions.sort(key=lambda s: session_order_key(s.session_date, s.id))
+    plugin = _plugin(request, db)
+    by_team: dict[int, list[TeamAwardEntryRead]] = {}
+    for session_obj in sessions:
+        for award in rules.session_awards(db, session_obj.id):
+            for division_id in rules.slot_division_ids(db, award):
+                if session_obj.id == session_id:
+                    team_ids = rules.slot_state(db, plugin, award, division_id).team_ids
+                else:
+                    team_ids = [row.team_id for row in rules.stored_winners(db, award.id, division_id)]
+                for team_id in team_ids:
+                    by_team.setdefault(team_id, []).append(
+                        TeamAwardEntryRead(
+                            award_id=award.id, award_name=award.name, kind=award.kind,
+                            session_id=session_obj.id, session_label=session_obj.label,
+                        )
+                    )
+    return [TeamAwardHistoryRead(team_id=team_id, awards=by_team[team_id]) for team_id in sorted(by_team)]

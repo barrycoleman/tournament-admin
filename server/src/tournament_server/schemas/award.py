@@ -87,3 +87,26 @@ class AwardRead(BaseModel):
 class SessionAwardsRead(BaseModel):
     awards_finalized_at: dt.datetime | None
     awards: list[AwardRead]
+
+
+class WinnerBody(BaseModel):
+    """A judged award takes team_id; a performance override takes team_ids and reason."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    team_id: StrictInt | None = None
+    team_ids: list[StrictInt] | None = None
+    reason: str | None = None
+
+
+class TeamAwardEntryRead(BaseModel):
+    award_id: int
+    award_name: str
+    kind: str
+    session_id: int
+    session_label: str
+
+
+class TeamAwardHistoryRead(BaseModel):
+    team_id: int
+    awards: list[TeamAwardEntryRead]
