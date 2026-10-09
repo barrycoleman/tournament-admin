@@ -17,10 +17,19 @@ export function JudgeLayout() {
     onEvent: (realtimeEvent: RealtimeEvent) => {
       if (realtimeEvent.event === "active_session_changed") {
         queryClient.invalidateQueries({ queryKey: ["event"] });
+        // The newly active session may have been created since the list loaded.
+        queryClient.invalidateQueries({ queryKey: ["sessions"] });
       }
     },
   });
   if (event.isLoading || sessions.isLoading) return <p>{t("judge.loading")}</p>;
+  if (event.isError || sessions.isError) {
+    return (
+      <p className="alert alert-danger" role="alert">
+        {t("errors.generic")}
+      </p>
+    );
+  }
   const session = sessions.data?.find((s) => s.id === event.data?.active_session_id);
   if (!session) return <p>{t("judge.noActiveSession")}</p>;
   return (

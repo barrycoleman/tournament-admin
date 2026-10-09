@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider, useOutletContext } from "react-router-dom";
@@ -19,8 +19,9 @@ function Probe() {
   return <p>{`${session.label} on ${channelPath}`}</p>;
 }
 
-function renderAt(activeSessionId: number | null) {
+function renderAt(activeSessionId: number | null, failing?: string) {
   vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+    if (path === failing) throw new Error("offline");
     if (path === "/api/event") return { id: 1, name: "League", active_session_id: activeSessionId } as never;
     if (path === "/api/sessions") return [{ id: 5, event_id: 1, label: "Saturday" }] as never;
     throw new Error(`unexpected request: ${path}`);
@@ -54,5 +55,21 @@ describe("JudgeLayout", () => {
   it("says so when no session is active", async () => {
     renderAt(null);
     expect(await screen.findByText("No session is active. Ask an admin to set the active session.")).toBeInTheDocument();
+  });
+
+  it.each(["/api/event", "/api/sessions"])("shows an error, not 'no session', when %s fails", async (path) => {
+    renderAt(5, path);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Something went wrong.");
+    expect(screen.queryByText(/No session is active/)).not.toBeInTheDocument();
+  });
+
+  it("refetches the event and the sessions when the active session changes", async () => {
+    renderAt(5);
+    await screen.findByText("Saturday on /ws/active-session");
+    const options = vi.mocked(useRealtimeChannel).mock.lastCall![0];
+    vi.mocked(apiRequest).mockClear();
+    act(() => options.onEvent?.({ event: "active_session_changed", data: { active_session_id: 5 } }));
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/event"));
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/sessions"));
   });
 });
