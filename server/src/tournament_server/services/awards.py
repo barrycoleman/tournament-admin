@@ -41,6 +41,8 @@ def definition_error(d: dict, event_division_ids: set[int]) -> str | None:
         return "kind must be 'judged' or 'performance'."
     if d["scope"] not in (EVENT, DIVISION):
         return "scope must be 'event' or 'division'."
+    if d["division_ids"] is None:
+        return "division_ids must be a list; use [] for every division."
     if d["scope"] == EVENT and d["division_ids"]:
         return "An event-wide award has no divisions."
     unknown = [i for i in d["division_ids"] if i not in event_division_ids]
@@ -73,7 +75,10 @@ def normalized(d: dict) -> dict:
     out["name"] = (out.get("name") or "").strip()
     description = (out.get("description") or "").strip()
     out["description"] = description or None
-    out["division_ids"] = list(out.get("division_ids") or [])
+    # Only an omitted list (create's default) is "every division"; an explicit
+    # null stays None so definition_error refuses it.
+    if out.get("division_ids") is not None:
+        out["division_ids"] = list(out["division_ids"])
     return out
 
 

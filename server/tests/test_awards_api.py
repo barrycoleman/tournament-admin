@@ -119,6 +119,17 @@ def test_patch_validates_the_merged_award(client):
     assert client.patch("/api/awards/999", json={"name": "X"}).status_code == 404
 
 
+def test_patch_refuses_an_explicit_null_division_list_and_omission_keeps_it(client):
+    first, _, _ = setup_two_divisions(client)
+    saturday = create_session(client)
+    award = _create(client, saturday, {**CHAMPION, "division_ids": [first]})
+    response = client.patch(f"/api/awards/{award['id']}", json={"division_ids": None})
+    assert response.status_code == 422, response.text
+    kept = client.patch(f"/api/awards/{award['id']}", json={"name": "Renamed"})
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["division_ids"] == [first]
+
+
 def test_delete_closes_the_position_gap(client):
     setup_two_divisions(client)
     saturday = create_session(client)
