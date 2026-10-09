@@ -172,4 +172,33 @@ test.describe.serial("awards", () => {
     await expect(page.getByRole("article")).toHaveCount(2);
     await expect(card(page, "Excellence Award").getByText("Pending")).toBeVisible();
   });
+
+  test("a per-division teamwork award resolves in a single-division event", async ({ page, request }) => {
+    // Scheduled with no division id, as the admin UI does in a single-division event.
+    const match = await post(request, "/api/matches", {
+      session_id: sunday,
+      round_type: "qualification",
+      match_number: 1,
+      field_id: null,
+      alliances: [
+        { station: "red", team_ids: [teams.T1] },
+        { station: "blue", team_ids: [teams.T2] },
+      ],
+    });
+    const red = match.alliances.find((a: { station: string }) => a.station === "red");
+    await post(request, `/api/matches/${match.id}/alliances/${red.id}/score`, { data: { score: 40 } });
+
+    await login(page);
+    await page.goto(`${server.baseUrl}/sessions/${sunday}/awards`);
+    await page.getByRole("button", { name: "Add award" }).click();
+    const dialog = page.getByRole("alertdialog", { name: "Add award" });
+    await dialog.getByLabel("Award name").fill("Teamwork Champion");
+    await dialog.getByLabel("Performance").check();
+    await dialog.getByLabel("Per division").check();
+    await dialog.getByLabel("Winner comes from").selectOption({ label: "Teamwork ranking" });
+    await dialog.getByRole("button", { name: "Save award" }).click();
+    const champion = card(page, "Teamwork Champion");
+    await expect(champion.getByText("Live")).toBeVisible();
+    await expect(champion.getByText(/T[12] Team (One|Two)/).first()).toBeVisible();
+  });
 });
