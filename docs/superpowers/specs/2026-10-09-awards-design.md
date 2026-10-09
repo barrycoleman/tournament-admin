@@ -152,6 +152,11 @@ def resolve(db, award: Award, division_id: int | None) -> Resolution
 `SOURCES: dict[str, Callable[..., Resolution]]` holds one entry per source.
 Award plugins add entries later. Resolvers read data only; they never write.
 
+A single-division event schedules, ranks and runs finals with no division id
+(the admin UI sends none), so when the slot's division is the event's only
+division, `teamwork_ranking` and `finals` also match rows whose
+`division_id` is null (finals: the newest bracket among both).
+
 ### 5.1 `teamwork_ranking`
 
 The `Ranking` row for the slot's division with `rank == placement`:
@@ -191,8 +196,8 @@ computes them.
 
 Returns every team at `rank == placement`, so a tie gives every tied team
 the award. A `skills_type` the game plugin no longer defines, or skills
-disabled for the event: no result, note "Unknown skills type" or "Skills
-are not enabled".
+disabled for the event (or no game plugin loaded): no result, note
+"Unknown skills type" or "Skills are not enabled".
 
 ## 6. API
 
