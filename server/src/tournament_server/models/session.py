@@ -26,3 +26,5 @@ class TournamentSession(Base):
     # Per-session skills attempts override (type key -> allowed attempts);
     # NULL uses the event setting, and a type missing here falls back to it.
     skills_attempts: Mapped[dict[str, int] | None] = mapped_column(JSON, default=None)
+    # Set when an admin finalizes the session's awards; NULL while they are live.
+    awards_finalized_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, default=None)

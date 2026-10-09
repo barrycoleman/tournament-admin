@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server.models.alliance import Alliance, AllianceTeam
+from tournament_server.models.award import Award, AwardWinner
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
 from tournament_server.models.bracket_matchup import BracketMatchup
 from tournament_server.models.event import Event
@@ -96,10 +97,42 @@ def session_has_scores(db: Session, session_id: int) -> bool:
     )
 
 
+def delete_session_awards(db: Session, session_id: int) -> None:
+    """Deletes a session's awards and their winners."""
+    awards = db.execute(select(Award).where(Award.session_id == session_id)).scalars().all()
+    for award in awards:
+        for winner in db.execute(select(AwardWinner).where(AwardWinner.award_id == award.id)).scalars().all():
+            db.delete(winner)
+    db.flush()
+    for award in awards:
+        db.delete(award)
+    db.flush()
+
+
+def delete_team_award_winners(db: Session, team_id: int) -> None:
+    for winner in db.execute(select(AwardWinner).where(AwardWinner.team_id == team_id)).scalars().all():
+        db.delete(winner)
+    db.flush()
+
+
+def remove_division_from_awards(db: Session, division_id: int) -> None:
+    """Takes a division out of every award's division list (an award left with
+    none then covers every division) and deletes that division's winners."""
+    for award in db.execute(select(Award)).scalars().all():
+        if division_id in award.division_ids:
+            award.division_ids = [d for d in award.division_ids if d != division_id]
+    for winner in db.execute(
+        select(AwardWinner).where(AwardWinner.division_id == division_id)
+    ).scalars().all():
+        db.delete(winner)
+    db.flush()
+
+
 def delete_session(db: Session, session_obj: TournamentSession) -> bool:
     """Deletes a session and everything scoped to it. Returns whether it was
     the event's active session, which is cleared if so."""
     session_id = session_obj.id
+    delete_session_awards(db, session_id)
     for bracket in db.execute(
         select(FinalsBracket).where(FinalsBracket.session_id == session_id)
     ).scalars().all():

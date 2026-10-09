@@ -23,6 +23,7 @@ from tournament_server.schemas.team import (
     TeamUpdate,
 )
 from tournament_server.services.team_assignment import assign_sole_division, balanced_assign
+from tournament_server.services.deletion import delete_team_award_winners
 
 router = APIRouter(prefix="/api/teams", tags=["teams"])
 
@@ -132,6 +133,7 @@ def delete_team(
             detail=f"Cannot delete team: has existing {', '.join(blockers)}",
         )
 
+    delete_team_award_winners(db, team_id)
     db.delete(team)
     db.commit()
     return Response(status_code=204)

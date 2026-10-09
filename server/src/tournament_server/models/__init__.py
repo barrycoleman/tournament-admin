@@ -1,5 +1,6 @@
 from tournament_server.models.alliance import Alliance, AllianceTeam
 from tournament_server.models.auth_session import AuthSession
+from tournament_server.models.award import Award, AwardWinner
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
 from tournament_server.models.bracket_matchup import BracketMatchup
 from tournament_server.models.division import Division
@@ -28,6 +29,8 @@ __all__ = [
     "Alliance",
     "AllianceTeam",
     "AuthSession",
+    "Award",
+    "AwardWinner",
     "BracketAlliance",
     "BracketAllianceTeam",
     "BracketMatchup",

@@ -16,6 +16,7 @@ from tournament_server.schemas.division import (
 )
 from tournament_server.schemas.team import TeamRead
 from tournament_server.services.team_assignment import assign_sole_division, balanced_assign
+from tournament_server.services.deletion import remove_division_from_awards
 
 router = APIRouter(prefix="/api/divisions", tags=["divisions"])
 
@@ -80,6 +81,7 @@ def delete_division(
     )
     for team in teams_in_division:
         team.division_id = None
+    remove_division_from_awards(db, division_id)
     db.delete(division)
     db.flush()
     # This count is deliberately taken after flush (which sends this

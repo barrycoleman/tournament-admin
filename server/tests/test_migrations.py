@@ -884,3 +884,31 @@ def test_per_team_flags_migration_moves_alliance_flags_onto_each_team(tmp_path):
     # Alliance 3 had no teams, so its no-show had no team to move onto and is not restored.
     assert [tuple(row) for row in flags] == [(1, 0, 1), (2, 0, 0), (3, 0, 0)]
     engine.dispose()
+
+
+def test_awards_migration_adds_tables_and_session_column(tmp_path):
+    db_path = str(tmp_path / "awards.db")
+    command.upgrade(_make_alembic_config(db_path), "e9c3f7a1b5d2")  # the revision before
+    raw_engine = create_engine(f"sqlite:///{db_path}")
+    with raw_engine.connect() as connection:
+        connection.execute(
+            text("INSERT INTO events (id, name, created_at) VALUES (1, 'League', '2026-01-01 00:00:00')")
+        )
+        connection.execute(text("INSERT INTO sessions (id, event_id, label) VALUES (1, 1, 'Saturday')"))
+        connection.commit()
+    raw_engine.dispose()
+
+    engine = make_engine(db_path)
+    assert ensure_schema_current(engine, db_path) == MigrationOutcome.UPGRADED
+    inspector = inspect(engine)
+    assert {"awards", "award_winners"} <= set(inspector.get_table_names())
+    with engine.connect() as connection:
+        finalized = connection.execute(text("SELECT awards_finalized_at FROM sessions WHERE id = 1")).scalar_one()
+    assert finalized is None
+    engine.dispose()
+
+    command.downgrade(_make_alembic_config(db_path), "e9c3f7a1b5d2")
+    inspector = inspect(create_engine(f"sqlite:///{db_path}"))
+    assert "awards" not in inspector.get_table_names()
+    assert "award_winners" not in inspector.get_table_names()
+    assert "awards_finalized_at" not in {c["name"] for c in inspector.get_columns("sessions")}
