@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.skills import SkillsAttempt, SkillsSettings
+from tournament_server.models.team import Team
 from tournament_server.plugin_registry.loader import LoadedPlugin
-from tournament_server.services.skills_rules import effective_allowed
+from tournament_server.services.skills_ranking import AttemptScore, SkillsRankingRow, rank_skills, session_order_key
+from tournament_server.services.skills_rules import effective_allowed, skills_depth
 
 SKILLS_OFF_DETAIL = "Skills challenges are turned off for this event."
 NO_PLUGIN_DETAIL = "Choose a game plugin before setting up skills challenges."
@@ -55,3 +57,23 @@ def attempt_numbers(attempts: Iterable[SkillsAttempt]) -> dict[int, int]:
         seen[(attempt.team_id, attempt.skills_type)] += 1
         numbers[attempt.id] = seen[(attempt.team_id, attempt.skills_type)]
     return numbers
+
+
+def compute_rankings(
+    db: Session, type_keys: list[str], tab: str, sessions: list[TournamentSession]
+) -> list[SkillsRankingRow]:
+    """Skills rankings over the given sessions' attempts, as the rankings
+    endpoint shows them. Awards reuse this."""
+    allowed = {s.id: session_allowed(db, s, type_keys) for s in sessions}
+    attempts = db.execute(
+        select(SkillsAttempt).where(SkillsAttempt.session_id.in_(list(allowed)))
+    ).scalars().all()
+    team_numbers = {team.id: team.number for team in db.execute(select(Team)).scalars().all()}
+    return rank_skills(
+        [AttemptScore(a.session_id, a.team_id, a.skills_type, a.score) for a in attempts],
+        type_keys,
+        tab,
+        skills_depth(allowed.values()),
+        {s.id: session_order_key(s.session_date, s.id) for s in sessions},
+        team_numbers,
+    )

@@ -31,8 +31,8 @@ from tournament_server.schemas.skills import (
     SkillsSettingsRead,
 )
 from tournament_server.services import skills
-from tournament_server.services.skills_ranking import OVERALL, AttemptScore, rank_skills, session_order_key
-from tournament_server.services.skills_rules import DEFAULT_ATTEMPTS, attempts_error, scoresheet_violations, skills_depth
+from tournament_server.services.skills_ranking import OVERALL
+from tournament_server.services.skills_rules import DEFAULT_ATTEMPTS, attempts_error, scoresheet_violations
 
 router = APIRouter(tags=["skills"])
 
@@ -343,22 +343,7 @@ def get_skills_rankings(
         )
     else:
         sessions = [_session_or_404(db, session_id)]
-    allowed = {s.id: skills.session_allowed(db, s, type_keys) for s in sessions}
-    attempts = db.execute(
-        select(SkillsAttempt).where(SkillsAttempt.session_id.in_(list(allowed)))
-    ).scalars().all()
-    team_numbers = {
-        team.id: team.number
-        for team in db.execute(select(Team).where(Team.event_id == event.id)).scalars().all()
-    }
-    rows = rank_skills(
-        [AttemptScore(a.session_id, a.team_id, a.skills_type, a.score) for a in attempts],
-        type_keys,
-        tab,
-        skills_depth(allowed.values()),
-        {s.id: session_order_key(s.session_date, s.id) for s in sessions},
-        team_numbers,
-    )
+    rows = skills.compute_rankings(db, type_keys, tab, sessions)
     return [
         SkillsRankingRowRead(
             rank=row.rank, team_id=row.team_id, score=row.score, attempts=row.attempts, session_id=row.session_id
