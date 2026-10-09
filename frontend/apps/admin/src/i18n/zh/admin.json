@@ -614,7 +614,10 @@
         "divisions": "请至少选择一个组别。",
         "placement": "名次必须是 1 或更大的整数。",
         "skillsType": "请选择技能类型。"
-      }
+      },
+      "ruleChangeConfirmHeading": "清除 {{name}} 的获奖者？",
+      "ruleChangeConfirmBody": "更改获奖者的产生方式会清除该奖项已录入的获奖者。",
+      "ruleChangeConfirm": "保存并清除获奖者"
     }
   }
 }

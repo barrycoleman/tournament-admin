@@ -51,6 +51,7 @@ export function AwardsView({
   const [editing, setEditing] = useState<AwardRead | "new" | null>(null);
   const [deleting, setDeleting] = useState<AwardRead | null>(null);
   const [copying, setCopying] = useState(false);
+  const [exportError, setExportError] = useState<unknown>(null);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: awardsKey(session.id) });
@@ -115,7 +116,10 @@ export function AwardsView({
           <button type="button" className="btn" disabled={locked} onClick={() => setCopying(true)}>
             {t("awards.copyAction")}
           </button>
-          <button type="button" className="btn" onClick={() => void downloadAwardsCsv(session.id)}>
+          <button type="button" className="btn" onClick={() => {
+              setExportError(null);
+              downloadAwardsCsv(session.id).catch(setExportError);
+            }}>
             {t("awards.exportAction")}
           </button>
           <span className="toolbar__spacer" />
@@ -133,6 +137,11 @@ export function AwardsView({
           {t("awards.finalizedBanner", {
             date: new Date(data.awards_finalized_at!).toLocaleString(i18n.language),
           })}
+        </p>
+      )}
+      {exportError !== null && (
+        <p className="alert alert-danger" role="alert">
+          {apiErrorMessage(exportError, t("errors.generic"))}
         </p>
       )}
       {(reorder.isError || unfinalize.isError) && (

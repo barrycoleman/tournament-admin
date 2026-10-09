@@ -219,4 +219,58 @@ describe("AwardsView", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Finalize awards" })).not.toBeInTheDocument();
   });
+
+  it("asks for confirmation before a rule change clears stored winners", async () => {
+    awards = {
+      ...awards,
+      awards: [award({ slots: [{ ...award().slots[0], status: "judged" }] })],
+    };
+    renderView();
+    const card = (await screen.findAllByRole("article"))[0];
+    fireEvent.click(within(card).getByRole("button", { name: "Edit" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Edit award" });
+    fireEvent.click(within(dialog).getByLabelText("Per division"));
+    vi.mocked(apiRequest).mockClear();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save award" }));
+    const confirm = await screen.findByRole("alertdialog", { name: "Clear the winners of Excellence Award?" });
+    expect(apiRequest).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Save and clear winners" }));
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith("/api/awards/1", {
+        method: "PATCH",
+        body: expect.objectContaining({ scope: "division" }),
+      })
+    );
+  });
+
+  it("saves a name-only edit directly even with stored winners", async () => {
+    awards = {
+      ...awards,
+      awards: [award({ slots: [{ ...award().slots[0], status: "judged" }] })],
+    };
+    renderView();
+    const card = (await screen.findAllByRole("article"))[0];
+    fireEvent.click(within(card).getByRole("button", { name: "Edit" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Edit award" });
+    fireEvent.change(within(dialog).getByLabelText("Award name"), { target: { value: "Renamed" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save award" }));
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith("/api/awards/1", {
+        method: "PATCH",
+        body: expect.objectContaining({ name: "Renamed" }),
+      })
+    );
+    expect(screen.queryByRole("alertdialog", { name: /Clear the winners/ })).not.toBeInTheDocument();
+  });
+
+  it("shows an alert when the CSV export fails", async () => {
+    const base = vi.mocked(apiRequest).getMockImplementation()!;
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
+      if (path === "/api/sessions/5/awards.csv") throw new Error("boom");
+      return (base as (p: string, o?: unknown) => Promise<never>)(path, options);
+    });
+    renderView();
+    fireEvent.click(await screen.findByRole("button", { name: "Export CSV" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+  });
 });

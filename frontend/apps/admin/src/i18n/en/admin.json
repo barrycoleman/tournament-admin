@@ -617,7 +617,10 @@
         "divisions": "Choose at least one division.",
         "placement": "Placement must be a whole number of 1 or more.",
         "skillsType": "Choose a skills type."
-      }
+      },
+      "ruleChangeConfirmHeading": "Clear the winners of {{name}}?",
+      "ruleChangeConfirmBody": "Changing how the winner is chosen clears the winners already entered for this award.",
+      "ruleChangeConfirm": "Save and clear winners"
     }
   }
 }

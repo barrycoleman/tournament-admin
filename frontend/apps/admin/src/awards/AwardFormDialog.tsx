@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest } from "@tournament-admin/shared";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Modal } from "../components/Modal";
 import { apiErrorMessage } from "../apiErrorMessage";
 import type { AwardRead, AwardSource, Division } from "../types";
@@ -42,6 +43,7 @@ export function AwardFormDialog({
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<AwardDraft>(award ? draftFromAward(award) : emptyDraft());
   const [submitted, setSubmitted] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const set = (patch: Partial<AwardDraft>) => setDraft((current) => ({ ...current, ...patch }));
 
   const save = useMutation({
@@ -70,7 +72,9 @@ export function AwardFormDialog({
         onSubmit={(event) => {
           event.preventDefault();
           setSubmitted(true);
-          if (error === null && !save.isPending) save.mutate();
+          if (error !== null || save.isPending) return;
+          if (showRuleWarning) setConfirming(true);
+          else save.mutate();
         }}
       >
         <h2 id={headingId}>{t(award ? "awards.form.editHeading" : "awards.form.addHeading")}</h2>
@@ -218,6 +222,18 @@ export function AwardFormDialog({
           </button>
         </div>
       </form>
+      {confirming && (
+        <ConfirmDialog
+          heading={t("awards.form.ruleChangeConfirmHeading", { name: draft.name.trim() })}
+          body={t("awards.form.ruleChangeConfirmBody")}
+          confirmLabel={t("awards.form.ruleChangeConfirm")}
+          cancelLabel={t("awards.cancel")}
+          isPending={save.isPending}
+          error={save.isError ? apiErrorMessage(save.error, t("errors.generic")) : null}
+          onConfirm={() => save.mutate()}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
     </Modal>
   );
 }
