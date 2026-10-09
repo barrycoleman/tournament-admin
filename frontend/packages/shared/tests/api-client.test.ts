@@ -8,6 +8,13 @@ beforeEach(() => {
 });
 
 describe("apiRequest", () => {
+  it("returns the body as text when responseType is text", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("a,b\n1,2\n", { status: 200, headers: { "Content-Type": "text/csv" } })
+    );
+    await expect(apiRequest<string>("/api/x.csv", { responseType: "text" })).resolves.toBe("a,b\n1,2\n");
+  });
+
   it("attaches the stored bearer token and returns parsed JSON", async () => {
     storeTokens({ accessToken: "token-123", refreshToken: "r", expiresAt: 0 });
     const fetchSpy = vi

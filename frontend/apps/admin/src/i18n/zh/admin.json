@@ -355,7 +355,8 @@
     "deleteActiveNote": "这是当前场次，删除后将没有当前场次。",
     "deletePhrasePrompt": "输入“{{name}}”以确认",
     "deleteConfirm": "删除场次",
-    "skillsTab": "技能赛"
+    "skillsTab": "技能赛",
+    "awardsTab": "奖项"
   },
   "frontDeskCheckin": {
     "heading": "队伍签到",
@@ -528,5 +529,92 @@
   "scoresheet": {
     "decrease": "减少{{label}}",
     "increase": "增加{{label}}"
+  },
+  "awards": {
+    "heading": "奖项",
+    "loading": "正在加载奖项…",
+    "empty": "还没有奖项。请添加奖项，或从其他场次复制。",
+    "judgeEmpty": "本场次没有评审奖项。",
+    "addAction": "添加奖项",
+    "copyAction": "从其他场次复制…",
+    "copyHeading": "复制奖项",
+    "copyFromLabel": "从场次复制",
+    "copyConfirm": "复制",
+    "exportAction": "导出 CSV",
+    "finalizeAction": "确定奖项",
+    "unfinalizeAction": "取消确定",
+    "finalizedBanner": "奖项已于 {{date}} 确定。如需修改，请先取消确定。",
+    "editAction": "编辑",
+    "deleteAction": "删除",
+    "moveUp": "将 {{name}} 上移",
+    "moveDown": "将 {{name}} 下移",
+    "deleteHeading": "删除 {{name}}？",
+    "deleteBody": "这将删除该奖项及已录入的获奖者。",
+    "deleteConfirm": "删除奖项",
+    "cancel": "取消",
+    "eventSlot": "全赛事",
+    "noWinner": "—",
+    "slotsLabel": "{{name}} 的获奖者",
+    "movedWarning": "队伍 {{number}} 已不在此组别。",
+    "status": {
+      "judged_pending": "待评",
+      "judged": "已评",
+      "resolved": "实时",
+      "provisional": "暂定",
+      "no_result": "暂无结果",
+      "overridden": "已调整",
+      "finalized": "已确定"
+    },
+    "note": {
+      "unknown_skills_type": "未知的技能类型",
+      "skills_disabled": "未启用技能挑战"
+    },
+    "overrideReason": "调整原因：{{reason}}",
+    "scope": {
+      "event": "全赛事",
+      "division": "按组别"
+    },
+    "basis": {
+      "session": "本场次",
+      "season": "本赛季至今"
+    },
+    "source": {
+      "teamworkRanking": "团队排名",
+      "finals": "决赛名次",
+      "skillsOverall": "技能总分",
+      "skillsType": "技能类型",
+      "skillsTypeNamed": "{{type}} 技能"
+    },
+    "summary": {
+      "judged": "评审 · {{scope}}",
+      "performance": "成绩 · {{source}} {{placement}} · {{basis}} · {{scope}}"
+    },
+    "form": {
+      "addHeading": "添加奖项",
+      "editHeading": "编辑奖项",
+      "nameLabel": "奖项名称",
+      "descriptionLabel": "说明（可选）",
+      "kindLabel": "获奖者如何产生",
+      "kindJudged": "评审",
+      "kindPerformance": "成绩",
+      "scopeLabel": "范围",
+      "scopeEvent": "全赛事（一名获奖者）",
+      "scopeDivision": "按组别",
+      "allDivisions": "所有组别",
+      "sourceLabel": "获奖者来自",
+      "skillsTypeLabel": "技能类型",
+      "basisLabel": "成绩范围",
+      "basisSession": "本场次",
+      "basisSeason": "本赛季至今",
+      "placementLabel": "名次",
+      "save": "保存奖项",
+      "ruleChangeWarning": "更改获奖者的产生方式会清除该奖项已录入的获奖者。",
+      "errors": {
+        "nameRequired": "请输入名称。",
+        "divisions": "请至少选择一个组别。",
+        "placement": "名次必须是 1 或更大的整数。",
+        "skillsType": "请选择技能类型。"
+      }
+    }
   }
 }

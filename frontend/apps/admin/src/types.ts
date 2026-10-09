@@ -229,3 +229,83 @@ export interface SkillsRankingRead {
   attempts: number[];
   session_id: number;
 }
+
+export type AwardKind = "judged" | "performance";
+export type AwardScope = "event" | "division";
+export type AwardSource = "teamwork_ranking" | "finals" | "skills_overall" | "skills_type";
+export type AwardBasis = "session" | "season";
+export type SlotStatus =
+  | "judged_pending"
+  | "judged"
+  | "resolved"
+  | "provisional"
+  | "no_result"
+  | "overridden"
+  | "finalized";
+
+export interface AwardWinnerTeam {
+  team_id: number;
+  number: string;
+  name: string;
+  organization: string | null;
+}
+
+export interface AwardSlotRead {
+  division_id: number | null;
+  division_name: string | null;
+  status: SlotStatus;
+  winners: AwardWinnerTeam[];
+  override_reason: string | null;
+  note: "unknown_skills_type" | "skills_disabled" | null;
+  moved_team_ids: number[];
+}
+
+export interface AwardDefinition {
+  name: string;
+  description: string | null;
+  kind: AwardKind;
+  scope: AwardScope;
+  division_ids: number[];
+  source: AwardSource | null;
+  skills_type: string | null;
+  basis: AwardBasis | null;
+  placement: number | null;
+}
+
+export interface AwardRead extends AwardDefinition {
+  id: number;
+  session_id: number;
+  position: number;
+  slots: AwardSlotRead[];
+}
+
+export interface SessionAwardsRead {
+  awards_finalized_at: string | null;
+  awards: AwardRead[];
+}
+
+export interface FinalizeWarning {
+  award_id: number;
+  award_name: string;
+  division_id: number | null;
+  division_name: string | null;
+  status: SlotStatus;
+}
+
+export interface FinalizeRead {
+  awards_finalized_at: string | null;
+  warnings: FinalizeWarning[];
+}
+
+export interface TeamAwardEntry {
+  award_id: number;
+  award_name: string;
+  kind: AwardKind;
+  session_id: number;
+  session_label: string;
+}
+
+export interface TeamAwardHistory {
+  team_id: number;
+  awards: TeamAwardEntry[];
+}

@@ -357,7 +357,8 @@
     "deleteActiveNote": "It's the active session, so no session will be active afterwards.",
     "deletePhrasePrompt": "Type \"{{name}}\" to confirm",
     "deleteConfirm": "Delete session",
-    "skillsTab": "Skills"
+    "skillsTab": "Skills",
+    "awardsTab": "Awards"
   },
   "frontDeskCheckin": {
     "heading": "Team Check-In",
@@ -531,5 +532,92 @@
   "scoresheet": {
     "decrease": "Decrease {{label}}",
     "increase": "Increase {{label}}"
+  },
+  "awards": {
+    "heading": "Awards",
+    "loading": "Loading awards…",
+    "empty": "No awards yet. Add one, or copy them from another session.",
+    "judgeEmpty": "This session has no judged awards.",
+    "addAction": "Add award",
+    "copyAction": "Copy awards from…",
+    "copyHeading": "Copy awards",
+    "copyFromLabel": "Copy from session",
+    "copyConfirm": "Copy",
+    "exportAction": "Export CSV",
+    "finalizeAction": "Finalize awards",
+    "unfinalizeAction": "Unfinalize",
+    "finalizedBanner": "Awards finalized on {{date}}. Unfinalize to make changes.",
+    "editAction": "Edit",
+    "deleteAction": "Delete",
+    "moveUp": "Move {{name}} up",
+    "moveDown": "Move {{name}} down",
+    "deleteHeading": "Delete {{name}}?",
+    "deleteBody": "This deletes the award and any winners entered for it.",
+    "deleteConfirm": "Delete award",
+    "cancel": "Cancel",
+    "eventSlot": "Event",
+    "noWinner": "—",
+    "slotsLabel": "Winners for {{name}}",
+    "movedWarning": "Team {{number}} is no longer in this division.",
+    "status": {
+      "judged_pending": "Pending",
+      "judged": "Judged",
+      "resolved": "Live",
+      "provisional": "Provisional",
+      "no_result": "No result yet",
+      "overridden": "Overridden",
+      "finalized": "Finalized"
+    },
+    "note": {
+      "unknown_skills_type": "Unknown skills type",
+      "skills_disabled": "Skills are not enabled"
+    },
+    "overrideReason": "Override reason: {{reason}}",
+    "scope": {
+      "event": "event-wide",
+      "division": "per division"
+    },
+    "basis": {
+      "session": "this session",
+      "season": "season so far"
+    },
+    "source": {
+      "teamworkRanking": "Teamwork ranking",
+      "finals": "Finals placement",
+      "skillsOverall": "Overall skills",
+      "skillsType": "Skills type",
+      "skillsTypeNamed": "{{type}} skills"
+    },
+    "summary": {
+      "judged": "Judged · {{scope}}",
+      "performance": "Performance · {{source}} {{placement}} · {{basis}} · {{scope}}"
+    },
+    "form": {
+      "addHeading": "Add award",
+      "editHeading": "Edit award",
+      "nameLabel": "Award name",
+      "descriptionLabel": "Description (optional)",
+      "kindLabel": "How the winner is chosen",
+      "kindJudged": "Judged",
+      "kindPerformance": "Performance",
+      "scopeLabel": "Scope",
+      "scopeEvent": "Event-wide (one winner)",
+      "scopeDivision": "Per division",
+      "allDivisions": "Every division",
+      "sourceLabel": "Winner comes from",
+      "skillsTypeLabel": "Skills type",
+      "basisLabel": "Results",
+      "basisSession": "This session",
+      "basisSeason": "Season so far",
+      "placementLabel": "Placement",
+      "save": "Save award",
+      "ruleChangeWarning": "Changing how the winner is chosen clears the winners already entered for this award.",
+      "errors": {
+        "nameRequired": "Enter a name.",
+        "divisions": "Choose at least one division.",
+        "placement": "Placement must be a whole number of 1 or more.",
+        "skillsType": "Choose a skills type."
+      }
+    }
   }
 }

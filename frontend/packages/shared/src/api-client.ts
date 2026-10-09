@@ -21,6 +21,8 @@ export interface ApiRequestOptions {
   body?: unknown;
   /** Set true when `body` is already a FormData instance (multipart upload). */
   isFormData?: boolean;
+  /** "text" returns the raw body (e.g. a CSV download); the default parses JSON. */
+  responseType?: "json" | "text";
 }
 
 async function readError(response: Response): Promise<{ detail: string; body: unknown }> {
@@ -82,6 +84,9 @@ export async function apiRequest<T>(
 
   if (response.status === 204) {
     return undefined as T;
+  }
+  if (options.responseType === "text") {
+    return (await response.text()) as T;
   }
   return (await response.json()) as T;
 }
