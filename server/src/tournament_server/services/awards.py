@@ -27,6 +27,10 @@ RULE_FIELDS = ("kind", "scope", "division_ids", "source", "skills_type", "basis"
 LOCKED_DETAIL = "Unfinalize awards to make changes."
 NAME_MAX = 200
 DESCRIPTION_MAX = 2000
+SKILLS_SOURCES = ("skills_overall", "skills_type")
+NEEDS_PLUGIN_DETAIL = "Performance awards need a game plugin."
+EVENT_NEEDS_SKILLS_DETAIL = "Event-wide performance awards come from skills challenges, which are off."
+SKILLS_OFF_DETAIL = "Skills awards need skills challenges turned on."
 
 
 def definition_error(d: dict, event_division_ids: set[int]) -> str | None:
@@ -66,6 +70,18 @@ def definition_error(d: dict, event_division_ids: set[int]) -> str | None:
         return "Teamwork ranking and finals awards are per division."
     if d["source"] == "finals" and d["basis"] != "session":
         return "Finals awards use the session's finals."
+    return None
+
+
+def availability_error(d: dict, plugin_selected: bool, skills_enabled: bool) -> str | None:
+    """Why a valid definition can never produce a winner in the event's current
+    state (no game plugin, or skills challenges off), or None."""
+    if d["kind"] != PERFORMANCE:
+        return None
+    if not plugin_selected:
+        return NEEDS_PLUGIN_DETAIL
+    if d["source"] in SKILLS_SOURCES and not skills_enabled:
+        return EVENT_NEEDS_SKILLS_DETAIL if d["scope"] == EVENT else SKILLS_OFF_DETAIL
     return None
 
 

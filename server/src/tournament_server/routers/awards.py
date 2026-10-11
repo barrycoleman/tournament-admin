@@ -35,6 +35,7 @@ from tournament_server.schemas.award import (
     WinnerTeamRead,
 )
 from tournament_server.services import awards as rules
+from tournament_server.services import skills as skills_service
 from tournament_server.services.skills_ranking import session_order_key
 
 router = APIRouter(tags=["awards"])
@@ -112,6 +113,15 @@ def _validated(db: Session, definition: dict) -> dict:
     return definition
 
 
+def _ensure_available(db: Session, definition: dict) -> None:
+    event = get_event_or_404(db)
+    error = rules.availability_error(
+        definition, event.game_plugin_name is not None, skills_service.is_enabled(db, event.id)
+    )
+    if error is not None:
+        raise HTTPException(status_code=422, detail=error)
+
+
 def _renumber(db: Session, session_id: int) -> None:
     for position, award in enumerate(rules.session_awards(db, session_id)):
         award.position = position
@@ -135,6 +145,7 @@ def create_award(
     session_obj = _session_or_404(db, session_id)
     _ensure_open(session_obj)
     definition = _validated(db, payload.model_dump())
+    _ensure_available(db, definition)
     award = Award(session_id=session_id, position=len(rules.session_awards(db, session_id)), **definition)
     db.add(award)
     db.commit()
@@ -155,6 +166,8 @@ def update_award(
     current = {name: getattr(award, name) for name in DEFINITION_FIELDS}
     definition = _validated(db, {**current, **payload.model_dump(exclude_unset=True)})
     rule_changed = any(definition[name] != current[name] for name in rules.RULE_FIELDS)
+    if rule_changed:
+        _ensure_available(db, definition)
     for name, value in definition.items():
         setattr(award, name, value)
     if rule_changed:
