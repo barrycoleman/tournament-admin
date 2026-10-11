@@ -71,7 +71,7 @@ Both endpoints accept `?dry_run=true`. A dry run validates exactly as a real cal
     "ranking_settings": true
   },
   "awards_needing_attention": [
-    {"award_id": 7, "session_id": 1, "name": "Autonomous Skill Champion", "reason": "unknown_skills_type"}
+    {"award_id": 7, "session_id": 1, "session_label": "Saturday", "name": "Autonomous Skill Champion", "reason": "unknown_skills_type"}
   ]
 }
 ```
@@ -79,7 +79,11 @@ Both endpoints accept `?dry_run=true`. A dry run validates exactly as a real cal
 - **`skills_enabled`:** true when skills are currently on.
 - **`session_attempt_overrides`:** how many sessions have a non-null override.
 - **`ranking_settings`:** true when a row exists and differs from the defaults.
-- **`awards_needing_attention`:** every performance award that would be unavailable or broken under the target state, using the §6 availability rules and the `unknown_skills_type` check. Clearing the plugin makes every performance award unavailable.
+- **`awards_needing_attention`:** every performance award that would be unavailable or broken under the target state. The target state is the new plugin (or none) with skills challenges off, because the reset turns them off.
+  - The reason is `unavailable` when clearing the plugin.
+  - Otherwise it is `unknown_skills_type` for a `skills_type` award whose type the new plugin lacks.
+  - Otherwise it is `unavailable` when the §6.1 rules refuse the award with skills off.
+  - Clearing the plugin makes every performance award unavailable.
 
 The real (non-dry-run) call returns the updated `EventRead`.
 
@@ -118,7 +122,7 @@ On `POST /api/sessions/{id}/awards`, and on `PATCH` when any rule field changes 
 - **`<NeedsGamePlugin />`** is the shared panel, with `alert alert-warning` styling.
   - **Admin:** "This needs a game plugin. Choose one in Event Setup." The link goes to `/events/setup#game-plugins`.
   - **Any other role:** "The organizer hasn't chosen a game plugin yet." It has no link.
-- **Loading.** While the event is loading, gated screens show their normal loading state, not the panel.
+- **Loading.** While the event is loading, gated screens render nothing, not the panel, so a plugin-less flash never appears.
 
 ### 5.2 Where it applies
 
@@ -130,8 +134,8 @@ On `POST /api/sessions/{id}/awards`, and on `PATCH` when any rule field changes 
   - the judge's `/rankings`
   - session Skills tab, if reached by URL (§5.3)
 - **A smaller control locks instead:**
-  - **Schedule tab:** keeps its readiness checklist. The game plugin item uses the shared wording and link.
-  - **Finalize qualification:** the button is disabled, with a short reason under it ("Needs a game plugin.") instead of a generic error.
+  - **Schedule tab:** keeps its readiness checklist and its existing item wording. The item's link goes to `/events/setup#game-plugins`.
+  - **Finalize qualification:** it lives only inside the Matches tab, so the Matches panel already replaces it. No separate change is needed.
   - **Skills settings on Event Setup:** stay disabled, with the shared wording.
 - **Unchanged:** dashboard, teams, divisions, sessions list and detail header, check-in, fields, role passwords, server info, and judged awards.
 
