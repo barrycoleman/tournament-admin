@@ -85,6 +85,14 @@ describe("WinnerDialog", () => {
     expect(screen.getAllByRole("radio")).toHaveLength(1);
   });
 
+  it("keeps the search box inside its field, so the field's spacing sits above the team list", async () => {
+    renderDialog();
+    await screen.findByRole("radiogroup", { name: "Teams" });
+    const field = screen.getByLabelText("Find a team").parentElement!;
+    expect(field).toHaveClass("field");
+    expect(within(field).getByText("Find a team")).toHaveClass("field__label");
+  });
+
   it("saves the chosen judged winner", async () => {
     const onClose = renderDialog();
     fireEvent.click(await screen.findByRole("radio", { name: /101 Alpha/ }));

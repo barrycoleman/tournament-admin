@@ -126,6 +126,9 @@ test.describe.serial("awards", () => {
     await card(page, "Excellence Award").getByRole("button", { name: /^Choose winner/ }).click();
     const dialog = page.getByRole("alertdialog", { name: "Choose the winner of Excellence Award" });
     await dialog.getByLabel("Find a team").fill("T3");
+    const searchBox = await dialog.getByLabel("Find a team").boundingBox();
+    const teamList = await dialog.getByRole("radiogroup", { name: "Teams" }).boundingBox();
+    expect(teamList!.y - (searchBox!.y + searchBox!.height)).toBeGreaterThanOrEqual(12);
     await dialog.getByRole("radio", { name: /T3 Team Three/ }).check();
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(card(page, "Excellence Award").getByText("T3 Team Three")).toBeVisible();

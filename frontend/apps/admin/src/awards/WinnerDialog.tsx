@@ -89,10 +89,12 @@ export function WinnerDialog({
   return (
     <Modal labelledBy={headingId} onCancel={() => !save.isPending && onClose()}>
       <h2 id={headingId}>{heading}</h2>
-      <label className="field" htmlFor={searchId}>
-        <span className="field__label">{t("awards.winner.searchLabel")}</span>
-      </label>
-      <input id={searchId} className="input" value={search} data-autofocus onChange={(e) => setSearch(e.target.value)} />
+      <div className="field">
+        <label className="field__label" htmlFor={searchId}>
+          {t("awards.winner.searchLabel")}
+        </label>
+        <input id={searchId} className="input" value={search} data-autofocus onChange={(e) => setSearch(e.target.value)} />
+      </div>
       <div role={mode === "judged" ? "radiogroup" : "group"} aria-label={t("awards.winner.teamsLabel")} className="list-plain">
         {shown.map((team) => {
           const warning = history.data ? judgedWarning(history.data, team.id, award.id, sessionId) : null;
