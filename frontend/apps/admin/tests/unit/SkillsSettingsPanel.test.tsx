@@ -20,7 +20,7 @@ const TYPES = [
 ];
 
 function event(game_plugin_name: string | null): EventRead {
-  return { id: 1, name: "League", active_session_id: null, game_plugin_name, created_at: "2026-10-08T00:00:00Z" };
+  return { id: 1, name: "League", active_session_id: null, game_plugin_name, game_plugin_locked: false, created_at: "2026-10-08T00:00:00Z" };
 }
 
 function stub(

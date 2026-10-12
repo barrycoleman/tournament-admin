@@ -656,5 +656,12 @@
   "judge": {
     "noActiveSession": "No session is active. Ask an admin to set the active session.",
     "loading": "Loading…"
+  },
+  "gamePlugin": {
+    "banner": "Choose a game plugin to set up scheduling, matches, rankings and skills.",
+    "bannerLink": "Choose a game plugin",
+    "needsAdmin": "This needs a game plugin.",
+    "needsAdminLink": "Choose one in Event Setup",
+    "needsOther": "The organizer hasn't chosen a game plugin yet."
   }
 }

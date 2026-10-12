@@ -5,6 +5,7 @@ export interface EventRead {
   name: string;
   active_session_id: number | null;
   game_plugin_name: string | null;
+  game_plugin_locked: boolean;
   created_at: string;
 }
 
@@ -308,4 +309,17 @@ export interface TeamAwardEntry {
 export interface TeamAwardHistory {
   team_id: number;
   awards: TeamAwardEntry[];
+}
+
+export interface AwardNeedingAttention {
+  award_id: number;
+  session_id: number;
+  session_label: string;
+  name: string;
+  reason: "unavailable" | "unknown_skills_type";
+}
+
+export interface GamePluginChangePreview {
+  would_reset: { skills_enabled: boolean; session_attempt_overrides: number; ranking_settings: boolean };
+  awards_needing_attention: AwardNeedingAttention[];
 }

@@ -1,3 +1,4 @@
+import { GAME_PLUGIN_SECTION_PATH } from "../gamePlugin/useGamePlugin";
 import { useId, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -6,7 +7,7 @@ import type { ReadinessItem, ReadinessKey } from "./readiness";
 function fixLink(key: ReadinessKey, sessionId: number): string {
   switch (key) {
     case "gamePlugin":
-      return "/events/setup";
+      return GAME_PLUGIN_SECTION_PATH;
     case "timezone":
       return "/sessions";
     case "playingTimes":

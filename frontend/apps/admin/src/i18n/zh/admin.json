@@ -653,5 +653,12 @@
   "judge": {
     "noActiveSession": "当前没有进行中的场次。请管理员设置当前场次。",
     "loading": "加载中…"
+  },
+  "gamePlugin": {
+    "banner": "请选择游戏插件，以设置赛程、比赛、排名和技能挑战。",
+    "bannerLink": "选择游戏插件",
+    "needsAdmin": "此功能需要游戏插件。",
+    "needsAdminLink": "在赛事设置中选择",
+    "needsOther": "组织者尚未选择游戏插件。"
   }
 }

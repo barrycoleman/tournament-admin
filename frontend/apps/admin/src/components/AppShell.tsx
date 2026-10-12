@@ -6,6 +6,8 @@ import { apiRequest, useAuth } from "@tournament-admin/shared";
 import { TransientErrorBanner } from "./TransientErrorBanner";
 import { DebugEventPanel } from "./DebugEventPanel";
 import { ThemeToggle } from "./ThemeToggle";
+import { GamePluginBanner } from "../gamePlugin/GamePluginBanner";
+import { useGamePluginLiveUpdates } from "../gamePlugin/liveUpdates";
 import { useRestartPoll } from "../useRestartPoll";
 
 function navLinkClassName({ isActive }: { isActive: boolean }): string | undefined {
@@ -18,6 +20,7 @@ export function AppShell() {
   const { status: switchStatus, start: startSwitchPoll } = useRestartPoll(undefined, "picker");
   const navRef = useRef<HTMLElement | null>(null);
   const location = useLocation();
+  useGamePluginLiveUpdates();
 
   // On the collapsed mobile nav (a horizontal scrollable strip, see
   // components.css's 720px breakpoint), the active destination can start
@@ -64,6 +67,7 @@ export function AppShell() {
         </div>
       </header>
       <TransientErrorBanner />
+      <GamePluginBanner />
       {switchMutation.isError && (
         <p className="alert alert-danger" role="alert">
           {t("errors.generic")}

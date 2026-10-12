@@ -2,6 +2,7 @@ import { createBrowserRouter, redirect } from "react-router-dom";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { indexLoader } from "./routeGuards";
 import type { EventRead } from "./types";
+import { RequiresGamePlugin } from "./gamePlugin/NeedsGamePlugin";
 import { EventsNewRoute } from "./routes/EventsNewRoute";
 import { LoginRoute } from "./routes/LoginRoute";
 import { PickerRoute } from "./routes/PickerRoute";
@@ -123,7 +124,7 @@ export const router = createBrowserRouter([
       { path: "divisions", element: <DivisionsRoute /> },
       { path: "teams", element: <TeamsRoute /> },
       { path: "sessions", element: <SessionsRoute /> },
-      { path: "rankings", element: <SeasonRankingsRoute /> },
+      { path: "rankings", element: <RequiresGamePlugin><SeasonRankingsRoute /></RequiresGamePlugin> },
       { path: "checkin", element: <FrontDeskCheckinRoute /> },
       {
         path: "judge",
@@ -131,7 +132,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, loader: () => redirect("/judge/awards") },
           { path: "awards", element: <JudgeAwardsRoute /> },
-          { path: "rankings", element: <SessionRankingsRoute /> },
+          { path: "rankings", element: <RequiresGamePlugin><SessionRankingsRoute /></RequiresGamePlugin> },
         ],
       },
       {
@@ -145,9 +146,9 @@ export const router = createBrowserRouter([
           { path: "checkin", element: <SessionCheckinRoute /> },
           { path: "fields", element: <SessionFieldsRoute /> },
           { path: "schedule", element: <SessionScheduleRoute /> },
-          { path: "matches", element: <SessionMatchesRoute /> },
-          { path: "skills", element: <SessionSkillsRoute /> },
-          { path: "rankings", element: <SessionRankingsRoute /> },
+          { path: "matches", element: <RequiresGamePlugin><SessionMatchesRoute /></RequiresGamePlugin> },
+          { path: "skills", element: <RequiresGamePlugin><SessionSkillsRoute /></RequiresGamePlugin> },
+          { path: "rankings", element: <RequiresGamePlugin><SessionRankingsRoute /></RequiresGamePlugin> },
           { path: "awards", element: <SessionAwardsRoute /> },
         ],
       },

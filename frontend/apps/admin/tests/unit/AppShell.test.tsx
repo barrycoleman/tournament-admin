@@ -16,7 +16,7 @@ vi.mock("@tournament-admin/shared", async (importOriginal) => {
   };
 });
 
-import { useAuth } from "@tournament-admin/shared";
+import { apiRequest, useAuth } from "@tournament-admin/shared";
 
 function renderShell() {
   const i18n = initI18n({ en: { translation: enAdmin } });
@@ -76,5 +76,20 @@ describe("AppShell role-gated navigation", () => {
     expect(screen.getByRole("link", { name: "Sessions" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Season rankings" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Check-In" })).not.toBeInTheDocument();
+  });
+
+  it("shows an admin the game plugin banner while no plugin is chosen", async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      role: "admin",
+      isAuthenticated: true,
+      login: vi.fn(),
+      logout: vi.fn(),
+    });
+    vi.mocked(apiRequest).mockResolvedValue({ game_plugin_name: null, game_plugin_locked: false } as never);
+    renderShell();
+
+    expect(
+      await screen.findByText("Choose a game plugin to set up scheduling, matches, rankings and skills.")
+    ).toBeInTheDocument();
   });
 });
