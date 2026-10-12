@@ -102,6 +102,23 @@ describe("SkillsSettingsPanel", () => {
     expect(await screen.findByText("Skills settings saved.")).toBeInTheDocument();
   });
 
+  it("takes new saved settings when they change underneath an untouched form", async () => {
+    const i18n = initI18n({ en: { translation: enAdmin } });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    stub("game", { enabled: true, attempts: {}, types: TYPES });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <SkillsSettingsPanel />
+        </I18nextProvider>
+      </QueryClientProvider>
+    );
+    expect(await screen.findByRole("switch", { name: "Run skills challenges" })).toBeChecked();
+    stub("game", { enabled: false, attempts: {}, types: TYPES });
+    await queryClient.invalidateQueries({ queryKey: ["skillsSettings"] });
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Run skills challenges" })).not.toBeChecked());
+  });
+
   it("shows a server refusal", async () => {
     stub(
       "sample_cooperative",

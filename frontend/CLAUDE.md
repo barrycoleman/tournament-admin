@@ -237,6 +237,8 @@ unit test under jsdom.
 
 **Awards** (`src/awards/`): the session Awards tab (`/sessions/:id/awards`) lists a session's awards in ceremony order with each slot's winners and status, and lets an admin add, edit, reorder, copy, delete, override, finalize and export them. `AwardsView` takes a `mode` (`admin` or `judge`) and a realtime `channelPath`, and refetches on `awards_changed` and on anything that moves a result (`AWARD_REFRESH_EVENTS`). Judges log into the same app and see only `/judge/awards` (judged awards, choose and clear winners), `/judge/rankings` (session rankings) and `/rankings`, always for the active session; `JudgeLayout` provides the session and the `/ws/active-session` channel, because the per-session channel is admin-only. `AuthenticatedLayout` sends a judge anywhere else back to `/judge/awards`.
 
+**Game plugin gating** (`src/gamePlugin/`): until the event has a game plugin, `useGamePlugin` reports none, `GamePluginBanner` (in the admin layout, hidden from judges) links to `/events/setup#game-plugins`, and `RequiresGamePlugin` swaps a screen for `NeedsGamePlugin` (an admin gets a link to Event Setup, anyone else a plain note). `router.tsx` wraps session Matches, Rankings and Skills, season `/rankings` and `/judge/rankings` in it; award forms disable the Performance kind and any source that cannot produce a winner. `AppShell` calls `useGamePluginLiveUpdates`, which refetches everything the plugin shapes on the `game_plugin_changed` broadcast, so open pages unlock live. Event Setup's plugin section has three states: nothing selected ("Select for this event"), selected and unused ("Switch to this" and "Clear selection", each first asking the server for a `dry_run` preview and confirming what will reset in an `alertdialog`), and in use (matches or skills attempts exist: no buttons, just the locked note). The skills settings form re-seeds from server values that change under it, because a plugin change resets them.
+
 ## Auth & token handling
 
 Both the access token and the rotating refresh token live in
@@ -291,7 +293,7 @@ chosen) starts its own backend and Vite server with
 `tests/e2e/fixtures/isolatedServer.ts`, as `cooperativeRankings.spec.ts`
 does on ports 8125/5185, `finalizeQualification.spec.ts` on 8127/5187, and
 `skillsChallenges.spec.ts` (the shipped sample game, with skills on) on
-8128/5188, and `awards.spec.ts` on 8129/5189. `zz_seasonRankings.spec.ts` runs last for the same
+8128/5188, `awards.spec.ts` on 8129/5189, and `gamePluginGating.spec.ts` on 8130/5190. `zz_seasonRankings.spec.ts` runs last for the same
 reason as `z_sessionSchedule.spec.ts`.
 
 `playwright.config.ts` uses `channel: "chrome"` — the machine's installed

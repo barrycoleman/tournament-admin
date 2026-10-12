@@ -38,6 +38,12 @@ function SkillsSettingsForm({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<SkillsSettingsDraft>(() => toSkillsDraft(settings));
+  // A plugin change resets the saved settings behind this form's back: take the new values unless the admin has edits in progress.
+  const [seen, setSeen] = useState(settings);
+  if (seen !== settings) {
+    if (JSON.stringify(draft) === JSON.stringify(toSkillsDraft(seen))) setDraft(toSkillsDraft(settings));
+    setSeen(settings);
+  }
   const [attempted, setAttempted] = useState(false);
   const errors = attemptsErrors(draft.attempts);
   const disabled = disabledReason !== null;
