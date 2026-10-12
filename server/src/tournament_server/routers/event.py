@@ -147,7 +147,7 @@ def set_active_session(
     broadcast_active_session(
         request.app, "active_session_changed", {"active_session_id": event.active_session_id}
     )
-    return event
+    return _event_read(db, event)
 
 
 def _change_game_plugin(

@@ -188,3 +188,13 @@ def test_a_change_broadcasts_on_every_channel(client):
         expected = {"game_plugin_name": "second-game"}
         assert next_event(session_socket, "game_plugin_changed")["data"] == expected
         assert next_event(active_socket, "game_plugin_changed")["data"] == expected
+
+
+def test_setting_the_active_session_reports_the_lock(client):
+    _event(client)
+    _select(client, "example-game")
+    _schedule_one_match(client)
+    session_id = create_session(client, "Another day")
+    response = client.post("/api/event/active-session", json={"session_id": session_id})
+    assert response.status_code == 200, response.text
+    assert response.json()["game_plugin_locked"] is True
