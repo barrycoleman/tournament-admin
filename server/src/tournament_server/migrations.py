@@ -76,7 +76,24 @@ def _backup_database(engine: Engine, db_path: str) -> None:
     shutil.copy2(db_path, _backup_path(db_path, dt.datetime.now(dt.UTC)))
 
 
+def _older_build_error(db_path: str) -> SchemaMismatchError:
+    return SchemaMismatchError(
+        f"{db_path} was made by an older build whose tables don't match this one. "
+        "Until the first release, schema changes edit the single baseline migration "
+        "instead of adding new ones, so there is no upgrade path for this file. "
+        "If it holds no data you need, delete it (or start a new tournament) and restart."
+    )
+
+
 def ensure_schema_current(engine: Engine, db_path: str) -> MigrationOutcome:
+    """Bring the database to the head revision, or refuse it.
+
+    Until the first release there is a single baseline migration that is edited
+    in place, so a revision id alone doesn't prove a file's tables are current:
+    a file at head is still compared with the models, and a file stamped at a
+    revision that no longer exists (from before the squash) is restamped if its
+    tables match and refused otherwise.
+    """
     config = _make_alembic_config(db_path)
     script = ScriptDirectory.from_config(config)
     head_revision = script.get_current_head()
@@ -100,7 +117,16 @@ def ensure_schema_current(engine: Engine, db_path: str) -> MigrationOutcome:
         )
 
     if current_heads == (head_revision,):
+        if not _reflected_schema_matches_models(engine):
+            raise _older_build_error(db_path)
         return MigrationOutcome.ALREADY_CURRENT
+
+    known = {revision.revision for revision in script.walk_revisions()}
+    if not set(current_heads) <= known:
+        if not _reflected_schema_matches_models(engine):
+            raise _older_build_error(db_path)
+        command.stamp(config, "head", purge=True)
+        return MigrationOutcome.STAMPED_BASELINE
 
     _backup_database(engine, db_path)
     command.upgrade(config, "head")

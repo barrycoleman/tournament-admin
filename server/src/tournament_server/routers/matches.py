@@ -78,7 +78,7 @@ def _to_match_read(match: Match, db: Session) -> MatchRead:
         # -- that contract stays. But this function runs once per match
         # in GET /api/matches's list, so letting the ValueError escape
         # here turns one bad row (e.g. a database that reached this state
-        # some other way than the c9d34b7a1f02 migration's own backfill)
+        # some other way than generate_bracket, which always sets it)
         # into a 500 for the whole match list. Degrade to a label with no
         # matchup-number prefix rather than crash.
         label = f"F{match.match_number}"

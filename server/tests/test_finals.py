@@ -1793,7 +1793,7 @@ def test_get_matches_degrades_gracefully_when_matchup_number_is_null(client):
     # Final-review live-probe regression (Finding 1, integration half): a
     # BracketMatchup row with matchup_number == None -- e.g. a database
     # that reached this state some other way than through the
-    # c9d34b7a1f02 migration's own backfill -- must not crash the entire
+    # generate_bracket, which always sets it -- must not crash the entire
     # GET /api/matches list for its session. services/match_labeling.py's
     # match_label() is contractually strict about raising ValueError in
     # this situation (pinned by tests/test_match_labeling.py), but
