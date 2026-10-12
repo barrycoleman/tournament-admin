@@ -150,3 +150,14 @@ def test_csv_lists_every_winner_in_award_then_slot_order(client):
     raw = TestClient(client.app)
     judge = bearer(login_as(raw, "judge"))
     assert raw.get(f"/api/sessions/{saturday}/awards.csv", headers=judge).status_code == 200
+
+
+def test_csv_escapes_cells_a_spreadsheet_would_run_as_formulas(client):
+    first, second, teams, saturday, judged, champion = _setup(client)
+    client.patch(f"/api/teams/{teams['A1']}", json={"name": '=HYPERLINK("http://x","y")', "organization": "@SUM(1)"})
+    client.patch(f"/api/awards/{judged['id']}", json={"name": "+Spirit", "description": "-1 point"})
+    rows = list(csv.reader(io.StringIO(client.get(f"/api/sessions/{saturday}/awards.csv").text)))
+    assert rows[1][:2] == ["'+Spirit", "'-1 point"]
+    assert rows[2][5:7] == ["'=HYPERLINK(\"http://x\",\"y\")", "'@SUM(1)"]
+    # Ordinary values are untouched.
+    assert rows[2][:5] == ["Teamwork Champion", "", "Division 1", "1", "A1"]

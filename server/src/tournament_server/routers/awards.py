@@ -458,6 +458,12 @@ def unfinalize_awards(
 
 
 CSV_COLUMNS = ["award", "description", "division", "placement", "team_number", "team_name", "organization", "status"]
+FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_cell(value: str) -> str:
+    """Prefix a quote so a spreadsheet shows the value as text rather than running it as a formula."""
+    return f"'{value}" if value.startswith(FORMULA_PREFIXES) else value
 
 
 @router.get("/api/sessions/{session_id}/awards.csv")
@@ -473,9 +479,10 @@ def awards_csv(
         for slot in award.slots:
             base = [award.name, award.description or "", slot.division_name or "", placement]
             if not slot.winners:
-                writer.writerow([*base, "", "", "", slot.status])
+                writer.writerow([_csv_cell(cell) for cell in [*base, "", "", "", slot.status]])
             for team in slot.winners:
-                writer.writerow([*base, team.number, team.name, team.organization or "", slot.status])
+                row = [*base, team.number, team.name, team.organization or "", slot.status]
+                writer.writerow([_csv_cell(cell) for cell in row])
     return Response(
         content=out.getvalue(),
         media_type="text/csv",
