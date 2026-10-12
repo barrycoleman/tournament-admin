@@ -56,12 +56,13 @@ def test_select_game_plugin_rejects_unknown_plugin(client):
     assert response.status_code == 404
 
 
-def test_select_game_plugin_is_immutable(client):
+def test_selecting_the_same_game_plugin_again_changes_nothing(client):
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "example-game"})
 
     response = client.post("/api/event/game-plugin", json={"name": "example-game"})
-    assert response.status_code == 409
+    assert response.status_code == 200
+    assert response.json()["game_plugin_name"] == "example-game"
 
 
 def test_create_event_requires_password(tmp_path):

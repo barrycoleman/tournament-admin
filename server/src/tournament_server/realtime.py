@@ -78,6 +78,21 @@ def broadcast_session(app: "FastAPI", session_id: int, event: str, data: dict) -
     )
 
 
+def broadcast_all(app: "FastAPI", event: str, data: dict) -> None:
+    """Sends to every connected socket: the active-session channel and every
+    per-session channel. Dead sockets are left for their own channel's next
+    broadcast or unregister to clean up."""
+    registry = app.state.realtime
+    if registry.event_loop is None:
+        return
+    sockets = set(registry.active_session)
+    for subscribers in registry.by_session.values():
+        sockets |= subscribers
+    if not sockets:
+        return
+    asyncio.run_coroutine_threadsafe(_send_to_all(sockets, event, data), registry.event_loop)
+
+
 def broadcast_for_session(
     app: "FastAPI", db: "Session", session_id: int, event: str, data: dict
 ) -> None:

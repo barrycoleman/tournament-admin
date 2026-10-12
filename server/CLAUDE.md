@@ -257,8 +257,20 @@ write lives.
 
 ## Match & scoring
 
-An Event selects exactly one game plugin via `POST /api/event/game-plugin`
-— immutable once set. A Match has Alliances (created together via `POST
+An Event has at most one game plugin, chosen with `POST /api/event/game-plugin`
+(`{name}`), changed the same way, or cleared with `DELETE /api/event/game-plugin`
+(admin only). Choosing the current plugin again is a no-op (no reset, no
+broadcast). The plugin is locked once any match or skills attempt exists
+(`services/game_plugin.is_locked`, exposed as `EventRead.game_plugin_locked`);
+a change or clear then returns 409 `The game plugin can't be changed after
+matches are scheduled or skills attempts are recorded.` Any real change resets
+every plugin-specific setting: skills challenges off with default attempts,
+every session's attempt override cleared, and ranking settings back to the
+`RankingRules` defaults. Both routes take `?dry_run=true`, which writes nothing
+and returns a `GamePluginChangePreview` (`would_reset` counts plus
+`awards_needing_attention`, each with reason `unavailable` or
+`unknown_skills_type`) instead of an `EventRead`. A real change broadcasts
+`game_plugin_changed` to every socket. A Match has Alliances (created together via `POST
 /api/matches`), with the count determined by the game plugin's declared
 `alliance_count` (every game plugin so far declares 2). Each
 alliance holds one or more Teams through the `alliance_teams` join table.
@@ -404,7 +416,7 @@ Skills rankings are never stored. `GET /api/skills/rankings?tab={overall|<type>}
 
 ## Awards
 
-Awards are defined per session (`awards`, ordered by `position`). An award is `judged` (people choose the winner) or `performance` (its winners come from a source at a placement). `scope` is `event` (one slot) or `division` (one slot per division in `division_ids`; `[]` means every division). Sources live in `services/award_sources.py`'s `SOURCES` registry: `teamwork_ranking` (stored `Ranking` rows; `basis` session or season), `finals` (the session's newest bracket for the division; score chase by `FinalsResult.rank`, provisional until complete; single elimination by the round an alliance lost in, then seed), `skills_overall` and `skills_type` (`services/skills.compute_rankings`, filtered to the division and renumbered). In a single-division event the schedule, rankings and finals carry no division id, so for the sole division `teamwork_ranking` and `finals` also match null-division rows (`award_sources._division_match`). Teamwork ranking and finals require division scope; finals require session basis. Automatic winners are computed on read and stored only when an admin finalizes the session (`sessions.awards_finalized_at`), as `award_winners` rows with origin `finalized`; judged entries and admin overrides are stored as `judged` and `override` rows. While a session's awards are finalized, every award write for it returns 409 until `POST .../awards/unfinalize`, which deletes only the `finalized` rows. Admins do everything; judges may set and clear judged slots only (`PUT/DELETE /api/awards/{id}/slots/{division id|event}`); every role can read the awards, the team history, and `GET /api/sessions/{id}/awards.csv`. Every write broadcasts `awards_changed {session_id}` with `broadcast_for_session`.
+Awards are defined per session (`awards`, ordered by `position`). An award is `judged` (people choose the winner) or `performance` (its winners come from a source at a placement). `scope` is `event` (one slot) or `division` (one slot per division in `division_ids`; `[]` means every division). Sources live in `services/award_sources.py`'s `SOURCES` registry: `teamwork_ranking` (stored `Ranking` rows; `basis` session or season), `finals` (the session's newest bracket for the division; score chase by `FinalsResult.rank`, provisional until complete; single elimination by the round an alliance lost in, then seed), `skills_overall` and `skills_type` (`services/skills.compute_rankings`, filtered to the division and renumbered). In a single-division event the schedule, rankings and finals carry no division id, so for the sole division `teamwork_ranking` and `finals` also match null-division rows (`award_sources._division_match`). Teamwork ranking and finals require division scope; finals require session basis. Automatic winners are computed on read and stored only when an admin finalizes the session (`sessions.awards_finalized_at`), as `award_winners` rows with origin `finalized`; judged entries and admin overrides are stored as `judged` and `override` rows. While a session's awards are finalized, every award write for it returns 409 until `POST .../awards/unfinalize`, which deletes only the `finalized` rows. Admins do everything; judges may set and clear judged slots only (`PUT/DELETE /api/awards/{id}/slots/{division id|event}`); every role can read the awards, the team history, and `GET /api/sessions/{id}/awards.csv`. Every write broadcasts `awards_changed {session_id}` with `broadcast_for_session`. A performance award can only be created or edited when it can ever have a winner (`awards.availability_error`): a game plugin must be selected, and skills sources need skills challenges on (event-scope skills awards get their own detail); changing the game plugin lists the awards this affects in the dry-run preview.
 
 ## Finals
 
@@ -874,6 +886,9 @@ truth for that richer shape):
   `broadcast_for_session`), on finalize and reopen.
 - `awards_changed` — `{session_id}` (via `broadcast_for_session`), after any
   award write, finalize or unfinalize.
+- `game_plugin_changed` — `{game_plugin_name}` (null when cleared), sent to
+  every socket (active-session and every per-session channel, via
+  `broadcast_all`), after the event's game plugin is changed or cleared.
 - `finals_changed` — `{session_id, bracket_id}` (via `broadcast_for_session`),
   after `POST /api/finals/start`, each `POST /api/finals/{id}/pick`,
   `POST /api/finals/{id}/alliances/{alliance_id}/unavailable` and

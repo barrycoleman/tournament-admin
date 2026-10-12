@@ -21,6 +21,7 @@ class EventRead(BaseModel):
     name: str
     active_session_id: int | None
     game_plugin_name: str | None
+    game_plugin_locked: bool = False
     created_at: dt.datetime
 
 
@@ -38,3 +39,22 @@ class MatchFormatRead(BaseModel):
     alliance_count: int
     match_duration_seconds: int
     default_cycle_time_seconds: int | None = None
+
+
+class WouldReset(BaseModel):
+    skills_enabled: bool
+    session_attempt_overrides: int
+    ranking_settings: bool
+
+
+class AwardNeedingAttention(BaseModel):
+    award_id: int
+    session_id: int
+    session_label: str
+    name: str
+    reason: str  # "unavailable" | "unknown_skills_type"
+
+
+class GamePluginChangePreview(BaseModel):
+    would_reset: WouldReset
+    awards_needing_attention: list[AwardNeedingAttention]
