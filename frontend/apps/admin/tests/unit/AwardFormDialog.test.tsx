@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initI18n } from "@tournament-admin/shared";
@@ -95,7 +95,9 @@ describe("AwardFormDialog availability", () => {
     const source = screen.getByRole("combobox", { name: "Winner comes from" });
     expect(source).toHaveDisplayValue("Overall skills (not available)");
     fireEvent.change(screen.getByLabelText("Award name"), { target: { value: "Robot Skills Champion" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save award" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save award" }));
+    });
     await vi.waitFor(() =>
       expect(apiRequest).toHaveBeenCalledWith(
         `/api/awards/${SKILLS_EVENT_AWARD.id}`,
