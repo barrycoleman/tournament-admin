@@ -1,38 +1,28 @@
-import { useEffect, useRef, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import QRCode from "qrcode";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
+import { apiErrorMessage } from "../apiErrorMessage";
+import { GamePluginChangeDialog } from "../gamePlugin/GamePluginChangeDialog";
+import { useGamePlugin } from "../gamePlugin/useGamePlugin";
 import { RankingSettingsPanel } from "../rankings/RankingSettingsPanel";
 import { RANKING_SETTINGS_KEY } from "../rankings/useRankingSettings";
 import { SkillsSettingsPanel } from "../skills/SkillsSettingsPanel";
 import { SKILLS_SETTINGS_KEY } from "../skills/useSkillsSettings";
-import type { EventRead, PluginSummary, ServerInfo } from "../types";
+import type { EventRead, GamePluginChangePreview, PluginSummary, ServerInfo } from "../types";
 
-function PluginList({
+function InstallPluginField({
   kind,
-  headingKey,
-  installLabelKey,
-  installSubmitKey,
+  labelKey,
+  submitKey,
 }: {
   kind: "games" | "schedulers";
-  headingKey: string;
-  installLabelKey: string;
-  installSubmitKey: string;
+  labelKey: string;
+  submitKey: string;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const queryKey = ["plugins", kind];
-
-  const { data: plugins } = useQuery({
-    queryKey,
-    queryFn: () => apiRequest<PluginSummary[]>(`/api/plugins/${kind}`),
-  });
-
-  const { data: event } = useQuery({
-    queryKey: ["event"],
-    queryFn: () => apiRequest<EventRead>("/api/event"),
-  });
 
   const installMutation = useMutation({
     mutationFn: (file: File) => {
@@ -44,20 +34,7 @@ function PluginList({
         isFormData: true,
       });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
-  });
-
-  const selectMutation = useMutation({
-    mutationFn: (name: string) =>
-      apiRequest<EventRead>("/api/event/game-plugin", {
-        method: "POST",
-        body: { name },
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event"] });
-      queryClient.invalidateQueries({ queryKey: RANKING_SETTINGS_KEY });
-      queryClient.invalidateQueries({ queryKey: SKILLS_SETTINGS_KEY });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["plugins", kind] }),
   });
 
   function handleFileChange(changeEvent: ChangeEvent<HTMLInputElement>) {
@@ -66,32 +43,10 @@ function PluginList({
   }
 
   return (
-    <section className="panel">
-      <h2>{t(headingKey)}</h2>
-      <ul className="list-plain">
-        {plugins?.map((plugin) => (
-          <li className="list-row" key={plugin.name}>
-            <span className="list-row__main">
-              {plugin.display_name} ({plugin.version})
-            </span>
-            {kind === "games" &&
-              (event?.game_plugin_name === plugin.name ? (
-                <span className="badge badge-neutral">{t("eventSetup.selectedLabel")}</span>
-              ) : (
-                <button
-                  className="btn btn-small"
-                  onClick={() => selectMutation.mutate(plugin.name)}
-                  disabled={Boolean(event?.game_plugin_name) || selectMutation.isPending}
-                >
-                  {t("eventSetup.selectSubmit")}
-                </button>
-              ))}
-          </li>
-        ))}
-      </ul>
+    <>
       <div className="field">
         <label className="field__label" htmlFor={`install-${kind}`}>
-          {t(installLabelKey)}
+          {t(labelKey)}
         </label>
         <input
           className="input"
@@ -108,7 +63,181 @@ function PluginList({
             : t("errors.pluginInstallFailed")}
         </p>
       )}
-      <span aria-hidden="true">{t(installSubmitKey)}</span>
+      <span aria-hidden="true">{t(submitKey)}</span>
+    </>
+  );
+}
+
+function PluginList({
+  headingKey,
+  installLabelKey,
+  installSubmitKey,
+}: {
+  headingKey: string;
+  installLabelKey: string;
+  installSubmitKey: string;
+}) {
+  const { t } = useTranslation();
+  const { data: plugins } = useQuery({
+    queryKey: ["plugins", "schedulers"],
+    queryFn: () => apiRequest<PluginSummary[]>("/api/plugins/schedulers"),
+  });
+
+  return (
+    <section className="panel">
+      <h2>{t(headingKey)}</h2>
+      <ul className="list-plain">
+        {plugins?.map((plugin) => (
+          <li className="list-row" key={plugin.name}>
+            <span className="list-row__main">
+              {plugin.display_name} ({plugin.version})
+            </span>
+          </li>
+        ))}
+      </ul>
+      <InstallPluginField kind="schedulers" labelKey={installLabelKey} submitKey={installSubmitKey} />
+    </section>
+  );
+}
+
+interface PendingChange {
+  /** null means clear the selection. */
+  target: { name: string; displayName: string } | null;
+  preview: GamePluginChangePreview;
+}
+
+function GamePluginSection() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const { selected, locked, name: selectedName } = useGamePlugin();
+  const [pending, setPending] = useState<PendingChange | null>(null);
+  const [sectionError, setSectionError] = useState<string | null>(null);
+
+  const { data: plugins } = useQuery({
+    queryKey: ["plugins", "games"],
+    queryFn: () => apiRequest<PluginSummary[]>("/api/plugins/games"),
+  });
+
+  function refreshAfterChange() {
+    for (const queryKey of [
+      ["event"],
+      RANKING_SETTINGS_KEY,
+      SKILLS_SETTINGS_KEY,
+      ["matchFormat"],
+      ["awards"],
+    ]) {
+      queryClient.invalidateQueries({ queryKey });
+    }
+  }
+
+  const selectMutation = useMutation({
+    mutationFn: (name: string) =>
+      apiRequest<EventRead>("/api/event/game-plugin", { method: "POST", body: { name } }),
+    onSuccess: () => {
+      setSectionError(null);
+      refreshAfterChange();
+    },
+    onError: (error) => setSectionError(apiErrorMessage(error, t("errors.generic"))),
+  });
+
+  const dryRunMutation = useMutation({
+    mutationFn: (target: PendingChange["target"]) =>
+      target
+        ? apiRequest<GamePluginChangePreview>("/api/event/game-plugin?dry_run=true", {
+            method: "POST",
+            body: { name: target.name },
+          })
+        : apiRequest<GamePluginChangePreview>("/api/event/game-plugin?dry_run=true", {
+            method: "DELETE",
+          }),
+    onSuccess: (preview, target) => {
+      setSectionError(null);
+      setPending({ target, preview });
+    },
+    onError: (error) => setSectionError(apiErrorMessage(error, t("errors.generic"))),
+  });
+
+  const changeMutation = useMutation({
+    mutationFn: (target: PendingChange["target"]) =>
+      target
+        ? apiRequest<EventRead>("/api/event/game-plugin", {
+            method: "POST",
+            body: { name: target.name },
+          })
+        : apiRequest<EventRead>("/api/event/game-plugin", { method: "DELETE" }),
+    onSuccess: () => {
+      setPending(null);
+      refreshAfterChange();
+    },
+  });
+
+  return (
+    <section className="panel" id="game-plugins">
+      <h2>{t("eventSetup.gamePluginsHeading")}</h2>
+      {!selected && <p className="field__hint">{t("eventSetup.chooseFirstHint")}</p>}
+      <ul className="list-plain">
+        {plugins?.map((plugin) => (
+          <li className="list-row" key={plugin.name}>
+            <span className="list-row__main">
+              {plugin.display_name} ({plugin.version})
+            </span>
+            {selectedName === plugin.name ? (
+              <span className="badge badge-neutral">{t("eventSetup.selectedLabel")}</span>
+            ) : !selected ? (
+              <button
+                className="btn btn-small"
+                onClick={() => selectMutation.mutate(plugin.name)}
+                disabled={selectMutation.isPending}
+              >
+                {t("eventSetup.selectSubmit")}
+              </button>
+            ) : !locked ? (
+              <button
+                className="btn btn-small"
+                onClick={() =>
+                  dryRunMutation.mutate({ name: plugin.name, displayName: plugin.display_name })
+                }
+                disabled={dryRunMutation.isPending}
+              >
+                {t("eventSetup.switchSubmit")}
+              </button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {selected && !locked && (
+        <button
+          className="btn btn-small"
+          onClick={() => dryRunMutation.mutate(null)}
+          disabled={dryRunMutation.isPending}
+        >
+          {t("eventSetup.clearSubmit")}
+        </button>
+      )}
+      {selected && locked && <p className="field__hint">{t("eventSetup.lockedNote")}</p>}
+      {sectionError && (
+        <p className="alert alert-danger" role="alert">
+          {sectionError}
+        </p>
+      )}
+      <InstallPluginField
+        kind="games"
+        labelKey="eventSetup.installLabel"
+        submitKey="eventSetup.installGameSubmit"
+      />
+      {pending && (
+        <GamePluginChangeDialog
+          target={pending.target}
+          preview={pending.preview}
+          isPending={changeMutation.isPending}
+          error={changeMutation.isError ? apiErrorMessage(changeMutation.error, t("errors.generic")) : null}
+          onConfirm={() => changeMutation.mutate(pending.target)}
+          onCancel={() => {
+            changeMutation.reset();
+            setPending(null);
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -155,14 +284,8 @@ export function EventSetupRoute() {
   return (
     <div>
       <h1>{t("eventSetup.heading")}</h1>
+      <GamePluginSection />
       <PluginList
-        kind="games"
-        headingKey="eventSetup.gamePluginsHeading"
-        installLabelKey="eventSetup.installLabel"
-        installSubmitKey="eventSetup.installGameSubmit"
-      />
-      <PluginList
-        kind="schedulers"
         headingKey="eventSetup.schedulerPluginsHeading"
         installLabelKey="eventSetup.installLabel"
         installSubmitKey="eventSetup.installSchedulerSubmit"
