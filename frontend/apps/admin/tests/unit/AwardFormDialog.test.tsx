@@ -41,10 +41,10 @@ const SKILLS_EVENT_AWARD: AwardRead = {
   ],
 };
 
-function renderDialog({ award, availability }: { award: AwardRead | null; availability: SourceAvailability }) {
+function dialogTree({ award, availability }: { award: AwardRead | null; availability: SourceAvailability }) {
   const i18n = initI18n({ en: { translation: enAdmin } });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  return (
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
         <AwardFormDialog
@@ -58,6 +58,10 @@ function renderDialog({ award, availability }: { award: AwardRead | null; availa
       </I18nextProvider>
     </QueryClientProvider>
   );
+}
+
+function renderDialog(props: { award: AwardRead | null; availability: SourceAvailability }) {
+  return render(dialogTree(props));
 }
 
 beforeEach(() => {
@@ -104,5 +108,45 @@ describe("AwardFormDialog availability", () => {
         expect.objectContaining({ method: "PATCH", body: expect.objectContaining({ source: "skills_overall" }) })
       )
     );
+  });
+
+  it("drops the not available option once another source is chosen", () => {
+    renderDialog({ award: SKILLS_EVENT_AWARD, availability: { pluginSelected: true, skillsEnabled: false } });
+    fireEvent.click(screen.getByRole("radio", { name: "Per division" }));
+    const source = screen.getByRole("combobox", { name: "Winner comes from" });
+    expect(source).toHaveDisplayValue("Teamwork ranking");
+    const labels = within(source).getAllByRole("option").map((o) => o.textContent);
+    expect(labels).toEqual(["Teamwork ranking", "Finals placement"]);
+  });
+
+  it("restores the original source when scope is switched away and back", async () => {
+    renderDialog({ award: SKILLS_EVENT_AWARD, availability: { pluginSelected: true, skillsEnabled: false } });
+    fireEvent.click(screen.getByRole("radio", { name: "Per division" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Event-wide (one winner)" }));
+    expect(screen.getByRole("combobox", { name: "Winner comes from" })).toHaveDisplayValue(
+      "Overall skills (not available)"
+    );
+    fireEvent.change(screen.getByLabelText("Award name"), { target: { value: "Renamed" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save award" }));
+    });
+    await vi.waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith(
+        `/api/awards/${SKILLS_EVENT_AWARD.id}`,
+        expect.objectContaining({
+          method: "PATCH",
+          body: expect.objectContaining({ source: "skills_overall", scope: "event" }),
+        })
+      )
+    );
+  });
+
+  it("selects an available source when Performance is chosen over a stale one", () => {
+    const { rerender } = renderDialog({ award: null, availability: { pluginSelected: true, skillsEnabled: false } });
+    // event scope has no sources while skills are off, so the draft keeps teamwork_ranking
+    fireEvent.click(screen.getByRole("radio", { name: "Event-wide (one winner)" }));
+    rerender(dialogTree({ award: null, availability: { pluginSelected: true, skillsEnabled: true } }));
+    fireEvent.click(screen.getByRole("radio", { name: "Performance" }));
+    expect(screen.getByRole("combobox", { name: "Winner comes from" })).toHaveDisplayValue("Overall skills");
   });
 });

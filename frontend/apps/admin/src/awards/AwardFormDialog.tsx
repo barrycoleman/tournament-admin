@@ -71,11 +71,17 @@ export function AwardFormDialog({
   const originalKind = award?.kind ?? null;
   const sources = availableSources(draft.scope, availability);
   const keptSource: AwardSource | null =
-    originalSource !== null && !sources.includes(originalSource) && draft.scope === award?.scope ? originalSource : null;
+    originalSource !== null && !sources.includes(originalSource) && draft.scope === award?.scope && draft.source === originalSource
+      ? originalSource
+      : null;
   const blockedReason = performanceBlockedReason(draft.scope, availability);
   const performanceDisabled = blockedReason !== null && originalKind !== "performance";
   const keptSkillsType =
-    award?.skills_type && !skillsTypes.some((type) => type.key === award.skills_type) ? award.skills_type : null;
+    award?.skills_type &&
+    draft.skillsType === award.skills_type &&
+    !skillsTypes.some((type) => type.key === award.skills_type)
+      ? award.skills_type
+      : null;
 
   return (
     <Modal labelledBy={headingId} onCancel={() => !save.isPending && onClose()}>
@@ -112,7 +118,13 @@ export function AwardFormDialog({
                 name="kind"
                 checked={draft.kind === kind}
                 disabled={kind === "performance" && performanceDisabled}
-                onChange={() => set({ kind })}
+                onChange={() => {
+                  if (kind !== "performance") return set({ kind });
+                  const valid =
+                    sources.includes(draft.source) ||
+                    (draft.source === originalSource && draft.scope === award?.scope);
+                  set({ kind, source: valid ? draft.source : (sources[0] ?? draft.source) });
+                }}
               />{" "}
               {t(kind === "judged" ? "awards.form.kindJudged" : "awards.form.kindPerformance")}
             </label>
@@ -129,8 +141,16 @@ export function AwardFormDialog({
                 checked={draft.scope === scope}
                 onChange={() => {
                   const options = availableSources(scope, availability);
-                  const keep = options.includes(draft.source) || (originalSource === draft.source && scope === award?.scope);
-                  const patch: Partial<AwardDraft> = { scope, source: keep ? draft.source : (options[0] ?? draft.source) };
+                  const restore = !options.includes(draft.source) && scope === award?.scope && originalSource !== null;
+                  const patch: Partial<AwardDraft> = {
+                    scope,
+                    source: options.includes(draft.source)
+                      ? draft.source
+                      : restore
+                        ? originalSource
+                        : (options[0] ?? draft.source),
+                  };
+                  if (restore && award?.skills_type) patch.skillsType = award.skills_type;
                   if (draft.kind === "performance" && originalKind !== "performance" && performanceBlockedReason(scope, availability) !== null) {
                     patch.kind = "judged";
                   }
