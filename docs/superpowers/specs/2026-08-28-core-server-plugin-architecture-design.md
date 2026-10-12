@@ -142,6 +142,7 @@ field.
 - **Device** — Raspberry Pi / unattended kiosk displays only. `device_id,
   name, ip, display_type (audience / pit / field-queue),
   assigned_field_or_division, last_seen`.
+  *Revised direction (2026-10-12): displays are any browser (Smart TV, laptop, phone), paired by code and assigned to display groups. See §10, "Gaps found in a 2026-10-12 review".*
 - **ScoringDevice** — tablets/phones used for scoring. See §4.
 - **Asset** — uploaded images: `purpose (sponsor_logo / event_banner /
   etc.), content_type, data (blob), width, height, uploaded_at`. The
@@ -155,6 +156,7 @@ field.
 is given a Pi's IP, then the admin assigns it a type, field/division, and
 name from the admin UI; the Pi is told what to display and reconnects
 automatically after network drops or power cycles.
+*Revised direction (2026-10-12): any browser device pairs with a short code or QR code that an admin confirms, and the same pairing may serve every device role. See §10.*
 
 **Scoring devices** (`ScoringDevice` table, separate from `Device`):
 self-registering. When a browser opens the scoring page, the server
@@ -472,3 +474,82 @@ third parties — deliberately deferred, not accidentally omitted.
     the API layer (bearer-token-based), or both — and how a JWT's
     signing key gets managed for a single-instance local server with
     no separate secrets infrastructure.
+- **Gaps found in a 2026-10-12 review against a closed-source reference
+  tool's user guide.** None of these is designed yet; each needs its own
+  brainstorm and spec. Grouped roughly by the subsystem it belongs to.
+  - **Displays are any browser, paired by code (revises §3 `Device` and
+    §4).** Displays are not limited to Raspberry Pis that an admin
+    discovers by IP. Any Smart TV, laptop or phone browser opens the
+    server address and shows a short pairing code (no ambiguous
+    characters, expires after a few minutes) plus a QR code; an admin
+    enters or scans it and picks the device's role. The device stores
+    nothing and keeps its authorization in browser storage across
+    reboots. The same pairing should serve every device role (scorer,
+    check-in, judge, display), replacing or extending today's
+    `ScoringDevice` admit flow, with rename, disable, re-enable and
+    delete, and idle auto-disable for operator devices (displays exempt).
+  - **Display groups and screens.** A display device follows exactly one
+    group: one audience group (always present, plays ceremony slides),
+    one field group per field (created and renamed with the field, which
+    fits skills fields and field-bound scorers in the live-scoring
+    work), and any number of admin-named remote groups (pit TVs,
+    hallway). The admin picks each group's current screen from the admin
+    UI. Screens switch automatically on match events: queueing a match
+    shows its field's intro/timer, starting a match moves the audience
+    group there, "show to teams" shows a score review on the field
+    group, "send to results" shows the result on the audience group.
+    Each group has a kiosk URL for an unpaired browser or streaming
+    software, and an optional streaming overlay mode on a chroma-key or
+    transparent background. Candidate screens: match schedule, match
+    result, rankings (teamwork and skills), queueing, alliance
+    selection, bracket, inspection progress, logos, slides, blank, and
+    per field: timer, match intro ("starts in" / "late by"), score
+    review.
+  - **Queueing.** A phone-friendly queue page listing unplayed matches
+    per field; a per-match "team is at the field" tick, separate from
+    session check-in, where an unticked team becomes a no-show; "queue
+    this match onto field X", optionally queueing the next match
+    automatically; and only one match running event-wide at a time.
+  - **Referee violations.** Notes, yellow cards and red cards (plus the
+    existing per-team DQ/no-show), each with team, match, notes, device
+    and time; a violations page; ranking recalculation on every change;
+    a repeated-red-card threshold making a team ineligible for alliance
+    selection, with an admin override; and indicators on field displays
+    that cue referees to check their devices.
+  - **Score history and the reveal flow.** Every saved version of a
+    score, with device and time, viewable and restorable (the audit log
+    already holds the data); hiding the running score from displays; a
+    "show to teams" score review at the field before "send to results".
+  - **Alliance selection.** Invitations a team can accept or decline (a
+    team that declines can't be invited again but can still captain),
+    undo, an eligibility list, a live alliance-selection display, and
+    printable selection signs.
+  - **Printouts.** Team list, check-in and inspection sheet, pit signs,
+    schedule by team, match list, rankings, bracket, a per-team referee
+    notes worksheet, award winners, the ceremony script and award
+    certificates.
+  - **Award ceremony.** A generated slide deck (an intro and a reveal
+    slide per award, plus custom intro, speaker and text slides), a
+    "take" control that puts a slide on the audience displays, and an
+    emcee script page on another device kept in step with the slides.
+    Extends the deferred winner-reveal mode in the awards spec.
+  - **Judged-award eligibility tracker.** A judges' page that checks
+    criteria for the top judged award (e.g. qualification and skills
+    rank within a cutoff), tracks engineering-notebook status, and lets
+    judges highlight teams during deliberation. The criteria are
+    game-specific, so they likely belong in the game plugin.
+  - **Team grade or age level.** Grade-specific awards, and rankings and
+    printouts split by grade. Optional coach contact details, stripped on
+    the server for roles that shouldn't see them.
+  - **League participation.** Whether a team that played too few
+    sessions should be flagged and ranked below the others in season
+    rankings.
+  - **Surrogate matches.** Extra matches that fill out a round when the
+    team count doesn't divide evenly and don't count for ranking; check
+    whether the scheduler plugins already cover this.
+  - **Already planned here but not built:** automatic interval backups
+    (§7; only the pre-migration backup exists), the server address as a
+    QR code and LAN discovery (above), sponsor logos from `Asset` (§3)
+    rotating on displays, inspection (`InspectionRecord`), and several
+    devices editing one live score (the deferred live-score preview,
+    §6).
