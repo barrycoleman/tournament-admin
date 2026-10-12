@@ -386,17 +386,17 @@
     "chooseFirstHint": "请先选择比赛。赛程、比赛场次、排名和技能挑战都取决于它。",
     "switchSubmit": "切换到此插件",
     "clearSubmit": "清除选择",
-    "lockedNote": "已锁定:比赛已排程或已记录技能挑战尝试。",
+    "lockedNote": "已锁定：比赛已排程或已记录技能挑战尝试。",
     "switchHeading": "切换到{{name}}?",
     "clearHeading": "清除比赛插件?",
-    "resetIntro": "这将重置属于当前比赛的设置:",
+    "resetIntro": "这将重置属于当前比赛的设置：",
     "resetSkills": "技能挑战将被关闭。",
     "resetOverrides_one": "为 {{count}} 个场次单独设置的技能尝试次数将恢复为默认值。",
     "resetOverrides_other": "为 {{count}} 个场次单独设置的技能尝试次数将恢复为默认值。",
     "resetRanking": "排名设置将恢复为默认值。",
     "resetNothing": "没有需要重置的设置。",
-    "awardsIntro": "在您修改这些奖项之前,它们将无法选出获奖者:",
-    "awardItem": "{{session}}:{{name}}",
+    "awardsIntro": "在您修改这些奖项之前，它们将无法选出获奖者：",
+    "awardItem": "{{session}}：{{name}}",
     "switchConfirm": "切换插件",
     "clearConfirm": "清除插件",
     "cancel": "取消",
@@ -627,8 +627,8 @@
       "basisSeason": "本赛季至今",
       "placementLabel": "名次",
       "save": "保存奖项",
-      "needsPlugin": "需要先选择游戏插件。",
-      "eventNeedsSkills": "全场奖项的成绩来自技能挑战赛，而该功能目前已关闭。",
+      "needsPlugin": "需要先选择比赛插件。",
+      "eventNeedsSkills": "全赛事成绩奖项来自技能挑战赛，而技能挑战赛目前已关闭。",
       "notAvailable": "{{label}}（不可用）",
       "ruleChangeWarning": "更改获奖者的产生方式会清除该奖项已录入的获奖者。",
       "errors": {
@@ -675,10 +675,10 @@
     "loading": "加载中…"
   },
   "gamePlugin": {
-    "banner": "请选择游戏插件，以设置赛程、比赛、排名和技能挑战。",
-    "bannerLink": "选择游戏插件",
-    "needsAdmin": "此功能需要游戏插件。",
+    "banner": "请选择比赛插件，以设置赛程、比赛、排名和技能挑战。",
+    "bannerLink": "选择比赛插件",
+    "needsAdmin": "此功能需要比赛插件。",
     "needsAdminLink": "在赛事设置中选择",
-    "needsOther": "组织者尚未选择游戏插件。"
+    "needsOther": "组织者尚未选择比赛插件。"
   }
 }

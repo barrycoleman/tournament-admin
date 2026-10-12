@@ -26,7 +26,6 @@ from tournament_server.schemas.event import (
     GamePluginSelect,
     MatchFormatRead,
 )
-
 from tournament_server.services import game_plugin as game_plugin_service
 
 router = APIRouter(prefix="/api/event", tags=["event"])

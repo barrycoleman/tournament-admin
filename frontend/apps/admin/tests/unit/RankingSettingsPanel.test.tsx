@@ -4,6 +4,7 @@ import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initI18n } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
+import { RANKING_SETTINGS_KEY } from "../../src/rankings/useRankingSettings";
 import { RankingSettingsPanel } from "../../src/rankings/RankingSettingsPanel";
 import type { GameModel, RankingSettingsRead } from "../../src/types";
 
@@ -45,13 +46,16 @@ function stub(gameModel: GameModel | null, onPut: (body: unknown) => unknown = (
 function renderPanel() {
   const i18n = initI18n({ en: { translation: enAdmin } });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <I18nextProvider i18n={i18n}>
-        <RankingSettingsPanel />
-      </I18nextProvider>
-    </QueryClientProvider>
-  );
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <RankingSettingsPanel />
+        </I18nextProvider>
+      </QueryClientProvider>
+    ),
+  };
 }
 
 const puts = () =>
@@ -146,5 +150,33 @@ describe("RankingSettingsPanel", () => {
       season_drop_no_show: false,
       season_drop_dq: false,
     });
+  });
+
+  it("takes new server values when the settings change under an untouched form", async () => {
+    stub("cooperative_score");
+    const { queryClient } = renderPanel();
+    const sessionGroup = await screen.findByRole("group", { name: "Session rankings" });
+    expect(within(sessionGroup).getByLabelText("Drop a set number of lowest matches")).not.toBeChecked();
+    act(() => {
+      queryClient.setQueryData(RANKING_SETTINGS_KEY, {
+        ...settings("cooperative_score"),
+        session_drop_mode: "lowest",
+        session_drop_count: 4,
+        season_keep_best: 7,
+      });
+    });
+    await waitFor(() => expect(screen.getByLabelText("Drop a set number of lowest matches")).toBeChecked());
+    expect(screen.getByLabelText("Matches to drop")).toHaveValue("4");
+    expect(screen.getByLabelText("Keep best matches")).toHaveValue("7");
+  });
+
+  it("keeps the admin's edits when the settings change under a form with unsaved changes", async () => {
+    stub("cooperative_score");
+    const { queryClient } = renderPanel();
+    fireEvent.change(await screen.findByLabelText("Keep best matches"), { target: { value: "9" } });
+    await act(async () => {
+      queryClient.setQueryData(RANKING_SETTINGS_KEY, { ...settings("cooperative_score"), season_keep_best: 7 });
+    });
+    expect(screen.getByLabelText("Keep best matches")).toHaveValue("9");
   });
 });

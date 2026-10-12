@@ -85,12 +85,16 @@ def broadcast_all(app: "FastAPI", event: str, data: dict) -> None:
     registry = app.state.realtime
     if registry.event_loop is None:
         return
-    sockets = set(registry.active_session)
-    for subscribers in registry.by_session.values():
-        sockets |= subscribers
-    if not sockets:
-        return
-    asyncio.run_coroutine_threadsafe(_send_to_all(sockets, event, data), registry.event_loop)
+
+    # The registry is mutated on the event-loop thread, so the union is built there too.
+    async def _send() -> None:
+        sockets = set(registry.active_session)
+        for subscribers in registry.by_session.values():
+            sockets |= subscribers
+        if sockets:
+            await _send_to_all(sockets, event, data)
+
+    asyncio.run_coroutine_threadsafe(_send(), registry.event_loop)
 
 
 def broadcast_for_session(

@@ -130,14 +130,21 @@ function GamePluginSection() {
     }
   }
 
+  // The lock starts when matches are scheduled or a skills attempt is recorded, and neither broadcasts a plugin change,
+  // so a refusal means this tab is stale: refetch the event so it shows the locked note instead of the buttons.
+  function noteRefusal(error: unknown) {
+    setSectionError(apiErrorMessage(error, t("errors.generic")));
+    if (error instanceof ApiError && error.status === 409) {
+      queryClient.invalidateQueries({ queryKey: ["event"] });
+    }
+  }
+
   const selectMutation = useMutation({
     mutationFn: (name: string) =>
       apiRequest<EventRead>("/api/event/game-plugin", { method: "POST", body: { name } }),
-    onSuccess: () => {
-      setSectionError(null);
-      refreshAfterChange();
-    },
-    onError: (error) => setSectionError(apiErrorMessage(error, t("errors.generic"))),
+    onMutate: () => setSectionError(null),
+    onSuccess: () => refreshAfterChange(),
+    onError: noteRefusal,
   });
 
   const dryRunMutation = useMutation({
@@ -150,11 +157,9 @@ function GamePluginSection() {
         : apiRequest<GamePluginChangePreview>("/api/event/game-plugin?dry_run=true", {
             method: "DELETE",
           }),
-    onSuccess: (preview, target) => {
-      setSectionError(null);
-      setPending({ target, preview });
-    },
-    onError: (error) => setSectionError(apiErrorMessage(error, t("errors.generic"))),
+    onMutate: () => setSectionError(null),
+    onSuccess: (preview, target) => setPending({ target, preview }),
+    onError: noteRefusal,
   });
 
   const changeMutation = useMutation({
@@ -168,6 +173,11 @@ function GamePluginSection() {
     onSuccess: () => {
       setPending(null);
       refreshAfterChange();
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) {
+        queryClient.invalidateQueries({ queryKey: ["event"] });
+      }
     },
   });
 

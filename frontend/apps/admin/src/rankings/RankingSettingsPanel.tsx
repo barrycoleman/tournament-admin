@@ -24,6 +24,12 @@ function RankingSettingsForm({ initial }: { initial: RankingSettingsRead }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<SettingsDraft>(() => toDraft(initial));
+  // A plugin change resets the saved settings behind this form's back: take the new values unless the admin has edits in progress.
+  const [seen, setSeen] = useState(initial);
+  if (seen !== initial) {
+    if (JSON.stringify(draft) === JSON.stringify(toDraft(seen))) setDraft(toDraft(initial));
+    setSeen(initial);
+  }
   const [attempted, setAttempted] = useState(false);
   const errors = draftErrors(draft);
   const mutation = useMutation({

@@ -50,7 +50,11 @@ function mockServer(state: ServerState) {
     if (path === "/api/server-info") return { port: 8000, addresses: [] } as never;
     if (path.startsWith("/api/event/game-plugin")) {
       const dry = path.endsWith("dry_run=true");
-      if (dry && state.failWith) throw new ApiError(409, state.failWith);
+      if (dry && state.failWith) {
+        // A refusal means the plugin became locked behind this tab's back.
+        state.locked = true;
+        throw new ApiError(409, state.failWith);
+      }
       if (dry) return (state.preview ?? EMPTY_PREVIEW) as never;
       state.selected = method === "DELETE" ? null : (opts?.body?.name ?? null);
       return eventRead() as never;
@@ -215,5 +219,9 @@ describe("EventSetupRoute", () => {
       await screen.findByText("The game plugin can't be changed after matches are scheduled or skills attempts are recorded.")
     ).toBeInTheDocument();
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    // The refusal refetched the event, which now reports the lock: no more buttons, just the note.
+    expect(await screen.findByText("Locked because matches are scheduled or skills attempts are recorded.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Switch to this" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear selection" })).not.toBeInTheDocument();
   });
 });
