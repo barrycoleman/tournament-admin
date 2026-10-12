@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  allowedSources,
+  availableSources,
   draftError,
   draftFromAward,
   draftToBody,
   emptyDraft,
+  performanceBlockedReason,
   ruleChanged,
   ruleSummary,
 } from "../../src/awards/awardForm";
@@ -26,11 +27,6 @@ const CHAMPION: AwardDefinition = {
 };
 
 describe("awardForm", () => {
-  it("offers only skills sources for event scope", () => {
-    expect(allowedSources("event")).toEqual(["skills_overall", "skills_type"]);
-    expect(allowedSources("division")).toEqual(["teamwork_ranking", "finals", "skills_overall", "skills_type"]);
-  });
-
   it("turns a judged draft into a body with no performance fields", () => {
     const body = draftToBody({ ...emptyDraft(), name: "  Design  ", description: "  ", scope: "event" });
     expect(body).toEqual({
@@ -100,5 +96,49 @@ describe("awardForm", () => {
     expect(ruleSummary(t, { ...CHAMPION, kind: "judged", scope: "event" }, {})).toBe(
       'awards.summary.judged:{"scope":"awards.scope.event"}'
     );
+  });
+});
+
+const NONE = { pluginSelected: false, skillsEnabled: false };
+const PLUGIN = { pluginSelected: true, skillsEnabled: false };
+const SKILLS = { pluginSelected: true, skillsEnabled: true };
+
+describe("availableSources", () => {
+  it.each([
+    ["division", NONE, []],
+    ["event", NONE, []],
+    ["division", PLUGIN, ["teamwork_ranking", "finals"]],
+    ["event", PLUGIN, []],
+    ["division", SKILLS, ["teamwork_ranking", "finals", "skills_overall", "skills_type"]],
+    ["event", SKILLS, ["skills_overall", "skills_type"]],
+  ] as const)("%s scope with %o offers %o", (scope, availability, expected) => {
+    expect(availableSources(scope, availability)).toEqual(expected);
+  });
+});
+
+describe("performanceBlockedReason", () => {
+  it("names the missing plugin first, then skills for event-wide awards", () => {
+    expect(performanceBlockedReason("division", NONE)).toBe("awards.form.needsPlugin");
+    expect(performanceBlockedReason("event", PLUGIN)).toBe("awards.form.eventNeedsSkills");
+    expect(performanceBlockedReason("division", PLUGIN)).toBeNull();
+    expect(performanceBlockedReason("event", SKILLS)).toBeNull();
+  });
+});
+
+describe("draftToBody keeps an unavailable source", () => {
+  it("does not swap a skills award's source when only the name changes", () => {
+    const award: AwardDefinition = {
+      name: "Skills Champion",
+      description: null,
+      kind: "performance",
+      scope: "event",
+      division_ids: [],
+      source: "skills_overall",
+      skills_type: null,
+      basis: "session",
+      placement: 1,
+    };
+    const draft = { ...draftFromAward(award), name: "Robot Skills Champion" };
+    expect(draftToBody(draft)).toMatchObject({ source: "skills_overall", name: "Robot Skills Champion" });
   });
 });

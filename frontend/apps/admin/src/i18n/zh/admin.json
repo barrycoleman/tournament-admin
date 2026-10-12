@@ -627,6 +627,9 @@
       "basisSeason": "本赛季至今",
       "placementLabel": "名次",
       "save": "保存奖项",
+      "needsPlugin": "需要先选择游戏插件。",
+      "eventNeedsSkills": "全场奖项的成绩来自技能挑战赛，而该功能目前已关闭。",
+      "notAvailable": "{{label}}（不可用）",
       "ruleChangeWarning": "更改获奖者的产生方式会清除该奖项已录入的获奖者。",
       "errors": {
         "nameRequired": "请输入名称。",

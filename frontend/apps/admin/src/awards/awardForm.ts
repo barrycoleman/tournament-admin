@@ -15,7 +15,6 @@ export interface AwardDraft {
   placement: string;
 }
 
-const ALL_SOURCES: AwardSource[] = ["teamwork_ranking", "finals", "skills_overall", "skills_type"];
 const RULE_FIELDS = ["kind", "scope", "division_ids", "source", "skills_type", "basis", "placement"] as const;
 
 export function emptyDraft(): AwardDraft {
@@ -33,9 +32,30 @@ export function emptyDraft(): AwardDraft {
   };
 }
 
-/** Teamwork rankings and finals never compare teams across divisions. */
-export function allowedSources(scope: AwardScope): AwardSource[] {
-  return scope === "event" ? ["skills_overall", "skills_type"] : ALL_SOURCES;
+export interface SourceAvailability {
+  pluginSelected: boolean;
+  skillsEnabled: boolean;
+}
+
+const DIVISION_SOURCES: AwardSource[] = ["teamwork_ranking", "finals"];
+const SKILLS_SOURCES: AwardSource[] = ["skills_overall", "skills_type"];
+
+/** Sources that can produce a winner now. Teamwork rankings and finals never
+ *  compare teams across divisions, so event-wide awards only come from skills. */
+export function availableSources(scope: AwardScope, availability: SourceAvailability): AwardSource[] {
+  if (!availability.pluginSelected) return [];
+  const skills = availability.skillsEnabled ? SKILLS_SOURCES : [];
+  return scope === "event" ? skills : [...DIVISION_SOURCES, ...skills];
+}
+
+/** Why the Performance choice is disabled for this scope, as an i18n key, or null. */
+export function performanceBlockedReason(
+  scope: AwardScope,
+  availability: SourceAvailability
+): "awards.form.needsPlugin" | "awards.form.eventNeedsSkills" | null {
+  if (!availability.pluginSelected) return "awards.form.needsPlugin";
+  if (availableSources(scope, availability).length === 0) return "awards.form.eventNeedsSkills";
+  return null;
 }
 
 export function draftFromAward(award: AwardDefinition): AwardDraft {
@@ -68,7 +88,7 @@ export function draftToBody(draft: AwardDraft): AwardDefinition {
   if (draft.kind === "judged") {
     return { ...common, source: null, skills_type: null, basis: null, placement: null };
   }
-  const source = allowedSources(draft.scope).includes(draft.source) ? draft.source : "skills_overall";
+  const source = draft.source;
   return {
     ...common,
     source,

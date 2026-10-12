@@ -5,6 +5,7 @@ import { apiRequest, useRealtimeChannel, type RealtimeEvent } from "@tournament-
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Modal } from "../components/Modal";
 import { apiErrorMessage } from "../apiErrorMessage";
+import { useGamePlugin } from "../gamePlugin/useGamePlugin";
 import { useSkillsSettings } from "../skills/useSkillsSettings";
 import type { AwardRead, AwardSlotRead, Division, SessionRead, SlotStatus } from "../types";
 import { AwardFormDialog } from "./AwardFormDialog";
@@ -44,6 +45,7 @@ export function AwardsView({
   const queryClient = useQueryClient();
   const awardsQuery = useSessionAwards(session.id);
   const skills = useSkillsSettings();
+  const plugin = useGamePlugin();
   const divisions = useQuery({
     queryKey: ["divisions"],
     queryFn: () => apiRequest<Division[]>("/api/divisions"),
@@ -221,6 +223,7 @@ export function AwardsView({
           award={editing === "new" ? null : editing}
           divisions={divisions.data ?? []}
           skillsTypes={skills.data?.types ?? []}
+          availability={{ pluginSelected: plugin.selected, skillsEnabled: Boolean(skills.data?.enabled) }}
           onClose={() => setEditing(null)}
         />
       )}

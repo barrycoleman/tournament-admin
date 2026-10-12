@@ -7,12 +7,14 @@ import { Modal } from "../components/Modal";
 import { apiErrorMessage } from "../apiErrorMessage";
 import type { AwardRead, AwardSource, Division } from "../types";
 import {
-  allowedSources,
+  availableSources,
   draftError,
   draftFromAward,
   draftToBody,
   emptyDraft,
+  performanceBlockedReason,
   ruleChanged,
+  type SourceAvailability,
   type AwardDraft,
 } from "./awardForm";
 import { awardsKey, teamHistoryKey } from "./useAwards";
@@ -30,12 +32,14 @@ export function AwardFormDialog({
   award,
   divisions,
   skillsTypes,
+  availability,
   onClose,
 }: {
   sessionId: number;
   award: AwardRead | null;
   divisions: Division[];
   skillsTypes: { key: string; label: string }[];
+  availability: SourceAvailability;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -63,7 +67,15 @@ export function AwardFormDialog({
   const error = draftError(draft);
   const hasWinners = award?.slots.some((slot) => slot.status === "judged" || slot.status === "overridden");
   const showRuleWarning = award !== null && hasWinners && ruleChanged(award, draftToBody(draft));
-  const sources = allowedSources(draft.scope);
+  const originalSource = award?.kind === "performance" ? award.source : null;
+  const originalKind = award?.kind ?? null;
+  const sources = availableSources(draft.scope, availability);
+  const keptSource: AwardSource | null =
+    originalSource !== null && !sources.includes(originalSource) && draft.scope === award?.scope ? originalSource : null;
+  const blockedReason = performanceBlockedReason(draft.scope, availability);
+  const performanceDisabled = blockedReason !== null && originalKind !== "performance";
+  const keptSkillsType =
+    award?.skills_type && !skillsTypes.some((type) => type.key === award.skills_type) ? award.skills_type : null;
 
   return (
     <Modal labelledBy={headingId} onCancel={() => !save.isPending && onClose()}>
@@ -95,10 +107,17 @@ export function AwardFormDialog({
           <legend className="field__label">{t("awards.form.kindLabel")}</legend>
           {(["judged", "performance"] as const).map((kind) => (
             <label key={kind}>
-              <input type="radio" name="kind" checked={draft.kind === kind} onChange={() => set({ kind })} />{" "}
+              <input
+                type="radio"
+                name="kind"
+                checked={draft.kind === kind}
+                disabled={kind === "performance" && performanceDisabled}
+                onChange={() => set({ kind })}
+              />{" "}
               {t(kind === "judged" ? "awards.form.kindJudged" : "awards.form.kindPerformance")}
             </label>
           ))}
+          {blockedReason !== null && <p className="field__hint">{t(blockedReason)}</p>}
         </fieldset>
         <fieldset className="field">
           <legend className="field__label">{t("awards.form.scopeLabel")}</legend>
@@ -108,9 +127,15 @@ export function AwardFormDialog({
                 type="radio"
                 name="scope"
                 checked={draft.scope === scope}
-                onChange={() =>
-                  set({ scope, source: allowedSources(scope).includes(draft.source) ? draft.source : "skills_overall" })
-                }
+                onChange={() => {
+                  const options = availableSources(scope, availability);
+                  const keep = options.includes(draft.source) || (originalSource === draft.source && scope === award?.scope);
+                  const patch: Partial<AwardDraft> = { scope, source: keep ? draft.source : (options[0] ?? draft.source) };
+                  if (draft.kind === "performance" && originalKind !== "performance" && performanceBlockedReason(scope, availability) !== null) {
+                    patch.kind = "judged";
+                  }
+                  set(patch);
+                }}
               />{" "}
               {t(scope === "event" ? "awards.form.scopeEvent" : "awards.form.scopeDivision")}
             </label>
@@ -159,6 +184,11 @@ export function AwardFormDialog({
                     {t(SOURCE_LABEL_KEYS[source])}
                   </option>
                 ))}
+                {keptSource !== null && (
+                  <option value={keptSource}>
+                    {t("awards.form.notAvailable", { label: t(SOURCE_LABEL_KEYS[keptSource]) })}
+                  </option>
+                )}
               </select>
             </label>
             {draft.source === "skills_type" && (
@@ -171,6 +201,9 @@ export function AwardFormDialog({
                       {type.label}
                     </option>
                   ))}
+                  {keptSkillsType !== null && (
+                    <option value={keptSkillsType}>{t("awards.form.notAvailable", { label: keptSkillsType })}</option>
+                  )}
                 </select>
               </label>
             )}

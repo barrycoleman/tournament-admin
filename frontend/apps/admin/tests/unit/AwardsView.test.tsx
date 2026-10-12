@@ -79,6 +79,7 @@ const CHAMPION = award({
 });
 
 let awards: SessionAwardsRead;
+let skillsEnabled = false;
 
 function stub() {
   vi.mocked(apiRequest).mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
@@ -88,7 +89,9 @@ function stub() {
     if (path === "/api/teams") return [{ id: 1, number: "101", name: "Alpha", division_id: 7 }] as never;
     if (path === "/api/sessions/5/participants") return [{ team_id: 1, checked_in: true }] as never;
     if (path === "/api/sessions") return [SESSION, { ...SESSION, id: 6, label: "Sunday" }] as never;
-    if (path === "/api/skills/settings") return { enabled: false, attempts: {}, types: [] } as never;
+    if (path === "/api/event")
+      return { id: 1, name: "Event", game_plugin_name: "sample_game", game_plugin_locked: false } as never;
+    if (path === "/api/skills/settings") return { enabled: skillsEnabled, attempts: {}, types: [] } as never;
     if (options?.method) return {} as never;
     throw new Error(`unexpected request: ${path}`);
   });
@@ -123,6 +126,7 @@ beforeEach(() => {
   vi.mocked(apiRequest).mockReset();
   vi.mocked(useRealtimeChannel).mockReset();
   vi.mocked(useRealtimeChannel).mockReturnValue({ connected: true });
+  skillsEnabled = false;
   awards = { awards_finalized_at: null, awards: [award(), CHAMPION] };
   stub();
 });
@@ -189,9 +193,11 @@ describe("AwardsView", () => {
   });
 
   it("hides finals and teamwork ranking for an event-wide performance award", async () => {
+    skillsEnabled = true;
     renderView();
     fireEvent.click(await screen.findByRole("button", { name: "Add award" }));
     const dialog = await screen.findByRole("alertdialog", { name: "Add award" });
+    await waitFor(() => expect(within(dialog).getByLabelText("Performance")).toBeEnabled());
     fireEvent.click(within(dialog).getByLabelText("Performance"));
     fireEvent.click(within(dialog).getByLabelText("Event-wide (one winner)"));
     const options = within(within(dialog).getByLabelText("Winner comes from")).getAllByRole("option");

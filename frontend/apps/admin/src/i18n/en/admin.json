@@ -630,6 +630,9 @@
       "basisSeason": "Season so far",
       "placementLabel": "Placement",
       "save": "Save award",
+      "needsPlugin": "Needs a game plugin.",
+      "eventNeedsSkills": "Event-wide performance awards come from skills challenges, which are off.",
+      "notAvailable": "{{label}} (not available)",
       "ruleChangeWarning": "Changing how the winner is chosen clears the winners already entered for this award.",
       "errors": {
         "nameRequired": "Enter a name.",
