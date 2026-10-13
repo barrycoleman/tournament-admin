@@ -3,21 +3,25 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from tournament_server.auth import require_admin
 from tournament_server.picker_config import load_config, save_config
+from tournament_server.routers.picker import _delayed_restart
 from tournament_server.schemas.backups import (
     BackupEntryRead,
     BackupErrorRead,
     BackupFolderUpdate,
     BackupsRead,
 )
+from tournament_server.schemas.picker import RestartingResponse
 from tournament_server.services.backups import (
+    BEFORE_RESTORE,
     MANUAL,
     BackupEntry,
     BackupError,
     BackupManager,
+    backup_problem,
     config_key,
 )
 
@@ -94,3 +98,31 @@ def set_folder(
         config.backup_dirs[key] = str(path.resolve())
     save_config(manager.config_path, config)
     return _state(manager)
+
+
+@router.post("/{filename}/restore", response_model=RestartingResponse, status_code=202)
+def restore_backup(
+    filename: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    _role: str = Depends(require_admin),
+) -> RestartingResponse:
+    manager = _manager(request)
+    entry = next((e for e in manager.list() if e.filename == filename), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Backup not found")
+    problem = backup_problem(entry.path)
+    if problem is not None:
+        raise HTTPException(status_code=409, detail=problem)
+    try:
+        manager.snapshot(BEFORE_RESTORE)
+    except BackupError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"The current state couldn't be saved, so nothing was restored: {exc}",
+        ) from exc
+    config = load_config(manager.config_path)
+    config.pending_restore = {"target": config_key(manager.db_path), "source": str(entry.path)}
+    save_config(manager.config_path, config)
+    background_tasks.add_task(_delayed_restart)
+    return RestartingResponse(status="restarting")

@@ -14,12 +14,15 @@ import re
 import shutil
 import sqlite3
 import stat
+import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlalchemy import create_engine
+
 from tournament_server.db import utc_now
-from tournament_server.picker_config import load_config
+from tournament_server.picker_config import load_config, save_config
 
 logger = logging.getLogger(__name__)
 
@@ -207,3 +210,76 @@ async def run_interval(manager: BackupManager, seconds: float = INTERVAL_SECONDS
             await asyncio.to_thread(manager.interval_tick)
         except Exception:  # noqa: BLE001 - the timer must keep running
             logger.exception("Interval backup check failed")
+
+
+DAMAGED_DETAIL = "This backup is damaged."
+OLDER_BUILD_DETAIL = "This backup was made by an older build and can't be restored."
+
+
+def _immutable_uri(path: Path) -> str:
+    return f"{path.resolve().as_uri()}?immutable=1"
+
+
+def backup_problem(path: Path) -> str | None:
+    """Why `path` can't be restored, or None. Opens it read-only without
+    creating -wal/-shm files beside it."""
+    from tournament_server.migrations import _reflected_schema_matches_models
+
+    uri = _immutable_uri(path)
+    try:
+        conn = sqlite3.connect(uri, uri=True)
+        try:
+            result = conn.execute("PRAGMA quick_check").fetchone()[0]
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return DAMAGED_DETAIL
+    if result != "ok":
+        return DAMAGED_DETAIL
+    engine = create_engine("sqlite://", creator=lambda: sqlite3.connect(uri, uri=True))
+    try:
+        if not _reflected_schema_matches_models(engine):
+            return OLDER_BUILD_DETAIL
+    except Exception:  # noqa: BLE001 - any failure to read it means it can't be restored
+        return DAMAGED_DETAIL
+    finally:
+        engine.dispose()
+    return None
+
+
+def replace_database(source: Path, target: Path) -> None:
+    """Copies `source` over `target` through a temporary name, keeps the
+    target's permission bits, and removes the target's -wal/-shm files so the
+    old process's WAL is never replayed against the new file. Raises OSError;
+    on failure `target` is untouched."""
+    tmp = target.with_name(f".{target.name}.restoring")
+    try:
+        shutil.copyfile(source, tmp)
+        if target.exists():
+            copy_mode(target, tmp)
+        os.replace(tmp, target)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
+    for suffix in ("-wal", "-shm"):
+        Path(f"{target}{suffix}").unlink(missing_ok=True)
+
+
+def apply_pending_restore(config_path: Path, db_path: str) -> None:
+    """Called by main._startup() before anything opens `db_path`."""
+    config = load_config(config_path)
+    pending = config.pending_restore
+    if not pending:
+        return
+    config.pending_restore = None
+    save_config(config_path, config)
+    target = Path(db_path).resolve()
+    if Path(pending["target"]).resolve() != target:
+        return
+    try:
+        replace_database(Path(pending["source"]), target)
+    except OSError as exc:
+        print(
+            f"ERROR: restoring {pending['source']} failed, keeping the current file: {exc}",
+            file=sys.stderr,
+        )

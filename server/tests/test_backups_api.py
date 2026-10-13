@@ -86,8 +86,7 @@ def test_backups_are_admin_only(client, role):
     assert raw.get("/api/backups", headers=headers).status_code == 403
     assert raw.post("/api/backups", headers=headers).status_code == 403
     assert raw.put("/api/backups/folder", json={"folder": None}, headers=headers).status_code == 403
-    # Task 4 adds this route:
-    # assert raw.post("/api/backups/x.db/restore", headers=headers).status_code == 403
+    assert raw.post("/api/backups/x.db/restore", headers=headers).status_code == 403
 
 
 def test_time_sync_reports_a_stable_boot_id(client):
