@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import datetime as dt
 import sqlite3
 from pathlib import Path
 
@@ -21,11 +23,29 @@ def no_restart(monkeypatch):
     return calls
 
 
+def _reasons(client) -> list[str]:
+    return [b["reason"] for b in client.get("/api/backups").json()["backups"]]
+
+
+def _fresh() -> str:
+    return dt.datetime.now(dt.UTC).isoformat()
+
+
 def _rename_event(client, name: str) -> None:
     assert client.patch("/api/event", json={"name": name}).status_code == 200
 
 
-def test_restore_records_a_pending_restore_and_restarts(client, tmp_path, no_restart):
+def test_restore_records_a_pending_restore_and_restarts(client, tmp_path, monkeypatch):
+    # The real restart never returns; a fake that returns would clear the
+    # pending restore, so capture it at the moment the restart is requested.
+    pending_seen: list[dict] = []
+    no_restart: list[bool] = []
+
+    async def fake_restart() -> None:
+        no_restart.append(True)
+        pending_seen.append(load_config(client.app.state.backups.config_path).pending_restore)
+
+    monkeypatch.setattr(backups_router, "_delayed_restart", fake_restart)
     client.post("/api/event", json={"name": "Before"})
     backup = client.post("/api/backups").json()
     _rename_event(client, "After")
@@ -35,7 +55,8 @@ def test_restore_records_a_pending_restore_and_restarts(client, tmp_path, no_res
     assert response.status_code == 202, response.text
     assert response.json() == {"status": "restarting"}
     assert no_restart == [True]
-    pending = load_config(client.app.state.backups.config_path).pending_restore
+    pending = pending_seen[0]
+    assert pending.pop("requested_at")
     assert pending == {
         "target": str((tmp_path / "test.db").resolve()),
         "source": str(client.app.state.backups.folder() / backup["filename"]),
@@ -61,6 +82,7 @@ def test_restore_refuses_a_damaged_backup(client, no_restart):
     assert response.json()["detail"] == backups.DAMAGED_DETAIL
     assert no_restart == []
     assert load_config(client.app.state.backups.config_path).pending_restore is None
+    assert "before-restore" not in _reasons(client)
 
 
 def test_restore_refuses_a_backup_from_an_older_build(client, no_restart):
@@ -76,6 +98,23 @@ def test_restore_refuses_a_backup_from_an_older_build(client, no_restart):
     assert response.status_code == 409
     assert response.json()["detail"] == backups.OLDER_BUILD_DETAIL
     assert no_restart == []
+    assert load_config(client.app.state.backups.config_path).pending_restore is None
+    assert "before-restore" not in _reasons(client)
+
+
+def test_a_restart_that_returns_clears_the_pending_restore(client, monkeypatch):
+    config_path = client.app.state.backups.config_path
+    config = load_config(config_path)
+    config.pending_restore = {"target": "t", "source": "s", "requested_at": _fresh()}
+    save_config(config_path, config)
+
+    async def returns() -> None:
+        return None
+
+    monkeypatch.setattr(backups_router, "_delayed_restart", returns)
+    asyncio.run(backups_router._restart_for_restore(config_path))
+
+    assert load_config(config_path).pending_restore is None
 
 
 def _db_with_event(path: Path, name: str) -> None:
@@ -100,15 +139,18 @@ def test_startup_swap_replaces_the_file_and_removes_wal_files(tmp_path):
     source = tmp_path / "backup.db"
     _db_with_event(target, "live")
     _db_with_event(source, "backup")
+    target.chmod(0o600)
     Path(f"{target}-wal").write_bytes(b"stale wal from the old process")
     Path(f"{target}-shm").write_bytes(b"stale shm")
     config_path = tmp_path / "server-config.json"
-    save_config(config_path, PickerConfig(pending_restore={"target": str(target), "source": str(source)}))
+    save_config(config_path, PickerConfig(pending_restore={"target": str(target), "source": str(source), "requested_at": _fresh()}))
 
     backups.apply_pending_restore(config_path, str(target))
 
     assert _name(target) == "backup"
-    assert not Path(f"{target}-wal").exists() or Path(f"{target}-wal").read_bytes() != b"stale wal from the old process"
+    assert not Path(f"{target}-wal").exists()
+    assert not Path(f"{target}-shm").exists()
+    assert target.stat().st_mode & 0o777 == 0o600
     assert load_config(config_path).pending_restore is None
 
 
@@ -120,7 +162,7 @@ def test_startup_ignores_a_pending_restore_for_another_file(tmp_path):
     config_path = tmp_path / "server-config.json"
     save_config(
         config_path,
-        PickerConfig(pending_restore={"target": str(tmp_path / "autumn.db"), "source": str(source)}),
+        PickerConfig(pending_restore={"target": str(tmp_path / "autumn.db"), "source": str(source), "requested_at": _fresh()}),
     )
 
     backups.apply_pending_restore(config_path, str(target))
@@ -135,7 +177,7 @@ def test_a_failed_swap_leaves_the_original(tmp_path, capsys):
     config_path = tmp_path / "server-config.json"
     save_config(
         config_path,
-        PickerConfig(pending_restore={"target": str(target), "source": str(tmp_path / "missing.db")}),
+        PickerConfig(pending_restore={"target": str(target), "source": str(tmp_path / "missing.db"), "requested_at": _fresh()}),
     )
 
     backups.apply_pending_restore(config_path, str(target))
@@ -143,3 +185,22 @@ def test_a_failed_swap_leaves_the_original(tmp_path, capsys):
     assert _name(target) == "live"
     assert "ERROR: restoring" in capsys.readouterr().err
     assert not list(tmp_path.glob(".spring.db.restoring"))
+
+
+def test_a_stale_pending_restore_is_ignored_and_cleared(tmp_path, capsys):
+    target = tmp_path / "spring.db"
+    source = tmp_path / "backup.db"
+    _db_with_event(target, "live")
+    _db_with_event(source, "backup")
+    old = (dt.datetime.now(dt.UTC) - dt.timedelta(minutes=10)).isoformat()
+    config_path = tmp_path / "server-config.json"
+    save_config(
+        config_path,
+        PickerConfig(pending_restore={"target": str(target), "source": str(source), "requested_at": old}),
+    )
+
+    backups.apply_pending_restore(config_path, str(target))
+
+    assert _name(target) == "live"
+    assert load_config(config_path).pending_restore is None
+    assert "ERROR: ignoring the pending restore" in capsys.readouterr().err

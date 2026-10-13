@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from tournament_server.auth import require_admin
+from tournament_server.db import utc_now
 from tournament_server.picker_config import load_config, save_config
 from tournament_server.routers.picker import _delayed_restart
 from tournament_server.schemas.backups import (
@@ -100,6 +101,15 @@ def set_folder(
     return _state(manager)
 
 
+async def _restart_for_restore(config_path: Path) -> None:
+    """On success the restart never returns; if it does return, the restart
+    failed, so the pending restore must not stay armed for a later restart."""
+    await _delayed_restart()
+    config = load_config(config_path)
+    config.pending_restore = None
+    save_config(config_path, config)
+
+
 @router.post("/{filename}/restore", response_model=RestartingResponse, status_code=202)
 def restore_backup(
     filename: str,
@@ -122,7 +132,11 @@ def restore_backup(
             detail=f"The current state couldn't be saved, so nothing was restored: {exc}",
         ) from exc
     config = load_config(manager.config_path)
-    config.pending_restore = {"target": config_key(manager.db_path), "source": str(entry.path)}
+    config.pending_restore = {
+        "target": config_key(manager.db_path),
+        "source": str(entry.path),
+        "requested_at": utc_now().isoformat(),
+    }
     save_config(manager.config_path, config)
-    background_tasks.add_task(_delayed_restart)
+    background_tasks.add_task(_restart_for_restore, manager.config_path)
     return RestartingResponse(status="restarting")

@@ -213,11 +213,12 @@ async def run_interval(manager: BackupManager, seconds: float = INTERVAL_SECONDS
 
 
 DAMAGED_DETAIL = "This backup is damaged."
+PENDING_RESTORE_MAX_AGE_SECONDS = 120
 OLDER_BUILD_DETAIL = "This backup was made by an older build and can't be restored."
 
 
 def _immutable_uri(path: Path) -> str:
-    return f"{path.resolve().as_uri()}?immutable=1"
+    return f"{path.resolve().as_uri()}?mode=ro&immutable=1"
 
 
 def backup_problem(path: Path) -> str | None:
@@ -257,12 +258,12 @@ def replace_database(source: Path, target: Path) -> None:
         shutil.copyfile(source, tmp)
         if target.exists():
             copy_mode(target, tmp)
+        for suffix in ("-wal", "-shm"):
+            Path(f"{target}{suffix}").unlink(missing_ok=True)
         os.replace(tmp, target)
     except OSError:
         tmp.unlink(missing_ok=True)
         raise
-    for suffix in ("-wal", "-shm"):
-        Path(f"{target}{suffix}").unlink(missing_ok=True)
 
 
 def apply_pending_restore(config_path: Path, db_path: str) -> None:
@@ -276,6 +277,12 @@ def apply_pending_restore(config_path: Path, db_path: str) -> None:
     target = Path(db_path).resolve()
     if Path(pending["target"]).resolve() != target:
         return
+    if _is_stale(pending.get("requested_at")):
+        print(
+            f"ERROR: ignoring the pending restore of {pending['source']}: it was not requested just now",
+            file=sys.stderr,
+        )
+        return
     try:
         replace_database(Path(pending["source"]), target)
     except OSError as exc:
@@ -283,3 +290,15 @@ def apply_pending_restore(config_path: Path, db_path: str) -> None:
             f"ERROR: restoring {pending['source']} failed, keeping the current file: {exc}",
             file=sys.stderr,
         )
+
+
+def _is_stale(requested_at: str | None) -> bool:
+    if not requested_at:
+        return True
+    try:
+        when = dt.datetime.fromisoformat(requested_at)
+    except ValueError:
+        return True
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=dt.UTC)
+    return (utc_now() - when).total_seconds() > PENDING_RESTORE_MAX_AGE_SECONDS
