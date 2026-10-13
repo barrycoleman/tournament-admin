@@ -16,14 +16,18 @@ from tournament_server.picker_config import (
     load_config,
     save_config,
 )
+from tournament_server.schemas.backups import BackupEntryRead
 from tournament_server.schemas.picker import (
     AddDirectoryRequest,
     CreateTournamentRequest,
+    DamagedRead,
     DirectoryListResponse,
     OpenTournamentRequest,
+    PickerRestoreRequest,
     RestartingResponse,
     TournamentListResponse,
 )
+from tournament_server.services import backups as backup_service
 
 router = APIRouter(prefix="/api/picker", tags=["picker"])
 switch_router = APIRouter(prefix="/api/picker", tags=["picker"])
@@ -159,5 +163,46 @@ def switch_tournament(
     config = load_config(config_path)
     config.last_opened_path = None
     save_config(config_path, config)
+    background_tasks.add_task(_delayed_restart)
+    return RestartingResponse(status="restarting")
+
+
+def _damaged_backups(request: Request) -> tuple[str, Path, list[backup_service.BackupEntry]]:
+    damaged = getattr(request.app.state, "damaged_path", None)
+    if damaged is None:
+        raise HTTPException(status_code=404, detail="Nothing is damaged")
+    folder = backup_service.backup_folder(damaged, request.app.state.picker_config_path)
+    return damaged, folder, backup_service.list_backups(folder, Path(damaged).stem)
+
+
+@router.get("/damaged", response_model=DamagedRead)
+def get_damaged(request: Request) -> DamagedRead:
+    damaged, _, entries = _damaged_backups(request)
+    return DamagedRead(
+        path=str(Path(damaged).resolve()),
+        backups=[
+            BackupEntryRead(
+                filename=e.filename, created_at=e.created_at, reason=e.reason, size_bytes=e.size_bytes
+            )
+            for e in entries
+        ],
+    )
+
+
+@router.post("/restore", response_model=RestartingResponse, status_code=202)
+def restore_damaged_file(
+    payload: PickerRestoreRequest, request: Request, background_tasks: BackgroundTasks
+) -> RestartingResponse:
+    damaged, folder, entries = _damaged_backups(request)
+    entry = next((e for e in entries if e.filename == payload.filename), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Backup not found")
+    problem = backup_service.backup_problem(entry.path)
+    if problem is not None:
+        raise HTTPException(status_code=409, detail=problem)
+    try:
+        backup_service.restore_damaged(damaged, entry.path, folder)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"The restore failed: {exc}") from exc
     background_tasks.add_task(_delayed_restart)
     return RestartingResponse(status="restarting")

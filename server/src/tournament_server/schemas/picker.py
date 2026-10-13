@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from tournament_server.schemas.backups import BackupEntryRead
+
 
 class DirectoryListResponse(BaseModel):
     allowed_directories: list[str]
@@ -35,3 +37,12 @@ class OpenTournamentRequest(BaseModel):
 
 class RestartingResponse(BaseModel):
     status: Literal["restarting"]
+
+
+class DamagedRead(BaseModel):
+    path: str
+    backups: list[BackupEntryRead]
+
+
+class PickerRestoreRequest(BaseModel):
+    filename: str

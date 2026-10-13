@@ -302,3 +302,29 @@ def _is_stale(requested_at: str | None) -> bool:
     if when.tzinfo is None:
         when = when.replace(tzinfo=dt.UTC)
     return (utc_now() - when).total_seconds() > PENDING_RESTORE_MAX_AGE_SECONDS
+
+
+def database_is_damaged(db_path: str) -> bool:
+    """True when SQLite's quick integrity check fails. A missing file is not
+    damaged (it is about to be created)."""
+    path = Path(db_path)
+    if not path.exists():
+        return False
+    try:
+        conn = sqlite3.connect(str(path))
+        try:
+            return conn.execute("PRAGMA quick_check").fetchone()[0] != "ok"
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return True
+
+
+def restore_damaged(db_path: str, backup: Path, folder: Path) -> None:
+    """Keeps a copy of the damaged file in `folder` as
+    `<stem>-<timestamp>-damaged.db`, then swaps `backup` in."""
+    target = Path(db_path).resolve()
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = dt.datetime.now().astimezone().strftime("%Y-%m-%d-%H%M%S")
+    shutil.copyfile(target, folder / f"{target.stem}-{stamp}-damaged.db")
+    replace_database(backup, target)

@@ -14,7 +14,7 @@ from tournament_server.picker_config import (
     resolve_config_path,
     save_config,
 )
-from tournament_server.services.backups import apply_pending_restore
+from tournament_server.services.backups import apply_pending_restore, database_is_damaged
 from tournament_server.settings import Settings
 
 if TYPE_CHECKING:
@@ -45,6 +45,10 @@ def _startup() -> tuple[Settings, int, "FastAPI"]:
         return settings, port, app
 
     apply_pending_restore(config_path, resolved_db_path)
+    if database_is_damaged(resolved_db_path):
+        print(f"ERROR: {resolved_db_path} is damaged; starting the picker to restore it.", file=sys.stderr)
+        app = create_picker_app(config_path, static_dir=settings.static_dir, damaged_path=resolved_db_path)
+        return settings, port, app
 
     try:
         app = create_app(
