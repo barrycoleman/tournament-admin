@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
 import logging
 from contextlib import asynccontextmanager
@@ -16,6 +17,7 @@ from tournament_server.db import make_engine, make_session_factory, utc_now
 from tournament_server.migrations import MigrationOutcome, ensure_schema_current
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
+from tournament_server.services.backups import BackupManager, run_interval
 from tournament_server.services.role_credentials import backfill_role_credentials
 from tournament_server.services.team_assignment import assign_sole_division
 from tournament_server.plugin_registry.discovery import (
@@ -25,6 +27,7 @@ from tournament_server.plugin_registry.discovery import (
 from tournament_server.routers import (
     audit_log,
     awards,
+    backups,
     auth,
     devices,
     divisions,
@@ -204,11 +207,18 @@ def create_app(
             backfill_role_credentials(db)
             db.commit()
 
+    picker_config_path = config_path if config_path is not None else resolve_config_path()
+    backup_manager = BackupManager(settings.db_path, picker_config_path)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         realtime.set_event_loop(app, asyncio.get_running_loop())
         await _recover_in_flight_matches(app)
+        app.state.backup_task = asyncio.create_task(run_interval(app.state.backups))
         yield
+        app.state.backup_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await app.state.backup_task
 
     app = FastAPI(title="Tournament Server", lifespan=lifespan)
     app.state.session_factory = session_factory
@@ -219,7 +229,9 @@ def create_app(
         minutes=settings.device_idle_timeout_minutes
     )
     app.state.port = settings.port
-    app.state.picker_config_path = config_path if config_path is not None else resolve_config_path()
+    app.state.picker_config_path = picker_config_path
+    app.state.backups = backup_manager
+    app.state.backup_task = None
     realtime.init_realtime_state(app)
     match_control.init_match_timer_state(app)
 
@@ -273,6 +285,7 @@ def create_app(
     app.include_router(schedule.router)
     app.include_router(finals.router)
     app.include_router(server_info.router)
+    app.include_router(backups.router)
     app.include_router(picker.switch_router)
     app.include_router(time_sync.router)
     app.include_router(websockets.router)
