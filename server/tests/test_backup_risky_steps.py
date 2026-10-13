@@ -98,3 +98,15 @@ def test_risky_step_still_succeeds_when_the_snapshot_fails(client, tmp_path):
     )
     assert client.post("/api/event/active-session", json={"session_id": session_id}).status_code == 200
     assert client.get("/api/backups").json()["last_error"]["message"]
+
+
+def test_a_backup_that_raises_something_unexpected_does_not_fail_the_step(client, monkeypatch):
+    session_id, _ = _event_with_teams(client)
+
+    def boom():
+        raise ValueError("config is unreadable")
+
+    monkeypatch.setattr(client.app.state.backups, "folder", boom)
+    response = client.post("/api/event/active-session", json={"session_id": session_id})
+    assert response.status_code == 200
+    assert client.app.state.backups.last_error is not None

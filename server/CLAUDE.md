@@ -989,13 +989,22 @@ Names are `<stem>-<YYYY-MM-DD>-<HHMMSS>-<reason>.db` (local time, `-2`... on
 a same-second clash). The folder defaults to `backups/<stem>/` next to the
 tournament file; a custom one lives in the picker config's `backup_dirs`
 (not in the tournament file, so a restore never reverts it).
+`PUT /api/backups/folder` refuses (422) a relative path, a folder that can't
+be written, a folder where `chmod` to the tournament file's mode fails (a
+FAT/exFAT stick can't keep backups private, and every snapshot would fail),
+and a folder that is one of the picker config's `allowed_directories`
+(backups would show up as tournaments). When a `BackupManager` starts it
+deletes stale hidden `.<stem>-*.partial` files left by an interrupted
+snapshot; `list_backups` skips a file pruned between listing and `stat`.
 
 `app.state.backups` (`BackupManager`) holds the last backup, the last
 error and the newest `audit_log` id seen; a lifespan task checks every 5
 minutes and snapshots only when that id grew (a restart alone takes none).
 Only the newest 50 `interval` snapshots are kept. Risky steps call
 `request.app.state.backups.snapshot_quietly("before-...")` after their checks
-and before their first write; a failure there only sets `last_error`.
+and before their first write; `snapshot_quietly` catches every exception
+(not just `BackupError`), records it in `last_error` and logs it, so a risky
+step never 500s on a backup problem (`snapshot()` itself still raises).
 Admin-only routes: `GET/POST /api/backups`, `PUT /api/backups/folder`,
 `POST /api/backups/{filename}/restore`.
 
@@ -1007,13 +1016,16 @@ takes a `before-restore` snapshot, writes `pending_restore` (with a
 the old `-wal`/`-shm` first (`replace_database`). Startup ignores a
 `pending_restore` older than 120 s (`PENDING_RESTORE_MAX_AGE_SECONDS`), and
 the restore clears it if the restart itself fails, so a failed restart
-never leaves a restore armed. `GET /api/time-sync` returns a per-process
+never leaves a restore armed. A failed swap or a stale skip also writes
+`last_restore_error` (`{message, at}`) to the picker config; `GET
+/api/backups` returns it once as `restore_error` and clears it, so the
+Backups page can say why the data is unchanged. `GET /api/time-sync` returns a per-process
 `boot_id` so the admin UI can tell the restarted server from the old one.
 If the tournament file fails `quick_check` at startup, the picker app
 starts in damaged mode (`GET /api/picker/damaged`, `POST
 /api/picker/restore`, unauthenticated like the rest of the picker). Its
-restore keeps a `-damaged.db` copy of the file (plus its `-wal` if present,
-with the same permission bits; `-2`... on a name clash, never overwriting an
+restore keeps a `-damaged.db` copy of the file (plus its `-wal` if present;
+both get the tournament file's permission bits; `-2`... on a name clash, never overwriting an
 earlier copy) before swapping a backup in. A locked or unreadable file
 (`sqlite3.OperationalError`) is not treated as damaged.
 

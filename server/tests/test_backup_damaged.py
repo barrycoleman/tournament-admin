@@ -83,6 +83,7 @@ def test_restoring_keeps_the_wal_sidecar_the_mode_and_never_overwrites_a_kept_co
     assert len(kept) == 1
     assert Path(f"{kept[0]}-wal").read_bytes() == b"newest committed frames"
     assert (kept[0].stat().st_mode & 0o777) == 0o640
+    assert (Path(f"{kept[0]}-wal").stat().st_mode & 0o777) == 0o640
     target.write_bytes(b"not a database" * 200)
     backups.restore_damaged(str(target), entry.path, folder)
     assert len(list(folder.glob("spring-*-damaged*.db"))) == 2

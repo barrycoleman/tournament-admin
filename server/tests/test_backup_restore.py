@@ -184,6 +184,9 @@ def test_a_failed_swap_leaves_the_original(tmp_path, capsys):
 
     assert _name(target) == "live"
     assert "ERROR: restoring" in capsys.readouterr().err
+    error = load_config(config_path).last_restore_error
+    assert error["message"].startswith("The restore didn't happen: ")
+    assert error["message"].endswith("Nothing was changed.")
     assert not list(tmp_path.glob(".spring.db.restoring"))
 
 
@@ -204,3 +207,6 @@ def test_a_stale_pending_restore_is_ignored_and_cleared(tmp_path, capsys):
     assert _name(target) == "live"
     assert load_config(config_path).pending_restore is None
     assert "ERROR: ignoring the pending restore" in capsys.readouterr().err
+    assert load_config(config_path).last_restore_error["message"] == (
+        "The restore was cancelled because the server took too long to restart. Nothing was changed."
+    )

@@ -414,6 +414,33 @@ describe("PickerRoute", () => {
     });
   });
 
+  it("says so when the damaged file's restart never comes back", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url === "/api/picker/damaged") {
+        return jsonResponse({
+          path: "/events/spring.db",
+          backups: [{ filename: "a.db", created_at: "2026-10-12T21:30:05Z", reason: "manual", size_bytes: 2048 }],
+        });
+      }
+      if (url === "/api/picker/restore" && method === "POST") return jsonResponse({ status: "restarting" }, 202);
+      return jsonResponse({}, 500);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderRoute();
+    await screen.findByText(/is damaged and can't be opened/);
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(16_000);
+    });
+    expect(screen.getByText("The server hasn't come back yet. Reload this page in a moment.")).toBeInTheDocument();
+  });
+
   it("shows no damaged section when the server isn't in damaged mode", async () => {
     vi.stubGlobal(
       "fetch",

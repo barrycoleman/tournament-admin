@@ -20,6 +20,7 @@ export interface BackupsState {
   last_backup_at: string | null;
   last_error: { message: string; at: string } | null;
   backups: BackupEntry[];
+  restore_error?: { message: string; at: string } | null;
 }
 
 const BACKUPS_KEY = ["backups"];
@@ -67,6 +68,8 @@ export function BackupsRoute() {
 
   if (!backups.data) return null;
   const state = backups.data;
+  const waiting = restart.status === "waiting";
+  const lastBackupAt = state.last_backup_at ?? state.backups[0]?.created_at ?? null;
 
   return (
     <div>
@@ -100,7 +103,7 @@ export function BackupsRoute() {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={saveFolder.isPending}
+                disabled={saveFolder.isPending || waiting}
                 onClick={() => saveFolder.mutate(folderDraft)}
               >
                 {t("backups.save")}
@@ -116,6 +119,7 @@ export function BackupsRoute() {
             <button
               type="button"
               className="btn btn-small"
+              disabled={waiting}
               onClick={() => {
                 setFolderDraft(state.folder);
                 setEditingFolder(true);
@@ -124,7 +128,12 @@ export function BackupsRoute() {
               {t("backups.change")}
             </button>{" "}
             {!state.folder_is_default && (
-              <button type="button" className="btn btn-small" onClick={() => saveFolder.mutate(null)}>
+              <button
+                type="button"
+                className="btn btn-small"
+                disabled={waiting}
+                onClick={() => saveFolder.mutate(null)}
+              >
                 {t("backups.useDefault")}
               </button>
             )}
@@ -137,17 +146,22 @@ export function BackupsRoute() {
         )}
       </div>
 
+      {state.restore_error && (
+        <p className="alert alert-danger" role="alert">
+          {t("backups.restoreFailed", { message: state.restore_error.message })}
+        </p>
+      )}
       {state.last_error && (
         <p className="alert alert-danger" role="alert">
           {t("backups.lastError", { time: formatTime(state.last_error.at), message: state.last_error.message })}
         </p>
       )}
       <p>
-        {state.last_backup_at ? t("backups.lastBackup", { time: formatTime(state.last_backup_at) }) : null}{" "}
+        {lastBackupAt ? t("backups.lastBackup", { time: formatTime(lastBackupAt) }) : null}{" "}
         <button
           type="button"
           className="btn btn-primary"
-          disabled={backUpNow.isPending}
+          disabled={backUpNow.isPending || waiting}
           onClick={() => backUpNow.mutate()}
         >
           {t("backups.backUpNow")}
@@ -179,7 +193,12 @@ export function BackupsRoute() {
                   <td>{t(reasonKey(entry.reason), { defaultValue: entry.reason })}</td>
                   <td className="table__nowrap">{formatSize(entry.size_bytes)}</td>
                   <td className="table__actions">
-                    <button type="button" className="btn btn-small" onClick={() => setRestoring(entry)}>
+                    <button
+                      type="button"
+                      className="btn btn-small"
+                      disabled={waiting}
+                      onClick={() => setRestoring(entry)}
+                    >
                       {t("backups.restore")}
                     </button>
                   </td>

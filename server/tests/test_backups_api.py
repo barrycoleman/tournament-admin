@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
+from tournament_server.picker_config import load_config, save_config
 from auth_helpers import bearer, login_as
 
 
@@ -62,6 +66,46 @@ def test_folder_that_cannot_be_written_is_refused(client, tmp_path):
     response = client.put("/api/backups/folder", json={"folder": str(blocker / "sub")})
     assert response.status_code == 422
     assert response.json()["detail"].startswith("Can't write to ")
+
+
+def test_folder_that_cannot_keep_permissions_is_refused(client, tmp_path, monkeypatch):
+    _event(client)
+    folder = tmp_path / "fat-usb"
+    real_chmod = os.chmod
+
+    def chmod(path, mode, *args, **kwargs):
+        if Path(path).parent == folder.resolve() or Path(path).parent == folder:
+            raise PermissionError(1, "Operation not permitted")
+        return real_chmod(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(os, "chmod", chmod)
+    response = client.put("/api/backups/folder", json={"folder": str(folder)})
+    assert response.status_code == 422
+    assert "can't keep backups private" in response.json()["detail"]
+
+
+def test_a_tournaments_folder_is_refused(client, tmp_path):
+    _event(client)
+    allowed = tmp_path / "tournaments"
+    allowed.mkdir()
+    client.app.state.backups.config_path.write_text(
+        '{"allowed_directories": ["%s"], "backup_dirs": {}}' % allowed
+    )
+    response = client.put("/api/backups/folder", json={"folder": str(allowed)})
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Choose a folder other than a tournaments folder."
+
+
+def test_a_startup_restore_error_is_returned_once(client):
+    _event(client)
+    config_path = client.app.state.backups.config_path
+    config = load_config(config_path)
+    config.last_restore_error = {"message": "The restore didn't happen: boom. Nothing was changed.", "at": "2026-10-12T21:00:00+00:00"}
+    save_config(config_path, config)
+    first = client.get("/api/backups").json()
+    assert first["restore_error"]["message"].startswith("The restore didn't happen")
+    assert load_config(config_path).last_restore_error is None
+    assert client.get("/api/backups").json()["restore_error"] is None
 
 
 def test_back_up_now_reports_a_failure(client, tmp_path):

@@ -164,3 +164,45 @@ def test_snapshot_failure_records_last_error(tmp_path):
     manager.snapshot("manual")
     assert manager.last_error is None
     assert manager.folder_is_default()
+
+
+def test_snapshot_quietly_swallows_any_error_and_records_it(tmp_path, monkeypatch):
+    db_path = _tournament(tmp_path)
+    manager = BackupManager(db_path, tmp_path / "server-config.json")
+
+    def boom():
+        raise ValueError("config is unreadable")
+
+    monkeypatch.setattr(manager, "folder", boom)
+    manager.snapshot_quietly("before-finals")
+    assert manager.last_error is not None
+    assert "config is unreadable" in manager.last_error["message"]
+
+
+def test_list_skips_a_file_pruned_between_listing_and_stat(tmp_path, monkeypatch):
+    db_path = _tournament(tmp_path)
+    folder = tmp_path / "b"
+    first = backups.take_snapshot(db_path, folder, "manual")
+    backups.take_snapshot(db_path, folder, "interval")
+    real = backups._entry
+
+    def vanishing(path, match):
+        if path.name == first.filename:
+            raise FileNotFoundError(path)
+        return real(path, match)
+
+    monkeypatch.setattr(backups, "_entry", vanishing)
+    assert [e.reason for e in backups.list_backups(folder, "spring")] == ["interval"]
+
+
+def test_manager_start_removes_stale_partial_files(tmp_path):
+    db_path = _tournament(tmp_path)
+    folder = backups.default_folder(db_path)
+    folder.mkdir(parents=True)
+    stale = folder / ".spring-2026-10-12-143005-manual.db.partial"
+    stale.write_bytes(b"half")
+    other = folder / ".other-2026-10-12-143005-manual.db.partial"
+    other.write_bytes(b"x")
+    BackupManager(db_path, tmp_path / "server-config.json")
+    assert not stale.exists()
+    assert other.exists()

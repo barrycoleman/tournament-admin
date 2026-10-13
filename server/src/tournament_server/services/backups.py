@@ -87,8 +87,13 @@ def list_backups(folder: Path, stem: str) -> list[BackupEntry]:
     entries = []
     for path in folder.iterdir():
         match = pattern.match(path.name)
-        if match and path.is_file():
-            entries.append(_entry(path, match))
+        if not match:
+            continue
+        try:
+            if path.is_file():
+                entries.append(_entry(path, match))
+        except FileNotFoundError:
+            continue  # pruned between listing and stat
     entries.sort(key=lambda e: (e.created_at, e.sequence, e.filename), reverse=True)
     return entries
 
@@ -142,6 +147,16 @@ class BackupManager:
         self.last_error: dict | None = None
         self._lock = threading.Lock()
         self._last_audit_id = self._current_audit_id()
+        self._remove_stale_partials()
+
+    def _remove_stale_partials(self) -> None:
+        """Hidden temp files left by a snapshot that was interrupted."""
+        try:
+            stem = Path(self.db_path).stem
+            for path in self.folder().glob(f".{stem}-*.partial"):
+                path.unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001 - best effort
+            pass
 
     def folder(self) -> Path:
         return backup_folder(self.db_path, self.config_path)
@@ -184,6 +199,9 @@ class BackupManager:
             self.snapshot(reason)
         except BackupError:
             pass
+        except Exception as exc:  # noqa: BLE001 - a risky step must never fail on a backup
+            self.last_error = {"message": str(exc), "at": utc_now()}
+            logger.exception("Backup (%s) failed", reason)
 
     def interval_tick(self) -> BackupEntry | None:
         if self._current_audit_id() <= self._last_audit_id:
@@ -278,6 +296,10 @@ def apply_pending_restore(config_path: Path, db_path: str) -> None:
     if Path(pending["target"]).resolve() != target:
         return
     if _is_stale(pending.get("requested_at")):
+        _record_restore_error(
+            config_path,
+            "The restore was cancelled because the server took too long to restart. Nothing was changed.",
+        )
         print(
             f"ERROR: ignoring the pending restore of {pending['source']}: it was not requested just now",
             file=sys.stderr,
@@ -286,10 +308,19 @@ def apply_pending_restore(config_path: Path, db_path: str) -> None:
     try:
         replace_database(Path(pending["source"]), target)
     except OSError as exc:
+        _record_restore_error(
+            config_path, f"The restore didn't happen: {exc.strerror or exc}. Nothing was changed."
+        )
         print(
             f"ERROR: restoring {pending['source']} failed, keeping the current file: {exc}",
             file=sys.stderr,
         )
+
+
+def _record_restore_error(config_path: Path, message: str) -> None:
+    config = load_config(config_path)
+    config.last_restore_error = {"message": message, "at": utc_now().isoformat()}
+    save_config(config_path, config)
 
 
 def _is_stale(requested_at: str | None) -> bool:
@@ -340,5 +371,7 @@ def restore_damaged(db_path: str, backup: Path, folder: Path) -> None:
     copy_mode(target, kept)
     wal = Path(f"{target}-wal")
     if wal.exists():
-        shutil.copyfile(wal, Path(f"{kept}-wal"))
+        kept_wal = Path(f"{kept}-wal")
+        shutil.copyfile(wal, kept_wal)
+        copy_mode(target, kept_wal)
     replace_database(backup, target)

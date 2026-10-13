@@ -28,6 +28,7 @@ def test_load_config_creates_a_fresh_file_when_none_exists(tmp_path):
         "last_opened_path": None,
         "backup_dirs": {},
         "pending_restore": None,
+        "last_restore_error": None,
     }
 
 

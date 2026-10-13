@@ -44,28 +44,24 @@ test.describe.serial("backups", () => {
     const renamed = await request.patch(api(`/api/teams/${teamId}`), { headers: headers(), data: { name: "Renamed" } });
     expect(renamed.ok()).toBeTruthy();
 
-    const bootBefore = (await (await request.get(api("/api/time-sync"))).json()).boot_id;
     await manualRow.getByRole("button", { name: "Restore" }).click();
     const dialog = page.getByRole("alertdialog");
     await expect(dialog).toContainText("Everything after it is replaced.");
+    const reloaded = page.waitForEvent("load", { timeout: 45_000 });
     await dialog.getByRole("button", { name: "Restore" }).click();
+    await expect(page.getByText(/^Restoring…/)).toBeVisible();
+    await reloaded;
 
-    await expect
-      .poll(async () => {
-        try {
-          return (await (await request.get(api("/api/time-sync"))).json()).boot_id;
-        } catch {
-          return bootBefore;
-        }
-      }, { timeout: 30_000 })
-      .not.toBe(bootBefore);
+    let teams = await request.get(api("/api/teams"), { headers: headers() });
+    if (teams.status() === 401) {
+      token = (await (await request.post(api("/api/auth/login"), { data: { role: "admin", password: PASSWORD } })).json())
+        .access_token;
+      teams = await request.get(api("/api/teams"), { headers: headers() });
+    }
+    const list = await teams.json();
+    expect(list.find((t: { id: number }) => t.id === teamId).name).toBe("Team One");
 
-    const team = await (await request.get(api(`/api/teams`), { headers: headers() })).json();
-    expect(team.find((t: { id: number }) => t.id === teamId).name).toBe("Team One");
-
-    await page.goto(`${server.baseUrl}/backups`);
     if (page.url().includes("/login")) await login(page);
-    await page.goto(`${server.baseUrl}/backups`);
     await expect(page.getByRole("row").filter({ hasText: "Before a restore" })).toHaveCount(1);
   });
 

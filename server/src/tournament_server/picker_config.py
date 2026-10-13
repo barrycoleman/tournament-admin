@@ -17,6 +17,9 @@ class PickerConfig:
     backup_dirs: dict[str, str] = field(default_factory=dict)
     # {"target": tournament path, "source": backup path}, applied by main._startup().
     pending_restore: dict[str, str] | None = None
+    # {"message": str, "at": ISO str}: why the last startup restore didn't
+    # happen; shown once on the Backups page, then cleared.
+    last_restore_error: dict[str, str] | None = None
 
 
 def resolve_config_path() -> Path:
@@ -39,6 +42,7 @@ def load_config(config_path: Path) -> PickerConfig:
         last_opened_path=raw.get("last_opened_path"),
         backup_dirs=dict(raw.get("backup_dirs") or {}),
         pending_restore=raw.get("pending_restore"),
+        last_restore_error=raw.get("last_restore_error"),
     )
 
 

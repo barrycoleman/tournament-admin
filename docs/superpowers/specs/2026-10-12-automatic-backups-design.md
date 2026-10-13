@@ -104,7 +104,7 @@ These requests take a snapshot after their own checks pass and before they write
    3. sets the copy's permission bits from the old file;
    4. clears `pending_restore`.
 
-   A pending restore whose target is a different path is cleared and ignored. If the copy fails, the original file is untouched, because the copy goes to a temporary name and then a rename. The error is printed, and startup continues with the original file.
+   A pending restore whose target is a different path is cleared and ignored. If the copy fails, the original file is untouched, because the copy goes to a temporary name and then a rename. The error is printed, and startup continues with the original file. The same applies to a pending restore skipped as stale: the reason is also saved as `last_restore_error` (`{message, at}`) in the picker config, `GET /api/backups` returns it once as `restore_error` and clears it, so the admin page can say why the data didn't change.
 6. **Reload.** The admin app waits with `useRestartPoll` and reloads. Because the server restarts from the normal app into the normal app, the existing "is the picker route there?" check can't tell old from new. `GET /api/time-sync` (no login) therefore also returns a `boot_id`, a random id fixed for the life of the process. The page reads it before restoring, and `useRestartPoll`'s new `"restarted"` target waits until a different `boot_id` answers.
 
 ### 4.2 What a restore takes back
@@ -132,6 +132,7 @@ The backup folder setting is not in the tournament file, so it stays as it is.
 - **Page contents:**
   - **Folder:** the resolved path, with **Change** (an input plus Save, showing the server's 422 reason) and **Use default** (hidden while the default is in use).
   - **Status:** "Last backup at 2:35 PM", or "No backups yet". If `last_error` is set, an `alert alert-danger` with the message and time.
+  - **Restore error:** if `restore_error` is returned (a startup swap failed or was cancelled), an `alert alert-danger` says "The last restore didn't complete: <reason>".
   - **Back up now:** a button. It shows the server error if the backup fails.
   - **Backups table,** newest first: time (local), reason (translated label), size, and **Restore**.
 - **Restore dialog:** `ConfirmDialog` with:
@@ -139,7 +140,7 @@ The backup folder setting is not in the tournament file, so it stays as it is.
   - "Every device reconnects. Any device, this one included, may need to log in or be admitted again.";
   - confirm button **Restore**.
 
-  On 202 it shows "Restoring…" and calls `useRestartPoll`. A 409 shows its detail in the dialog.
+  On 202 it shows "Restoring…", disables the page's buttons, and calls `useRestartPoll`. A 409 shows its detail in the dialog.
 - **Refresh:** the list refetches on focus and after Back up now. No realtime event is needed.
 - **Strings:** every string goes through i18n, in English and Chinese.
 

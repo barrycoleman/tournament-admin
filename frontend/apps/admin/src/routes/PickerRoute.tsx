@@ -85,6 +85,11 @@ function DamagedSection() {
       <h2 id="damaged-heading">{t("picker.damagedHeading")}</h2>
       <p>{t("picker.damagedBody", { path: damaged.data.path })}</p>
       {restart.status === "waiting" && <p role="status">{t("picker.damagedRestoring")}</p>}
+      {restart.status === "timedOut" && (
+        <p className="alert alert-danger" role="alert">
+          {t("picker.damagedTimedOut")}
+        </p>
+      )}
       {entries.length === 0 ? (
         <p>{t("picker.damagedNoBackups")}</p>
       ) : (

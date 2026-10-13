@@ -100,6 +100,11 @@ describe("BackupsRoute", () => {
   });
 
   it("changes the folder and shows the server's refusal", async () => {
+    stub({
+      "PUT /api/backups/folder": new ApiError(422, "Choose a folder other than a tournaments folder.", {
+        detail: "Choose a folder other than a tournaments folder.",
+      }),
+    });
     renderRoute();
     fireEvent.click(await screen.findByRole("button", { name: "Change" }));
     fireEvent.change(screen.getByLabelText("Backup folder"), { target: { value: "/mnt/usb" } });
@@ -107,6 +112,36 @@ describe("BackupsRoute", () => {
     await waitFor(() =>
       expect(apiRequest).toHaveBeenCalledWith("/api/backups/folder", { method: "PUT", body: { folder: "/mnt/usb" } })
     );
+    expect(await screen.findByText("Choose a folder other than a tournaments folder.")).toBeInTheDocument();
+  });
+
+  it("shows why the last restore didn't complete", async () => {
+    state.restore_error = { message: "The restore didn't happen: disk full. Nothing was changed.", at: "2026-10-12T21:40:00Z" };
+    renderRoute();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The last restore didn't complete: The restore didn't happen: disk full. Nothing was changed."
+    );
+  });
+
+  it("shows the newest listed backup's time when this process has not made one yet", async () => {
+    state.last_backup_at = null;
+    renderRoute();
+    expect(await screen.findByText(/Last backup at /)).toBeInTheDocument();
+  });
+
+  it("disables the buttons while waiting for the restarted server", async () => {
+    state.folder_is_default = false;
+    stub({ "POST /api/backups/spring-2026-10-12-143005-manual.db/restore": { status: "restarting" } });
+    renderRoute();
+    const rows = await screen.findAllByRole("row");
+    fireEvent.click(within(rows[1]).getByRole("button", { name: "Restore" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Restoring");
+    for (const name of ["Back up now", "Change", "Use default"]) {
+      expect(screen.getByRole("button", { name })).toBeDisabled();
+    }
+    for (const button of screen.getAllByRole("button", { name: "Restore" })) expect(button).toBeDisabled();
   });
 
   it("confirms a restore with the full warning and shows a 409", async () => {

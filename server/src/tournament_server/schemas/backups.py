@@ -23,6 +23,7 @@ class BackupsRead(BaseModel):
     last_backup_at: dt.datetime | None
     last_error: BackupErrorRead | None
     backups: list[BackupEntryRead]
+    restore_error: BackupErrorRead | None = None
 
 
 class BackupFolderUpdate(BaseModel):

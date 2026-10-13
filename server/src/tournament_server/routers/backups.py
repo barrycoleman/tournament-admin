@@ -23,11 +23,17 @@ from tournament_server.services.backups import (
     BackupError,
     BackupManager,
     backup_problem,
+    copy_mode,
     config_key,
 )
 
 router = APIRouter(prefix="/api/backups", tags=["backups"])
 
+TOURNAMENTS_FOLDER_DETAIL = "Choose a folder other than a tournaments folder."
+NO_PERMISSIONS_DETAIL = (
+    "This folder can't keep backups private (its file system doesn't support file permissions). "
+    "Choose another folder."
+)
 RELATIVE_FOLDER_DETAIL = "Enter a full folder path, starting from the root."
 
 
@@ -44,7 +50,7 @@ def _entry_read(entry: BackupEntry) -> BackupEntryRead:
     )
 
 
-def _state(manager: BackupManager) -> BackupsRead:
+def _state(manager: BackupManager, restore_error: BackupErrorRead | None = None) -> BackupsRead:
     error = manager.last_error
     return BackupsRead(
         folder=str(manager.folder()),
@@ -52,22 +58,43 @@ def _state(manager: BackupManager) -> BackupsRead:
         last_backup_at=manager.last_backup_at,
         last_error=BackupErrorRead(**error) if error else None,
         backups=[_entry_read(entry) for entry in manager.list()],
+        restore_error=restore_error,
     )
 
 
-def _folder_problem(path: Path) -> str | None:
+def _folder_problem(path: Path, db_path: str, config_path: Path) -> str | None:
     try:
         path.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(dir=path):
-            pass
+    except OSError as exc:
+        return f"Can't write to {path}: {exc.strerror or exc}"
+    if is_path_allowed_exactly(path, load_config(config_path).allowed_directories):
+        return TOURNAMENTS_FOLDER_DETAIL
+    try:
+        with tempfile.NamedTemporaryFile(dir=path) as probe:
+            try:
+                copy_mode(Path(db_path), Path(probe.name))
+            except OSError:
+                return NO_PERMISSIONS_DETAIL
     except OSError as exc:
         return f"Can't write to {path}: {exc.strerror or exc}"
     return None
 
 
+def is_path_allowed_exactly(path: Path, allowed: list[str]) -> bool:
+    resolved = path.resolve()
+    return any(Path(a).resolve() == resolved for a in allowed)
+
+
 @router.get("", response_model=BackupsRead)
 def get_backups(request: Request, _role: str = Depends(require_admin)) -> BackupsRead:
-    return _state(_manager(request))
+    manager = _manager(request)
+    config = load_config(manager.config_path)
+    restore_error = None
+    if config.last_restore_error:
+        restore_error = BackupErrorRead(**config.last_restore_error)
+        config.last_restore_error = None
+        save_config(manager.config_path, config)
+    return _state(manager, restore_error)
 
 
 @router.post("", response_model=BackupEntryRead, status_code=201)
@@ -93,7 +120,7 @@ def set_folder(
         path = Path(folder)
         if not path.is_absolute():
             raise HTTPException(status_code=422, detail=RELATIVE_FOLDER_DETAIL)
-        problem = _folder_problem(path)
+        problem = _folder_problem(path, manager.db_path, manager.config_path)
         if problem is not None:
             raise HTTPException(status_code=422, detail=problem)
         config.backup_dirs[key] = str(path.resolve())
