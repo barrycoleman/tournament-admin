@@ -239,6 +239,8 @@ unit test under jsdom.
 
 **Game plugin gating** (`src/gamePlugin/`): until the event has a game plugin, `useGamePlugin` reports none, `GamePluginBanner` (in the admin layout, hidden from judges) links to `/events/setup#game-plugins`, and `RequiresGamePlugin` swaps a screen for `NeedsGamePlugin` (an admin gets a link to Event Setup, anyone else a plain note). `router.tsx` wraps session Matches, Rankings and Skills, season `/rankings` and `/judge/rankings` in it; award forms disable the Performance kind and any source that cannot produce a winner. `AppShell` calls `useGamePluginLiveUpdates`, which refetches everything the plugin shapes on the `game_plugin_changed` broadcast, so open pages unlock live. Event Setup's plugin section has three states: nothing selected ("Select for this event"), selected and unused ("Switch to this" and "Clear selection", each first asking the server for a `dry_run` preview and confirming what will reset in an `alertdialog`), and in use (matches or skills attempts exist: no buttons, just the locked note). The skills settings form re-seeds from server values that change under it, because a plugin change resets them.
 
+**Backups** (`src/routes/BackupsRoute.tsx`, admin nav "Backups"): folder (Change / Use default), last backup and last error, Back up now, and the backups table with Restore. Restore reads `boot_id` from `GET /api/time-sync`, posts the restore, then waits with `useRestartPoll(..., "restarted")`, which polls time sync until a different `boot_id` answers (the picker-route check can't tell a normal-to-normal restart apart). The picker page shows a damaged file's backups when `GET /api/picker/damaged` answers.
+
 ## Auth & token handling
 
 Both the access token and the rotating refresh token live in
@@ -293,7 +295,7 @@ chosen) starts its own backend and Vite server with
 `tests/e2e/fixtures/isolatedServer.ts`, as `cooperativeRankings.spec.ts`
 does on ports 8125/5185, `finalizeQualification.spec.ts` on 8127/5187, and
 `skillsChallenges.spec.ts` (the shipped sample game, with skills on) on
-8128/5188, `awards.spec.ts` on 8129/5189, and `gamePluginGating.spec.ts` on 8130/5190. `zz_seasonRankings.spec.ts` runs last for the same
+8128/5188, `awards.spec.ts` on 8129/5189, and `gamePluginGating.spec.ts` on 8130/5190, and `backups.spec.ts` on 8131/5191. `zz_seasonRankings.spec.ts` runs last for the same
 reason as `z_sessionSchedule.spec.ts`.
 
 `playwright.config.ts` uses `channel: "chrome"` — the machine's installed

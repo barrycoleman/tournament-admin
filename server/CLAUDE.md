@@ -833,9 +833,10 @@ something this phase tries to fix; a future phase wanting to close it
 would need a short-lived single-use ticket endpoint.
 
 `GET /api/time-sync` (no auth, like `/health` and
-`POST /api/devices/register`) returns `{"server_time": "<ISO-8601 UTC>"}`
+`POST /api/devices/register`) returns `{"server_time": "<ISO-8601 UTC>", "boot_id": "<per-process id>"}`
 so a client can measure its own clock offset and render a countdown
-against absolute deadlines rather than trusting its local clock.
+against absolute deadlines rather than trusting its local clock, and can
+tell a restarted server from the old one (see Backups).
 
 ### Event catalog
 
@@ -977,6 +978,44 @@ while the server was down). Deliberately **one** step, not a cascade
 through however many phases elapsed, and there is no "the server was
 down too long, just end it" threshold — both are spec-level judgment
 calls left open.
+
+## Backups
+
+`services/backups.py` owns backup files; see
+`docs/superpowers/specs/2026-10-12-automatic-backups-design.md`. Snapshots
+use SQLite's online backup API (never a file copy), are written to a
+temporary name and renamed, and get the tournament file's permission bits.
+Names are `<stem>-<YYYY-MM-DD>-<HHMMSS>-<reason>.db` (local time, `-2`... on
+a same-second clash). The folder defaults to `backups/<stem>/` next to the
+tournament file; a custom one lives in the picker config's `backup_dirs`
+(not in the tournament file, so a restore never reverts it).
+
+`app.state.backups` (`BackupManager`) holds the last backup, the last
+error and the newest `audit_log` id seen; a lifespan task checks every 5
+minutes and snapshots only when that id grew (a restart alone takes none).
+Only the newest 50 `interval` snapshots are kept. Risky steps call
+`request.app.state.backups.snapshot_quietly("before-...")` after their checks
+and before their first write; a failure there only sets `last_error`.
+Admin-only routes: `GET/POST /api/backups`, `PUT /api/backups/folder`,
+`POST /api/backups/{filename}/restore`.
+
+A restore checks the backup (`PRAGMA quick_check` plus the same schema
+comparison as `ensure_schema_current`, opened with `?mode=ro&immutable=1`),
+takes a `before-restore` snapshot, writes `pending_restore` (with a
+`requested_at` timestamp) to the picker config and restarts;
+`main._startup()` swaps the file in before anything opens it and removes
+the old `-wal`/`-shm` first (`replace_database`). Startup ignores a
+`pending_restore` older than 120 s (`PENDING_RESTORE_MAX_AGE_SECONDS`), and
+the restore clears it if the restart itself fails, so a failed restart
+never leaves a restore armed. `GET /api/time-sync` returns a per-process
+`boot_id` so the admin UI can tell the restarted server from the old one.
+If the tournament file fails `quick_check` at startup, the picker app
+starts in damaged mode (`GET /api/picker/damaged`, `POST
+/api/picker/restore`, unauthenticated like the rest of the picker). Its
+restore keeps a `-damaged.db` copy of the file (plus its `-wal` if present,
+with the same permission bits; `-2`... on a name clash, never overwriting an
+earlier copy) before swapping a backup in. A locked or unreadable file
+(`sqlite3.OperationalError`) is not treated as damaged.
 
 ## Database migrations
 
