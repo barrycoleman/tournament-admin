@@ -23,7 +23,12 @@ def test_load_config_creates_a_fresh_file_when_none_exists(tmp_path):
     assert config == PickerConfig(allowed_directories=[], last_opened_path=None)
     assert config_path.exists()
     on_disk = json.loads(config_path.read_text())
-    assert on_disk == {"allowed_directories": [], "last_opened_path": None}
+    assert on_disk == {
+        "allowed_directories": [],
+        "last_opened_path": None,
+        "backup_dirs": {},
+        "pending_restore": None,
+    }
 
 
 def test_load_config_seeds_default_dir_from_env_var_on_first_creation(tmp_path, monkeypatch):

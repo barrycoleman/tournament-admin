@@ -13,6 +13,10 @@ DEFAULT_CONFIG_PATH = Path.home() / ".tournament-admin" / "server-config.json"
 class PickerConfig:
     allowed_directories: list[str] = field(default_factory=list)
     last_opened_path: str | None = None
+    # Tournament file's resolved path -> its custom backup folder.
+    backup_dirs: dict[str, str] = field(default_factory=dict)
+    # {"target": tournament path, "source": backup path}, applied by main._startup().
+    pending_restore: dict[str, str] | None = None
 
 
 def resolve_config_path() -> Path:
@@ -33,6 +37,8 @@ def load_config(config_path: Path) -> PickerConfig:
     return PickerConfig(
         allowed_directories=list(raw.get("allowed_directories", [])),
         last_opened_path=raw.get("last_opened_path"),
+        backup_dirs=dict(raw.get("backup_dirs") or {}),
+        pending_restore=raw.get("pending_restore"),
     )
 
 
