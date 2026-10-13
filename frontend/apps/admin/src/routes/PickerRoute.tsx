@@ -3,6 +3,9 @@ import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { useRestartPoll } from "../useRestartPoll";
+import { apiErrorMessage } from "../apiErrorMessage";
+import type { BackupEntry } from "./BackupsRoute";
+import { formatSize, reasonKey } from "../backups/format";
 
 interface DirectoryListResponse {
   allowed_directories: string[];
@@ -53,6 +56,60 @@ export function generateDefaultFilename(now: Date = new Date()): string {
     now.getHours()
   )}${pad(now.getMinutes())}`;
   return `${stamp}-tournament.db`;
+}
+
+interface DamagedRead {
+  path: string;
+  backups: BackupEntry[];
+}
+
+function DamagedSection() {
+  const { t } = useTranslation();
+  const restart = useRestartPoll();
+  const damaged = useQuery({
+    queryKey: ["pickerDamaged"],
+    queryFn: () => apiRequest<DamagedRead>("/api/picker/damaged"),
+    retry: false,
+  });
+  const restore = useMutation({
+    mutationFn: (filename: string) =>
+      apiRequest("/api/picker/restore", { method: "POST", body: { filename } }),
+    onSuccess: () => restart.start(),
+  });
+  // Older picker tests answer every request with the directories body, so
+  // render only for a real damaged-mode response.
+  if (!damaged.data?.path) return null;
+  const entries = damaged.data.backups ?? [];
+  return (
+    <section className="alert alert-danger" aria-labelledby="damaged-heading">
+      <h2 id="damaged-heading">{t("picker.damagedHeading")}</h2>
+      <p>{t("picker.damagedBody", { path: damaged.data.path })}</p>
+      {restart.status === "waiting" && <p role="status">{t("picker.damagedRestoring")}</p>}
+      {entries.length === 0 ? (
+        <p>{t("picker.damagedNoBackups")}</p>
+      ) : (
+        <ul className="list-plain">
+          {entries.map((entry) => (
+            <li key={entry.filename} className="list-row">
+              <span className="list-row__main">
+                {new Date(entry.created_at).toLocaleString()} · {t(reasonKey(entry.reason), { defaultValue: entry.reason })} ·{" "}
+                {formatSize(entry.size_bytes)}
+              </span>
+              <button
+                type="button"
+                className="btn"
+                disabled={restore.isPending}
+                onClick={() => restore.mutate(entry.filename)}
+              >
+                {t("picker.damagedRestore")}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {restore.isError && <p role="alert">{apiErrorMessage(restore.error, t("errors.generic"))}</p>}
+    </section>
+  );
 }
 
 export function PickerRoute() {
@@ -191,6 +248,7 @@ export function PickerRoute() {
       <main className="auth-screen">
         <div className="auth-card">
           <h1>{t("picker.heading")}</h1>
+          <DamagedSection />
           {timedOutAlert}
           <div className="picker-menu">
             <button

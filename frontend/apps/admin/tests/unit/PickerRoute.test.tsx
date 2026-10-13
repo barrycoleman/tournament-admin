@@ -377,4 +377,54 @@ describe("PickerRoute", () => {
       "Tournament failed to start — check the server logs."
     );
   });
+
+  it("offers the damaged file's backups and restores one", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url === "/api/picker/directories") return jsonResponse({ allowed_directories: [] });
+      if (url === "/api/picker/damaged") {
+        return jsonResponse({
+          path: "/events/spring.db",
+          backups: [
+            {
+              filename: "spring-2026-10-12-143005-manual.db",
+              created_at: "2026-10-12T21:30:05Z",
+              reason: "manual",
+              size_bytes: 2048,
+            },
+          ],
+        });
+      }
+      if (url === "/api/picker/restore" && method === "POST") return jsonResponse({ status: "restarting" }, 202);
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderRoute();
+
+    expect(
+      await screen.findByText("/events/spring.db is damaged and can't be opened. Restore it from a backup.")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Back up now \(manual\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) => String(url) === "/api/picker/restore");
+      expect(call).toBeDefined();
+      expect(JSON.parse(call![1]!.body as string)).toEqual({ filename: "spring-2026-10-12-143005-manual.db" });
+    });
+  });
+
+  it("shows no damaged section when the server isn't in damaged mode", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) =>
+        String(input) === "/api/picker/damaged"
+          ? jsonResponse({ detail: "Nothing is damaged" }, 404)
+          : jsonResponse({ allowed_directories: [] })
+      )
+    );
+    renderRoute();
+    await screen.findByRole("button", { name: "Create New Tournament" });
+    expect(screen.queryByText(/is damaged and can't be opened/)).not.toBeInTheDocument();
+  });
 });

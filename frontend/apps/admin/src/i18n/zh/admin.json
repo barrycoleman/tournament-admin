@@ -33,6 +33,11 @@
     "switchToDark": "切换到深色模式"
   },
   "picker": {
+    "damagedHeading": "此比赛文件已损坏",
+    "damagedBody": "{{path}} 已损坏，无法打开。请从备份中恢复。",
+    "damagedNoBackups": "没有找到它的备份。",
+    "damagedRestore": "恢复",
+    "damagedRestoring": "正在恢复……服务器恢复后页面会自动重新加载。",
     "heading": "启动赛事",
     "createAction": "创建新赛事",
     "openAction": "打开现有赛事",
