@@ -28,7 +28,7 @@ The whole event lives in one SQLite file. A bad click (deleting a session, rebui
 ### 3.1 Where they go
 
 - **Default folder:** `backups/<tournament file stem>/`, next to the tournament file. For `~/Documents/tournaments/spring.db` that is `~/Documents/tournaments/backups/spring/`.
-- **Changing it:** the admin can set another folder on the Backups page. It is stored in the tournament file, in a new nullable `events.backup_dir` column. Null or blank means the default.
+- **Changing it:** the admin can set another folder on the Backups page. It is stored in the server's picker config (`server-config.json`, new key `backup_dirs`, mapping the tournament file's resolved path to a folder), not in the tournament file. That needs no schema change, a restore never reverts it, and the damaged-file screen (§5) can still find a custom folder. No entry, or blank, means the default.
 - **Creating it:** the folder is created on the first snapshot if missing.
 - **The picker:** it lists only `*.db` files directly in an allowed folder, so backups in a subfolder never appear there as tournaments.
 
@@ -47,7 +47,7 @@ The whole event lives in one SQLite file. A bad click (deleting a session, rebui
 ### 3.3 Interval snapshots
 
 - **Timing:** a background task, started in the app's lifespan, wakes every 5 minutes.
-- **Change detection:** it takes a snapshot only if the newest `audit_log` id is greater than the one recorded at the last snapshot of any reason. Every write is audited, so this sees every change. The first wake after startup always compares against nothing, so a restarted server takes one snapshot as soon as anything changes.
+- **Change detection:** it takes a snapshot only if the newest `audit_log` id is greater than the one recorded at the last snapshot of any reason. Every write is audited, so this sees every change. At startup the current newest id is the baseline, so a restart alone takes no snapshot; the first change after it does.
 - **Off the event loop:** the snapshot runs in a worker thread.
 - **Retention:** after each `interval` snapshot, only the newest 50 `interval` files in the folder are kept, and older ones are deleted. Files with any other reason are never deleted automatically.
 
@@ -97,7 +97,7 @@ These requests take a snapshot after their own checks pass and before they write
 1. **Find it.** `POST /api/backups/{filename}/restore` looks the file up in the backup folder only. A name with a path separator, or one not listed by `GET /api/backups`, is a 404.
 2. **Check the backup.** The server opens it read-only and runs `PRAGMA quick_check` and the schema comparison from `migrations._reflected_schema_matches_models`. If either fails, it returns 409 with "This backup is damaged." or "This backup was made by an older build and can't be restored." Nothing changes.
 3. **Save the current state.** It takes a `before-restore` snapshot of the current file. If that fails, the restore is refused with 500, because the current state could not be saved.
-4. **Record and restart.** It writes `pending_restore {target, source}` to the picker config and returns 202 `{restarting: true}`. It then restarts the process with the existing delayed `os.execve` restart used by the picker.
+4. **Record and restart.** It writes `pending_restore {target, source}` to the picker config and returns 202 `{status: "restarting"}` (the picker's existing `RestartingResponse`). It then restarts the process with the existing delayed `os.execve` restart used by the picker.
 5. **Swap at startup.** On startup, before any engine opens the file, `_startup()` sees `pending_restore` whose `target` is the path it is about to open. It:
    1. copies `source` over `target`;
    2. deletes `target`'s `-wal` and `-shm` files;
@@ -105,22 +105,23 @@ These requests take a snapshot after their own checks pass and before they write
    4. clears `pending_restore`.
 
    A pending restore whose target is a different path is cleared and ignored. If the copy fails, the original file is untouched, because the copy goes to a temporary name and then a rename. The error is printed, and startup continues with the original file.
-6. **Reload.** The admin app waits with `useRestartPoll` and reloads.
+6. **Reload.** The admin app waits with `useRestartPoll` and reloads. Because the server restarts from the normal app into the normal app, the existing "is the picker route there?" check can't tell old from new. `GET /api/time-sync` (no login) therefore also returns a `boot_id`, a random id fixed for the life of the process. The page reads it before restoring, and `useRestartPoll`'s new `"restarted"` target waits until a different `boot_id` answers.
 
 ### 4.2 What a restore takes back
 
 Everything goes back to the backup's moment, including the following, and the confirm dialog says so:
 
-- auth sessions, so other devices may need to log in again;
+- auth sessions, so any device, this one included, may need to log in again;
 - admitted scoring devices;
-- role passwords;
-- the backup folder setting.
+- role passwords.
+
+The backup folder setting is not in the tournament file, so it stays as it is.
 
 ## 5. Damaged file at startup
 
 - **The check:** `_startup()` runs `PRAGMA quick_check` on the resolved tournament file before `create_app()`.
 - **On failure:** it builds the picker app in "damaged" mode, passing the damaged path, instead of exiting.
-- **`GET /api/picker/damaged`:** returns `{path, backups: [...]}` in that mode, using the default backup folder for that file, and 404 otherwise. The custom folder setting lives inside the damaged file and can't be trusted.
+- **`GET /api/picker/damaged`:** returns `{path, backups: [...]}` in that mode, using that file's backup folder (its custom folder from the picker config, else the default), and 404 otherwise.
 - **`POST /api/picker/restore`** with `{filename}`: restores one of those backups. It runs the same checks as §4.1 steps 1-2, copies with the same temporary-name-and-rename swap, then restarts into the normal app. There is no `before-restore` snapshot; the damaged file is instead renamed to `<stem>-<timestamp>-damaged.db` in the backup folder, so nothing is deleted.
 - **Login:** these two endpoints have no login, like the rest of the picker (its accepted risk is in `server/CLAUDE.md`). They only act on the damaged file's own backups.
 - **The picker page:** shows "<file> is damaged and can't be opened. Restore it from a backup." with the backup list and a Restore button per backup, above the usual picker content.
@@ -135,7 +136,7 @@ Everything goes back to the backup's moment, including the following, and the co
   - **Backups table,** newest first: time (local), reason (translated label), size, and **Restore**.
 - **Restore dialog:** `ConfirmDialog` with:
   - "Restore the backup from {time}? Everything after it is replaced. The current state is saved as a backup first.";
-  - "Every device reconnects, and other devices may need to log in or be admitted again.";
+  - "Every device reconnects. Any device, this one included, may need to log in or be admitted again.";
   - confirm button **Restore**.
 
   On 202 it shows "Restoring…" and calls `useRestartPoll`. A 409 shows its detail in the dialog.
@@ -186,4 +187,4 @@ On an isolated server (ports 8131/5191), because a restore restarts the server:
   2. rename a team;
   3. restore that backup;
   4. after the reload, the old name is back and a `before-restore` backup is listed.
-- **Folder:** changing the backup folder to a new path lists backups from there, and **Use default** returns.
+- **Folder:** changing the backup folder to a new path, then Back up now, lists the new backup from there, and **Use default** returns to the default folder.
