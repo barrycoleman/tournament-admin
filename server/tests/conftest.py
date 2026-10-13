@@ -119,3 +119,18 @@ def captain_pick_client(tmp_path) -> TestClient:
     )
     with _AutoAuthTestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture()
+def backup_reasons():
+    """Records the reason of every risky-step snapshot instead of taking it.
+
+    Usage: `reasons = backup_reasons(client)`; the returned list fills as
+    requests run."""
+
+    def attach(test_client):
+        reasons: list[str] = []
+        test_client.app.state.backups.snapshot_quietly = reasons.append
+        return reasons
+
+    return attach

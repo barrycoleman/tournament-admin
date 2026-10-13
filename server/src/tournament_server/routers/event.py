@@ -140,6 +140,7 @@ def set_active_session(
     session_obj = db.get(TournamentSession, payload.session_id)
     if session_obj is None or session_obj.event_id != event.id:
         raise HTTPException(status_code=404, detail="Session not found")
+    request.app.state.backups.snapshot_quietly("before-active-session")
     event.active_session_id = session_obj.id
     db.commit()
     db.refresh(event)
@@ -159,6 +160,7 @@ def _change_game_plugin(
     target = request.app.state.game_plugins.get(target_name) if target_name is not None else None
     if dry_run:
         return game_plugin_service.preview(db, event, target)
+    request.app.state.backups.snapshot_quietly("before-game-plugin")
     game_plugin_service.reset_settings(db, event)
     event.game_plugin_name = target_name
     db.commit()

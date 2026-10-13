@@ -118,6 +118,7 @@ def remove_session(
             status_code=409,
             detail="This session has scored matches, so it can't be deleted.",
         )
+    request.app.state.backups.snapshot_quietly("before-delete-session")
     was_active = delete_session(db, session_obj)
     db.commit()
     if was_active:

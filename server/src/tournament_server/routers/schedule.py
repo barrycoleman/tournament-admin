@@ -558,6 +558,7 @@ def generate_schedule(
     if payload.dry_run:
         return ScheduleGenerateResponse(fits=True, rounds=round_results, overflow=None)
 
+    request.app.state.backups.snapshot_quietly("before-schedule")
     # Everything below runs in one transaction: a failure before commit
     # leaves the previous schedule exactly as it was.
     for round_ in replaced:
@@ -736,6 +737,7 @@ def clear_schedule(
         raise HTTPException(status_code=404, detail="Session not found")
     if qualification.is_finalized(session_obj) and round_type != "practice":
         raise HTTPException(status_code=409, detail=qualification.FINALIZED_SCHEDULE_DETAIL)
+    request.app.state.backups.snapshot_quietly("before-clear-schedule")
 
     matches_deleted = _delete_round(db, session_id, division_id, round_type)
 

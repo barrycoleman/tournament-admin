@@ -410,6 +410,7 @@ def finalize_awards(
                 snapshot.append((award, division_id, state.team_ids))
     if not payload.confirm:
         return FinalizeRead(awards_finalized_at=None, warnings=warnings)
+    request.app.state.backups.snapshot_quietly("before-awards-finalize")
     # Claim the finalize atomically: of two concurrent confirms only one
     # sees the column still empty, so only one writes the snapshot.
     finalized_at = utc_now()

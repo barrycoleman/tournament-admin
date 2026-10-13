@@ -92,6 +92,7 @@ def finalize(
                 status_code=422,
                 detail=f"Teams that played {played} can drop between 0 and {int(played) - 1} matches",
             )
+    request.app.state.backups.snapshot_quietly("before-qualification")
     try:
         qualification.finalize(db, session_obj, state, payload.drops)
     except qualification.QualificationConflictError as exc:
@@ -113,5 +114,6 @@ def reopen(
     ).first()
     if has_finals is not None:
         raise HTTPException(status_code=409, detail=qualification.FINALS_EXIST_DETAIL)
+    request.app.state.backups.snapshot_quietly("before-qualification")
     qualification.reopen(db, session_obj)
     return _after_change(request, db, session_obj, plugin)

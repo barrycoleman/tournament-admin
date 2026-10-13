@@ -297,6 +297,7 @@ def start_finals(
         )
     top_teams = ranked[:needed]
 
+    request.app.state.backups.snapshot_quietly("before-finals")
     bracket = FinalsBracket(
         session_id=payload.session_id,
         division_id=payload.division_id,
@@ -517,6 +518,7 @@ def delete_finals(
         raise HTTPException(
             status_code=409, detail="Cannot delete a completed finals bracket"
         )
+    request.app.state.backups.snapshot_quietly("before-finals")
 
     session_id = bracket.session_id
     delete_finals_bracket(db, bracket)
