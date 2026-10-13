@@ -16,6 +16,7 @@
     "submit": "Create event"
   },
   "shell": {
+    "backupsLink": "Backups",
     "logout": "Log out",
     "dashboardLink": "Dashboard",
     "eventSetupLink": "Event & plugins",
@@ -537,6 +538,41 @@
       "deleteBody": "Team {{number}} gets this {{label}} attempt back.",
       "deleteConfirm": "Delete attempt",
       "deleteCancel": "Keep attempt"
+    }
+  },
+  "backups": {
+    "heading": "Backups",
+    "intro": "The server saves a copy of this tournament every 5 minutes when something changed, and before risky steps.",
+    "folderLabel": "Backup folder",
+    "change": "Change",
+    "save": "Save",
+    "cancel": "Cancel",
+    "useDefault": "Use default",
+    "lastBackup": "Last backup at {{time}}",
+    "noneYet": "No backups yet.",
+    "lastError": "The last backup failed at {{time}}: {{message}}",
+    "backUpNow": "Back up now",
+    "time": "Time",
+    "reason": "Reason",
+    "size": "Size",
+    "restore": "Restore",
+    "restoreHeading": "Restore this backup?",
+    "restoreBody": "Restore the backup from {{time}}? Everything after it is replaced. The current state is saved as a backup first. Every device reconnects. Any device, this one included, may need to log in or be admitted again.",
+    "restoring": "Restoring… the page reloads when the server is back.",
+    "restoreTimedOut": "The server hasn't come back yet. Reload this page in a moment.",
+    "reasons": {
+      "interval": "Every 5 minutes",
+      "manual": "Back up now (manual)",
+      "before-restore": "Before a restore",
+      "before-active-session": "Before switching the active session",
+      "before-schedule": "Before building a schedule",
+      "before-clear-schedule": "Before clearing a round",
+      "before-qualification": "Before finalizing or reopening qualification",
+      "before-finals": "Before starting or deleting finals",
+      "before-delete-session": "Before deleting a session",
+      "before-game-plugin": "Before changing the game plugin",
+      "before-awards-finalize": "Before finalizing awards",
+      "damaged": "Damaged file kept after a restore"
     }
   },
   "debugPanel": {

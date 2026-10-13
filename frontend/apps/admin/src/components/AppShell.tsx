@@ -90,6 +90,9 @@ export function AppShell() {
             <NavLink to="/settings/roles" className={navLinkClassName}>
               {t("shell.rolesLink")}
             </NavLink>
+            <NavLink to="/backups" className={navLinkClassName}>
+              {t("shell.backupsLink")}
+            </NavLink>
             <NavLink to="/divisions" className={navLinkClassName}>
               {t("shell.divisionsLink")}
             </NavLink>

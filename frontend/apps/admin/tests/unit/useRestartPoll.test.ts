@@ -100,4 +100,31 @@ describe("useRestartPoll", () => {
     expect(result.current.status).toBe("timedOut");
     expect(onReady).not.toHaveBeenCalled();
   });
+
+  it('with target "restarted", waits for a different boot id', async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+        if (calls === 2) return new Response(null, { status: 502 });
+        const boot = calls < 3 ? "old" : "new";
+        return new Response(JSON.stringify({ server_time: "x", boot_id: boot }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      })
+    );
+    const onReady = vi.fn();
+    const { result } = renderHook(() => useRestartPoll(onReady, "restarted"));
+    act(() => {
+      result.current.start("old");
+    });
+    for (let i = 0; i < 3; i += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+    }
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
 });

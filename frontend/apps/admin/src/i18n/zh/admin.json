@@ -16,6 +16,7 @@
     "submit": "创建赛事"
   },
   "shell": {
+    "backupsLink": "备份",
     "logout": "登出",
     "dashboardLink": "仪表盘",
     "eventSetupLink": "赛事与插件",
@@ -534,6 +535,41 @@
       "deleteBody": "{{number}} 队将重新获得这次{{label}}尝试。",
       "deleteConfirm": "删除尝试",
       "deleteCancel": "保留尝试"
+    }
+  },
+  "backups": {
+    "heading": "备份",
+    "intro": "有改动时，服务器每 5 分钟保存一次本比赛的副本，并在高风险操作前也保存一次。",
+    "folderLabel": "备份文件夹",
+    "change": "更改",
+    "save": "保存",
+    "cancel": "取消",
+    "useDefault": "使用默认位置",
+    "lastBackup": "上次备份于 {{time}}",
+    "noneYet": "还没有备份。",
+    "lastError": "上次备份于 {{time}} 失败：{{message}}",
+    "backUpNow": "立即备份",
+    "time": "时间",
+    "reason": "原因",
+    "size": "大小",
+    "restore": "恢复",
+    "restoreHeading": "恢复此备份？",
+    "restoreBody": "恢复 {{time}} 的备份？之后的所有内容都会被替换。当前状态会先保存为一个备份。所有设备都会重新连接。任何设备（包括本设备）都可能需要重新登录或重新获准。",
+    "restoring": "正在恢复……服务器恢复后页面会自动重新加载。",
+    "restoreTimedOut": "服务器还没有恢复。请稍后重新加载此页面。",
+    "reasons": {
+      "interval": "每 5 分钟",
+      "manual": "立即备份（手动）",
+      "before-restore": "恢复之前",
+      "before-active-session": "切换当前场次之前",
+      "before-schedule": "生成赛程之前",
+      "before-clear-schedule": "清除一轮之前",
+      "before-qualification": "确定或重新开放资格赛之前",
+      "before-finals": "开始或删除决赛之前",
+      "before-delete-session": "删除场次之前",
+      "before-game-plugin": "更改比赛插件之前",
+      "before-awards-finalize": "确定奖项之前",
+      "damaged": "恢复后保留的损坏文件"
     }
   },
   "debugPanel": {

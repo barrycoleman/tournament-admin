@@ -20,8 +20,12 @@ export type RestartPollStatus = "idle" | "waiting" | "timedOut";
  *   immediately on the *old*, still-normal process (this route already
  *   404s there before the restart even happens), landing `onReady`
  *   far too early.
+ * - "restarted" (restore): the normal app restarts into the normal app, so
+ *   the picker route can't tell old from new; readiness is GET
+ *   /api/time-sync answering with a boot_id different from the one passed
+ *   to start().
  */
-export type RestartTarget = "normal" | "picker";
+export type RestartTarget = "normal" | "picker" | "restarted";
 
 /**
  * After a picker action (create/open/switch) triggers a server restart,
@@ -36,21 +40,33 @@ export function useRestartPoll(
 ) {
   const [status, setStatus] = useState<RestartPollStatus>("idle");
 
-  function start() {
+  function start(previousBootId?: string) {
     setStatus("waiting");
     const deadline = Date.now() + RESTART_POLL_TIMEOUT_MS;
 
     const tick = async () => {
-      try {
-        await apiRequest("/api/picker/directories");
-        if (target === "picker") {
-          onReady();
-          return;
+      if (target === "restarted") {
+        try {
+          const { boot_id } = await apiRequest<{ boot_id: string }>("/api/time-sync");
+          if (boot_id !== previousBootId) {
+            onReady();
+            return;
+          }
+        } catch {
+          // Still restarting.
         }
-      } catch (err) {
-        if (target === "normal" && err instanceof ApiError && err.status === 404) {
-          onReady();
-          return;
+      } else {
+        try {
+          await apiRequest("/api/picker/directories");
+          if (target === "picker") {
+            onReady();
+            return;
+          }
+        } catch (err) {
+          if (target === "normal" && err instanceof ApiError && err.status === 404) {
+            onReady();
+            return;
+          }
         }
       }
       if (Date.now() > deadline) {
