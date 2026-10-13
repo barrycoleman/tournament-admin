@@ -73,6 +73,39 @@ def test_restoring_a_damaged_file_keeps_a_copy_and_restarts(damaged):
     assert len(kept) == 1 and kept[0].read_bytes().startswith(b"not a database")
 
 
+def test_restoring_keeps_the_wal_sidecar_the_mode_and_never_overwrites_a_kept_copy(damaged):
+    client, target, entry, _ = damaged
+    os.chmod(target, 0o640)
+    Path(f"{target}-wal").write_bytes(b"newest committed frames")
+    folder = backups.default_folder(str(target))
+    backups.restore_damaged(str(target), entry.path, folder)
+    kept = list(folder.glob("spring-*-damaged.db"))
+    assert len(kept) == 1
+    assert Path(f"{kept[0]}-wal").read_bytes() == b"newest committed frames"
+    assert (kept[0].stat().st_mode & 0o777) == 0o640
+    target.write_bytes(b"not a database" * 200)
+    backups.restore_damaged(str(target), entry.path, folder)
+    assert len(list(folder.glob("spring-*-damaged*.db"))) == 2
+
+
+def test_a_locked_or_unreadable_file_is_not_called_damaged(tmp_path, monkeypatch):
+    path = tmp_path / "x.db"
+    path.write_bytes(b"whatever")
+
+    def locked(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(backups.sqlite3, "connect", locked)
+    assert backups.database_is_damaged(str(path)) is False
+
+
+def test_a_second_picker_restore_after_success_is_404(damaged):
+    client, _, entry, calls = damaged
+    assert client.post("/api/picker/restore", json={"filename": entry.filename}).status_code == 202
+    assert client.post("/api/picker/restore", json={"filename": entry.filename}).status_code == 404
+    assert calls == [True]
+
+
 def test_picker_restore_refuses_unknown_and_damaged_backups(damaged):
     client, _, entry, calls = damaged
     assert client.post("/api/picker/restore", json={"filename": "nope.db"}).status_code == 404

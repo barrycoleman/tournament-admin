@@ -204,5 +204,6 @@ def restore_damaged_file(
         backup_service.restore_damaged(damaged, entry.path, folder)
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"The restore failed: {exc}") from exc
+    request.app.state.damaged_path = None
     background_tasks.add_task(_delayed_restart)
     return RestartingResponse(status="restarting")

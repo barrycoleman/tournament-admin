@@ -316,6 +316,10 @@ def database_is_damaged(db_path: str) -> bool:
             return conn.execute("PRAGMA quick_check").fetchone()[0] != "ok"
         finally:
             conn.close()
+    except sqlite3.OperationalError:
+        # Locked or unreadable is not corruption; let startup fail loudly
+        # rather than inviting an overwrite.
+        return False
     except sqlite3.DatabaseError:
         return True
 
@@ -326,5 +330,15 @@ def restore_damaged(db_path: str, backup: Path, folder: Path) -> None:
     target = Path(db_path).resolve()
     folder.mkdir(parents=True, exist_ok=True)
     stamp = dt.datetime.now().astimezone().strftime("%Y-%m-%d-%H%M%S")
-    shutil.copyfile(target, folder / f"{target.stem}-{stamp}-damaged.db")
+    base = f"{target.stem}-{stamp}-damaged"
+    kept = folder / f"{base}.db"
+    sequence = 2
+    while kept.exists():
+        kept = folder / f"{base}-{sequence}.db"
+        sequence += 1
+    shutil.copyfile(target, kept)
+    copy_mode(target, kept)
+    wal = Path(f"{target}-wal")
+    if wal.exists():
+        shutil.copyfile(wal, Path(f"{kept}-wal"))
     replace_database(backup, target)
