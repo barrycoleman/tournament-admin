@@ -1,0 +1,25 @@
+{
+  "connecting": "正在连接…",
+  "unreachable": "无法连接服务器，正在重试…",
+  "pairing": {
+    "heading": "配对此设备",
+    "instructions": "在管理应用中打开“设备”，输入此代码。",
+    "expiresIn": "{{seconds}} 秒后更换新代码",
+    "qrLabel": "二维码：打开管理应用的设备页面并填入此代码"
+  },
+  "home": {
+    "pairedAs": "已配对为",
+    "ready": "就绪。"
+  },
+  "blocked": {
+    "heading": "此设备已停用。",
+    "askAdmin": "请管理员启用 {{name}}。"
+  },
+  "roles": {
+    "scorer": "记分员",
+    "referee": "裁判",
+    "judge": "评委",
+    "front_desk": "签到",
+    "display_device": "显示屏"
+  }
+}

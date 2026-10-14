@@ -1,0 +1,31 @@
+{
+  "name": "@tournament-admin/device",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tournament-admin/shared": "*",
+    "i18next": "^23.15.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-i18next": "^15.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.5.0",
+    "@testing-library/react": "^16.0.0",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "jsdom": "^25.0.0",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.6",
+    "vitest": "^2.1.1"
+  }
+}

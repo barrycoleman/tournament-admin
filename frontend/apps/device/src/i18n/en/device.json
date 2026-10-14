@@ -1,0 +1,25 @@
+{
+  "connecting": "Connecting…",
+  "unreachable": "Can't reach the server. Retrying…",
+  "pairing": {
+    "heading": "Pair this device",
+    "instructions": "In the admin app, open Devices and enter this code.",
+    "expiresIn": "New code in {{seconds}} s",
+    "qrLabel": "QR code that opens the admin app's Devices page with this code"
+  },
+  "home": {
+    "pairedAs": "Paired as",
+    "ready": "Ready."
+  },
+  "blocked": {
+    "heading": "This device is disabled.",
+    "askAdmin": "Ask an admin to enable {{name}}."
+  },
+  "roles": {
+    "scorer": "Scorer",
+    "referee": "Referee",
+    "judge": "Judge",
+    "front_desk": "Check-in",
+    "display_device": "Display"
+  }
+}
