@@ -1188,6 +1188,19 @@ defense-in-depth — this does not by itself make ordering safe, it only
 protects a direct call against this route if something is ever inserted
 between it and the routes it must not shadow.
 
+**The device app.** `static_ui.mount_device_ui` (called from
+`create_app()` just before `mount_static_admin_ui`) serves the device app
+(`frontend/apps/device/dist/`, built with base `/device/`) under `/device/`
+with its own SPA fallback (`/device`, `/device/{path}` return its
+`index.html`; `/device/assets` is a `StaticFiles` mount, only if `assets/`
+exists). Resolution mirrors the admin UI: `device_static_dir` passed to
+`create_app()`, else `TOURNAMENT_DEVICE_STATIC_DIR` (`Settings.device_static_dir`),
+else `DEFAULT_DEVICE_STATIC_DIR`. `GET /pair` always answers a 307 to
+`/device/`, so a TV only types a short address (see "Device pairing"). The
+admin catch-all 404s for `device` and `device/...`, so a missing device
+build never serves the admin app at a device address. Picker mode
+(`create_picker_app`) does not mount the device app.
+
 Because `frontend/apps/admin/dist/` may already exist in a working
 checkout (from a prior `npm run build`), a plain `create_app()` call with
 no explicit override can serve the real built UI even in contexts (like

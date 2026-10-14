@@ -11,6 +11,7 @@ class Settings:
     host: str = "0.0.0.0"
     port: int = 8000
     static_dir: str | None = None
+    device_static_dir: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -20,4 +21,5 @@ class Settings:
             host=os.environ.get("TOURNAMENT_HOST", "0.0.0.0"),
             port=int(os.environ.get("TOURNAMENT_PORT", "8000")),
             static_dir=os.environ.get("TOURNAMENT_STATIC_DIR"),
+            device_static_dir=os.environ.get("TOURNAMENT_DEVICE_STATIC_DIR"),
         )

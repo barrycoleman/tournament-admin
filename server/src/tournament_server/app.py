@@ -56,7 +56,7 @@ from tournament_server.routers import (
 )
 from tournament_server.picker_config import resolve_config_path
 from tournament_server.settings import Settings
-from tournament_server.static_ui import mount_static_admin_ui
+from tournament_server.static_ui import mount_device_ui, mount_static_admin_ui
 
 
 async def _recover_in_flight_matches(app: FastAPI) -> None:
@@ -169,6 +169,7 @@ def create_app(
     # pass the real bound port whenever one was resolved.
     port: int | None = None,
     static_dir: str | None = None,
+    device_static_dir: str | None = None,
     config_path: Path | None = None,
 ) -> FastAPI:
     settings = Settings.from_env()
@@ -180,6 +181,8 @@ def create_app(
         settings.port = port
     if static_dir is not None:
         settings.static_dir = static_dir
+    if device_static_dir is not None:
+        settings.device_static_dir = device_static_dir
 
     if settings.db_path is None:
         raise ValueError("create_app() requires a resolved db_path")
@@ -276,6 +279,7 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    mount_device_ui(app, settings.device_static_dir)
     mount_static_admin_ui(app, settings.static_dir)
 
     return app
