@@ -282,7 +282,7 @@ go stale relative to the plugin's logic. A Match becomes `"completed"` once
 every Alliance has a saved `ScoreRecord`, which triggers a ranking recompute
 for its session/division.
 
-Once an alliance has a `ScoreRecord`, only an admin may change it. A scorer or referee re-submitting gets 409 "This score has already been submitted; ask an admin to correct it." Their first submission (on an admitted device) is unchanged, and admin submissions still create or overwrite, including after qualification is finalized. Draft scores that scorers may overwrite belong to the later live-scoring spec. The one exception is a record the cooperative mirror created (`ScoreRecord.mirrored` is true): it was never submitted for that alliance, so a scorer or referee may submit it once, which clears the flag (see Cooperative scoring).
+Once an alliance has a `ScoreRecord`, only an admin may change it. A scorer or referee re-submitting gets 409 "This score has already been submitted; ask an admin to correct it." Their first submission (from a paired device) is unchanged, and admin submissions still create or overwrite, including after qualification is finalized. Draft scores that scorers may overwrite belong to the later live-scoring spec. The one exception is a record the cooperative mirror created (`ScoreRecord.mirrored` is true): it was never submitted for that alliance, so a scorer or referee may submit it once, which clears the flag (see Cooperative scoring).
 
 Win-point allocation (2/1/0 for win/tie/loss) and strength-of-schedule
 (sum of opponents' current win points) are computed by the core server,
@@ -400,7 +400,7 @@ scope's rows, so a team with no qualifying match left has no row.
 
 An event runs skills challenges when an admin turns them on (`PUT /api/skills/settings`, `{enabled, attempts}`). Turning them on needs a game plugin (409 "Choose a game plugin before setting up skills challenges.") with at least one skills type (409 "This game has no skills challenges."). `skills_settings` holds one row per event, created on the first save; until then reads return the defaults (off, 3 attempts per type). `attempts` maps a type key to the attempts each team gets per session (1-20; a missing type means 3). A session may override it (`PUT /api/sessions/{id}/skills`, `{"attempts": {...} | null}`, stored in `sessions.skills_attempts`, with `{}` stored as null). A type missing from the override falls back to the event setting (`services/skills_rules.effective_allowed`). `GET /api/skills/types/{key}/schema` returns one type's scoresheet fields.
 
-Attempts are recorded with `POST /api/sessions/{id}/skills/attempts` (`{team_id, skills_type, data}`). Scorers and referees use it on an admitted device, and an admin needs no device. It refuses:
+Attempts are recorded with `POST /api/sessions/{id}/skills/attempts` (`{team_id, skills_type, data}`). Scorers and referees use it from a paired device, and an admin needs no device. It refuses:
 - 409 while skills are off;
 - 409 for a team not checked in for the session;
 - 409 once the team has used the effective allowed number for that type (lowering the number keeps existing attempts);
@@ -751,58 +751,92 @@ the exact same `division_id` as the request (including `null` matching
 `null` for a no-division bracket), and its own auto-select path (when no
 `field_set_id` is given) is filtered by division the same way.
 
-## Scoring device admission
+## Device pairing
 
-A `ScoringDevice` (`POST /api/devices/register` — no auth required,
-matching `POST /api/auth/login`'s bootstrap-endpoint status) self-registers
-and gets a persistent, human-friendly random name (`shifty-squirrel`-style,
-adjective-animal) plus a browser-storable `device_token`; it starts
-`pending`. An admin reviews `GET /api/devices` and calls
-`POST /api/devices/{id}/admit` (or `.../revoke` to un-admit). This is a
-distinct, additional layer on top of role-based auth (see
-`docs/superpowers/specs/2026-09-03-real-authentication-design.md`), not a
-replacement for it: role auth gates *whether a caller can act at all*;
-device admission gates *whether score-writes count as coming from a
-trusted, admin-vetted device* and attributes them to a real name instead
-of the spoofable `X-Actor-Name` header.
+See `docs/superpowers/specs/2026-10-13-device-pairing-design.md`. A tablet
+or TV becomes a scorer, referee, judge, front-desk or display device by
+being **paired**: it shows a code, an admin types the code into the admin
+UI with a role and a name, and the device is signed in from then on. The
+pairable roles are exactly `PAIRABLE_ROLES` (`services/devices.py`);
+`admin` and `attendee` are never pairable.
 
-Admission has no stored status enum — `admitted_at is not None AND (now -
-last_seen_at) < idle_timeout` is computed at every point of use (list,
-enforcement), mirroring `AuthSession`'s existing lazy-expiry pattern; no
-background job sweeps expired admissions. `last_seen_at` is kept current
-by a request-level middleware (`app.py`) that touches it on any
-*successful* request carrying a valid `X-Device-Token`, not just scoring
-ones — so the idle-timeout (`TOURNAMENT_DEVICE_IDLE_TIMEOUT_MINUTES`,
-default 60) reflects real device activity. Making the touch conditional
-on success alone isn't enough, though: `require_admitted_device` only
-gates the one scoring endpoint, so an ordinary successful `GET` would
-otherwise silently revive an already-idle device with no admin action —
-`touch_device_activity` (`device_auth.py`) additionally refuses to
-refresh `last_seen_at` for a device that is admitted but currently *not*
-within its idle window, so "idle" stays a true one-way gate only an
-explicit `admit` (which also refreshes `last_seen_at`) can reopen.
-`admit`/`revoke` each write an explicit `AuditLog` entry too (curated,
-not the generic per-column hook — `scoring_devices` stays excluded from
-that so `device_token_hash` never leaks into the log), since revoking
-would otherwise erase the only record a device was ever admitted.
+**Pairing codes** live in `app.state.pairing` (`services/pairing.py`'s
+`PairingStore`), in memory only, never in the tournament file, so pairing
+traffic never writes the audit log or takes a backup, and a restart just
+drops open codes (the device asks for a new one). A code is 6 characters
+from `CODE_ALPHABET`, lives 5 minutes, and at most 50 are open at once
+(opening the 51st evicts the oldest *unpaired* code first). A paired
+code's token can still be collected for 60 s after the code's expiry, so a
+pairing made in a code's last seconds isn't lost. `POST /api/pairing`
+returns `expires_in` (seconds) alongside `expires_at`; the device counts
+down from `expires_in`, never from its own clock.
 
-`require_admitted_device` (`device_auth.py`) is applied only to
-`POST /api/matches/{id}/alliances/{id}/score`, in addition to the existing
-`require_scorer_or_referee` role gate. `admin` bypasses only the
-*rejection*, never the *lookup*: a present, currently-admitted device
-token still attributes `ScoreRecord.submitted_by_device` to the real
-device name even for an admin caller, but an admin is never blocked by a
-missing/invalid/un-admitted one — every other role is. Every caller that
-never sends `X-Device-Token` (including all pre-device-phase tests) keeps
-falling back to today's `audit.current_actor.get()`-based attribution,
-unchanged.
+```
+POST /api/pairing                   — no auth; {id, code, poll_key, expires_at, expires_in}
+GET  /api/pairing/codes/{code}      — admin; {code, suggested_name, expires_at}, 404 if unknown
+GET  /api/pairing/{id}              — X-Pairing-Key: <poll_key>; {status: waiting|paired|expired, device_token?}
+POST /api/devices/pair              — admin; {code, role, name} -> the device row (201)
+POST /api/auth/device               — {device_token} -> {access_token, expires_in, device}
+```
 
-`Device`/Pi-display admission (the master spec's other, separate device
-concept — admin-driven, for unattended kiosk displays) is not built —
-still a distinct, later phase. The WebSocket "active-session" push
-mechanism it needs now exists (see *Real-time channels and live match
-control* below), so a Pi client is the only remaining prerequisite. See
-`docs/superpowers/specs/2026-09-08-scoring-device-admission-design.md`.
+Codes are matched loosely (spaces, hyphens and case are ignored). The
+`device_token` is handed over exactly once by the poll. `POST
+/api/auth/device` answers 401 `This device is no longer paired` for an
+unknown token, and 403 `{"detail": "This device is disabled", "status":
+"disabled"|"idle", "name"}` for a device that isn't active.
+
+The access token carries a `device_id` claim. `auth.resolve_caller` (used
+by `get_caller`, so by every `require_role` route) checks a device token
+against its `devices` row on **every request**: a deleted row is 401, a
+disabled or idle one 403, and the role always comes from the row, never
+from the token, so an admin's change applies on the device's very next
+request. `last_seen_at` is written at most once a minute
+(`LAST_SEEN_WRITE_INTERVAL`), and only while the device is still active,
+so a request never revives an idle device; only an admin's enable does.
+
+**Status** is computed, not stored (`device_status`): `disabled` when
+`disabled_at` is set, else `idle` when `last_seen_at` is at least
+`events.device_idle_minutes` old (default 240, allowed 15 to 1440), else
+`active`. Display devices never go idle.
+
+**Management** (all admin-only):
+
+```
+GET    /api/devices                 — list, with computed status
+GET    /api/devices/settings        — {idle_minutes}
+PUT    /api/devices/settings        — {idle_minutes}, 422 outside 15..1440
+GET    /api/devices/me              — any caller; the calling device's {id, name, role, status}, 404 for a non-device token
+PATCH  /api/devices/{id}            — {name?, role?}; 409 on a duplicate name (case-insensitive)
+POST   /api/devices/{id}/disable
+POST   /api/devices/{id}/enable     — also clears idle (refreshes last_seen_at)
+DELETE /api/devices/{id}            — 204; the device's next request is 401
+```
+
+Device ids are never reused (`AUTOINCREMENT`), so an unexpired access
+token of a deleted device can't speak for a device paired after it.
+
+**Scoring.** `require_paired_scoring_device` (`device_auth.py`) gates
+`POST /api/matches/{id}/alliances/{id}/score` and
+`POST /api/sessions/{id}/skills/attempts`: an admin needs no device; a
+scorer or referee must be calling from a paired device (403 `Only a
+paired device can submit scores.` otherwise), and a score is attributed to
+the device's name (`ScoreRecord.submitted_by_device`).
+
+**Audit.** `devices` is in `audit._EXCLUDED_TABLES`, so the token hash
+never reaches the log. Instead pair, update (rename and role change),
+disable, enable and delete each write one curated `AuditLog` entry
+(`routers/devices.audit_device`, `table_name="devices"`) with the
+name, role and disabled flag before and after; the idle setting writes one
+too (`action="idle_setting"`, `row_pk` null, `{idle_minutes}` before and
+after), alongside the generic hook's `events` update.
+
+**Realtime.** Pairing a device and every management change broadcasts
+`devices_changed` on the active-session channel. A WebSocket opened with a
+device token is registered under its device id
+(`realtime.register_device_socket`); disabling, deleting or changing the
+role of a device closes its open sockets with code **4403**
+(`realtime.DEVICE_CHANGED_CLOSE_CODE`) so the device reconnects and sees
+its new state at once. A rename doesn't close them.
 
 ## Real-time channels and live match control
 
@@ -826,14 +860,17 @@ uses the raw `receive()`, not `receive_text()`, so a binary frame is
 tolerated identically rather than raising `KeyError`). Auth is the same
 access token `POST /api/auth/login` issues, passed as a **query
 parameter** — a browser's native `WebSocket` API cannot set custom
-handshake headers, so there is no alternative. **Known, accepted
+handshake headers, so there is no alternative. A device token is checked
+against its device row on connect exactly as a request is (`resolve_caller`:
+a disabled, idle or deleted device is refused with 1008, and the role comes
+from the row); see Device pairing for the 4403 close. **Known, accepted
 tradeoff**: that token therefore appears in standard access logs, proxy
 logs and browser history in a way a bearer header would not. Not
 something this phase tries to fix; a future phase wanting to close it
 would need a short-lived single-use ticket endpoint.
 
 `GET /api/time-sync` (no auth, like `/health` and
-`POST /api/devices/register`) returns `{"server_time": "<ISO-8601 UTC>", "boot_id": "<per-process id>"}`
+`POST /api/pairing`) returns `{"server_time": "<ISO-8601 UTC>", "boot_id": "<per-process id>"}`
 so a client can measure its own clock offset and render a countdown
 against absolute deadlines rather than trusting its local clock, and can
 tell a restarted server from the old one (see Backups).
@@ -893,6 +930,9 @@ truth for that richer shape):
   `DELETE /api/finals/{id}`. These can change finals results (a walkover, a
   deleted bracket) without creating a match, so `new_match_created` alone
   doesn't cover them; the Awards page refetches on it.
+- `devices_changed` — `{}` (active-session channel only), after a device
+  is paired, renamed, given a new role, disabled, enabled or deleted, and
+  after the idle setting changes. The admin's Devices page refetches on it.
 
 Routing: `realtime.broadcast_for_session` always sends on
 `session:<id>`, and additionally on `active-session` when that session
@@ -1290,10 +1330,7 @@ password when a tournament already exists in the allowlist).
   write in the `plugins` router — but note this is still a
   code-execution primitive available to any admin, not a sandboxed
   install; that hardening (checksums, capability scanning) is still a
-  separate, later phase per the design spec's §9. `Device`/
-  `ScoringDevice` admission — an *additional* per-device admission layer
-  on top of a role's session — remains a distinct, unbuilt future phase
-  (design spec §7).
+  separate, later phase per the design spec's §9.
 - **Role passwords are also stored reversibly, not just hashed.**
   `RoleCredential.password_hash` (bcrypt, one-way) is still what `POST
   /api/auth/login` checks — unchanged. A second column,

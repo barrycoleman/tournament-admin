@@ -112,10 +112,6 @@ def decode_access_token(token: str, db: Session) -> dict:
         raise ValueError("Invalid or expired token")
 
 
-def decode_role_from_token(token: str, db: Session) -> str:
-    return decode_access_token(token, db)["role"]
-
-
 class CallerRejected(Exception):
     def __init__(self, status_code: int, detail: str) -> None:
         super().__init__(detail)

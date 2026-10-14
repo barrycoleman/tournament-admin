@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import TYPE_CHECKING
 
 from fastapi import WebSocket
@@ -12,10 +13,16 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 
+# Close code for a paired device whose state changed (disabled, deleted or a
+# new role): the device reconnects and sees its new state at once.
+DEVICE_CHANGED_CLOSE_CODE = 4403
+
+
 class ConnectionRegistry:
     def __init__(self) -> None:
         self.active_session: set[WebSocket] = set()
         self.by_session: dict[int, set[WebSocket]] = {}
+        self.by_device: dict[int, set[WebSocket]] = {}
         self.event_loop: asyncio.AbstractEventLoop | None = None
 
 
@@ -45,6 +52,33 @@ def unregister_session(app: "FastAPI", session_id: int, websocket: WebSocket) ->
         subscribers.discard(websocket)
         if not subscribers:
             del app.state.realtime.by_session[session_id]
+
+
+def register_device_socket(app: "FastAPI", device_id: int, websocket: WebSocket) -> None:
+    app.state.realtime.by_device.setdefault(device_id, set()).add(websocket)
+
+
+def unregister_device_socket(app: "FastAPI", device_id: int, websocket: WebSocket) -> None:
+    sockets = app.state.realtime.by_device.get(device_id)
+    if sockets is not None:
+        sockets.discard(websocket)
+        if not sockets:
+            del app.state.realtime.by_device[device_id]
+
+
+def close_device_sockets(app: "FastAPI", device_id: int) -> None:
+    """Closes a device's open sockets so it reconnects and sees its new state
+    (disabled, deleted or a different role)."""
+    registry = app.state.realtime
+    if registry.event_loop is None:
+        return
+
+    async def _close() -> None:
+        for websocket in list(registry.by_device.get(device_id, ())):
+            with contextlib.suppress(Exception):
+                await websocket.close(code=DEVICE_CHANGED_CLOSE_CODE)
+
+    asyncio.run_coroutine_threadsafe(_close(), registry.event_loop)
 
 
 async def _send_to_all(subscribers: set[WebSocket], event: str, data: dict) -> None:

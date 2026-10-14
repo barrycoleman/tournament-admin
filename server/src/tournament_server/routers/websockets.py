@@ -4,28 +4,31 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from tournament_server import realtime
-from tournament_server.auth import ROLES, decode_role_from_token
+from tournament_server.auth import ROLES, Caller, CallerRejected, resolve_caller
 
 router = APIRouter(tags=["websockets"])
 
 
-async def _authenticate(websocket: WebSocket, allowed_roles: tuple[str, ...]) -> str | None:
+async def _authenticate(websocket: WebSocket, allowed_roles: tuple[str, ...]) -> Caller | None:
+    """Who the socket's token speaks for. A device token is checked against
+    its row like any request (a disabled, idle or deleted device is refused,
+    and the role comes from the row)."""
     token = websocket.query_params.get("token")
     if token is None:
         await websocket.close(code=1008)
         return None
     db: Session = websocket.app.state.session_factory()
     try:
-        role = decode_role_from_token(token, db)
-    except ValueError:
+        caller = resolve_caller(token, db)
+    except CallerRejected:
         await websocket.close(code=1008)
         return None
     finally:
         db.close()
-    if role != "admin" and role not in allowed_roles:
+    if caller.role != "admin" and caller.role not in allowed_roles:
         await websocket.close(code=1008)
         return None
-    return role
+    return caller
 
 
 async def _drain_until_disconnect(websocket: WebSocket) -> None:
@@ -46,29 +49,37 @@ async def _drain_until_disconnect(websocket: WebSocket) -> None:
 
 @router.websocket("/ws/active-session")
 async def active_session_channel(websocket: WebSocket) -> None:
-    role = await _authenticate(websocket, ROLES)
-    if role is None:
+    caller = await _authenticate(websocket, ROLES)
+    if caller is None:
         return
     await websocket.accept()
     realtime.register_active_session(websocket.app, websocket)
+    if caller.device_id is not None:
+        realtime.register_device_socket(websocket.app, caller.device_id, websocket)
     try:
         await _drain_until_disconnect(websocket)
     except WebSocketDisconnect:
         pass
     finally:
         realtime.unregister_active_session(websocket.app, websocket)
+        if caller.device_id is not None:
+            realtime.unregister_device_socket(websocket.app, caller.device_id, websocket)
 
 
 @router.websocket("/ws/session/{session_id}")
 async def session_channel(websocket: WebSocket, session_id: int) -> None:
-    role = await _authenticate(websocket, ())
-    if role is None:
+    caller = await _authenticate(websocket, ())
+    if caller is None:
         return
     await websocket.accept()
     realtime.register_session(websocket.app, session_id, websocket)
+    if caller.device_id is not None:
+        realtime.register_device_socket(websocket.app, caller.device_id, websocket)
     try:
         await _drain_until_disconnect(websocket)
     except WebSocketDisconnect:
         pass
     finally:
         realtime.unregister_session(websocket.app, session_id, websocket)
+        if caller.device_id is not None:
+            realtime.unregister_device_socket(websocket.app, caller.device_id, websocket)

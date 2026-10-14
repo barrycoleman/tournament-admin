@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import datetime as dt
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from tournament_server.services.devices import MAX_IDLE_MINUTES, MIN_IDLE_MINUTES
 
 
 class DeviceRead(BaseModel):
@@ -46,3 +48,12 @@ class PairingCodeCheck(BaseModel):
 class PairingPollRead(BaseModel):
     status: str
     device_token: str | None = None
+
+
+class DeviceUpdate(BaseModel):
+    name: str | None = None
+    role: str | None = None
+
+
+class DeviceSettings(BaseModel):
+    idle_minutes: int = Field(ge=MIN_IDLE_MINUTES, le=MAX_IDLE_MINUTES)
