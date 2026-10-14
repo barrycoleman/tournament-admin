@@ -317,3 +317,30 @@ def test_a_device_that_only_signs_in_still_goes_idle(admin):
     response = raw.post("/api/auth/device", json={"device_token": device["device_token"]})
     assert response.status_code == 403
     assert response.json()["status"] == "idle"
+
+
+def test_a_second_admin_pairing_the_same_code_with_the_same_name_gets_the_code_error(admin):
+    # Two admins open the same code, so both forms are pre-filled with the
+    # same suggested name. The second one's lookup ran before the first
+    # pairing finished, so it still saw the code open; by the time it checks
+    # the name, the first device holds it and the code is spent.
+    pending = _open(admin)
+    store = admin.app.state.pairing
+    stale = store.find_open(pending["code"])
+    first = admin.post("/api/devices/pair", json={"code": pending["code"], "role": "scorer", "name": "Tab"})
+    assert first.status_code == 201
+    real_find_open = store.find_open
+    calls = []
+
+    def find_open_seen_before_the_first_pairing(code):
+        calls.append(code)
+        return stale if len(calls) == 1 else real_find_open(code)
+
+    store.find_open = find_open_seen_before_the_first_pairing
+    try:
+        second = admin.post("/api/devices/pair", json={"code": pending["code"], "role": "judge", "name": "Tab"})
+    finally:
+        store.find_open = real_find_open
+    assert second.status_code == 404
+    assert second.json()["detail"] == "That code isn't valid or has expired."
+    assert [d["name"] for d in admin.get("/api/devices").json()] == ["Tab"]

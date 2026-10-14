@@ -29,6 +29,7 @@ from tournament_server.services.devices import (
     idle_minutes_for,
     name_key,
 )
+from tournament_server.services.pairing import PairingStore
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
@@ -89,6 +90,15 @@ def list_devices(db: Session = Depends(get_db), _role: str = Depends(require_adm
     return [to_device_read(d, db) for d in devices]
 
 
+def _name_taken(store: PairingStore, code: str) -> HTTPException:
+    """The error for a name another device already holds. If the code was
+    spent meanwhile (most likely by another admin pairing the same code with
+    the same suggested name), the code error is the true answer."""
+    if store.find_open(code) is None:
+        return HTTPException(status_code=404, detail=UNKNOWN_CODE)
+    return HTTPException(status_code=409, detail=DUPLICATE_NAME)
+
+
 @router.post("/pair", response_model=DeviceRead, status_code=201)
 def pair_device(
     payload: PairRequest,
@@ -103,7 +113,7 @@ def pair_device(
     role = checked_role(payload.role)
     name = checked_name(payload.name)
     if db.execute(select(Device).where(Device.name_key == name_key(name))).scalars().first():
-        raise HTTPException(status_code=409, detail=DUPLICATE_NAME)
+        raise _name_taken(store, payload.code)
     device_token = secrets.token_urlsafe(32)
     now = utc_now()
     device = Device(
@@ -120,7 +130,7 @@ def pair_device(
         db.flush()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail=DUPLICATE_NAME)
+        raise _name_taken(store, payload.code)
     if not store.attach_token(pending.id, device_token):
         db.rollback()
         raise HTTPException(status_code=404, detail=UNKNOWN_CODE)
