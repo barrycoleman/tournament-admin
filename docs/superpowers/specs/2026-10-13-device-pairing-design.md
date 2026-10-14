@@ -39,7 +39,7 @@ Scorer tablets must type the scorer password and then wait for an admin to admit
 
 ### 4.1 Pairing codes
 
-- **Requesting:** `POST /api/pairing` (no login) returns `{id, code, poll_key, expires_at}`.
+- **Requesting:** `POST /api/pairing` (no login) returns `{id, code, poll_key, expires_at, expires_in}`. The device counts down from `expires_in` (seconds), not `expires_at`, because a TV's clock is often wrong.
 - **Code:** 6 characters from `ACDEFGHJKMNPQRTUVWXY34679` (no `0`/`O`, `1`/`I`/`L`, `2`/`Z`, `5`/`S`, `8`/`B`), shown as two groups of three (`KX4 9TM`). A code is unique among open codes.
 - **Expiry:** 5 minutes. The device requests a new one by itself when it expires.
 - **Storage:** in server memory only (`app.state.pairing`), never in the tournament file, so pairing traffic never takes a backup or writes the audit log. A restart drops open codes; the device just shows a new one.
@@ -57,7 +57,7 @@ Scorer tablets must type the scorer password and then wait for an admin to admit
 
 ### 4.3 The device collects its token
 
-- **Polling:** the device calls `GET /api/pairing/{id}` with header `X-Pairing-Key: <poll_key>` every 2 seconds. It returns `{status: "waiting"}`, `{status: "paired", device_token}` or `{status: "expired"}`. A wrong key or unknown id is 404.
+- **Polling:** the device calls `GET /api/pairing/{id}` with header `X-Pairing-Key: <poll_key>` every 2 seconds. It returns `{status: "waiting"}`, `{status: "paired", device_token}` or `{status: "expired"}`. A wrong key or unknown id is 404, and the device treats a 404 like `expired`: it asks for a new code. A paired code stays collectable for 60 seconds past its expiry, so a pairing made in the last seconds isn't lost.
 - **Exactly once:** the first `paired` response hands over the token and removes the code; a later poll is 404.
 - **Storage on the device:** the device token is kept in `localStorage`.
 
@@ -129,7 +129,7 @@ A restore brings the device list back to the backup's moment (already stated in 
 
 ## 7. Device app
 
-A new Vite app, `frontend/apps/device`, in the existing npm workspace, using `frontend/packages/shared` and the admin app's stack (React, React Router, TanStack Query, react-i18next).
+A new Vite app, `frontend/apps/device`, in the existing npm workspace, using `frontend/packages/shared` (for i18n setup), React, react-i18next and `qrcode`. React Router and TanStack Query join when the scorer and display screens need them. The device keeps its own storage key (`tournament-admin.device.v1`) and its own small fetch helper, because it shares an origin with the admin app and must never read or overwrite the admin's sign-in.
 
 ### 7.1 Serving
 
@@ -145,8 +145,8 @@ A new Vite app, `frontend/apps/device`, in the existing npm workspace, using `fr
   - "In the admin app, open Devices and enter this code.";
   - a countdown to expiry and a new code requested automatically;
   - nothing to click, so a TV remote isn't needed.
-- **Home** (paired and active): "Paired as **{name}** — {role}. Ready." The later scorer and display projects replace this screen.
-- **Disabled or idle:** "This device is disabled. Ask an admin to enable **{name}**." It retries `POST /api/auth/device` every 30 seconds and on any socket event, and returns home when it succeeds.
+- **Home** (paired and active): "Paired as **{name}** — {role}. Ready." The later scorer and display projects replace this screen. It keeps a live connection open; when the server closes it with 4403 (disabled, deleted or role changed) it signs in again at once and shows the result. It renews its access token a minute before it expires.
+- **Disabled or idle:** "This device is disabled. Ask an admin to enable **{name}**." It retries `POST /api/auth/device` every 30 seconds (a disabled device can't open a live connection) and returns home when it succeeds.
 - **Deleted or unknown token:** clears the stored token and shows a new pairing code.
 - **Server unreachable:** "Can't reach the server. Retrying…", keeping the current screen underneath and resuming when the server answers.
 - **Strings:** English and Chinese, with the same language selection as the admin app.
