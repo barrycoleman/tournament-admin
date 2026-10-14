@@ -46,19 +46,28 @@ function portInUse(port: number, host: string): Promise<boolean> {
 }
 
 /**
- * A backend on its own fresh database plus a Vite dev server proxying to it,
- * for scenarios the shared E2E event can't host (its game plugin is fixed
+ * A backend on its own fresh database plus a Vite dev server proxying to it
+ * (and, given devicePort, the device app's dev server behind that one), for
+ * scenarios the shared E2E event can't host (its game plugin is fixed
  * once chosen). Spawned like tournamentPicker.spec.ts's servers: no shell,
  * and each process leads its own group so stop() reaps the whole tree.
  */
 export async function startIsolatedServer({
   backendPort,
   frontendPort,
+  devicePort,
 }: {
   backendPort: number;
   frontendPort: number;
+  /** Also start the device app's dev server, proxied through the admin one at /device/ and /pair. */
+  devicePort?: number;
 }): Promise<IsolatedServer> {
-  for (const [label, port] of [["backend", backendPort], ["frontend", frontendPort]] as const) {
+  const ports: [string, number][] = [
+    ["backend", backendPort],
+    ["frontend", frontendPort],
+  ];
+  if (devicePort !== undefined) ports.push(["device", devicePort]);
+  for (const [label, port] of ports) {
     if (await portInUse(port, "127.0.0.1")) {
       throw new Error(
         `Isolated E2E ${label} port ${port} is already accepting connections; stop the leftover process before running the suite.`
@@ -96,12 +105,29 @@ export async function startIsolatedServer({
     spawned.push(backend);
     await waitForPort(backendPort, "127.0.0.1", 30_000);
 
+    if (devicePort !== undefined) {
+      const device: ChildProcess = spawn(
+        "npm",
+        ["run", "dev", "--", "--port", String(devicePort), "--strictPort"],
+        {
+          cwd: path.resolve(__dirname, "../../../../device"),
+          env: { ...process.env, VITE_BACKEND_PORT: String(backendPort) },
+          stdio: "ignore",
+          detached: true,
+        }
+      );
+      spawned.push(device);
+      await waitForPort(devicePort, "127.0.0.1", 30_000);
+    }
+
+    const frontendEnv: NodeJS.ProcessEnv = { ...process.env, VITE_BACKEND_PORT: String(backendPort) };
+    if (devicePort !== undefined) frontendEnv.VITE_DEVICE_PORT = String(devicePort);
     const frontend: ChildProcess = spawn(
       "npm",
       ["run", "dev", "--", "--port", String(frontendPort), "--strictPort"],
       {
         cwd: path.resolve(__dirname, "../../.."),
-        env: { ...process.env, VITE_BACKEND_PORT: String(backendPort) },
+        env: frontendEnv,
         stdio: "ignore",
         detached: true,
       }

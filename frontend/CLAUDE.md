@@ -3,12 +3,15 @@
 ## What this is
 
 The tournament-admin project's frontends live here as an npm workspace:
-`frontend/apps/<app>/` (one per UI surface — currently only `admin`) and
+`frontend/apps/<app>/` (one per UI surface — currently `admin` and
+`device`, the app a paired tablet or TV runs) and
 `frontend/packages/shared/` (auth/token handling, the API client,
 real-time WebSocket hook, and i18n setup — written once, shared by every
 app). Each app builds to static assets the Python server
 (`server/`) serves directly — see `server/CLAUDE.md`'s "Serving the admin
-UI" section for how that wiring works.
+UI" section for how that wiring works. The admin app is served at `/`,
+the device app at `/device/` (its Vite `base`), and the server answers
+`/pair` with a 307 to `/device/`, so a TV only types a short address.
 
 Read `docs/superpowers/specs/2026-09-14-admin-ui-shell-design.md` and
 `docs/superpowers/plans/2026-09-14-admin-ui-shell.md` before touching the
@@ -52,6 +55,7 @@ file — the grid's component tests stop rendering anything without them.
 frontend/
   package.json          # workspace root (workspaces: apps/*, packages/*)
   apps/admin/            # the admin UI
+  apps/device/           # the paired-device app (base /device/)
   packages/shared/       # framework code shared across apps
 ```
 
@@ -81,6 +85,15 @@ The dev server's proxy target port is read from `VITE_BACKEND_PORT`
 (default `8000`, matching the backend's own default) — see
 `vite.config.ts`. `npm run build` produces `dist/`, which the backend
 serves directly in production (no dev proxy needed there).
+
+To work on the device app too, start its dev server as well (Terminal 3:
+`cd frontend/apps/device && npm run dev -- --port 5175`). The admin dev
+server proxies `^/device/` and `^/pair/?$` (rewritten to `/device/`) to
+it, on the port in `VITE_DEVICE_PORT` (default `5175`), so in
+development, as in production, both apps share one origin and the
+pairing QR link and `/pair` work from the admin dev URL. Keep the device
+key anchored with its trailing slash: a plain `/device` prefix would also
+catch the admin's own `/devices` page and hand it to the device server.
 
 ## Bootstrap ordering (why the router looks the way it does)
 
@@ -138,7 +151,9 @@ context — see the session-checkin and fields-schedule-ui design specs;
 the layout's header also carries the "Set as active session" control; the Fields tab's empty state offers "copy fields from" any other session that has field sets, via `POST /api/sessions/{id}/copy-fields`), and `/checkin` (a
 separate, non-nested route: the dedicated `front_desk` kiosk screen,
 scoped to `Event.active_session_id` rather than a session id in the
-URL).
+URL). Admins also have `/devices` (pair and manage tablets and displays;
+see **Devices** below). `/device/` and `/pair` are not admin routes: they
+belong to the device app, and the admin dev server proxies them to it.
 
 The Schedule tab is a live planner. `src/schedule/planDraft.ts` (rows,
 change detection and `isDraftDirty`, what Apply sends — the first
@@ -239,6 +254,10 @@ unit test under jsdom.
 
 **Game plugin gating** (`src/gamePlugin/`): until the event has a game plugin, `useGamePlugin` reports none, `GamePluginBanner` (in the admin layout, hidden from judges) links to `/events/setup#game-plugins`, and `RequiresGamePlugin` swaps a screen for `NeedsGamePlugin` (an admin gets a link to Event Setup, anyone else a plain note). `router.tsx` wraps session Matches, Rankings and Skills, season `/rankings` and `/judge/rankings` in it; award forms disable the Performance kind and any source that cannot produce a winner. `AppShell` calls `useGamePluginLiveUpdates`, which refetches everything the plugin shapes on the `game_plugin_changed` broadcast, so open pages unlock live. Event Setup's plugin section has three states: nothing selected ("Select for this event"), selected and unused ("Switch to this" and "Clear selection", each first asking the server for a `dry_run` preview and confirming what will reset in an `alertdialog`), and in use (matches or skills attempts exist: no buttons, just the locked note). The skills settings form re-seeds from server values that change under it, because a plugin change resets them.
 
+**Devices** (`src/routes/DevicesRoute.tsx`, `src/devices/`, admin nav "Devices", route `/devices`): `PairDeviceForm` takes a code typed loosely (case, spaces and dashes are normalized), checks it as soon as it has six characters and fills in the server's suggested name (replacing only an earlier suggestion, never a name the admin typed), then pairs it with a role and name. The page reads `?pair=<code>` to prefill the form, which is what the device's QR link opens. The list shows each device's role, status (active, idle, disabled) and last seen, with Edit (`EditDeviceDialog`), Disable/Enable and Delete (`ConfirmDialog`); below it is the idle-timeout setting (15 to 1440 minutes). The list refetches on the `devices_changed` broadcast on `/ws/active-session`. A signed-out admin who opens `/devices?pair=...` returns there after signing in: `returnPathAfterLogin` in `routeGuards.ts` sends an admin back to the page they came from (and a judge only to a judge page) through `safeReturnPath`, which refuses anything but a same-app path. The sign-in page links to `/pair` with a plain `<a>`, not a router `Link`, because `/pair` belongs to the device app.
+
+**Device app** (`apps/device/`): a small React app with no router, built with Vite `base: "/device/"`, which the server serves at `/device/` with its own SPA fallback. It keeps its device token under its own `localStorage` key `tournament-admin.device.v1` and makes every request through its own fetch helper in `src/deviceApi.ts`, never the shared `apiRequest`, and never reads or writes the admin's `tournament-admin.auth.v1` — the two apps share an origin, so pairing the browser an admin is signed into must leave the admin signed in. `useDeviceSession` picks one of three screens: pairing (`PairingScreen`: the code in two groups of three, a QR link to `/devices?pair=<code>`, a countdown and automatic renewal counted from the response's `expires_in` on the device's own clock, never by comparing `expires_at` with it, because a TV's clock may be wrong), home (`HomeScreen`: "Paired as" with the name and role), and blocked (`BlockedScreen`: "This device is disabled.", rechecked every 30 s). A sign-in refused as unknown clears the token and goes back to pairing; a server it can't reach shows "Can't reach the server. Retrying…" and retries. While signed in, `useDeviceSocket` holds `/ws/active-session` open; a `4403` close (the device was disabled, deleted or changed) makes it sign in again, which lands on the right screen. A device on the blocked screen holds no socket, so it notices being enabled or deleted only at its next 30 s recheck.
+
 **Backups** (`src/routes/BackupsRoute.tsx`, admin nav "Backups"): folder (Change / Use default), last backup and last error, Back up now, and the backups table with Restore. Restore reads `boot_id` from `GET /api/time-sync`, posts the restore, then waits with `useRestartPoll(..., "restarted")`, which polls time sync until a different `boot_id` answers (the picker-route check can't tell a normal-to-normal restart apart). While the restart poll is waiting, Restore, Back up now, Change and Use default are disabled; a `restore_error` from `GET /api/backups` (a startup swap that failed or was cancelled) shows as an `alert alert-danger`, and the status line falls back to the newest listed backup's time when the server has made none since it started. The picker page shows a damaged file's backups when `GET /api/picker/damaged` answers, and a timed-out alert if its restart poll gives up.
 
 ## Auth & token handling
@@ -295,7 +314,7 @@ chosen) starts its own backend and Vite server with
 `tests/e2e/fixtures/isolatedServer.ts`, as `cooperativeRankings.spec.ts`
 does on ports 8125/5185, `finalizeQualification.spec.ts` on 8127/5187, and
 `skillsChallenges.spec.ts` (the shipped sample game, with skills on) on
-8128/5188, `awards.spec.ts` on 8129/5189, and `gamePluginGating.spec.ts` on 8130/5190, and `backups.spec.ts` on 8131/5191. `zz_seasonRankings.spec.ts` runs last for the same
+8128/5188, `awards.spec.ts` on 8129/5189, and `gamePluginGating.spec.ts` on 8130/5190, `backups.spec.ts` on 8131/5191, and `devicePairing.spec.ts` on 8132/5192 with the device app's dev server on 5193 (pass `devicePort` to `startIsolatedServer` and it also starts `apps/device` and points the admin dev server's `/device/` and `/pair` proxy at it). `zz_seasonRankings.spec.ts` runs last for the same
 reason as `z_sessionSchedule.spec.ts`.
 
 `playwright.config.ts` uses `channel: "chrome"` — the machine's installed
