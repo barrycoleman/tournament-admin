@@ -55,6 +55,24 @@ export function judgeAllowedPath(pathname: string): boolean {
   return pathname === "/rankings" || pathname === "/judge" || pathname.startsWith("/judge/");
 }
 
+// Set while an explicit logout is under way, so the redirect to /login that
+// follows records no return path (the page belonged to the user who just
+// logged out). A signed-out visit or an expired session still records one.
+let explicitLogout = false;
+
+/** Mark that the user chose to log out. Cleared by the next sign-in. */
+export function noteExplicitLogout(): void {
+  explicitLogout = true;
+}
+
+export function clearExplicitLogout(): void {
+  explicitLogout = false;
+}
+
+export function isExplicitLogout(): boolean {
+  return explicitLogout;
+}
+
 /** A same-app path to return to after signing in, or null for anything else
  * (an absolute URL or a protocol-relative "//host" would leave the app, and
  * browsers read a backslash as a slash, so "/\\host" is refused too). */

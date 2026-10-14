@@ -9,6 +9,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { GamePluginBanner } from "../gamePlugin/GamePluginBanner";
 import { useGamePluginLiveUpdates } from "../gamePlugin/liveUpdates";
 import { useRestartPoll } from "../useRestartPoll";
+import { noteExplicitLogout } from "../routeGuards";
 
 function navLinkClassName({ isActive }: { isActive: boolean }): string | undefined {
   return isActive ? "active" : undefined;
@@ -61,7 +62,10 @@ export function AppShell() {
             </button>
           )}
           <ThemeToggle />
-          <button className="btn btn-small" onClick={() => void logout()}>
+          <button className="btn btn-small" onClick={() => {
+              noteExplicitLogout();
+              void logout();
+            }}>
             {t("shell.logout")}
           </button>
         </div>

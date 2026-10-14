@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ApiError, useAuth } from "@tournament-admin/shared";
-import { returnPathAfterLogin } from "../routeGuards";
+import { clearExplicitLogout, returnPathAfterLogin } from "../routeGuards";
 
 export function LoginRoute() {
   const { t } = useTranslation();
@@ -18,6 +18,7 @@ export function LoginRoute() {
     setError(null);
     try {
       await login(role, password);
+      clearExplicitLogout();
       navigate(returnPathAfterLogin(role, (location.state as { from?: unknown } | null)?.from), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {

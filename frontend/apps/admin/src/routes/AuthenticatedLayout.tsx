@@ -1,7 +1,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { hasValidTokens, useAuth } from "@tournament-admin/shared";
 import { AppShell } from "../components/AppShell";
-import { judgeAllowedPath } from "../routeGuards";
+import { isExplicitLogout, judgeAllowedPath } from "../routeGuards";
 
 export function AuthenticatedLayout() {
   // `isAuthenticated` comes from context so this guard re-evaluates when
@@ -16,6 +16,9 @@ export function AuthenticatedLayout() {
   const location = useLocation();
 
   if (!isAuthenticated || !hasValidTokens()) {
+    // After the user clicks Log out, the page they were on is theirs, not the
+    // next user's, so no return path is recorded.
+    if (isExplicitLogout()) return <Navigate to="/login" replace />;
     return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
   }
   if (role === "judge" && !judgeAllowedPath(location.pathname)) {
