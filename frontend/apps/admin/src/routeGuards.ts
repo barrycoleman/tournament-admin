@@ -36,15 +36,30 @@ export function indexLoader(): Response | null {
   return null;
 }
 
+/**
+ * Where to go after `role` signs in, given the page a signed-out visitor was
+ * on. Only an admin, or a judge returning to a judge page, goes back there:
+ * the page may be the previous user's, so anyone else goes to "/" and lets
+ * indexLoader send them to their own landing page.
+ */
+export function returnPathAfterLogin(role: string, from: unknown): string {
+  const path = safeReturnPath(from);
+  if (path === null) return "/";
+  if (role === "admin") return path;
+  if (role === "judge" && judgeAllowedPath(path.split(/[?#]/)[0])) return path;
+  return "/";
+}
+
 /** The only pages a judge can open: the judge pages and season rankings. */
 export function judgeAllowedPath(pathname: string): boolean {
   return pathname === "/rankings" || pathname === "/judge" || pathname.startsWith("/judge/");
 }
 
 /** A same-app path to return to after signing in, or null for anything else
- * (an absolute URL or a protocol-relative "//host" would leave the app). */
+ * (an absolute URL or a protocol-relative "//host" would leave the app, and
+ * browsers read a backslash as a slash, so "/\\host" is refused too). */
 export function safeReturnPath(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  if (!value.startsWith("/") || value.startsWith("//")) return null;
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null;
   return value;
 }

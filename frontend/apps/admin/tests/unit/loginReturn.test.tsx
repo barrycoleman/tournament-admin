@@ -60,6 +60,8 @@ describe("safeReturnPath", () => {
     expect(safeReturnPath(42)).toBeNull();
     expect(safeReturnPath(undefined)).toBeNull();
     expect(safeReturnPath("devices")).toBeNull();
+    expect(safeReturnPath("/\\evil.example")).toBeNull();
+    expect(safeReturnPath("/devices\\x")).toBeNull();
   });
 });
 
@@ -115,6 +117,48 @@ describe("returning after sign-in", () => {
     fireEvent.click(screen.getByRole("button", { name: "Log in" }));
     await waitFor(() => expect(screen.getByText(/^devices at \/devices\?pair=X/)).toBeInTheDocument());
     expect(login).toHaveBeenCalledWith("admin", "secret");
+  });
+
+  function signInFrom(from: string, role: string) {
+    const queryClient = new QueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <MemoryRouter initialEntries={[{ pathname: "/login", state: { from } }]}>
+            <Routes>
+              <Route path="/login" element={<LoginRoute />} />
+              <Route path="/devices" element={<LocationProbe label="devices" />} />
+              <Route path="/rankings" element={<LocationProbe label="rankings" />} />
+              <Route path="/" element={<LocationProbe label="dashboard" />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+    fireEvent.change(screen.getByLabelText("Role"), { target: { value: role } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+  }
+
+  it("returns an admin to an admin page", async () => {
+    signInFrom("/devices", "admin");
+    expect(await screen.findByText(/^devices at \/devices/)).toBeInTheDocument();
+  });
+
+  it("sends front_desk to the index, not the previous user's admin page", async () => {
+    signInFrom("/devices", "front_desk");
+    expect(await screen.findByText(/^dashboard at \//)).toBeInTheDocument();
+    expect(login).toHaveBeenCalledWith("front_desk", "secret");
+  });
+
+  it("returns a judge only to a page a judge can open", async () => {
+    signInFrom("/rankings", "judge");
+    expect(await screen.findByText(/^rankings at \/rankings/)).toBeInTheDocument();
+  });
+
+  it("sends a judge to the index instead of an admin page", async () => {
+    signInFrom("/devices", "judge");
+    expect(await screen.findByText(/^dashboard at \//)).toBeInTheDocument();
   });
 
   it("goes to the dashboard after login when there is nowhere to return to", async () => {
