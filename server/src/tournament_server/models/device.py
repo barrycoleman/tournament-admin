@@ -13,6 +13,9 @@ class Device(Base):
     is the lower-cased name, so names are unique ignoring case."""
 
     __tablename__ = "devices"
+    # AUTOINCREMENT so a deleted device's id is never handed to a later one:
+    # its unexpired access token carries that id and must not speak for it.
+    __table_args__ = {"sqlite_autoincrement": True}
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100))

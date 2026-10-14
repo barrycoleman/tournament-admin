@@ -83,7 +83,8 @@ def upgrade() -> None:
     sa.Column('disabled_at', tournament_server.db.UTCDateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name_key'),
-    sa.UniqueConstraint('token_hash')
+    sa.UniqueConstraint('token_hash'),
+    sqlite_autoincrement=True
     )
     op.create_table('signing_keys',
     sa.Column('id', sa.Integer(), nullable=False),

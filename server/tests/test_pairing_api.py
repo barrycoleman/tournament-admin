@@ -265,3 +265,17 @@ def test_pairing_writes_one_curated_audit_entry_without_the_token_hash(admin):
     assert entry["table_name"] == "devices" and entry["action"] == "pair" and entry["row_pk"] == device["id"]
     assert entry["before"] is None
     assert entry["after"] == {"name": "Audit Tab", "role": "scorer", "disabled": False}
+
+
+def test_a_deleted_devices_token_never_speaks_for_a_device_paired_after_it(admin):
+    paired_device(admin, name="Older")
+    deleted = paired_device(admin, name="Newest", role="judge")
+    db = admin.app.state.session_factory()
+    db.delete(db.get(Device, deleted["id"]))
+    db.commit()
+    db.close()
+    replacement = paired_device(admin, name="Replacement", role="scorer")
+    assert replacement["id"] != deleted["id"]
+    raw = TestClient(admin.app)
+    assert raw.get("/api/teams", headers=deleted["headers"]).status_code == 401
+    assert raw.get("/api/teams", headers=replacement["headers"]).status_code == 200
