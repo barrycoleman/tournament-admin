@@ -740,6 +740,7 @@
     "paired": "Paired {{name}}.",
     "checking": "Checking code…",
     "unknownCode": "That code isn't valid or has expired.",
+    "duplicateName": "A device with that name already exists.",
     "listHeading": "Paired devices",
     "empty": "No devices are paired yet.",
     "columns": {

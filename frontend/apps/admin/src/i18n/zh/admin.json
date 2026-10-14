@@ -737,6 +737,7 @@
     "paired": "已配对 {{name}}。",
     "checking": "正在检查代码…",
     "unknownCode": "该代码无效或已过期。",
+    "duplicateName": "已有同名设备。",
     "listHeading": "已配对的设备",
     "empty": "尚未配对任何设备。",
     "columns": {

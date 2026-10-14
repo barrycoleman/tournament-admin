@@ -108,18 +108,30 @@ describe("PairDeviceForm", () => {
     expect(screen.getByLabelText("Device name")).toHaveValue("");
   });
 
-  it("shows the server's duplicate-name refusal", async () => {
-    stub({
-      "POST /api/devices/pair": new ApiError(409, "A device with that name already exists.", {
-        detail: "A device with that name already exists.",
-      }),
-    });
+  async function pairAfterACheck(error: ApiError) {
+    stub({ "POST /api/devices/pair": error });
     renderForm();
     typeCode("KX49TM");
     await waitFor(() => expect(screen.getByLabelText("Device name")).toHaveValue("Tablet 3"));
     fireEvent.click(screen.getByRole("button", { name: "Pair" }));
+  }
+
+  it("translates a duplicate-name refusal from Pair", async () => {
+    await pairAfterACheck(new ApiError(409, "server text", { detail: "server text" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("A device with that name already exists.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("server text");
     expect(screen.getByLabelText("Pairing code")).toHaveValue("KX49TM");
+  });
+
+  it("translates a code that expired between the check and Pair", async () => {
+    await pairAfterACheck(new ApiError(404, "server text", { detail: "server text" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("That code isn't valid or has expired.");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("server text");
+  });
+
+  it("shows the server's message for any other Pair failure", async () => {
+    await pairAfterACheck(new ApiError(422, "Role isn't pairable", { detail: "Role isn't pairable" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Role isn't pairable");
   });
 
   it("sends display_device when Display is chosen", async () => {

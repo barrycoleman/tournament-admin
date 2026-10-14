@@ -52,6 +52,12 @@ export function PairDeviceForm({ initialCode = "" }: { initialCode?: string }) {
     };
   }, [normalized, t]);
 
+  function pairErrorMessage(error: unknown): string {
+    if (error instanceof ApiError && error.status === 404) return t("devices.unknownCode");
+    if (error instanceof ApiError && error.status === 409) return t("devices.duplicateName");
+    return apiErrorMessage(error, t("errors.generic"));
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPairedName(null);
@@ -115,7 +121,7 @@ export function PairDeviceForm({ initialCode = "" }: { initialCode?: string }) {
       </div>
       {pair.isError && (
         <p className="alert alert-danger" role="alert">
-          {apiErrorMessage(pair.error, t("errors.generic"))}
+          {pairErrorMessage(pair.error)}
         </p>
       )}
       {pairedName && (
