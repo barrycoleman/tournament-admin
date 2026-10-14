@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Unreachable, clearDeviceToken, getDeviceToken, signIn, storeDeviceToken, type DeviceSelf } from "./deviceApi";
+import { clearDeviceToken, getDeviceToken, signIn, storeDeviceToken, type DeviceSelf } from "./deviceApi";
 
 export const BLOCKED_RETRY_MS = 30_000;
 export const UNREACHABLE_RETRY_MS = 5_000;
@@ -59,9 +59,10 @@ export function useDeviceSession() {
           setScreen({ kind: "home", device: result.device });
           timer = setTimeout(run, Math.max(result.expiresIn * 1000 - RENEW_BEFORE_EXPIRY_MS, 5_000));
         }
-      } catch (error) {
+      } catch {
+        // Anything unexpected is retried like a lost connection: a TV has no
+        // keyboard, so it must never get stuck on "Connecting…".
         if (cancelled) return;
-        if (!(error instanceof Unreachable)) throw error;
         setUnreachable(true);
         timer = setTimeout(run, UNREACHABLE_RETRY_MS);
       }

@@ -20,15 +20,22 @@ class FakeSocket {
   close() {}
 }
 
-type Route = (url: string, init?: RequestInit) => { status: number; body?: unknown } | Promise<never>;
+interface Answer {
+  status: number;
+  body?: unknown;
+  /** Sent as-is instead of JSON, e.g. an HTML error page from a proxy. */
+  raw?: string;
+}
+type Route = (url: string, init?: RequestInit) => Answer | Promise<Answer>;
+function toResponse(answer: Answer): Response {
+  const body = answer.raw ?? (answer.body === undefined ? null : JSON.stringify(answer.body));
+  return new Response(body, { status: answer.status });
+}
 function serve(route: Route) {
-  return vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-    const result = route(String(input), init);
-    if (result instanceof Promise) return result;
-    return Promise.resolve(
-      new Response(result.body === undefined ? null : JSON.stringify(result.body), { status: result.status })
-    );
-  });
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => toResponse(await route(String(input), init)));
+}
+function after(ms: number, answer: Answer): Promise<Answer> {
+  return new Promise((resolve) => setTimeout(() => resolve(answer), ms));
 }
 
 const CODE = { id: "p1", code: "KX49TM", poll_key: "k", expires_at: "2000-01-01T00:00:00Z", expires_in: 300 };
@@ -146,6 +153,98 @@ describe("device app", () => {
     expect(signIns).toBe(3);
     expect(codesIssued).toBe(2);
     expect(localStorage.getItem("tournament-admin.device.v1")).toBeNull();
+  });
+
+  it("still collects a pairing that lands after the device's countdown has run out", async () => {
+    let oldPolls = 0;
+    let codesIssued = 0;
+    serve((url) => {
+      if (url === "/api/pairing") {
+        codesIssued += 1;
+        return { status: 201, body: { ...CODE, id: `p${codesIssued}`, code: codesIssued === 1 ? "KX49TM" : "AAAAAA", expires_in: 5 } };
+      }
+      if (url === "/api/pairing/p1") {
+        oldPolls += 1;
+        // Waiting until after the 5 s countdown, then paired inside the server's grace.
+        return { status: 200, body: oldPolls < 3 ? { status: "waiting" } : { status: "paired", device_token: "dt" } };
+      }
+      if (url.startsWith("/api/pairing/")) return { status: 200, body: { status: "waiting" } };
+      if (url === "/api/auth/device") return { status: 200, body: { access_token: "a", expires_in: 1800, device: DEVICE } };
+      return { status: 404 };
+    });
+    render(<App />);
+    expect(await screen.findByTestId("pairing-code")).toHaveTextContent("KX4 9TM");
+    await act(() => vi.advanceTimersByTimeAsync(5_500));
+    expect(await screen.findByTestId("pairing-code")).toHaveTextContent("AAA AAA");
+    await act(() => vi.advanceTimersByTimeAsync(2_000));
+    expect(await screen.findByText("Field 1 Tablet")).toBeInTheDocument();
+    expect(oldPolls).toBe(3);
+    expect(localStorage.getItem("tournament-admin.device.v1")).toContain("dt");
+  });
+
+  it("never lets a later 404 throw away a slow paired answer", async () => {
+    let polls = 0;
+    let codesIssued = 0;
+    serve((url) => {
+      if (url === "/api/pairing") {
+        codesIssued += 1;
+        return { status: 201, body: CODE };
+      }
+      if (url.startsWith("/api/pairing/")) {
+        polls += 1;
+        // The first poll is slow and carries the token; the server forgets the
+        // code once it has handed the token over, so any later poll is a 404.
+        return polls === 1
+          ? after(3_000, { status: 200, body: { status: "paired", device_token: "dt" } })
+          : { status: 404, body: { detail: "Not found" } };
+      }
+      if (url === "/api/auth/device") return { status: 200, body: { access_token: "a", expires_in: 1800, device: DEVICE } };
+      return { status: 404 };
+    });
+    render(<App />);
+    await screen.findByTestId("pairing-code");
+    // Separate act() calls so anything a 404 would do is committed before the
+    // slow answer arrives.
+    await act(() => vi.advanceTimersByTimeAsync(2_500));
+    await act(() => vi.advanceTimersByTimeAsync(1_700));
+    await act(() => vi.advanceTimersByTimeAsync(1_500));
+    expect(await screen.findByText("Field 1 Tablet")).toBeInTheDocument();
+    expect(codesIssued).toBe(1);
+    expect(polls).toBe(1);
+  });
+
+  it("treats a garbled answer while pairing as a retryable failure", async () => {
+    let requests = 0;
+    serve((url) => {
+      if (url === "/api/pairing") {
+        requests += 1;
+        return requests === 1 ? { status: 200, raw: "<html>proxy error</html>" } : { status: 201, body: CODE };
+      }
+      return { status: 200, body: { status: "waiting" } };
+    });
+    render(<App />);
+    expect(await screen.findByText("Can't reach the server. Retrying…")).toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    expect(await screen.findByTestId("pairing-code")).toBeInTheDocument();
+    expect(screen.queryByText("Can't reach the server. Retrying…")).not.toBeInTheDocument();
+  });
+
+  it("treats a garbled sign-in answer as a retryable failure", async () => {
+    localStorage.setItem("tournament-admin.device.v1", JSON.stringify({ deviceToken: "dt" }));
+    let signIns = 0;
+    serve((url) => {
+      if (url !== "/api/auth/device") return { status: 404 };
+      signIns += 1;
+      return signIns === 1
+        ? { status: 200, raw: "not json" }
+        : { status: 200, body: { access_token: "a", expires_in: 1800, device: DEVICE } };
+    });
+    render(<App />);
+    expect(await screen.findByText("Can't reach the server. Retrying…")).toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    expect(await screen.findByText("Field 1 Tablet")).toBeInTheDocument();
+    expect(screen.queryByText("Can't reach the server. Retrying…")).not.toBeInTheDocument();
+    expect(localStorage.getItem("tournament-admin.device.v1")).toContain("dt");
   });
 
   it("shows the disabled screen and returns home once enabled", async () => {

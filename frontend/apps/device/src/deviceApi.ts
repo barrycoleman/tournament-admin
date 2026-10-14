@@ -68,10 +68,23 @@ async function send(path: string, init: RequestInit): Promise<Response> {
   return response;
 }
 
+/** A body that isn't the JSON we expect (an HTML page from a proxy, a cut-off
+ * answer) is treated like no answer at all, so callers retry instead of
+ * stalling on an error they don't expect. */
+async function readJson<T>(response: Response): Promise<T> {
+  try {
+    const body: unknown = await response.json();
+    if (body === null || typeof body !== "object") throw new Error("not an object");
+    return body as T;
+  } catch {
+    throw new Unreachable();
+  }
+}
+
 export async function requestPairingCode(): Promise<PairingCode> {
   const response = await send("/api/pairing", { method: "POST" });
   if (!response.ok) throw new Unreachable();
-  return (await response.json()) as PairingCode;
+  return readJson<PairingCode>(response);
 }
 
 export async function pollPairing(code: Pick<PairingCode, "id" | "poll_key">): Promise<PollResult> {
@@ -80,7 +93,7 @@ export async function pollPairing(code: Pick<PairingCode, "id" | "poll_key">): P
   });
   if (response.status === 404) return { status: "expired" };
   if (!response.ok) throw new Unreachable();
-  return (await response.json()) as PollResult;
+  return readJson<PollResult>(response);
 }
 
 export async function signIn(deviceToken: string): Promise<SignInResult> {
@@ -91,11 +104,11 @@ export async function signIn(deviceToken: string): Promise<SignInResult> {
   });
   if (response.status === 401) return { kind: "unknown" };
   if (response.status === 403) {
-    const body = (await response.json()) as { status: "idle" | "disabled"; name: string };
+    const body = await readJson<{ status: "idle" | "disabled"; name: string }>(response);
     return { kind: "blocked", status: body.status, name: body.name };
   }
   if (!response.ok) throw new Unreachable();
-  const body = (await response.json()) as { access_token: string; expires_in: number; device: DeviceSelf };
+  const body = await readJson<{ access_token: string; expires_in: number; device: DeviceSelf }>(response);
   return { kind: "active", accessToken: body.access_token, expiresIn: body.expires_in, device: body.device };
 }
 

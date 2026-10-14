@@ -69,4 +69,16 @@ describe("device requests", () => {
     vi.spyOn(globalThis, "fetch").mockImplementationOnce(() => respond(502));
     await expect(requestPairingCode()).rejects.toBeInstanceOf(Unreachable);
   });
+
+  it("reports an answer that isn't JSON as unreachable", async () => {
+    const garbled = () => Promise.resolve(new Response("<html>proxy error</html>", { status: 200 }));
+    vi.spyOn(globalThis, "fetch").mockImplementation(garbled);
+    await expect(requestPairingCode()).rejects.toBeInstanceOf(Unreachable);
+    await expect(pollPairing({ id: "p1", poll_key: "k" })).rejects.toBeInstanceOf(Unreachable);
+    await expect(signIn("t")).rejects.toBeInstanceOf(Unreachable);
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(new Response("nope", { status: 403 }))
+    );
+    await expect(signIn("t")).rejects.toBeInstanceOf(Unreachable);
+  });
 });

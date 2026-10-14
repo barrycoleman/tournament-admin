@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import QRCode from "qrcode";
-import { Unreachable, formatCode, pairingLink, pollPairing, requestPairingCode, type PairingCode } from "../deviceApi";
+import { formatCode, pairingLink, pollPairing, requestPairingCode, type PairingCode } from "../deviceApi";
 import { UNREACHABLE_RETRY_MS } from "../useDeviceSession";
 
 const POLL_MS = 2_000;
@@ -20,22 +20,87 @@ export function PairingScreen({ onPaired, onReachability }: Props) {
   const [now, setNow] = useState(() => Date.now());
   const canvas = useRef<HTMLCanvasElement>(null);
 
+  const callbacks = useRef({ onPaired, onReachability });
+  callbacks.current = { onPaired, onReachability };
+  // The server hands a token over exactly once, so once any code (current or
+  // previous) answers "paired" that is final for this screen.
+  const collected = useRef(false);
+  const mounted = useRef(true);
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  // The code on screen. A code whose countdown ran out stays polled until the
+  // server forgets it (its grace after expiry), but only the current code's
+  // "expired" answer asks for a new one.
+  const currentId = useRef<string | null>(null);
+
+  useEffect(() => {
+    mounted.current = true;
+    const pending = timers.current;
+    return () => {
+      mounted.current = false;
+      pending.forEach(clearTimeout);
+      pending.clear();
+    };
+  }, []);
+
   useEffect(() => {
     if (code) return undefined;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const later = (fn: () => void, ms: number) => {
+      const id = setTimeout(() => {
+        timers.current.delete(id);
+        fn();
+      }, ms);
+      timers.current.add(id);
+    };
+
+    // Polls one code, one request at a time, until it is paired or the server
+    // has forgotten it.
+    const poll = (target: PairingCode) => {
+      const tick = async () => {
+        if (!mounted.current || collected.current) return;
+        let result;
+        try {
+          result = await pollPairing(target);
+        } catch {
+          if (!mounted.current || collected.current) return;
+          if (currentId.current === target.id) callbacks.current.onReachability(false);
+          later(() => void tick(), POLL_MS);
+          return;
+        }
+        if (!mounted.current || collected.current) return;
+        if (currentId.current === target.id) callbacks.current.onReachability(true);
+        if (result.status === "paired") {
+          collected.current = true;
+          callbacks.current.onPaired(result.device_token);
+        } else if (result.status === "expired") {
+          if (currentId.current === target.id) {
+            currentId.current = null;
+            setCode(null);
+          }
+        } else {
+          later(() => void tick(), POLL_MS);
+        }
+      };
+      later(() => void tick(), POLL_MS);
+    };
+
     const fetchCode = async () => {
       try {
         const next = await requestPairingCode();
-        if (cancelled) return;
-        onReachability(true);
+        if (cancelled || collected.current) return;
+        callbacks.current.onReachability(true);
+        currentId.current = next.id;
         setDeadline(Date.now() + next.expires_in * 1000);
         setNow(Date.now());
         setCode(next);
-      } catch (error) {
+        poll(next);
+      } catch {
+        // Anything unexpected is retried like a lost connection: a TV has no
+        // keyboard to recover with.
         if (cancelled) return;
-        if (!(error instanceof Unreachable)) throw error;
-        onReachability(false);
+        callbacks.current.onReachability(false);
         timer = setTimeout(fetchCode, UNREACHABLE_RETRY_MS);
       }
     };
@@ -44,35 +109,7 @@ export function PairingScreen({ onPaired, onReachability }: Props) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [code, onReachability]);
-
-  useEffect(() => {
-    if (!code) return undefined;
-    let stopped = false;
-    const id = setInterval(() => {
-      void (async () => {
-        try {
-          const result = await pollPairing(code);
-          if (stopped) return;
-          onReachability(true);
-          if (result.status === "paired") {
-            stopped = true;
-            clearInterval(id);
-            onPaired(result.device_token);
-          } else if (result.status === "expired") {
-            setCode(null);
-          }
-        } catch (error) {
-          if (!(error instanceof Unreachable)) throw error;
-          if (!stopped) onReachability(false);
-        }
-      })();
-    }, POLL_MS);
-    return () => {
-      stopped = true;
-      clearInterval(id);
-    };
-  }, [code, onPaired, onReachability]);
+  }, [code]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1_000);
@@ -80,7 +117,11 @@ export function PairingScreen({ onPaired, onReachability }: Props) {
   }, []);
 
   useEffect(() => {
-    if (code && now >= deadline) setCode(null);
+    if (code && now >= deadline) {
+      // Show a new code; the old one keeps being polled (see poll above).
+      currentId.current = null;
+      setCode(null);
+    }
   }, [code, now, deadline]);
 
   // Drawn at commit, so the QR is on the canvas as soon as the code is shown.
