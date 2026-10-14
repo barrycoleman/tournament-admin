@@ -54,6 +54,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=200), nullable=False),
     sa.Column('active_session_id', sa.Integer(), nullable=True),
     sa.Column('game_plugin_name', sa.String(length=200), nullable=True),
+    sa.Column('device_idle_minutes', sa.Integer(), nullable=False),
     sa.Column('created_at', tournament_server.db.UTCDateTime(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
@@ -69,6 +70,20 @@ def upgrade() -> None:
     sa.Column('password_encrypted', sa.String(length=500), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('role')
+    )
+    op.create_table('devices',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('name_key', sa.String(length=100), nullable=False),
+    sa.Column('role', sa.String(length=20), nullable=False),
+    sa.Column('token_hash', sa.String(length=200), nullable=False),
+    sa.Column('paired_at', tournament_server.db.UTCDateTime(), nullable=False),
+    sa.Column('paired_by', sa.String(length=200), nullable=False),
+    sa.Column('last_seen_at', tournament_server.db.UTCDateTime(), nullable=False),
+    sa.Column('disabled_at', tournament_server.db.UTCDateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name_key'),
+    sa.UniqueConstraint('token_hash')
     )
     op.create_table('scoring_devices',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -419,6 +434,7 @@ def downgrade() -> None:
     op.drop_table('divisions')
     op.drop_table('signing_keys')
     op.drop_table('scoring_devices')
+    op.drop_table('devices')
     op.drop_table('role_credentials')
     op.drop_table('password_encryption_keys')
     op.drop_table('events')

@@ -23,7 +23,7 @@ def _tournament(tmp_path: Path, name: str = "spring.db") -> str:
 
 def _write(db_path: str, name: str) -> None:
     conn = sqlite3.connect(db_path)
-    conn.execute("INSERT INTO events (name, created_at) VALUES (?, '2026-01-01 00:00:00')", (name,))
+    conn.execute("INSERT INTO events (name, device_idle_minutes, created_at) VALUES (?, 240, '2026-01-01 00:00:00')", (name,))
     conn.execute(
         "INSERT INTO audit_log (timestamp, table_name, action, actor) "
         "VALUES ('2026-01-01 00:00:00', 'events', 'insert', 'test')"
@@ -75,7 +75,7 @@ def test_snapshot_includes_writes_still_in_the_wal(tmp_path):
     holder = sqlite3.connect(db_path)  # keeps the WAL from being checkpointed on close
     holder.execute("PRAGMA journal_mode=WAL")
     holder.execute("PRAGMA wal_autocheckpoint=0")
-    holder.execute("INSERT INTO events (name, created_at) VALUES ('In WAL', '2026-01-01 00:00:00')")
+    holder.execute("INSERT INTO events (name, device_idle_minutes, created_at) VALUES ('In WAL', 240, '2026-01-01 00:00:00')")
     holder.commit()
     assert Path(f"{db_path}-wal").stat().st_size > 0
 

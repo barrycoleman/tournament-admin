@@ -60,8 +60,8 @@ def test_stamped_baseline_database_with_zero_divisions_self_heals_via_create_app
     with engine.connect() as connection:
         connection.execute(
             text(
-                "INSERT INTO events (id, name, created_at) "
-                "VALUES (1, 'No Divisions Yet', '2026-01-01 00:00:00')"
+                "INSERT INTO events (id, name, device_idle_minutes, created_at) "
+                "VALUES (1, 'No Divisions Yet', 240, '2026-01-01 00:00:00')"
             )
         )
         connection.commit()
@@ -98,8 +98,8 @@ def test_startup_self_heal_assigns_unassigned_teams_to_a_pre_existing_sole_divis
     with engine.connect() as connection:
         connection.execute(
             text(
-                "INSERT INTO events (id, name, created_at) "
-                "VALUES (1, 'Regional Qualifier', '2026-01-01 00:00:00')"
+                "INSERT INTO events (id, name, device_idle_minutes, created_at) "
+                "VALUES (1, 'Regional Qualifier', 240, '2026-01-01 00:00:00')"
             )
         )
         connection.execute(
@@ -134,8 +134,8 @@ def test_startup_self_heal_backfills_missing_role_credential(tmp_path):
     with engine.connect() as connection:
         connection.execute(
             text(
-                "INSERT INTO events (id, name, created_at) "
-                "VALUES (1, 'Regional Qualifier', '2026-01-01 00:00:00')"
+                "INSERT INTO events (id, name, device_idle_minutes, created_at) "
+                "VALUES (1, 'Regional Qualifier', 240, '2026-01-01 00:00:00')"
             )
         )
         connection.execute(

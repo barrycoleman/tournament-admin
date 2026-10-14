@@ -17,6 +17,7 @@ class Event(Base):
         Integer, default=None
     )
     game_plugin_name: Mapped[str | None] = mapped_column(String(200), default=None)
+    device_idle_minutes: Mapped[int] = mapped_column(Integer, default=240)
     created_at: Mapped[dt.datetime] = mapped_column(
         UTCDateTime, default=utc_now
     )

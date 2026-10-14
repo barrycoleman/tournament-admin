@@ -24,7 +24,7 @@ def _good_tournament(path: Path) -> None:
     ensure_schema_current(engine, str(path))
     engine.dispose()
     conn = sqlite3.connect(str(path))
-    conn.execute("INSERT INTO events (name, created_at) VALUES ('Good', '2026-01-01 00:00:00')")
+    conn.execute("INSERT INTO events (name, device_idle_minutes, created_at) VALUES ('Good', 240, '2026-01-01 00:00:00')")
     conn.commit()
     conn.close()
 

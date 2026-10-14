@@ -3,6 +3,7 @@ from tournament_server.models.auth_session import AuthSession
 from tournament_server.models.award import Award, AwardWinner
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
 from tournament_server.models.bracket_matchup import BracketMatchup
+from tournament_server.models.device import Device
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
 from tournament_server.models.field import Field
@@ -34,6 +35,7 @@ __all__ = [
     "BracketAlliance",
     "BracketAllianceTeam",
     "BracketMatchup",
+    "Device",
     "Division",
     "Event",
     "Field",
