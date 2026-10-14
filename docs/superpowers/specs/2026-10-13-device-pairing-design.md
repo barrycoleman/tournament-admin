@@ -95,7 +95,7 @@ Worked out when read, never stored:
 - **Idle:** the role isn't `display_device` and `now - last_seen_at` is at least the event's `device_idle_minutes`.
 - **Active:** otherwise.
 
-`last_seen_at` is refreshed whenever a request from an active device is admitted, at most once a minute (so a busy display doesn't write on every request). An idle device's requests never refresh it, so idle stays idle until an admin enables it (today's one-way rule).
+`last_seen_at` is refreshed whenever a request from an active device is admitted, at most once a minute (so a busy display doesn't write on every request). An idle device's requests never refresh it, so idle stays idle until an admin enables it (today's one-way rule). Signing in (`POST /api/auth/device`) and opening a WebSocket don't count as activity: they still check the device's status, but never refresh `last_seen_at`, because the device app renews its token on a timer and reconnects its socket on its own, which would otherwise keep an untouched tablet from ever going idle. Pairing and an admin's enable set it.
 
 ### 5.3 Admin API (admin only; any other role gets 403)
 

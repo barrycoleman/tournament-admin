@@ -12,14 +12,15 @@ router = APIRouter(tags=["websockets"])
 async def _authenticate(websocket: WebSocket, allowed_roles: tuple[str, ...]) -> Caller | None:
     """Who the socket's token speaks for. A device token is checked against
     its row like any request (a disabled, idle or deleted device is refused,
-    and the role comes from the row)."""
+    and the role comes from the row), but a connect is not activity: it
+    never refreshes the device's `last_seen_at`."""
     token = websocket.query_params.get("token")
     if token is None:
         await websocket.close(code=1008)
         return None
     db: Session = websocket.app.state.session_factory()
     try:
-        caller = resolve_caller(token, db)
+        caller = resolve_caller(token, db, touch=False)
     except CallerRejected:
         await websocket.close(code=1008)
         return None

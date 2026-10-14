@@ -93,8 +93,9 @@ def device_sign_in(payload: DeviceSignInRequest, db: Session = Depends(get_db)):
             status_code=403,
             content={"detail": "This device is disabled", "status": status, "name": device.name},
         )
-    device.last_seen_at = now
-    db.commit()
+    # Signing in is not activity: the device app renews its token on a
+    # timer, so counting it would keep an untouched screen from ever going
+    # idle. Only real requests (resolve_caller) refresh last_seen_at.
     return DeviceTokenResponse(
         access_token=create_access_token(db, device.role, device_id=device.id),
         expires_in=ACCESS_TOKEN_LIFETIME_SECONDS,

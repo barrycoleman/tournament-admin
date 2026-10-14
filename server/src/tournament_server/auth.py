@@ -126,11 +126,15 @@ class Caller:
     device_name: str | None = None
 
 
-def resolve_caller(token: str, db: Session) -> Caller:
+def resolve_caller(token: str, db: Session, *, touch: bool = True) -> Caller:
     """Who a bearer token speaks for. A device's token is checked against
     its row on every call, so disabling, deleting or changing the role of a
     device takes effect on its very next request, and its role always comes
-    from the row, never from the token."""
+    from the row, never from the token.
+
+    `touch=False` checks the device without counting the call as activity
+    (a WebSocket connect), so an open screen that only reconnects still
+    goes idle."""
     try:
         payload = decode_access_token(token, db)
     except ValueError:
@@ -144,7 +148,7 @@ def resolve_caller(token: str, db: Session) -> Caller:
     now = utc_now()
     if device_status(device, now, idle_minutes_for(db)) != "active":
         raise CallerRejected(403, "This device is disabled")
-    if now - device.last_seen_at >= LAST_SEEN_WRITE_INTERVAL:
+    if touch and now - device.last_seen_at >= LAST_SEEN_WRITE_INTERVAL:
         device.last_seen_at = now
         db.commit()
     return Caller(role=device.role, device_id=device.id, device_name=device.name)

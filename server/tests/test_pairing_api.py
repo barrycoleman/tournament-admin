@@ -279,3 +279,41 @@ def test_a_deleted_devices_token_never_speaks_for_a_device_paired_after_it(admin
     raw = TestClient(admin.app)
     assert raw.get("/api/teams", headers=deleted["headers"]).status_code == 401
     assert raw.get("/api/teams", headers=replacement["headers"]).status_code == 200
+
+
+def _set_last_seen(admin, device_id, value):
+    db = admin.app.state.session_factory()
+    db.get(Device, device_id).last_seen_at = value
+    db.commit()
+    db.close()
+
+
+def _last_seen(admin, device_id):
+    db = admin.app.state.session_factory()
+    try:
+        return db.get(Device, device_id).last_seen_at
+    finally:
+        db.close()
+
+
+def test_signing_in_does_not_count_as_activity(admin):
+    device = paired_device(admin)
+    earlier = utc_now() - dt.timedelta(minutes=30)
+    _set_last_seen(admin, device["id"], earlier)
+    response = TestClient(admin.app).post("/api/auth/device", json={"device_token": device["device_token"]})
+    assert response.status_code == 200
+    assert _last_seen(admin, device["id"]) == earlier
+
+
+def test_a_device_that_only_signs_in_still_goes_idle(admin):
+    device = paired_device(admin)
+    raw = TestClient(admin.app)
+    _set_last_seen(admin, device["id"], utc_now() - dt.timedelta(minutes=200))
+    # Its renewals keep succeeding while it is inside the idle window...
+    assert raw.post("/api/auth/device", json={"device_token": device["device_token"]}).status_code == 200
+    # ...but they never moved its last real request, so once the window
+    # is shorter than that, the next sign-in finds it idle.
+    admin.put("/api/devices/settings", json={"idle_minutes": 180})
+    response = raw.post("/api/auth/device", json={"device_token": device["device_token"]})
+    assert response.status_code == 403
+    assert response.json()["status"] == "idle"

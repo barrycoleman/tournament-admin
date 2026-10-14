@@ -793,6 +793,11 @@ from the token, so an admin's change applies on the device's very next
 request. `last_seen_at` is written at most once a minute
 (`LAST_SEEN_WRITE_INTERVAL`), and only while the device is still active,
 so a request never revives an idle device; only an admin's enable does.
+Signing in (`POST /api/auth/device`) and WebSocket connects are not
+activity: both still check the device's status, but neither refreshes
+`last_seen_at` (`resolve_caller(..., touch=False)` for sockets), since the
+device app renews its token and reconnects its socket on its own and would
+otherwise never go idle while left open. Pairing and enable set it.
 
 **Status** is computed, not stored (`device_status`): `disabled` when
 `disabled_at` is set, else `idle` when `last_seen_at` is at least

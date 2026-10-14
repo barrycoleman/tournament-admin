@@ -36,9 +36,10 @@ def test_a_device_change_closes_its_sockets_with_4403(admin, action):
 def test_a_disabled_device_cannot_open_a_socket(admin):
     device = paired_device(admin)
     admin.post(f"/api/devices/{device['id']}/disable")
-    with pytest.raises(WebSocketDisconnect):
+    with pytest.raises(WebSocketDisconnect) as refused:
         with _connect(admin, device) as socket:
             socket.receive_json()
+    assert refused.value.code == 1008
 
 
 def test_a_rename_does_not_close_the_socket_and_device_changes_are_broadcast(admin):
@@ -51,9 +52,10 @@ def test_a_rename_does_not_close_the_socket_and_device_changes_are_broadcast(adm
 def test_a_deleted_device_cannot_open_a_socket(admin):
     device = paired_device(admin)
     admin.delete(f"/api/devices/{device['id']}")
-    with pytest.raises(WebSocketDisconnect):
+    with pytest.raises(WebSocketDisconnect) as refused:
         with _connect(admin, device) as socket:
             socket.receive_json()
+    assert refused.value.code == 1008
 
 
 def test_an_idle_device_cannot_open_a_socket(admin):
@@ -67,9 +69,10 @@ def test_an_idle_device_cannot_open_a_socket(admin):
     db.get(Device, device["id"]).last_seen_at = utc_now() - dt.timedelta(hours=5)
     db.commit()
     db.close()
-    with pytest.raises(WebSocketDisconnect):
+    with pytest.raises(WebSocketDisconnect) as refused:
         with _connect(admin, device) as socket:
             socket.receive_json()
+    assert refused.value.code == 1008
 
 
 def test_a_device_takes_its_socket_role_from_its_row(admin):
@@ -84,3 +87,22 @@ def test_a_device_takes_its_socket_role_from_its_row(admin):
         with admin.websocket_connect(f"/ws/session/1?token={device['access_token']}") as socket:
             socket.receive_json()
     assert realtime.DEVICE_CHANGED_CLOSE_CODE == 4403
+
+
+def test_a_socket_connect_does_not_count_as_activity(admin):
+    import datetime as dt
+
+    from tournament_server.db import utc_now
+    from tournament_server.models.device import Device
+
+    device = paired_device(admin)
+    earlier = utc_now() - dt.timedelta(minutes=30)
+    db = admin.app.state.session_factory()
+    db.get(Device, device["id"]).last_seen_at = earlier
+    db.commit()
+    db.close()
+    with _connect(admin, device):
+        assert device["id"] in admin.app.state.realtime.by_device
+    db = admin.app.state.session_factory()
+    assert db.get(Device, device["id"]).last_seen_at == earlier
+    db.close()
