@@ -144,6 +144,7 @@ field.
   assigned_field_or_division, last_seen`.
   *Revised direction (2026-10-12): displays are any browser (Smart TV, laptop, phone), paired by code and assigned to display groups. See §10, "Gaps found in a 2026-10-12 review".*
 - **ScoringDevice** — tablets/phones used for scoring. See §4.
+  *Superseded (2026-10-13): the device pairing spec (`docs/superpowers/specs/2026-10-13-device-pairing-design.md`) replaces `ScoringDevice` with a single `Device` table for every paired device.*
 - **Asset** — uploaded images: `purpose (sponsor_logo / event_banner /
   etc.), content_type, data (blob), width, height, uploaded_at`. The
   product ships with **zero** default sponsor or advertising content of
@@ -151,6 +152,8 @@ field.
   organizer explicitly uploads here.
 
 ## 4. Device admission
+
+*Superseded (2026-10-13): this section is replaced by the device pairing spec (`docs/superpowers/specs/2026-10-13-device-pairing-design.md`), which pairs every device role by code and replaces `ScoringDevice` with `Device`. The text below is kept as history.*
 
 **Pi displays** (`Device` table): admin-driven. The server discovers or
 is given a Pi's IP, then the admin assigns it a type, field/division, and

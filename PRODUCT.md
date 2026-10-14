@@ -18,7 +18,7 @@ separate UIs to build.
 
 - **Event organizer / admin** — sets up and runs a tournament event:
   configures the event, installs/selects a game plugin, manages divisions,
-  teams, scheduling, finals brackets, and device admission. Desktop-class,
+  teams, scheduling, finals brackets, and device pairing. Desktop-class,
   config-heavy workflows. Runs on the same machine as the server.
 - **Scorer** — enters match scores on a tablet at the field, under time
   pressure between matches. Needs offline-tolerant submission (on-device
@@ -66,9 +66,14 @@ subscription/hosted competition-management products.
   only, for working on a specific/inactive session without affecting
   what field devices see). Clients resync full state on reconnect, not
   just missed deltas.
-- **Device trust**: a `ScoringDevice` admission layer (separate from
-  role-based auth) gates score-submission attribution; a similar
-  Pi-display admission concept is planned but not yet built.
+- **Device pairing**: a tablet, phone or TV opens the server address
+  followed by `/pair`, shows a short code (and a QR link), and an admin
+  enters that code on the Devices page with a role (scorer, referee,
+  judge, front desk or display) and a name. The device then stays signed
+  in as that role; an admin can rename it, change its role, disable,
+  enable or delete it, and an operator device goes idle after a
+  configurable timeout. Scores can only be submitted from a paired device
+  (or by an admin) and are attributed to the device's name.
 - **Packaging**: primary distribution is a standalone PyInstaller
   executable per OS (Windows/Mac/Linux); Docker is a secondary option.
   Automatic timestamped SQLite backups on an interval and before risky

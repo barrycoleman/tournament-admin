@@ -86,6 +86,12 @@ The dev server's proxy target port is read from `VITE_BACKEND_PORT`
 `vite.config.ts`. `npm run build` produces `dist/`, which the backend
 serves directly in production (no dev proxy needed there).
 
+**A deployment needs both apps built.** The server serves
+`apps/admin/dist/` and `apps/device/dist/` side by side; without the
+device build, `/pair` redirects to `/device/`, which 404s. Run
+`npm run build` from `frontend/` (the workspace script builds every app),
+or `npm run build` in `apps/admin` and in `apps/device`.
+
 To work on the device app too, start its dev server as well (Terminal 3:
 `cd frontend/apps/device && npm run dev -- --port 5175`). The admin dev
 server proxies `^/device/` and `^/pair/?$` (rewritten to `/device/`) to

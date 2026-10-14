@@ -1168,6 +1168,12 @@ and gated: if the resolved static directory doesn't exist,
 frontend built yet is the normal state for a fresh checkout, and every
 existing test relies on this no-op path still working).
 
+**Build both apps for a deployment.** A self-hoster must build the admin
+app *and* the device app (`npm run build` from `frontend/`, which builds
+every workspace app, or `npm run build` in `frontend/apps/admin` and in
+`frontend/apps/device`). With only the admin app built, `/pair` still
+redirects to `/device/`, which then 404s, so no device can pair.
+
 Resolution order: `static_dir` passed to `create_app()`, else
 `TOURNAMENT_STATIC_DIR` env var (`Settings.static_dir`), else the
 computed default `frontend/apps/admin/dist` (relative to the repo root,
