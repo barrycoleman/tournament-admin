@@ -11,6 +11,7 @@ import { DashboardRoute } from "./routes/DashboardRoute";
 import { EventSetupRoute } from "./routes/EventSetupRoute";
 import { SettingsRolesRoute } from "./routes/SettingsRolesRoute";
 import { BackupsRoute } from "./routes/BackupsRoute";
+import { DevicesRoute } from "./routes/DevicesRoute";
 import { DivisionsRoute } from "./routes/DivisionsRoute";
 import { TeamsRoute } from "./routes/TeamsRoute";
 import { SessionsRoute } from "./routes/SessionsRoute";
@@ -123,6 +124,7 @@ export const router = createBrowserRouter([
       { path: "events/setup", element: <EventSetupRoute /> },
       { path: "settings/roles", element: <SettingsRolesRoute /> },
       { path: "backups", element: <BackupsRoute /> },
+      { path: "devices", element: <DevicesRoute /> },
       { path: "divisions", element: <DivisionsRoute /> },
       { path: "teams", element: <TeamsRoute /> },
       { path: "sessions", element: <SessionsRoute /> },

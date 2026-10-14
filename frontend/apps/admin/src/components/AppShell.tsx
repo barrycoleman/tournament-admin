@@ -93,6 +93,9 @@ export function AppShell() {
             <NavLink to="/backups" className={navLinkClassName}>
               {t("shell.backupsLink")}
             </NavLink>
+            <NavLink to="/devices" className={navLinkClassName}>
+              {t("shell.devicesLink")}
+            </NavLink>
             <NavLink to="/divisions" className={navLinkClassName}>
               {t("shell.divisionsLink")}
             </NavLink>

@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ApiError, useAuth } from "@tournament-admin/shared";
+import { safeReturnPath } from "../routeGuards";
 
 export function LoginRoute() {
   const { t } = useTranslation();
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [role, setRole] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +18,8 @@ export function LoginRoute() {
     setError(null);
     try {
       await login(role, password);
-      navigate("/", { replace: true });
+      const from = safeReturnPath((location.state as { from?: unknown } | null)?.from);
+      navigate(from ?? "/", { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         setError(t("login.invalidCredentials"));
@@ -68,6 +71,12 @@ export function LoginRoute() {
             </button>
           </div>
         </form>
+        {/* A plain link, not a router Link: /pair belongs to the device app. */}
+        <p className="auth-card__pair">
+          <a className="btn" href="/pair">
+            {t("login.pairThisDevice")}
+          </a>
+        </p>
       </div>
     </main>
   );

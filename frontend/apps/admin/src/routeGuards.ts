@@ -40,3 +40,11 @@ export function indexLoader(): Response | null {
 export function judgeAllowedPath(pathname: string): boolean {
   return pathname === "/rankings" || pathname === "/judge" || pathname.startsWith("/judge/");
 }
+
+/** A same-app path to return to after signing in, or null for anything else
+ * (an absolute URL or a protocol-relative "//host" would leave the app). */
+export function safeReturnPath(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  if (!value.startsWith("/") || value.startsWith("//")) return null;
+  return value;
+}

@@ -7,7 +7,8 @@
     "roleLabel": "角色",
     "passwordLabel": "密码",
     "submit": "登录",
-    "invalidCredentials": "角色或密码无效。"
+    "invalidCredentials": "角色或密码无效。",
+    "pairThisDevice": "配对此设备"
   },
   "eventsNew": {
     "heading": "设置您的赛事",
@@ -30,7 +31,8 @@
     "sessionsLink": "场次",
     "checkinLink": "签到",
     "switchToLight": "切换到浅色模式",
-    "switchToDark": "切换到深色模式"
+    "switchToDark": "切换到深色模式",
+    "devicesLink": "设备"
   },
   "picker": {
     "damagedHeading": "此比赛文件已损坏",
@@ -723,5 +725,54 @@
     "needsAdmin": "此功能需要比赛插件。",
     "needsAdminLink": "在赛事设置中选择",
     "needsOther": "组织者尚未选择比赛插件。"
+  },
+  "devices": {
+    "heading": "设备",
+    "pairHeading": "配对设备",
+    "pairHelp": "在设备上打开服务器地址并加上 /pair，然后输入设备显示的代码。",
+    "codeLabel": "配对代码",
+    "roleLabel": "角色",
+    "nameLabel": "设备名称",
+    "pair": "配对",
+    "paired": "已配对 {{name}}。",
+    "checking": "正在检查代码…",
+    "unknownCode": "该代码无效或已过期。",
+    "listHeading": "已配对的设备",
+    "empty": "尚未配对任何设备。",
+    "columns": {
+      "name": "名称",
+      "role": "角色",
+      "status": "状态",
+      "lastSeen": "最近活动",
+      "actions": "操作"
+    },
+    "status": {
+      "active": "活动",
+      "idle": "闲置",
+      "disabled": "已停用"
+    },
+    "roles": {
+      "scorer": "记分员",
+      "referee": "裁判",
+      "judge": "评委",
+      "front_desk": "签到",
+      "display_device": "显示屏"
+    },
+    "edit": "编辑",
+    "editHeading": "编辑 {{name}}",
+    "save": "保存",
+    "cancel": "取消",
+    "disable": "停用",
+    "enable": "启用",
+    "delete": "删除",
+    "deleteHeading": "删除设备",
+    "deleteBody": "删除 {{name}}？之后需要重新配对。",
+    "idleHeading": "闲置",
+    "idleLabel": "操作设备无活动多少分钟后停用",
+    "idleHelp": "显示屏不会因闲置而停用。范围：15 到 1440 分钟。",
+    "idleSave": "保存",
+    "idleSaved": "已保存。",
+    "justNow": "刚刚",
+    "loadError": "无法加载设备。"
   }
 }

@@ -220,6 +220,12 @@
   max-width: 560px;
 }
 
+.auth-card__pair {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: var(--border-width) solid var(--color-border);
+}
+
 /* ---------- Panels / cards ---------- */
 
 .panel {

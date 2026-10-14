@@ -7,7 +7,8 @@
     "roleLabel": "Role",
     "passwordLabel": "Password",
     "submit": "Log in",
-    "invalidCredentials": "Invalid role or password."
+    "invalidCredentials": "Invalid role or password.",
+    "pairThisDevice": "Pair this device"
   },
   "eventsNew": {
     "heading": "Set up your event",
@@ -30,7 +31,8 @@
     "sessionsLink": "Sessions",
     "checkinLink": "Check-In",
     "switchToLight": "Switch to light mode",
-    "switchToDark": "Switch to dark mode"
+    "switchToDark": "Switch to dark mode",
+    "devicesLink": "Devices"
   },
   "picker": {
     "damagedHeading": "This tournament file is damaged",
@@ -726,5 +728,54 @@
     "needsAdmin": "This needs a game plugin.",
     "needsAdminLink": "Choose one in Event Setup",
     "needsOther": "The organizer hasn't chosen a game plugin yet."
+  },
+  "devices": {
+    "heading": "Devices",
+    "pairHeading": "Pair a device",
+    "pairHelp": "Open the server address followed by /pair on the device, then enter the code it shows.",
+    "codeLabel": "Pairing code",
+    "roleLabel": "Role",
+    "nameLabel": "Device name",
+    "pair": "Pair",
+    "paired": "Paired {{name}}.",
+    "checking": "Checking code…",
+    "unknownCode": "That code isn't valid or has expired.",
+    "listHeading": "Paired devices",
+    "empty": "No devices are paired yet.",
+    "columns": {
+      "name": "Name",
+      "role": "Role",
+      "status": "Status",
+      "lastSeen": "Last seen",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "Active",
+      "idle": "Idle",
+      "disabled": "Disabled"
+    },
+    "roles": {
+      "scorer": "Scorer",
+      "referee": "Referee",
+      "judge": "Judge",
+      "front_desk": "Check-in",
+      "display_device": "Display"
+    },
+    "edit": "Edit",
+    "editHeading": "Edit {{name}}",
+    "save": "Save",
+    "cancel": "Cancel",
+    "disable": "Disable",
+    "enable": "Enable",
+    "delete": "Delete",
+    "deleteHeading": "Delete device",
+    "deleteBody": "Delete {{name}}? It will need to be paired again.",
+    "idleHeading": "Inactivity",
+    "idleLabel": "Disable operator devices after this many minutes without activity",
+    "idleHelp": "Displays are never disabled for inactivity. Allowed: 15 to 1,440 minutes.",
+    "idleSave": "Save",
+    "idleSaved": "Saved.",
+    "justNow": "just now",
+    "loadError": "Couldn't load the devices."
   }
 }

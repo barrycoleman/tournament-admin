@@ -16,7 +16,7 @@ export function AuthenticatedLayout() {
   const location = useLocation();
 
   if (!isAuthenticated || !hasValidTokens()) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
   }
   if (role === "judge" && !judgeAllowedPath(location.pathname)) {
     return <Navigate to="/judge/awards" replace />;
