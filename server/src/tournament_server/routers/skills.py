@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from tournament_server.auth import require_admin, require_any_role
 from tournament_server.db import utc_now
 from tournament_server.deps import get_db, get_event_or_404, get_optional_game_plugin
-from tournament_server.device_auth import require_admitted_device
+from tournament_server.device_auth import require_paired_scoring_device
 from tournament_server.models.event import Event
 from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.session import TournamentSession
@@ -219,7 +219,7 @@ def create_skills_attempt(
     payload: SkillsAttemptCreate,
     request: Request,
     db: Session = Depends(get_db),
-    _device: str | None = Depends(require_admitted_device),
+    _device: str | None = Depends(require_paired_scoring_device),
 ) -> Any:
     session_obj = _session_or_404(db, session_id)
     event = get_event_or_404(db)

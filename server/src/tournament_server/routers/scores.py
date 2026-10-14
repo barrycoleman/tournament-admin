@@ -10,7 +10,7 @@ from tournament_server import audit
 from tournament_server.auth import require_scorer_or_referee
 from tournament_server.db import utc_now
 from tournament_server.deps import get_db, get_game_plugin_for_event, get_the_event
-from tournament_server.device_auth import require_admitted_device
+from tournament_server.device_auth import require_paired_scoring_device
 from tournament_server.models.alliance import Alliance
 from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.match import Match
@@ -85,7 +85,7 @@ def submit_score(
     request: Request,
     db: Session = Depends(get_db),
     role: str = Depends(require_scorer_or_referee),
-    device_friendly_name: str | None = Depends(require_admitted_device),
+    device_friendly_name: str | None = Depends(require_paired_scoring_device),
 ) -> ScoreRecordRead:
     match = db.get(Match, match_id)
     if match is None:

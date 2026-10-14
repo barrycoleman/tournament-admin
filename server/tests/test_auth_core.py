@@ -15,6 +15,7 @@ from tournament_server.auth import (
     decrypt_password,
     encrypt_password,
     generate_refresh_token,
+    get_caller,
     get_password_encryption_key,
     get_signing_key,
     hash_password,
@@ -23,6 +24,7 @@ from tournament_server.auth import (
     require_any_role,
     require_role,
     require_scorer_or_referee,
+    resolve_caller,
     verify_password,
 )
 from tournament_server.db import init_db, make_engine, make_session_factory
@@ -118,11 +120,29 @@ def test_create_access_token_has_only_role_iat_exp_claims(tmp_path):
     assert payload["exp"] - payload["iat"] == ACCESS_TOKEN_LIFETIME_SECONDS
 
 
+def _check(dependency, authorization, db):
+    """Runs a role dependency the way FastAPI does: header -> caller -> role."""
+    return dependency(caller=get_caller(authorization=authorization, db=db))
+
+
+def test_create_access_token_adds_a_device_id_only_when_given(tmp_path):
+    db = _db(tmp_path)
+    token = create_access_token(db, "judge", device_id=7)
+    payload = jwt.decode(token, get_signing_key(db), algorithms=[JWT_ALGORITHM])
+    assert payload["device_id"] == 7 and payload["role"] == "judge"
+
+
+def test_a_password_token_resolves_to_its_role_with_no_device(tmp_path):
+    db = _db(tmp_path)
+    caller = resolve_caller(create_access_token(db, "scorer"), db)
+    assert (caller.role, caller.device_id, caller.device_name) == ("scorer", None, None)
+
+
 def test_require_role_401s_with_no_header(tmp_path):
     db = _db(tmp_path)
     dependency = require_role()
     with pytest.raises(HTTPException) as exc_info:
-        dependency(authorization=None, db=db)
+        _check(dependency, None, db)
     assert exc_info.value.status_code == 401
 
 
@@ -130,7 +150,7 @@ def test_require_role_401s_with_malformed_header(tmp_path):
     db = _db(tmp_path)
     dependency = require_role()
     with pytest.raises(HTTPException) as exc_info:
-        dependency(authorization="not-a-bearer-token", db=db)
+        _check(dependency, "not-a-bearer-token", db)
     assert exc_info.value.status_code == 401
 
 
@@ -149,7 +169,7 @@ def test_require_role_401s_on_expired_token(tmp_path):
     )
     dependency = require_role()
     with pytest.raises(HTTPException) as exc_info:
-        dependency(authorization=f"Bearer {expired}", db=db)
+        _check(dependency, f"Bearer {expired}", db)
     assert exc_info.value.status_code == 401
 
 
@@ -161,7 +181,7 @@ def test_require_role_401s_on_bad_signature(tmp_path):
     )
     dependency = require_role()
     with pytest.raises(HTTPException) as exc_info:
-        dependency(authorization=f"Bearer {bogus}", db=db)
+        _check(dependency, f"Bearer {bogus}", db)
     assert exc_info.value.status_code == 401
 
 
@@ -170,7 +190,7 @@ def test_require_role_403s_when_role_not_allowed(tmp_path):
     token = create_access_token(db, "attendee")
     dependency = require_role("scorer", "referee")
     with pytest.raises(HTTPException) as exc_info:
-        dependency(authorization=f"Bearer {token}", db=db)
+        _check(dependency, f"Bearer {token}", db)
     assert exc_info.value.status_code == 403
 
 
@@ -178,21 +198,21 @@ def test_require_role_passes_when_role_allowed(tmp_path):
     db = _db(tmp_path)
     token = create_access_token(db, "scorer")
     dependency = require_role("scorer", "referee")
-    assert dependency(authorization=f"Bearer {token}", db=db) == "scorer"
+    assert _check(dependency, f"Bearer {token}", db) == "scorer"
 
 
 def test_admin_always_passes_regardless_of_allowed_roles(tmp_path):
     db = _db(tmp_path)
     token = create_access_token(db, "admin")
     dependency = require_role("scorer", "referee")
-    assert dependency(authorization=f"Bearer {token}", db=db) == "admin"
+    assert _check(dependency, f"Bearer {token}", db) == "admin"
 
 
 def test_require_admin_rejects_non_admin(tmp_path):
     db = _db(tmp_path)
     token = create_access_token(db, "judge")
     with pytest.raises(HTTPException) as exc_info:
-        require_admin(authorization=f"Bearer {token}", db=db)
+        _check(require_admin, f"Bearer {token}", db)
     assert exc_info.value.status_code == 403
 
 
@@ -200,14 +220,14 @@ def test_require_any_role_accepts_every_role(tmp_path):
     db = _db(tmp_path)
     for role in ROLES:
         token = create_access_token(db, role)
-        assert require_any_role(authorization=f"Bearer {token}", db=db) == role
+        assert _check(require_any_role, f"Bearer {token}", db) == role
 
 
 def test_require_scorer_or_referee_rejects_judge(tmp_path):
     db = _db(tmp_path)
     token = create_access_token(db, "judge")
     with pytest.raises(HTTPException) as exc_info:
-        require_scorer_or_referee(authorization=f"Bearer {token}", db=db)
+        _check(require_scorer_or_referee, f"Bearer {token}", db)
     assert exc_info.value.status_code == 403
 
 

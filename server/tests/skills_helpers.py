@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi.testclient import TestClient
 
 SECOND_GAME = Path(__file__).parent / "fixtures" / "plugins" / "games" / "second-game"
 
@@ -38,17 +37,6 @@ def enable_skills(client, attempts: dict[str, int] | None = None) -> None:
 
 def admin_token(client) -> str:
     return client.headers["Authorization"].removeprefix("Bearer ")
-
-
-def admitted_device_token(client) -> str:
-    """Registers a device and admits it (as the admin `client`); returns its token."""
-    raw = TestClient(client.app)
-    device = raw.post("/api/devices/register").json()
-    device_id = next(
-        d["id"] for d in client.get("/api/devices").json() if d["friendly_name"] == device["friendly_name"]
-    )
-    assert client.post(f"/api/devices/{device_id}/admit").status_code == 200
-    return device["device_token"]
 
 
 def next_event(socket, name: str) -> dict:

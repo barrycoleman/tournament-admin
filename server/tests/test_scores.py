@@ -1,7 +1,7 @@
 from sqlalchemy import select
 
 from auth_helpers import bearer, login_as
-from skills_helpers import admitted_device_token
+from device_helpers import paired_device
 from tournament_server.models.score_record import ScoreRecord
 
 
@@ -164,188 +164,81 @@ def test_submit_score_403s_for_attendee(client):
     assert response.status_code == 403
 
 
-def test_submit_score_succeeds_for_scorer_and_referee(client):
+def test_submit_score_succeeds_for_paired_scorer_and_referee(client):
     match_id, red_id, blue_id = _setup_match(client)
     raw = client.__class__(client.app)
-    device_token = admitted_device_token(client)
-
     for role, alliance_id in (("scorer", red_id), ("referee", blue_id)):
-        token = login_as(raw, role)
+        device = paired_device(client, role=role)
         response = raw.post(
             f"/api/matches/{match_id}/alliances/{alliance_id}/score",
             json=_no_show_body(client, match_id, alliance_id),
-            headers={**bearer(token), "X-Device-Token": device_token},
+            headers=device["headers"],
         )
-        assert response.status_code == 200, f"{role} should be able to submit a score"
+        assert response.status_code == 200, response.text
 
 
-def test_pending_device_cannot_submit_score_as_scorer(client):
-    match_id, red_id, blue_id = _setup_match(client)
+def test_a_password_signed_in_scorer_without_a_paired_device_is_refused(client):
+    match_id, red_id, _ = _setup_match(client)
     raw = client.__class__(client.app)
-    device = raw.post("/api/devices/register").json()
-    scorer_token = login_as(raw, "scorer")
-
     response = raw.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
         json=_no_show_body(client, match_id, red_id),
-        headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
+        headers=bearer(login_as(raw, "scorer")),
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only a paired device can submit scores."
+
+
+def test_a_paired_judge_cannot_submit_scores(client):
+    match_id, red_id, _ = _setup_match(client)
+    raw = client.__class__(client.app)
+    response = raw.post(
+        f"/api/matches/{match_id}/alliances/{red_id}/score",
+        json=_no_show_body(client, match_id, red_id),
+        headers=paired_device(client, role="judge")["headers"],
     )
     assert response.status_code == 403
 
 
-def test_missing_device_token_rejected_for_scorer(client):
-    match_id, red_id, blue_id = _setup_match(client)
-    raw = client.__class__(client.app)
-    scorer_token = login_as(raw, "scorer")
-
-    response = raw.post(
-        f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json=_no_show_body(client, match_id, red_id),
-        headers=bearer(scorer_token),
-    )
-    assert response.status_code == 401
-
-
-def test_unknown_device_token_rejected_for_scorer(client):
-    match_id, red_id, blue_id = _setup_match(client)
-    raw = client.__class__(client.app)
-    scorer_token = login_as(raw, "scorer")
-
-    response = raw.post(
-        f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json=_no_show_body(client, match_id, red_id),
-        headers={**bearer(scorer_token), "X-Device-Token": "not-a-real-token"},
-    )
-    assert response.status_code == 401
-
-
-def test_idle_device_rejected_until_explicitly_re_admitted(client):
+def test_an_idle_device_cannot_submit_scores(client):
     import datetime as dt
 
     from tournament_server.db import utc_now
-    from tournament_server.models.scoring_device import ScoringDevice
+    from tournament_server.models.device import Device
 
-    match_id, red_id, blue_id = _setup_match(client)
-    raw = client.__class__(client.app)
-    device = raw.post("/api/devices/register").json()
-    device_id = next(
-        d["id"] for d in client.get("/api/devices").json()
-        if d["friendly_name"] == device["friendly_name"]
-    )
-    client.post(f"/api/devices/{device_id}/admit")
-    scorer_token = login_as(raw, "scorer")
-
+    match_id, red_id, _ = _setup_match(client)
+    device = paired_device(client)
     db = client.app.state.session_factory()
-    row = db.get(ScoringDevice, device_id)
-    row.last_seen_at = utc_now() - dt.timedelta(hours=2)
+    db.get(Device, device["id"]).last_seen_at = utc_now() - dt.timedelta(hours=5)
     db.commit()
     db.close()
-
-    stale_response = raw.post(
-        f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json=_no_show_body(client, match_id, red_id),
-        headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
-    )
-    assert stale_response.status_code == 403
-
-    # The rejected attempt above must NOT have silently revived the
-    # device — a second, immediately-following identical attempt still
-    # 403s, proving only an explicit re-admit (not mere retrying) restores
-    # access.
-    still_rejected = raw.post(
-        f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json=_no_show_body(client, match_id, red_id),
-        headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
-    )
-    assert still_rejected.status_code == 403
-
-    client.post(f"/api/devices/{device_id}/admit")
-    fresh_response = raw.post(
-        f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json=_no_show_body(client, match_id, red_id),
-        headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
-    )
-    assert fresh_response.status_code == 200
-
-
-def test_idle_device_not_revived_by_a_successful_non_scoring_request(client):
-    import datetime as dt
-
-    from tournament_server.db import utc_now
-    from tournament_server.models.scoring_device import ScoringDevice
-
-    match_id, red_id, blue_id = _setup_match(client)
     raw = client.__class__(client.app)
-    device = raw.post("/api/devices/register").json()
-    device_id = next(
-        d["id"] for d in client.get("/api/devices").json()
-        if d["friendly_name"] == device["friendly_name"]
-    )
-    client.post(f"/api/devices/{device_id}/admit")
-    scorer_token = login_as(raw, "scorer")
-
-    db = client.app.state.session_factory()
-    row = db.get(ScoringDevice, device_id)
-    row.last_seen_at = utc_now() - dt.timedelta(hours=2)
-    db.commit()
-    db.close()
-
-    successful_read = raw.get(
-        "/api/divisions",
-        headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
-    )
-    assert successful_read.status_code == 200
-
-    listed = client.get("/api/devices").json()
-    matched = next(d for d in listed if d["id"] == device_id)
-    assert matched["status"] == "idle"
-
-    still_rejected = raw.post(
-        f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json=_no_show_body(client, match_id, red_id),
-        headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
-    )
-    assert still_rejected.status_code == 403
+    for _ in range(2):
+        response = raw.post(
+            f"/api/matches/{match_id}/alliances/{red_id}/score",
+            json=_no_show_body(client, match_id, red_id),
+            headers=device["headers"],
+        )
+        assert response.status_code == 403
 
 
-def test_revoked_device_cannot_submit_score(client):
-    match_id, red_id, blue_id = _setup_match(client)
+def test_a_paired_device_is_credited_by_name(client):
+    match_id, red_id, _ = _setup_match(client)
+    device = paired_device(client, name="Field 1 Tablet")
     raw = client.__class__(client.app)
-    device = raw.post("/api/devices/register").json()
-    device_id = next(
-        d["id"] for d in client.get("/api/devices").json()
-        if d["friendly_name"] == device["friendly_name"]
-    )
-    client.post(f"/api/devices/{device_id}/admit")
-    client.post(f"/api/devices/{device_id}/revoke")
-    scorer_token = login_as(raw, "scorer")
-
     response = raw.post(
         f"/api/matches/{match_id}/alliances/{red_id}/score",
         json=_no_show_body(client, match_id, red_id),
-        headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
+        headers=device["headers"],
     )
-    assert response.status_code == 403
+    assert response.status_code == 200, response.text
+    assert response.json()["submitted_by_device"] == "Field 1 Tablet"
+    db = client.app.state.session_factory()
+    from tournament_server.models.score_record import ScoreRecord
 
-
-def test_admitted_device_attributes_the_score_by_friendly_name(client):
-    match_id, red_id, blue_id = _setup_match(client)
-    raw = client.__class__(client.app)
-    device = raw.post("/api/devices/register").json()
-    device_id = next(
-        d["id"] for d in client.get("/api/devices").json()
-        if d["friendly_name"] == device["friendly_name"]
-    )
-    client.post(f"/api/devices/{device_id}/admit")
-    scorer_token = login_as(raw, "scorer")
-
-    response = raw.post(
-        f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json=_no_show_body(client, match_id, red_id),
-        headers={**bearer(scorer_token), "X-Device-Token": device["device_token"]},
-    )
-    assert response.status_code == 200
-    assert response.json()["submitted_by_device"] == device["friendly_name"]
+    record = db.query(ScoreRecord).filter_by(alliance_id=red_id).one()
+    assert record.submitted_by_device == "Field 1 Tablet"
+    db.close()
 
 
 def test_admin_bypasses_device_gate_entirely(client):
@@ -358,40 +251,18 @@ def test_admin_bypasses_device_gate_entirely(client):
     assert response.status_code == 200
 
 
-def test_admin_with_admitted_device_still_gets_device_attribution(client):
-    # The subtle case: admin bypasses require_admitted_device's *rejection*,
-    # but the dependency still *resolves* a present, valid device token —
-    # so attribution stays accurate for an admin using a real device too,
-    # it's not just "admin always falls back to the actor header."
-    match_id, red_id, blue_id = _setup_match(client)
-    device = client.post("/api/devices/register").json()
-    device_id = next(
-        d["id"] for d in client.get("/api/devices").json()
-        if d["friendly_name"] == device["friendly_name"]
-    )
-    client.post(f"/api/devices/{device_id}/admit")
-
-    response = client.post(
-        f"/api/matches/{match_id}/alliances/{red_id}/score",
-        json=_no_show_body(client, match_id, red_id),
-        headers={"X-Device-Token": device["device_token"]},
-    )
-    assert response.status_code == 200
-    assert response.json()["submitted_by_device"] == device["friendly_name"]
-
-
 def test_only_an_admin_can_correct_a_submitted_score(client):
     match_id, red_id, _ = _setup_match(client)
     raw = client.__class__(client.app)
-    device_token = admitted_device_token(client)
+    devices = {role: paired_device(client, role=role)["headers"] for role in ("scorer", "referee")}
     path = f"/api/matches/{match_id}/alliances/{red_id}/score"
     first = {"data": {"high_balls": 1, "low_balls": 0, "auto_winner": "tie"}}
     second = {"data": {"high_balls": 5, "low_balls": 2, "auto_winner": "tie"}}
 
-    scorer = {**bearer(login_as(raw, "scorer")), "X-Device-Token": device_token}
+    scorer = devices["scorer"]
     assert raw.post(path, json=first, headers=scorer).status_code == 200
     for role in ("scorer", "referee"):
-        headers = {**bearer(login_as(raw, role)), "X-Device-Token": device_token}
+        headers = devices[role]
         refused = raw.post(path, json=second, headers=headers)
         assert refused.status_code == 409, role
         assert refused.json()["detail"] == "This score has already been submitted; ask an admin to correct it."
@@ -442,7 +313,7 @@ def test_a_mirrored_cooperative_copy_can_be_submitted_once_by_a_scorer(cooperati
     client = cooperative_client
     match_id, red_id, blue_id = _setup_cooperative_match(client)
     raw = client.__class__(client.app)
-    scorer = {**bearer(login_as(raw, "scorer")), "X-Device-Token": admitted_device_token(client)}
+    scorer = paired_device(client)["headers"]
     red_path = f"/api/matches/{match_id}/alliances/{red_id}/score"
     blue_path = f"/api/matches/{match_id}/alliances/{blue_id}/score"
 
@@ -481,7 +352,7 @@ def test_mirroring_into_a_submitted_record_keeps_it_submitted(cooperative_client
 def _cooperative_scorer(client):
     match_id, red_id, blue_id = _setup_cooperative_match(client)
     raw = client.__class__(client.app)
-    scorer = {**bearer(login_as(raw, "scorer")), "X-Device-Token": admitted_device_token(client)}
+    scorer = paired_device(client)["headers"]
     red_path = f"/api/matches/{match_id}/alliances/{red_id}/score"
     blue_path = f"/api/matches/{match_id}/alliances/{blue_id}/score"
     assert raw.post(red_path, json={"data": {"objects_scored": 10}}, headers=scorer).status_code == 200
@@ -518,7 +389,7 @@ def test_a_scorer_may_score_the_partner_of_a_disqualified_alliance(cooperative_c
     client = cooperative_client
     match_id, red_id, blue_id = _setup_cooperative_match(client)
     raw = client.__class__(client.app)
-    scorer = {**bearer(login_as(raw, "scorer")), "X-Device-Token": admitted_device_token(client)}
+    scorer = paired_device(client)["headers"]
     blue_path = f"/api/matches/{match_id}/alliances/{blue_id}/score"
     red_path = f"/api/matches/{match_id}/alliances/{red_id}/score"
     blue_team = _only_team(client, match_id, blue_id)

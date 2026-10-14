@@ -4,6 +4,8 @@ import datetime as dt
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from tournament_server.schemas.device import DeviceSelf
+
 
 class LoginRequest(BaseModel):
     role: str
@@ -40,3 +42,13 @@ class AuthSessionRead(BaseModel):
     role: str
     issued_at: dt.datetime
     label: str | None
+
+
+class DeviceSignInRequest(BaseModel):
+    device_token: str
+
+
+class DeviceTokenResponse(BaseModel):
+    access_token: str
+    expires_in: int
+    device: DeviceSelf

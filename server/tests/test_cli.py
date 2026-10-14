@@ -53,7 +53,7 @@ def test_migrate_command_reports_schema_mismatch(tmp_path, capsys):
     db_path = str(tmp_path / "old.db")
     engine = make_engine(db_path)
     tables_to_create = [
-        t for name, t in Base.metadata.tables.items() if name != "scoring_devices"
+        t for name, t in Base.metadata.tables.items() if name != "devices"
     ]
     Base.metadata.create_all(engine, tables=tables_to_create)
 

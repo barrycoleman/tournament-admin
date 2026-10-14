@@ -183,7 +183,7 @@ def test_mismatched_pre_alembic_database_is_refused(tmp_path):
     # Simulate a genuinely old schema: create every table EXCEPT one, so
     # the reflected shape can never match today's models.
     tables_to_create = [
-        t for name, t in Base.metadata.tables.items() if name != "scoring_devices"
+        t for name, t in Base.metadata.tables.items() if name != "devices"
     ]
     Base.metadata.create_all(engine, tables=tables_to_create)
 

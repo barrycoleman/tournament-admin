@@ -35,13 +35,13 @@ def actor_scope(name: str):
 #   cheap insurance against a future change that adds an ORM-level write to
 #   this table.
 # - "role_credentials", "auth_sessions", "signing_keys",
-#   "password_encryption_keys", and "scoring_devices" hold password/token
+#   "password_encryption_keys", and "devices" hold password/token
 #   hashes, the reversibly-encrypted password ciphertext (see
 #   auth.py's encrypt_password/decrypt_password), the key that decrypts it,
 #   and the JWT signing key. Excluding them is load-bearing, not insurance:
-#   without it, every login, event creation, and device registration would
+#   without it, every login, event creation, and device pairing would
 #   write hashed or encrypted secrets straight into the audit log. This is
-#   exercised by every login, event creation, and device registration in
+#   exercised by every login, event creation, and device pairing in
 #   the test suite.
 _EXCLUDED_TABLES = {
     "audit_log",
@@ -49,7 +49,7 @@ _EXCLUDED_TABLES = {
     "auth_sessions",
     "signing_keys",
     "password_encryption_keys",
-    "scoring_devices",
+    "devices",
 }
 
 

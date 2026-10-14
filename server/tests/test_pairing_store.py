@@ -100,6 +100,13 @@ def test_poll_with_a_wrong_key_or_id_is_none():
     assert store.poll("nope", pending.poll_key) is None
 
 
+def test_poll_with_a_non_ascii_key_is_none_not_an_error():
+    store = PairingStore(now=Clock())
+    pending = store.open(set())
+    assert store.poll(pending.id, "clé-ключ") is None
+    assert store.poll(pending.id, pending.poll_key) == ("waiting", None)
+
+
 def test_poll_after_expiry_reports_expired():
     clock = Clock()
     store = PairingStore(now=clock)

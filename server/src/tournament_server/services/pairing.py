@@ -95,7 +95,11 @@ class PairingStore:
     def poll(self, pairing_id: str, poll_key: str) -> tuple[PollStatus, str | None] | None:
         with self._lock:
             pending = self._by_id.get(pairing_id)
-            if pending is None or not secrets.compare_digest(pending.poll_key, poll_key):
+            # Compare bytes: compare_digest refuses non-ASCII str, and a
+            # header can carry anything; a strange key is just a wrong key.
+            if pending is None or not secrets.compare_digest(
+                pending.poll_key.encode("utf-8"), poll_key.encode("utf-8", "surrogatepass")
+            ):
                 return None
             if pending.expires_at <= self._now():
                 del self._by_id[pairing_id]

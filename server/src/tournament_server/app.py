@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from sqlalchemy import select
 
-from tournament_server import audit, device_auth  # noqa: F401  (audit registers hooks)
+from tournament_server import audit  # noqa: F401  (audit registers hooks)
 from tournament_server import models  # noqa: F401  (registers all tables)
 from tournament_server import match_control, realtime
 from tournament_server.db import make_engine, make_session_factory, utc_now
@@ -18,6 +18,7 @@ from tournament_server.migrations import MigrationOutcome, ensure_schema_current
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
 from tournament_server.services.backups import BackupManager, run_interval
+from tournament_server.services.pairing import PairingStore
 from tournament_server.services.role_credentials import backfill_role_credentials
 from tournament_server.services.team_assignment import assign_sole_division
 from tournament_server.plugin_registry.discovery import (
@@ -36,6 +37,7 @@ from tournament_server.routers import (
     fields,
     finals,
     matches,
+    pairing,
     participation,
     picker,
     playing_windows,
@@ -225,12 +227,10 @@ def create_app(
     app.state.plugins_root = Path(settings.plugins_root)
     app.state.game_plugins = discover_game_plugins(app.state.plugins_root)
     app.state.scheduler_plugins = discover_scheduler_plugins(app.state.plugins_root)
-    app.state.device_idle_timeout = dt.timedelta(
-        minutes=settings.device_idle_timeout_minutes
-    )
     app.state.port = settings.port
     app.state.picker_config_path = picker_config_path
     app.state.backups = backup_manager
+    app.state.pairing = PairingStore()
     app.state.backup_task = None
     realtime.init_realtime_state(app)
     match_control.init_match_timer_state(app)
@@ -243,28 +243,10 @@ def create_app(
         with audit.actor_scope(request.headers.get("x-actor-name", "admin")):
             return await call_next(request)
 
-    @app.middleware("http")
-    async def device_activity_middleware(request: Request, call_next):
-        device_token = request.headers.get("x-device-token")
-        response = await call_next(request)
-        # Only a *successful* request counts as activity. Touching
-        # last_seen_at unconditionally — including on a rejected request —
-        # would let an idle device silently revive its own admission just
-        # by attempting (and failing) a request, defeating the "requires
-        # one-click re-admission" goal: see the design spec's §5.
-        if device_token and response.status_code < 400:
-            db = request.app.state.session_factory()
-            try:
-                device_auth.touch_device_activity(
-                    db, device_token, request.app.state.device_idle_timeout
-                )
-            finally:
-                db.close()
-        return response
-
     app.include_router(event.router)
     app.include_router(auth.router)
     app.include_router(devices.router)
+    app.include_router(pairing.router)
     app.include_router(sessions.router)
     app.include_router(qualification.router)
     app.include_router(playing_windows.router)

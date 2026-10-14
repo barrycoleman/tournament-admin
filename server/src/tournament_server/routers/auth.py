@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,9 +23,12 @@ from tournament_server.auth import (
 from tournament_server.db import utc_now
 from tournament_server.deps import get_db
 from tournament_server.models.auth_session import AuthSession
+from tournament_server.models.device import Device
 from tournament_server.models.role_credential import RoleCredential
 from tournament_server.schemas.auth import (
     AuthSessionRead,
+    DeviceSignInRequest,
+    DeviceTokenResponse,
     LoginRequest,
     LogoutRequest,
     PasswordChangeRequest,
@@ -32,6 +36,8 @@ from tournament_server.schemas.auth import (
     RolePasswordRead,
     TokenResponse,
 )
+from tournament_server.schemas.device import DeviceSelf
+from tournament_server.services.devices import device_status, idle_minutes_for
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -71,6 +77,29 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     if credential is None or not verify_password(payload.password, credential.password_hash):
         raise HTTPException(status_code=401, detail="Invalid role or password")
     return _issue_tokens(db, payload.role, payload.label)
+
+
+@router.post("/device", response_model=DeviceTokenResponse)
+def device_sign_in(payload: DeviceSignInRequest, db: Session = Depends(get_db)):
+    device = db.execute(
+        select(Device).where(Device.token_hash == hash_token(payload.device_token))
+    ).scalars().first()
+    if device is None:
+        raise HTTPException(status_code=401, detail="This device is no longer paired")
+    now = utc_now()
+    status = device_status(device, now, idle_minutes_for(db))
+    if status != "active":
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "This device is disabled", "status": status, "name": device.name},
+        )
+    device.last_seen_at = now
+    db.commit()
+    return DeviceTokenResponse(
+        access_token=create_access_token(db, device.role, device_id=device.id),
+        expires_in=ACCESS_TOKEN_LIFETIME_SECONDS,
+        device=DeviceSelf(id=device.id, name=device.name, role=device.role, status="active"),
+    )
 
 
 @router.post("/refresh", response_model=TokenResponse)

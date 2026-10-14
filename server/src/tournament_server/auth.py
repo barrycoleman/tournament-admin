@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import secrets
+from dataclasses import dataclass
 
 import bcrypt
 import jwt
@@ -13,8 +14,14 @@ from sqlalchemy.orm import Session
 
 from tournament_server.db import utc_now
 from tournament_server.deps import get_db
+from tournament_server.models.device import Device
 from tournament_server.models.password_encryption_key import PasswordEncryptionKey
 from tournament_server.models.signing_key import SigningKey
+from tournament_server.services.devices import (
+    LAST_SEEN_WRITE_INTERVAL,
+    device_status,
+    idle_minutes_for,
+)
 
 ROLES = (
     "admin",
@@ -84,7 +91,7 @@ def get_signing_key(db: Session) -> str:
     return key_row.key
 
 
-def create_access_token(db: Session, role: str) -> str:
+def create_access_token(db: Session, role: str, device_id: int | None = None) -> str:
     signing_key = get_signing_key(db)
     now = utc_now()
     payload = {
@@ -92,39 +99,81 @@ def create_access_token(db: Session, role: str) -> str:
         "iat": int(now.timestamp()),
         "exp": int((now + ACCESS_TOKEN_LIFETIME).timestamp()),
     }
+    if device_id is not None:
+        payload["device_id"] = device_id
     return jwt.encode(payload, signing_key, algorithm=JWT_ALGORITHM)
 
 
-def decode_role_from_token(token: str, db: Session) -> str:
+def decode_access_token(token: str, db: Session) -> dict:
     signing_key = get_signing_key(db)
     try:
-        payload = jwt.decode(token, signing_key, algorithms=[JWT_ALGORITHM])
+        return jwt.decode(token, signing_key, algorithms=[JWT_ALGORITHM])
     except jwt.PyJWTError:
         raise ValueError("Invalid or expired token")
-    return payload["role"]
 
 
-def _decode_role(authorization: str | None, db: Session) -> str:
+def decode_role_from_token(token: str, db: Session) -> str:
+    return decode_access_token(token, db)["role"]
+
+
+class CallerRejected(Exception):
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+@dataclass(frozen=True)
+class Caller:
+    role: str
+    device_id: int | None = None
+    device_name: str | None = None
+
+
+def resolve_caller(token: str, db: Session) -> Caller:
+    """Who a bearer token speaks for. A device's token is checked against
+    its row on every call, so disabling, deleting or changing the role of a
+    device takes effect on its very next request, and its role always comes
+    from the row, never from the token."""
+    try:
+        payload = decode_access_token(token, db)
+    except ValueError:
+        raise CallerRejected(401, "Invalid or expired token")
+    device_id = payload.get("device_id")
+    if device_id is None:
+        return Caller(role=payload["role"])
+    device = db.get(Device, device_id)
+    if device is None:
+        raise CallerRejected(401, "This device is no longer paired")
+    now = utc_now()
+    if device_status(device, now, idle_minutes_for(db)) != "active":
+        raise CallerRejected(403, "This device is disabled")
+    if now - device.last_seen_at >= LAST_SEEN_WRITE_INTERVAL:
+        device.last_seen_at = now
+        db.commit()
+    return Caller(role=device.role, device_id=device.id, device_name=device.name)
+
+
+def get_caller(
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db),
+) -> Caller:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=401, detail="Missing or malformed Authorization header"
         )
-    token = authorization.removeprefix("Bearer ")
     try:
-        return decode_role_from_token(token, db)
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+        return resolve_caller(authorization.removeprefix("Bearer "), db)
+    except CallerRejected as rejected:
+        raise HTTPException(status_code=rejected.status_code, detail=rejected.detail)
 
 
 def require_role(*allowed_roles: str):
     """FastAPI dependency factory. `admin` always passes, regardless of
     `allowed_roles`. Calling with no `allowed_roles` means admin-only."""
 
-    def _dependency(
-        authorization: str | None = Header(None),
-        db: Session = Depends(get_db),
-    ) -> str:
-        role = _decode_role(authorization, db)
+    def _dependency(caller: Caller = Depends(get_caller)) -> str:
+        role = caller.role
         if role != "admin" and (not allowed_roles or role not in allowed_roles):
             raise HTTPException(
                 status_code=403, detail="This role cannot perform this operation"

@@ -129,7 +129,7 @@ def test_main_clears_last_opened_path_on_schema_mismatch(tmp_path):
     bad_db = tmp_path / "old.db"
     engine = make_engine(str(bad_db))
     tables_to_create = [
-        t for name, t in Base.metadata.tables.items() if name != "scoring_devices"
+        t for name, t in Base.metadata.tables.items() if name != "devices"
     ]
     Base.metadata.create_all(engine, tables=tables_to_create)
 
@@ -215,7 +215,7 @@ def test_main_prefers_the_env_var_over_a_conflicting_last_opened_path(tmp_path):
     bad_db = tmp_path / "old.db"
     engine = make_engine(str(bad_db))
     tables_to_create = [
-        t for name, t in Base.metadata.tables.items() if name != "scoring_devices"
+        t for name, t in Base.metadata.tables.items() if name != "devices"
     ]
     Base.metadata.create_all(engine, tables=tables_to_create)
 
@@ -260,7 +260,7 @@ def test_main_schema_mismatch_on_env_var_path_does_not_clear_config(tmp_path):
     bad_db = tmp_path / "old.db"
     engine = make_engine(str(bad_db))
     tables_to_create = [
-        t for name, t in Base.metadata.tables.items() if name != "scoring_devices"
+        t for name, t in Base.metadata.tables.items() if name != "devices"
     ]
     Base.metadata.create_all(engine, tables=tables_to_create)
 

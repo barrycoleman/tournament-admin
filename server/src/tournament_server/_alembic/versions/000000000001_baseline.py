@@ -85,18 +85,6 @@ def upgrade() -> None:
     sa.UniqueConstraint('name_key'),
     sa.UniqueConstraint('token_hash')
     )
-    op.create_table('scoring_devices',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('friendly_name', sa.String(length=100), nullable=False),
-    sa.Column('device_token_hash', sa.String(length=200), nullable=False),
-    sa.Column('registered_at', tournament_server.db.UTCDateTime(), nullable=False),
-    sa.Column('admitted_at', tournament_server.db.UTCDateTime(), nullable=True),
-    sa.Column('admitted_by', sa.String(length=200), nullable=True),
-    sa.Column('last_seen_at', tournament_server.db.UTCDateTime(), nullable=False),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('device_token_hash'),
-    sa.UniqueConstraint('friendly_name')
-    )
     op.create_table('signing_keys',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('key', sa.String(length=200), nullable=False),
@@ -433,7 +421,6 @@ def downgrade() -> None:
     op.drop_table('ranking_settings')
     op.drop_table('divisions')
     op.drop_table('signing_keys')
-    op.drop_table('scoring_devices')
     op.drop_table('devices')
     op.drop_table('role_credentials')
     op.drop_table('password_encryption_keys')

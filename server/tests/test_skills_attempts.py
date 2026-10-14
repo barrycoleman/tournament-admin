@@ -2,9 +2,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from auth_helpers import bearer, login_as
+from device_helpers import paired_device
 from skills_helpers import (
     admin_token,
-    admitted_device_token,
     create_event,
     create_session,
     enable_skills,
@@ -194,26 +194,26 @@ def test_admins_edit_attempts_in_past_sessions(setup):
     assert client.put(f"/api/skills/attempts/{attempt['id']}", json={"data": {"objects_scored": 2}}).status_code == 200
 
 
-def test_scorers_and_referees_record_on_an_admitted_device_only(setup):
+def test_scorers_and_referees_record_on_a_paired_device_only(setup):
     client, s1, (t1, t2, _) = setup
-    device = admitted_device_token(client)
     raw = TestClient(client.app)
     for role, team_id in (("scorer", t1), ("referee", t2)):
-        headers = {**bearer(login_as(raw, role)), "X-Device-Token": device}
+        headers = paired_device(client, role=role)["headers"]
         assert record_attempt(raw, s1, team_id, headers=headers).status_code == 201, role
     scorer = bearer(login_as(raw, "scorer"))
-    assert record_attempt(raw, s1, t1, headers=scorer).status_code == 401
+    refused = record_attempt(raw, s1, t1, headers=scorer)
+    assert refused.status_code == 403
+    assert refused.json()["detail"] == "Only a paired device can submit scores."
     assert record_attempt(raw, s1, t1, headers=bearer(login_as(raw, "attendee"))).status_code == 403
 
 
 def test_scorers_and_referees_cannot_change_a_submitted_attempt(setup):
     client, s1, (t1, _, _) = setup
     attempt = record_attempt(client, s1, t1).json()
-    device = admitted_device_token(client)
     raw = TestClient(client.app)
     detail = "Only an admin can change a submitted skills attempt."
     for role in ("scorer", "referee"):
-        headers = {**bearer(login_as(raw, role)), "X-Device-Token": device}
+        headers = paired_device(client, role=role)["headers"]
         edit = raw.put(f"/api/skills/attempts/{attempt['id']}", json={"data": {"objects_scored": 1}}, headers=headers)
         delete = raw.delete(f"/api/skills/attempts/{attempt['id']}", headers=headers)
         assert (edit.status_code, edit.json()["detail"]) == (403, detail), role

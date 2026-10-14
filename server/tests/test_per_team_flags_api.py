@@ -1,7 +1,6 @@
 from sqlalchemy import func, select
 
-from auth_helpers import bearer, login_as
-from skills_helpers import admitted_device_token
+from device_helpers import paired_device
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.score_record_team import ScoreRecordTeam
 
@@ -118,7 +117,7 @@ def test_the_old_alliance_level_flags_are_refused(client):
 def test_a_scorer_still_cannot_resubmit(client):
     path, (t1, _, _, _), _ = _setup(client)
     raw = client.__class__(client.app)
-    scorer = {**bearer(login_as(raw, "scorer")), "X-Device-Token": admitted_device_token(client)}
+    scorer = paired_device(client)["headers"]
     assert raw.post(path, json={"data": SHEET}, headers=scorer).status_code == 200
     refused = raw.post(path, json={"data": SHEET, "teams": [{"team_id": t1, "dq": True}]}, headers=scorer)
     assert refused.status_code == 409
@@ -184,7 +183,7 @@ def test_a_fully_flagged_alliance_does_not_mirror(cooperative_client):
 def test_a_scorer_may_score_the_partner_of_a_fully_flagged_alliance(cooperative_client):
     red_path, blue_path, (t1, t2, _, _), _ = _setup_cooperative(cooperative_client)
     raw = cooperative_client.__class__(cooperative_client.app)
-    scorer = {**bearer(login_as(raw, "scorer")), "X-Device-Token": admitted_device_token(cooperative_client)}
+    scorer = paired_device(cooperative_client)["headers"]
     flagged = raw.post(
         red_path,
         json={"data": {"objects_scored": 3}, "teams": [{"team_id": t1, "dq": True}, {"team_id": t2, "dq": True}]},
@@ -204,7 +203,7 @@ def test_mirroring_keeps_the_partners_own_flags(cooperative_client):
 
 def _scorer_headers(client):
     raw = client.__class__(client.app)
-    return raw, {**bearer(login_as(raw, "scorer")), "X-Device-Token": admitted_device_token(client)}
+    return raw, paired_device(client)["headers"]
 
 
 def test_a_scorer_cannot_overwrite_a_partly_flagged_partner_with_different_data(cooperative_client):
