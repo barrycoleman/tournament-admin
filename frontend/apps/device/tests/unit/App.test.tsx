@@ -6,13 +6,14 @@ vi.mock("qrcode", () => ({ default: { toCanvas: vi.fn(() => Promise.resolve()) }
 
 import QRCode from "qrcode";
 import { App } from "../../src/App";
+import { clearDeviceToken } from "../../src/deviceApi";
 
-const sockets: { url: string; onclose?: (e: { code: number }) => void; close: () => void }[] = [];
+const sockets: { url: string; onclose?: (e: { code: number }) => void; onopen?: () => void; close: () => void }[] = [];
 class FakeSocket {
   url: string;
   onclose?: (e: { code: number }) => void;
   onmessage?: unknown;
-  onopen?: unknown;
+  onopen?: () => void;
   constructor(url: string) {
     this.url = url;
     sockets.push(this);
@@ -50,6 +51,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  // Also forgets a token kept in memory when storage refused it.
+  clearDeviceToken();
   vi.unstubAllGlobals();
 });
 
@@ -311,5 +314,74 @@ describe("device app", () => {
     await act(() => vi.advanceTimersByTimeAsync(5_000));
     expect(await screen.findByTestId("pairing-code")).toBeInTheDocument();
     expect(screen.queryByText("Can't reach the server. Retrying…")).not.toBeInTheDocument();
+  });
+
+  it("says the server can't be reached when the home screen's socket drops, and clears it on reconnect", async () => {
+    localStorage.setItem("tournament-admin.device.v1", JSON.stringify({ deviceToken: "dt" }));
+    serve((url) =>
+      url === "/api/auth/device" ? { status: 200, body: { access_token: "a", expires_in: 1800, device: DEVICE } } : { status: 404 }
+    );
+    render(<App />);
+    await screen.findByText("Field 1 Tablet");
+    act(() => sockets[0].onopen?.());
+    expect(screen.queryByText("Can't reach the server. Retrying…")).not.toBeInTheDocument();
+    act(() => sockets[0].onclose?.({ code: 1006 }));
+    expect(await screen.findByText("Can't reach the server. Retrying…")).toBeInTheDocument();
+    expect(screen.getByText("Field 1 Tablet")).toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(3_000));
+    expect(sockets).toHaveLength(2);
+    act(() => sockets[1].onopen?.());
+    expect(screen.queryByText("Can't reach the server. Retrying…")).not.toBeInTheDocument();
+  });
+
+  it("checks its session again when the server refuses the socket with 1008", async () => {
+    localStorage.setItem("tournament-admin.device.v1", JSON.stringify({ deviceToken: "dt" }));
+    let signIns = 0;
+    serve((url) => {
+      if (url !== "/api/auth/device") return { status: 404 };
+      signIns += 1;
+      return { status: 200, body: { access_token: `a${signIns}`, expires_in: 1800, device: DEVICE } };
+    });
+    render(<App />);
+    await screen.findByText("Field 1 Tablet");
+    expect(signIns).toBe(1);
+    act(() => sockets[0].onclose?.({ code: 1008 }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(signIns).toBe(2);
+  });
+
+  it("keeps a paired token in memory and reaches home when storage refuses to save it", async () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("quota", "QuotaExceededError");
+    });
+    let polls = 0;
+    let codesIssued = 0;
+    serve((url) => {
+      if (url === "/api/pairing") {
+        codesIssued += 1;
+        return { status: 201, body: CODE };
+      }
+      if (url.startsWith("/api/pairing/")) {
+        polls += 1;
+        return { status: 200, body: { status: "paired", device_token: "dt" } };
+      }
+      if (url === "/api/auth/device") return { status: 200, body: { access_token: "a", expires_in: 1800, device: DEVICE } };
+      return { status: 404 };
+    });
+    render(<App />);
+    await screen.findByTestId("pairing-code");
+    await act(() => vi.advanceTimersByTimeAsync(2_500));
+    expect(await screen.findByText("Field 1 Tablet")).toBeInTheDocument();
+    expect(codesIssued).toBe(1);
+    expect(polls).toBe(1);
+  });
+
+  it("treats a storage read that throws as no token and shows a pairing code", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("denied", "SecurityError");
+    });
+    serve((url) => (url === "/api/pairing" ? { status: 201, body: CODE } : { status: 200, body: { status: "waiting" } }));
+    render(<App />);
+    expect(await screen.findByTestId("pairing-code")).toBeInTheDocument();
   });
 });

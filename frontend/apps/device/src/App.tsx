@@ -11,9 +11,15 @@ export function App() {
   const session = useDeviceSession();
   const [pairingReachable, setPairingReachable] = useState(true);
   const onReachability = useCallback((reachable: boolean) => setPairingReachable(reachable), []);
-  useDeviceSocket(session.screen.kind === "home" ? session.accessToken : null, session.recheck);
+  const [socketReachable, setSocketReachable] = useState(true);
+  const onSocketReachability = useCallback((reachable: boolean) => setSocketReachable(reachable), []);
+  const onHome = session.screen.kind === "home";
+  useDeviceSocket(onHome ? session.accessToken : null, session.recheck, onSocketReachability);
 
-  const unreachable = session.screen.kind === "pairing" ? !pairingReachable : session.unreachable;
+  const unreachable =
+    session.screen.kind === "pairing"
+      ? !pairingReachable
+      : session.unreachable || (onHome && !socketReachable);
   const { screen } = session;
 
   return (

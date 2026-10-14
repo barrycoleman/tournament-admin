@@ -37,7 +37,12 @@ export class Unreachable extends Error {
   }
 }
 
-export function getDeviceToken(): string | null {
+// The token kept for this page's lifetime when storage refuses it (a private
+// window, a full quota), so a freshly paired device still signs in. Only set
+// while storage can't hold the token.
+let memoryToken: string | null = null;
+
+function readStoredToken(): string | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
@@ -45,16 +50,33 @@ export function getDeviceToken(): string | null {
     const token = (parsed as { deviceToken?: unknown } | null)?.deviceToken;
     return typeof token === "string" ? token : null;
   } catch {
+    // A read that throws counts as no token.
     return null;
   }
 }
 
+export function getDeviceToken(): string | null {
+  return readStoredToken() ?? memoryToken;
+}
+
+/** Saves the token. A storage failure is not fatal: the token is kept in
+ * memory, so this session carries on and only a reload needs pairing again. */
 export function storeDeviceToken(deviceToken: string): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ deviceToken }));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ deviceToken }));
+    memoryToken = null;
+  } catch {
+    memoryToken = deviceToken;
+  }
 }
 
 export function clearDeviceToken(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  memoryToken = null;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Nothing more to clear.
+  }
 }
 
 async function send(path: string, init: RequestInit): Promise<Response> {
