@@ -102,8 +102,8 @@ Devices stay paired for the whole event. A session at another venue pairs its ow
 
 Follows its own field. The match it shows is the earliest match on the field (by `scheduled_time`, then match order) that has no complete score. It ignores the next-match override.
 
-- **Match Intro** (match not started): the match name as title (from the match label, for example "Qualification 37"), the field name, each alliance as a coloured block with one line per team (current session rank in its division or "–", number, name), and the time to its scheduled start: green while more than 30 s remain, yellow from 30 s to 0, red counting up after it ("3:12 late"). A match with no scheduled time (finals games) shows "Up next" without a countdown.
-- **In Match** (phase is any running phase): the 3-2-1 count-in, then the period clock in very large type; "Driver control next" while `awaiting_driver`; a "Paused" banner while paused.
+- **Match Intro** (match not started): the match name as title, the field name, the alliance bands (§5.3), and in the centre the time to its scheduled start: green while more than 30 s remain, yellow from 30 s to 0, red counting up after it ("3:12 late"). A match with no scheduled time (finals games) shows "Up next" instead.
+- **In Match** (phase is any running phase): the match name as title; the teams as small chips in the top-left corner (rank badge and number, in alliance colour); the 3-2-1 count-in, then the period clock filling the centre; below it the period's name in a banner with an icon ("Autonomous", "Driver control"); "Driver control next" while `awaiting_driver`; a "Paused" banner while paused.
 - **Match Over** (phase `ended`, not yet fully scored): "Match over" until the score is saved, then the next match.
 - **Done:** "No more matches on this field".
 - **Time-out:** a running time-out on its field group replaces all of the above (§6.4).
@@ -112,15 +112,15 @@ Follows its own field. The match it shows is the earliest match on the field (by
 
 | Key | Label | Audience | Pit | Shows | Settings |
 |---|---|---|---|---|---|
-| `match_intro` | Match Intro | ✓ | | The field group's next match (§6.1), as the field version, plus the field name | — |
-| `in_match` | In Match | ✓ | | The field group's running match: clock in the centre, alliance teams in corner blocks, match name on top; "Match over" at 0:00 after it ends | — |
-| `last_scored_match` | Last Scored Match | ✓ | | The most recently fully scored match on this field group: alliance blocks as in Match Intro, each alliance's score in large type | — |
-| `teamwork_rankings` | Teamwork Rankings | ✓ | ✓ | Active session's rankings for the division: rank, team (number above name) and the game model's columns (head-to-head: win points, strength of schedule, record; cooperative: average score, matches) | — |
-| `skills_rankings` | Skills Rankings | ✓ | ✓ | Event-wide skills rankings for the active session | `tab`: `overall` or a skills type key (default `overall`) |
+| `match_intro` | Match Intro | ✓ | | The field group's next match (§6.1): "Up next" or the time to start in the centre, alliance bands below, plus the field name | — |
+| `in_match` | In Match | ✓ | | The field group's running match, laid out as the field version's In Match; "Match over" at 0:00 after it ends | — |
+| `last_scored_match` | Last Scored Match | ✓ | | The most recently fully scored match on this field group: the alliance bands; each alliance's score in very large type; beside it the score breakdown, one row per scoresheet field (the field's label from the game plugin's `scoresheet_schema()` and its value, an enum showing its option label) | — |
+| `teamwork_rankings` | Teamwork Rankings | ✓ | ✓ | Active session's rankings for the division: rank, team (number and name) and the game model's columns (head-to-head: win points, strength of schedule, record; cooperative: matches, average score). A side panel, "Match schedule & results", lists the division's latest scored matches with their scores, then its next matches with field and time | — |
+| `skills_rankings` | Skills Rankings | ✓ | ✓ | Event-wide skills rankings for the active session: rank, team (number and name), total, and per skills type its best score and attempts used ("90 / 3"). Side panels: the top 10 (team, total, each type's best) and recent scores (the latest attempts: team, type, score) | — |
 | `upcoming_matches` | Upcoming Matches | ✓ | ✓ | The next unplayed matches: match, alliances, field, time | `count` 1–20 (default 3); `scope`: `field_set` or `division` (pit: `division` only) |
 | `match_results` | Match Results | ✓ | ✓ | Fully scored matches, newest first, with both scores | — |
-| `schedule` | Schedule | ✓ | ✓ | The division's whole match list with times | — |
-| `elimination_bracket` | Elimination Brackets | ✓ | ✓ | The division's newest finals bracket in the active session: the single-elimination tree with each matchup's alliances, series score and winner, or score-chase standings in run order with the current run highlighted; "No eliminations yet" before one exists | — |
+| `schedule` | Schedule | ✓ | ✓ | The division's whole match list: match, teams in alliance colour, field, time | — |
+| `elimination_bracket` | Elimination Brackets | ✓ | ✓ | The division's newest finals bracket in the active session. Single elimination: the tree with each matchup's alliances, series score and winner. Score chase: "Finals rankings" (rank, the pair's two teams, matches, total score) with the "Match schedule & results" side panel for finals runs. "No eliminations yet" before one exists | — |
 | `logo` | Logo | ✓ | ✓ | The event name, large (sponsor logos later) | — |
 
 "The division" is the audience group's field group's division, or the pit group's division; with none (single-division event) it is every match and ranking with no division plus the sole division's.
@@ -129,7 +129,10 @@ Screens that can be longer than the TV (`teamwork_rankings`, `skills_rankings`, 
 
 ### 5.3 Common frame
 
-Every screen has a header bar with the screen title and the event name, with room on the left for a logo once sponsor logos exist. Colours and type come from the existing design system; red and blue mark the two alliances. The layout is sized from the viewport width so the same screen reads on a 24" monitor and a projector.
+- **Look:** a dark background with white type, made for a dim venue. The header has the event name in small type above the screen title in very large bold capitals ("QUALIFICATION 10", "SKILLS RANKINGS"), with room top right for a logo once sponsor logos exist. Tables are light bands on the dark background, with alternating row shading. Type and spacing come from the existing design system; red and blue mark the two alliances.
+- **Alliance bands** (Match Intro, Last Scored Match): a full-width band along the bottom per alliance, labelled "Red alliance" or "Blue alliance". Each team shows a rank badge (current session rank in its division, "–" if unranked), its number and name, and below them its location (city, state, country, whichever are set). A `cooperative_score` game shows one band, "Alliance", holding every team in the match, and one score; a head-to-head game shows a red and a blue band side by side, each with its own score.
+- **Scaling:** sized from the viewport width so the same screen reads on a 24" monitor and a projector.
+- **Reference screenshots** of a closed-source tool guided these layouts. They are kept outside the repository; nothing from them (names, logos, colours beyond red and blue) is copied.
 
 ### 5.4 The screen registry
 
@@ -151,7 +154,7 @@ New admin nav item **Match Control** (`/match-control`), admin only, for the act
 - **Next match card:** "Next: Q35 · Field 2" with its alliances; **Change** opens a list of the field group's unstarted matches to set the override; **Clear** returns to schedule order.
 - **Timer card:** the running match's clock and phase in large type, and its field. **Start** starts the next match (disabled while a match on this field group is running, which the server already refuses); **Start Driver** while awaiting driver; **Pause** / **Resume**; **End Early** (asks first); **Reset**, which asks "Reset this period or the whole match?".
 - **Saved Match card:** the last fully scored match on the field group with its scores, so the operator can check it before showing Last Scored Match.
-- **Audience screen buttons:** one per audience screen (§5.2), the current one highlighted, plus the selected screen's settings below them (for example the skills tab or the upcoming count), which apply immediately. Pressing a button sets the screen on this field group's audience group.
+- **Audience screen buttons:** one per audience screen (§5.2), the current one highlighted, plus the selected screen's settings below them (for example the upcoming count and scope), which apply immediately. Pressing a button sets the screen on this field group's audience group.
 - **Time-out:** **Time-out** with a length (default 3:00) and **Cancel time-out** while one runs.
 - **Play sounds** switch for the audience group.
 
@@ -227,7 +230,8 @@ GET    /api/finals?session_id=&division_id=   any role; the session's brackets f
 - Fields not allowed for a group's kind (`name` on an audience group, `play_sounds` on a pit group, `rotation` on an audience group) are a 422.
 - "Online" means the device has an open WebSocket (the existing device socket registry).
 - `GET /api/displays/me` returns `{device: {id, name}, session_id, group}`. `session_id` is the active session or null. `group` is null when unassigned, else `{id, kind, name, field_set_id, field_id, division_id, screen, screen_settings, rotation, play_sounds, field_set: {queued_match_id, timeout_deadline}}`.
-- Display read access: every endpoint a screen reads (matches, rankings, skills rankings, skills settings, finals, teams, divisions, field groups, fields, ranking settings, the event) must allow `display_device`. The plan checks each and widens any that don't.
+- Last Scored Match needs each alliance's saved scoresheet data; the plan checks that a match read (or a score read) returns it and adds it if not.
+- Display read access: every endpoint a screen reads (matches, scores, rankings, skills rankings, skills settings, finals, teams, divisions, field groups, fields, ranking settings, the event) must allow `display_device`. The plan checks each and widens any that don't.
 
 ### 8.1 Live events
 
@@ -266,7 +270,7 @@ The Devices page shows each display's group in the active session.
 ## 11. Later work this design must leave room for
 
 - **Skills field displays:** a `field` group on a skills field (or a shared group for several skills fields) showing the team and type the scorer picked, then the count-in and countdown. Comes with skills fields and skills timers.
-- **New screens:** alliance selection, inspection status, slides, sponsor logos, the score-reveal screens. Each is a registry line, a device module and an admin label.
+- **New screens:** alliance selection, inspection status (counts of checked in, not started, partial and passed, then a grid of team numbers with their status), slides, sponsor logos (including logo rows between schedule rows and a logo in the header), the score-reveal screens. Each is a registry line, a device module and an admin label.
 - **New automatic switches:** queueing, "show to teams" and "send to results" set screens through the same group update path as §6.3.
 - **Kiosk links and the streaming overlay.**
 
