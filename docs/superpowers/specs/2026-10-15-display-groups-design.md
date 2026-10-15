@@ -102,8 +102,8 @@ Devices stay paired for the whole event. A session at another venue pairs its ow
 
 Follows its own field. The match it shows is the earliest match on the field (by `scheduled_time`, then match order) that has no complete score. It ignores the next-match override.
 
-- **Match Intro** (match not started): the match name as title, the field name, the alliance bands (§5.3), and in the centre the time to its scheduled start: green while more than 30 s remain, yellow from 30 s to 0, red counting up after it ("3:12 late"). A match with no scheduled time (finals games) shows "Up next" instead.
-- **In Match** (phase is any running phase): the match name as title; the teams as small chips in the top-left corner (rank badge and number, in alliance colour); the 3-2-1 count-in, then the period clock filling the centre; below it the period's name in a banner with an icon ("Autonomous", "Driver control"); "Driver control next" while `awaiting_driver`; a "Paused" banner while paused.
+- **Next Match** (match not started), its own layout, made to be read from the field: the match name as title and the field name; then one full-width bar per alliance, a red bar and a blue bar, holding that alliance's team numbers in very large type (a `cooperative_score` game shows one bar with every team); and the time to its scheduled start: green while more than 30 s remain, yellow from 30 s to 0, red counting up after it ("3:12 late"). A match with no scheduled time (finals games) shows "Up next" instead.
+- **In Match** (phase is any running phase): the same `in_match` module the audience uses, so both look identical: the match name as title; the teams as small chips in the top-left corner (rank badge and number, in alliance colour); the 3-2-1 count-in, then the period clock filling the centre; below it the period's name in a banner with an icon ("Autonomous", "Driver control"); "Driver control next" while `awaiting_driver`; a "Paused" banner while paused.
 - **Match Over** (phase `ended`, not yet fully scored): "Match over" until the score is saved, then the next match.
 - **Done:** "No more matches on this field".
 - **Time-out:** a running time-out on its field group replaces all of the above (§6.4).
@@ -112,8 +112,8 @@ Follows its own field. The match it shows is the earliest match on the field (by
 
 | Key | Label | Audience | Pit | Shows | Settings |
 |---|---|---|---|---|---|
-| `match_intro` | Match Intro | ✓ | | The field group's next match (§6.1): "Up next" or the time to start in the centre, alliance bands below, plus the field name | — |
-| `in_match` | In Match | ✓ | | The field group's running match, laid out as the field version's In Match; "Match over" at 0:00 after it ends | — |
+| `match_intro` | Match Intro | ✓ | | The field group's next match (§6.1): "Up next" or the time to start in the centre, the alliance bands (§5.3) below with ranks, names and locations, plus the field name. This differs from the field display's Next Match, which shows only the team numbers in large alliance bars | — |
+| `in_match` | In Match | ✓ | | The field group's running match; the same module and layout as the field display's In Match; "Match over" at 0:00 after it ends | — |
 | `last_scored_match` | Last Scored Match | ✓ | | The most recently fully scored match on this field group: the alliance bands; each alliance's score in very large type; beside it the score breakdown, one row per scoresheet field (the field's label from the game plugin's `scoresheet_schema()` and its value, an enum showing its option label) | — |
 | `teamwork_rankings` | Teamwork Rankings | ✓ | ✓ | Active session's rankings for the division: rank, team (number and name) and the game model's columns (head-to-head: win points, strength of schedule, record; cooperative: matches, average score). A side panel, "Match schedule & results", lists the division's latest scored matches with their scores, then its next matches with field and time | — |
 | `skills_rankings` | Skills Rankings | ✓ | ✓ | Event-wide skills rankings for the active session: rank, team (number and name), total, and per skills type its best score and attempts used ("90 / 3"). Side panels: the top 10 (team, total, each type's best) and recent scores (the latest attempts: team, type, score) | — |
