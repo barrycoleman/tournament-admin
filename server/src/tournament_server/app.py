@@ -32,6 +32,7 @@ from tournament_server.routers import (
     backups,
     auth,
     devices,
+    displays,
     divisions,
     event,
     field_sets,
@@ -253,6 +254,7 @@ def create_app(
     app.include_router(event.router)
     app.include_router(auth.router)
     app.include_router(devices.router)
+    app.include_router(displays.router)
     app.include_router(pairing.router)
     app.include_router(sessions.router)
     app.include_router(qualification.router)

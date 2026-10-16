@@ -162,3 +162,17 @@ def broadcast_new_finals_matches(
                 "field_id": match.field_id,
             },
         )
+
+
+def send_to_device(app: "FastAPI", device_id: int, event: str, data: dict) -> None:
+    """Sends to one paired device's open sockets only (display_identify)."""
+    registry = app.state.realtime
+    if registry.event_loop is None:
+        return
+
+    async def _send() -> None:
+        sockets = registry.by_device.get(device_id)
+        if sockets:
+            await _send_to_all(sockets, event, data)
+
+    asyncio.run_coroutine_threadsafe(_send(), registry.event_loop)

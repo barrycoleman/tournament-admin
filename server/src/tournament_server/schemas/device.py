@@ -16,6 +16,7 @@ class DeviceRead(BaseModel):
     paired_by: str
     last_seen_at: dt.datetime
     disabled_at: dt.datetime | None
+    display_group: str | None = None
 
 
 class DeviceSelf(BaseModel):

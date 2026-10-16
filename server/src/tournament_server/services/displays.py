@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from tournament_server.models.event import Event
 from tournament_server.models.display import DisplayAssignment, DisplayGroup
 from tournament_server.models.field import Field
 from tournament_server.models.field_set import FieldSet
@@ -117,3 +118,70 @@ def clear_division_from_pit_groups(db: Session, division_id: int) -> None:
     for group in db.execute(select(DisplayGroup).where(DisplayGroup.division_id == division_id)).scalars().all():
         group.division_id = None
     db.flush()
+
+
+def group_name(db: Session, group: DisplayGroup) -> str:
+    if group.kind == AUDIENCE:
+        field_set = db.get(FieldSet, group.field_set_id)
+        return field_set.name if field_set is not None else ""
+    if group.kind == FIELD:
+        field = db.get(Field, group.field_id)
+        return field.name if field is not None else ""
+    return group.name or ""
+
+
+def group_field_set_id(db: Session, group: DisplayGroup) -> int | None:
+    if group.kind == AUDIENCE:
+        return group.field_set_id
+    if group.kind == FIELD:
+        field = db.get(Field, group.field_id)
+        return field.field_set_id if field is not None else None
+    return None
+
+
+def session_groups(db: Session, session_id: int) -> list[DisplayGroup]:
+    """Each field set's audience group then its field groups, field sets in
+    id order, then pit groups by name."""
+    rows = db.execute(select(DisplayGroup).where(DisplayGroup.session_id == session_id)).scalars().all()
+    field_set_of = dict(
+        db.execute(
+            select(Field.id, Field.field_set_id)
+            .join(FieldSet, FieldSet.id == Field.field_set_id)
+            .where(FieldSet.session_id == session_id)
+        ).all()
+    )
+
+    def order(group: DisplayGroup) -> tuple:
+        if group.kind == PIT:
+            return (1, 0, 0, (group.name or "").casefold(), group.id)
+        if group.kind == AUDIENCE:
+            return (0, group.field_set_id, 0, "", group.id)
+        return (0, field_set_of.get(group.field_id, 0), 1, "", group.field_id)
+
+    return sorted(rows, key=order)
+
+
+def display_group_name(db: Session, device_id: int) -> str | None:
+    """The name of the group this display follows in the active session."""
+    event = db.execute(select(Event)).scalars().first()
+    if event is None or event.active_session_id is None:
+        return None
+    assignment = db.execute(
+        select(DisplayAssignment).where(
+            DisplayAssignment.session_id == event.active_session_id, DisplayAssignment.device_id == device_id
+        )
+    ).scalars().first()
+    if assignment is None:
+        return None
+    group = db.get(DisplayGroup, assignment.group_id)
+    return group_name(db, group) if group is not None else None
+
+
+def session_has_display_setup(db: Session, session_id: int) -> bool:
+    """True once the session has any display assignment or a pit group; the
+    one definition of "this session has display setup"."""
+    if db.execute(select(DisplayAssignment.id).where(DisplayAssignment.session_id == session_id)).first():
+        return True
+    return db.execute(
+        select(DisplayGroup.id).where(DisplayGroup.session_id == session_id, DisplayGroup.kind == PIT)
+    ).first() is not None
