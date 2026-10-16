@@ -13,6 +13,7 @@ from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.match import Match
 from tournament_server.models.session import TournamentSession
 from tournament_server.schemas.field_set import FieldSetCreate, FieldSetRead, FieldSetUpdate
+from tournament_server.services import displays
 
 router = APIRouter(prefix="/api/field-sets", tags=["field-sets"])
 
@@ -33,6 +34,8 @@ def create_field_set(
         division_id=payload.division_id,
     )
     db.add(field_set)
+    db.flush()
+    displays.ensure_audience_group(db, field_set)
     db.commit()
     db.refresh(field_set)
     return field_set
@@ -106,6 +109,7 @@ def delete_field_set(
                 status_code=409,
                 detail="Field set has scheduled matches; clear the schedule first",
             )
+    displays.delete_field_set_groups(db, field_set_id)
     for field in fields:
         db.delete(field)
     db.flush()

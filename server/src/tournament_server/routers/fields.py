@@ -11,6 +11,7 @@ from tournament_server.models.field_set import FieldSet
 from tournament_server.models.match import Match
 from tournament_server.models.session import TournamentSession
 from tournament_server.schemas.field import FieldCreate, FieldRead, FieldUpdate
+from tournament_server.services import displays
 
 router = APIRouter(prefix="/api/fields", tags=["fields"])
 
@@ -33,6 +34,7 @@ def create_field(
             default_set = FieldSet(session_id=payload.session_id, name="Main Fields")
             db.add(default_set)
             db.flush()
+            displays.ensure_audience_group(db, default_set)
             field_set_id = default_set.id
         elif len(existing_sets) == 1:
             field_set_id = existing_sets[0].id
@@ -51,6 +53,8 @@ def create_field(
 
     field = Field(field_set_id=field_set_id, name=payload.name)
     db.add(field)
+    db.flush()
+    displays.ensure_field_group(db, field)
     db.commit()
     db.refresh(field)
     return field
@@ -112,6 +116,7 @@ def delete_field(
         raise HTTPException(
             status_code=409, detail="Field has scheduled matches; clear the schedule first"
         )
+    displays.delete_field_groups(db, field_id)
     db.delete(field)
     db.commit()
     return Response(status_code=204)

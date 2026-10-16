@@ -19,6 +19,7 @@ from tournament_server.schemas.session import (
     SessionRead,
     SessionUpdate,
 )
+from tournament_server.services import displays
 from tournament_server.services.deletion import (
     delete_session,
     scored_session_ids,
@@ -161,10 +162,14 @@ def copy_fields(
         )
         db.add(copy)
         db.flush()
+        displays.ensure_audience_group(db, copy)
         for field in db.execute(
             select(Field).where(Field.field_set_id == source_set.id).order_by(Field.id)
         ).scalars().all():
-            db.add(Field(field_set_id=copy.id, name=field.name))
+            field_copy = Field(field_set_id=copy.id, name=field.name)
+            db.add(field_copy)
+            db.flush()
+            displays.ensure_field_group(db, field_copy)
         copies.append(copy)
     db.commit()
     for copy in copies:

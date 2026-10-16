@@ -18,6 +18,7 @@ from tournament_server.migrations import MigrationOutcome, ensure_schema_current
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
 from tournament_server.services.backups import BackupManager, run_interval
+from tournament_server.services.displays import ensure_all_groups
 from tournament_server.services.pairing import PairingStore
 from tournament_server.services.role_credentials import backfill_role_credentials
 from tournament_server.services.team_assignment import assign_sole_division
@@ -211,6 +212,9 @@ def create_app(
             db.commit()
             backfill_role_credentials(db)
             db.commit()
+        # Every field set and field has its display group (display groups design §4.2).
+        ensure_all_groups(db)
+        db.commit()
 
     picker_config_path = config_path if config_path is not None else resolve_config_path()
     backup_manager = BackupManager(settings.db_path, picker_config_path)

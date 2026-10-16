@@ -158,6 +158,8 @@ def upgrade() -> None:
     sa.Column('session_id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=200), nullable=False),
     sa.Column('division_id', sa.Integer(), nullable=True),
+    sa.Column('queued_match_id', sa.Integer(), nullable=True),
+    sa.Column('timeout_deadline', tournament_server.db.UTCDateTime(), nullable=True),
     sa.ForeignKeyConstraint(['division_id'], ['divisions.id'], ),
     sa.ForeignKeyConstraint(['session_id'], ['sessions.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -225,6 +227,35 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=200), nullable=False),
     sa.ForeignKeyConstraint(['field_set_id'], ['field_sets.id'], ),
     sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('display_groups',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('session_id', sa.Integer(), nullable=False),
+    sa.Column('kind', sa.String(length=20), nullable=False),
+    sa.Column('field_set_id', sa.Integer(), nullable=True),
+    sa.Column('field_id', sa.Integer(), nullable=True),
+    sa.Column('name', sa.String(length=100), nullable=True),
+    sa.Column('division_id', sa.Integer(), nullable=True),
+    sa.Column('screen', sa.String(length=50), nullable=True),
+    sa.Column('screen_settings', sa.JSON(), nullable=False),
+    sa.Column('rotation', sa.JSON(), nullable=True),
+    sa.Column('play_sounds', sa.Boolean(), nullable=False),
+    sa.ForeignKeyConstraint(['division_id'], ['divisions.id'], ),
+    sa.ForeignKeyConstraint(['field_id'], ['fields.id'], ),
+    sa.ForeignKeyConstraint(['field_set_id'], ['field_sets.id'], ),
+    sa.ForeignKeyConstraint(['session_id'], ['sessions.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('display_assignments',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('session_id', sa.Integer(), nullable=False),
+    sa.Column('device_id', sa.Integer(), nullable=False),
+    sa.Column('group_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['device_id'], ['devices.id'], ),
+    sa.ForeignKeyConstraint(['group_id'], ['display_groups.id'], ),
+    sa.ForeignKeyConstraint(['session_id'], ['sessions.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('session_id', 'device_id', name='uq_display_assignment_session_device')
     )
     op.create_table('finals_brackets',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -396,6 +427,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_table('display_assignments')
+    op.drop_table('display_groups')
     op.drop_table('score_record_teams')
     op.drop_table('score_records')
     op.drop_table('alliance_teams')
