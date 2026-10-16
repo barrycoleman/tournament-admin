@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server.auth import require_admin, require_any_role
-from tournament_server.deps import get_db, get_game_plugin_for_event, get_the_event
+from tournament_server.deps import (
+    get_db,
+    get_game_plugin_for_event,
+    get_optional_game_plugin,
+    get_session_id,
+    get_the_event,
+)
 from tournament_server.models.alliance import Alliance
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
 from tournament_server.models.bracket_matchup import BracketMatchup
@@ -352,6 +358,28 @@ def start_finals(
     db.refresh(bracket)
     _finals_changed(request, db, bracket.session_id, bracket.id)
     return _to_finals_bracket_read(bracket, db, game_plugin)
+
+
+@router.get("", response_model=list[FinalsBracketRead])
+def list_finals(
+    request: Request,
+    session_id: int = Depends(get_session_id),
+    division_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
+) -> list[FinalsBracketRead]:
+    """The session's finals brackets for one division (or for none), newest first."""
+    event = get_the_event(db)
+    game_plugin = get_optional_game_plugin(request, event) if event is not None else None
+    if game_plugin is None:
+        return []
+    query = select(FinalsBracket).where(FinalsBracket.session_id == session_id)
+    if division_id is None:
+        query = query.where(FinalsBracket.division_id.is_(None))
+    else:
+        query = query.where(FinalsBracket.division_id == division_id)
+    brackets = db.execute(query.order_by(FinalsBracket.id.desc())).scalars().all()
+    return [_to_finals_bracket_read(bracket, db, game_plugin) for bracket in brackets]
 
 
 @router.get("/{bracket_id}", response_model=FinalsBracketRead)

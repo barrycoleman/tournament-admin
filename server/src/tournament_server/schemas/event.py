@@ -39,6 +39,9 @@ class MatchFormatRead(BaseModel):
     alliance_count: int
     match_duration_seconds: int
     default_cycle_time_seconds: int | None = None
+    game_model: str
+    autonomous_seconds: int
+    driver_seconds: int
 
 
 class WouldReset(BaseModel):

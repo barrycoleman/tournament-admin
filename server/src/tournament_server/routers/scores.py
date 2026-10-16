@@ -7,9 +7,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server import audit
-from tournament_server.auth import require_scorer_or_referee
+from tournament_server.auth import require_any_role, require_scorer_or_referee
 from tournament_server.db import utc_now
-from tournament_server.deps import get_db, get_game_plugin_for_event, get_the_event
+from tournament_server.deps import (
+    get_db,
+    get_game_plugin_for_event,
+    get_optional_game_plugin,
+    get_session_id,
+    get_the_event,
+)
 from tournament_server.device_auth import require_paired_scoring_device
 from tournament_server.models.alliance import Alliance
 from tournament_server.models.finals_bracket import FinalsBracket
@@ -17,12 +23,49 @@ from tournament_server.models.match import Match
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.score_record_team import ScoreRecordTeam
 from tournament_server.realtime import broadcast_for_session, broadcast_new_finals_matches
-from tournament_server.schemas.score_record import ScoreRecordRead, ScoreSubmit, TeamFlags
+from tournament_server.schemas.score_record import AllianceScoreRead, ScoreRecordRead, ScoreSubmit, TeamFlags
 from tournament_server.services import displays, qualification, team_flags
 from tournament_server.services.finals import advance_score_chase, advance_single_elimination
 from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
 
 router = APIRouter(prefix="/api/matches", tags=["scores"])
+
+# Saved scores by session, for the display screens (display groups design).
+list_router = APIRouter(prefix="/api/scores", tags=["scores"])
+
+@list_router.get("", response_model=list[AllianceScoreRead])
+def list_scores(
+    request: Request,
+    session_id: int = Depends(get_session_id),
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
+) -> list[AllianceScoreRead]:
+    event = get_the_event(db)
+    plugin = get_optional_game_plugin(request, event) if event is not None else None
+    if plugin is None:
+        return []
+    rows = db.execute(
+        select(ScoreRecord, Alliance, Match)
+        .join(Alliance, ScoreRecord.alliance_id == Alliance.id)
+        .join(Match, Alliance.match_id == Match.id)
+        .where(Match.session_id == session_id)
+        .order_by(Match.id, Alliance.id)
+    ).all()
+    result = []
+    for record, alliance, match in rows:
+        team_ids = team_flags.alliance_team_ids(db, alliance.id)
+        result.append(
+            AllianceScoreRead(
+                match_id=match.id,
+                alliance_id=alliance.id,
+                score=team_flags.effective_score(plugin, record, team_ids, finals=match.finals_bracket_id is not None),
+                data=json.loads(record.data_json),
+                teams=[TeamFlags(team_id=t.team_id, no_show=t.no_show, dq=t.dq) for t in record.teams],
+                saved_at=record.saved_at,
+            )
+        )
+    return result
+
 
 SCORE_ALREADY_SUBMITTED_DETAIL = "This score has already been submitted; ask an admin to correct it."
 

@@ -14,6 +14,15 @@ class TeamFlags(BaseModel):
     dq: bool = False
 
 
+class AllianceScoreRead(BaseModel):
+    match_id: int
+    alliance_id: int
+    score: int
+    data: dict[str, Any]
+    teams: list[TeamFlags]
+    saved_at: dt.datetime | None
+
+
 class ScoreSubmit(BaseModel):
     # Unknown fields are refused so a client still sending the old
     # alliance-level `no_show`/`dq` gets a 422 instead of losing the flag.

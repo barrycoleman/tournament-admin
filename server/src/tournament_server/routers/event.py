@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
@@ -11,7 +13,7 @@ from tournament_server.auth import (
     require_admin,
     require_any_role,
 )
-from tournament_server.deps import get_db, get_event_or_404, get_the_event
+from tournament_server.deps import get_db, get_event_or_404, get_game_plugin_for_event, get_the_event
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
 from tournament_server.models.role_credential import RoleCredential
@@ -106,7 +108,20 @@ def read_match_format(
             match_format["autonomous_seconds"] + match_format["driver_seconds"]
         ),
         default_cycle_time_seconds=match_format.get("default_cycle_time_seconds"),
+        game_model=match_format["game_model"],
+        autonomous_seconds=match_format["autonomous_seconds"],
+        driver_seconds=match_format["driver_seconds"],
     )
+
+
+@router.get("/scoresheet-schema", response_model=list[dict[str, Any]])
+def read_scoresheet_schema(
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
+) -> list[dict[str, Any]]:
+    """The teamwork scoresheet's fields, for score breakdowns on displays."""
+    return get_game_plugin_for_event(request, db).module.scoresheet_schema()
 
 
 @router.patch("", response_model=EventRead)

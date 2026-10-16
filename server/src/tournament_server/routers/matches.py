@@ -98,6 +98,8 @@ def _to_match_read(match: Match, db: Session) -> MatchRead:
         paused=match.paused,
         remaining_seconds_at_pause=match.remaining_seconds_at_pause,
         is_finals=match.finals_bracket_id is not None,
+        bracket_matchup_id=match.bracket_matchup_id,
+        bracket_alliance_id=match.bracket_alliance_id,
         alliances=alliance_reads,
     )
 

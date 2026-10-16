@@ -173,6 +173,9 @@ def test_match_format_reports_the_selected_game_plugin(client):
         "alliance_count": 2,
         "match_duration_seconds": 120,
         "default_cycle_time_seconds": None,
+        "game_model": "head_to_head",
+        "autonomous_seconds": 15,
+        "driver_seconds": 105,
     }
 
 

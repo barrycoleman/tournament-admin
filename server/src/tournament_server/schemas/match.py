@@ -51,4 +51,6 @@ class MatchRead(BaseModel):
     paused: bool
     remaining_seconds_at_pause: float | None
     is_finals: bool
+    bracket_matchup_id: int | None = None
+    bracket_alliance_id: int | None = None
     alliances: list[AllianceRead]
