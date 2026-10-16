@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { COOPERATIVE, audienceGroup, baseRoutes, match, me } from "./displayFixtures";
 import { renderDisplay, serveDisplay } from "./displayHarness";
@@ -39,7 +39,7 @@ describe("Match Intro", () => {
     expect(within(blue).getByText("103C")).toBeInTheDocument();
     expect(within(blue).getByText("Bolts")).toBeInTheDocument();
     expect(within(blue).getByText("Shelbyville")).toBeInTheDocument();
-    expect(within(blue).getByTestId("rank-3")).toHaveTextContent("2");
+    await waitFor(() => expect(within(blue).getByTestId("rank-3")).toHaveTextContent("2"));
     expect(within(screen.getByRole("region", { name: "Red alliance" })).getByTestId("rank-1")).toHaveTextContent("–");
   });
 
