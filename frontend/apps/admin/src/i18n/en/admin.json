@@ -32,7 +32,8 @@
     "checkinLink": "Check-In",
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode",
-    "devicesLink": "Devices"
+    "devicesLink": "Devices",
+    "matchControlLink": "Match Control"
   },
   "picker": {
     "damagedHeading": "This tournament file is damaged",
@@ -778,5 +779,77 @@
     "idleSaved": "Saved.",
     "justNow": "just now",
     "loadError": "Couldn't load the devices."
+  },
+  "displayScreens": {
+    "match_intro": "Match Intro",
+    "in_match": "In Match",
+    "last_scored_match": "Last Scored Match",
+    "teamwork_rankings": "Teamwork Rankings",
+    "skills_rankings": "Skills Rankings",
+    "upcoming_matches": "Upcoming Matches",
+    "match_results": "Match Results",
+    "schedule": "Schedule",
+    "elimination_bracket": "Elimination Brackets",
+    "logo": "Logo"
+  },
+  "matchControl": {
+    "heading": "Match Control",
+    "noSession": "No session is active. Make one active on the",
+    "sessionsLink": "Sessions page.",
+    "noFields": "This session has no fields yet.",
+    "loading": "Loading…",
+    "fieldGroups": "Field groups",
+    "nextHeading": "Next match",
+    "noNext": "No match is waiting on this field group.",
+    "start": "Start",
+    "change": "Change",
+    "clearQueue": "Back to schedule order",
+    "queueLabel": "Queue match",
+    "queuePlaceholder": "Choose a match…",
+    "timerHeading": "Timer",
+    "noRunning": "No match has started on this field group yet.",
+    "paused": "Paused",
+    "waitingForScore": "Match over — waiting for the score.",
+    "startDriver": "Start driver control",
+    "pause": "Pause",
+    "resume": "Resume",
+    "endEarly": "End early",
+    "reset": "Reset",
+    "endHeading": "End the match early?",
+    "endBody": "The clock stops and the match ends now.",
+    "resetHeading": "Reset the match?",
+    "resetSection": "Reset this period",
+    "resetFull": "Reset the whole match",
+    "cancel": "Cancel",
+    "savedHeading": "Saved match",
+    "noneSaved": "No match on this field group has been scored yet.",
+    "station": {
+      "red": "Red",
+      "blue": "Blue"
+    },
+    "audienceHeading": "Audience screen",
+    "playSounds": "Play sounds",
+    "timeoutHeading": "Time-out",
+    "timeoutLength": "Length in seconds",
+    "startTimeout": "Start time-out",
+    "cancelTimeout": "Cancel time-out",
+    "phase": {
+      "not_started": "Not started",
+      "countdown_autonomous": "Autonomous count-in",
+      "autonomous": "Autonomous",
+      "awaiting_driver": "Waiting for driver control",
+      "countdown_driver": "Driver count-in",
+      "driver": "Driver control",
+      "ended": "Ended"
+    },
+    "versus": "vs"
+  },
+  "displays": {
+    "settings": {
+      "count": "Matches to show",
+      "scope": "Show matches from",
+      "scopeFieldSet": "This field group",
+      "scopeDivision": "The whole division"
+    }
   }
 }

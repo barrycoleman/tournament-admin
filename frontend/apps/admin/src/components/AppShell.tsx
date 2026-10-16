@@ -100,6 +100,9 @@ export function AppShell() {
             <NavLink to="/devices" className={navLinkClassName}>
               {t("shell.devicesLink")}
             </NavLink>
+            <NavLink to="/match-control" className={navLinkClassName}>
+              {t("shell.matchControlLink")}
+            </NavLink>
             <NavLink to="/divisions" className={navLinkClassName}>
               {t("shell.divisionsLink")}
             </NavLink>

@@ -32,7 +32,8 @@
     "checkinLink": "签到",
     "switchToLight": "切换到浅色模式",
     "switchToDark": "切换到深色模式",
-    "devicesLink": "设备"
+    "devicesLink": "设备",
+    "matchControlLink": "比赛控制"
   },
   "picker": {
     "damagedHeading": "此比赛文件已损坏",
@@ -775,5 +776,77 @@
     "idleSaved": "已保存。",
     "justNow": "刚刚",
     "loadError": "无法加载设备。"
+  },
+  "displayScreens": {
+    "match_intro": "比赛介绍",
+    "in_match": "比赛进行中",
+    "last_scored_match": "最近计分的比赛",
+    "teamwork_rankings": "团队赛排名",
+    "skills_rankings": "技能赛排名",
+    "upcoming_matches": "即将进行的比赛",
+    "match_results": "比赛结果",
+    "schedule": "比赛日程",
+    "elimination_bracket": "淘汰赛对阵",
+    "logo": "标志"
+  },
+  "matchControl": {
+    "heading": "比赛控制",
+    "noSession": "当前没有进行中的场次。请在",
+    "sessionsLink": "场次页面设置。",
+    "noFields": "本场次还没有场地。",
+    "loading": "加载中…",
+    "fieldGroups": "场地组",
+    "nextHeading": "下一场比赛",
+    "noNext": "本场地组没有等待中的比赛。",
+    "start": "开始",
+    "change": "更改",
+    "clearQueue": "恢复日程顺序",
+    "queueLabel": "排队比赛",
+    "queuePlaceholder": "选择一场比赛…",
+    "timerHeading": "计时",
+    "noRunning": "本场地组还没有比赛开始。",
+    "paused": "已暂停",
+    "waitingForScore": "比赛结束 — 等待计分。",
+    "startDriver": "开始手动控制",
+    "pause": "暂停",
+    "resume": "继续",
+    "endEarly": "提前结束",
+    "reset": "重置",
+    "endHeading": "提前结束比赛？",
+    "endBody": "计时停止，比赛立即结束。",
+    "resetHeading": "重置比赛？",
+    "resetSection": "重置本阶段",
+    "resetFull": "重置整场比赛",
+    "cancel": "取消",
+    "savedHeading": "已保存的比赛",
+    "noneSaved": "本场地组还没有比赛计分。",
+    "station": {
+      "red": "红方",
+      "blue": "蓝方"
+    },
+    "audienceHeading": "观众屏幕",
+    "playSounds": "播放声音",
+    "timeoutHeading": "暂停时间",
+    "timeoutLength": "时长（秒）",
+    "startTimeout": "开始暂停",
+    "cancelTimeout": "取消暂停",
+    "phase": {
+      "not_started": "未开始",
+      "countdown_autonomous": "自动阶段倒数",
+      "autonomous": "自动阶段",
+      "awaiting_driver": "等待手动控制",
+      "countdown_driver": "手动控制倒数",
+      "driver": "手动控制",
+      "ended": "已结束"
+    },
+    "versus": "对"
+  },
+  "displays": {
+    "settings": {
+      "count": "显示场数",
+      "scope": "比赛范围",
+      "scopeFieldSet": "本场地组",
+      "scopeDivision": "整个分组"
+    }
   }
 }
