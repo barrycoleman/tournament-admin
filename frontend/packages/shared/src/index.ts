@@ -6,3 +6,4 @@ export * from "./auth";
 export * from "./i18n";
 export * from "./realtime";
 export * from "./scoresheet";
+export * from "./display";
