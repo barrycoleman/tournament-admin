@@ -25,14 +25,14 @@ from tournament_server.models.field import Field
 from tournament_server.models.match import Match
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
-from tournament_server.realtime import broadcast_for_session
+from tournament_server.realtime import broadcast_active_session, broadcast_for_session
 from tournament_server.schemas.match import (
     AllianceRead,
     MatchCreate,
     MatchRead,
     MatchResetRequest,
 )
-from tournament_server.services import qualification
+from tournament_server.services import displays, qualification
 from tournament_server.services.match_labeling import match_label
 
 router = APIRouter(prefix="/api/matches", tags=["matches"])
@@ -334,6 +334,9 @@ def start_match(
         raise HTTPException(
             status_code=409, detail=f"Match is not in not_started (currently {match.phase})"
         )
+    field_set_id = displays.field_set_id_for_field(db, match.field_id)
+    if field_set_id is not None and displays.running_match(db, field_set_id, exclude_id=match.id) is not None:
+        raise HTTPException(status_code=409, detail="Another match is running on this field group.")
     plugin = get_game_plugin_for_event(request, db)
     match_format = plugin.module.match_format()
     match.phase = phase_after_start(match_format["autonomous_seconds"])
@@ -341,6 +344,7 @@ def start_match(
         match.phase, match_format["autonomous_seconds"], match_format["driver_seconds"]
     )
     match.phase_deadline = utc_now() + dt.timedelta(seconds=duration)
+    switched = displays.on_match_started(db, field_set_id) if field_set_id is not None else []
     db.commit()
     db.refresh(match)
 
@@ -349,6 +353,12 @@ def start_match(
         {"match_id": match.id, "phase": match.phase, "phase_deadline": match.phase_deadline.isoformat()},
     )
     schedule_auto_advance(request.app, match.id, _auto_advance_match(request.app, match.id))
+    for group_id in switched:
+        broadcast_active_session(
+            request.app, "display_changed", {"session_id": match.session_id, "group_id": group_id}
+        )
+    if field_set_id is not None:
+        displays.notify_field_set_changed(request.app, field_set_id)
 
     return _to_match_read(match, db)
 

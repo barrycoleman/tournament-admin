@@ -18,7 +18,7 @@ from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.score_record_team import ScoreRecordTeam
 from tournament_server.realtime import broadcast_for_session, broadcast_new_finals_matches
 from tournament_server.schemas.score_record import ScoreRecordRead, ScoreSubmit, TeamFlags
-from tournament_server.services import qualification, team_flags
+from tournament_server.services import displays, qualification, team_flags
 from tournament_server.services.finals import advance_score_chase, advance_single_elimination
 from tournament_server.services.ranking import recompute_event_rankings, recompute_rankings
 
@@ -225,7 +225,10 @@ def submit_score(
     }
     if len(scored_alliance_ids) == len(all_alliances):
         match.status = "completed"
+        cleared = displays.clear_queued_matches(db, [match.id])
         db.commit()
+        for field_set_id in cleared:
+            displays.notify_field_set_changed(request.app, field_set_id)
 
     if match.finals_bracket_id is not None:
         bracket = db.get(FinalsBracket, match.finals_bracket_id)

@@ -9,12 +9,14 @@ from collections.abc import Iterable
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from tournament_server import realtime
 from tournament_server.models.device import Device
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
 from tournament_server.models.display import DisplayAssignment, DisplayGroup
 from tournament_server.models.field import Field
 from tournament_server.models.field_set import FieldSet
+from tournament_server.models.match import Match
 
 AUDIENCE = "audience"
 FIELD = "field"
@@ -253,3 +255,50 @@ def copy_displays(db: Session, target_session_id: int, source_session_id: int) -
         db.add(DisplayAssignment(session_id=target_session_id, device_id=device.id, group_id=target.id))
     db.flush()
     return unplaced
+
+
+RUNNING_EXCLUDED_PHASES = ("not_started", "ended")
+
+
+def field_ids_for_set(db: Session, field_set_id: int) -> list[int]:
+    return list(db.execute(select(Field.id).where(Field.field_set_id == field_set_id)).scalars().all())
+
+
+def field_set_id_for_field(db: Session, field_id: int | None) -> int | None:
+    if field_id is None:
+        return None
+    field = db.get(Field, field_id)
+    return field.field_set_id if field is not None else None
+
+
+def running_match(db: Session, field_set_id: int, exclude_id: int | None = None) -> Match | None:
+    query = select(Match).where(
+        Match.field_id.in_(field_ids_for_set(db, field_set_id)),
+        Match.phase.not_in(RUNNING_EXCLUDED_PHASES),
+    )
+    if exclude_id is not None:
+        query = query.where(Match.id != exclude_id)
+    return db.execute(query.limit(1)).scalars().first()
+
+
+def on_match_started(db: Session, field_set_id: int) -> list[int]:
+    """A match on this field set just started (spec section 6.3): its audience
+    groups move to In Match, keeping their settings, and its override and
+    time-out are cleared. Returns the ids of the audience groups it switched."""
+    switched = []
+    for group in db.execute(
+        select(DisplayGroup).where(DisplayGroup.kind == AUDIENCE, DisplayGroup.field_set_id == field_set_id)
+    ).scalars().all():
+        if group.screen != "in_match":
+            group.screen = "in_match"
+            switched.append(group.id)
+    field_set = db.get(FieldSet, field_set_id)
+    if field_set is not None:
+        field_set.queued_match_id = None
+        field_set.timeout_deadline = None
+    db.flush()
+    return switched
+
+
+def notify_field_set_changed(app, field_set_id: int) -> None:
+    realtime.broadcast_active_session(app, "field_set_changed", {"field_set_id": field_set_id})
