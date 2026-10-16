@@ -50,6 +50,30 @@ def test_starting_a_match_moves_the_audience_to_in_match_keeping_its_settings_an
     assert body["queued_match_id"] is None and body["timeout_deadline"] is None
 
 
+def _audience_on_upcoming_then_match_started(client, field):
+    audience = groups(client, kind="audience")[0]
+    with client.app.state.session_factory() as db:
+        db.get(DisplayGroup, audience.id).screen = "upcoming_matches"
+        db.get(DisplayGroup, audience.id).screen_settings = {"count": 5}
+        db.commit()
+    assert client.post(f"/api/matches/{field['matches'][0]['id']}/start").status_code == 200
+    return audience
+
+
+def test_choosing_in_match_after_a_match_start_ignores_the_kept_settings_it_cannot_take(client, field):
+    audience = _audience_on_upcoming_then_match_started(client, field)
+    response = client.patch(f"/api/displays/groups/{audience.id}", json={"screen": "in_match"})
+    assert response.status_code == 200, response.text
+    assert response.json()["screen"] == "in_match"
+
+
+def test_choosing_the_previous_screen_after_a_match_start_restores_its_kept_settings(client, field):
+    audience = _audience_on_upcoming_then_match_started(client, field)
+    response = client.patch(f"/api/displays/groups/{audience.id}", json={"screen": "upcoming_matches"})
+    assert response.status_code == 200, response.text
+    assert response.json()["screen_settings"]["count"] == 5
+
+
 def test_only_one_match_runs_per_field_group(client, field):
     first, second, _ = field["matches"]
     assert client.post(f"/api/matches/{first['id']}/start").status_code == 200

@@ -65,6 +65,15 @@ describe("match order", () => {
     expect(currentMatchForField([done], 1)).toBeNull();
   });
 
+  it("prefers a running match on the field, then an ended one not fully scored, over an earlier unstarted one", () => {
+    const q1 = match({ scheduled_time: at(0) });
+    const q2 = match({ scheduled_time: at(1), phase: "ended" });
+    const q3 = match({ scheduled_time: at(2), phase: "driver" });
+    expect(currentMatchForField([q1, q2, q3], 1)?.id).toBe(q3.id);
+    expect(currentMatchForField([q1, q2], 1)?.id).toBe(q2.id);
+    expect(currentMatchForField([q1], 1)?.id).toBe(q1.id);
+  });
+
   it("the field group's next match is the queued one when still valid, else the earliest unstarted", () => {
     const running = match({ scheduled_time: at(1), phase: "driver" });
     const first = match({ scheduled_time: at(2), field_id: 2 });

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from tournament_server.models.field_set import FieldSet
 from tournament_server.models.match import Match
 from tournament_server.models.session import TournamentSession
 from tournament_server.schemas.field import FieldCreate, FieldRead, FieldUpdate
+from tournament_server.routers.displays import notify_display_changed
 from tournament_server.services import displays
 
 router = APIRouter(prefix="/api/fields", tags=["fields"])
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/api/fields", tags=["fields"])
 @router.post("", response_model=FieldRead, status_code=201)
 def create_field(
     payload: FieldCreate,
+    request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_admin),
 ) -> Field:
@@ -57,6 +59,7 @@ def create_field(
     displays.ensure_field_group(db, field)
     db.commit()
     db.refresh(field)
+    notify_display_changed(request, payload.session_id, None)
     return field
 
 
@@ -103,6 +106,7 @@ def update_field(
 @router.delete("/{field_id}", status_code=204)
 def delete_field(
     field_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_admin),
 ) -> Response:
@@ -116,7 +120,9 @@ def delete_field(
         raise HTTPException(
             status_code=409, detail="Field has scheduled matches; clear the schedule first"
         )
+    session_id = db.get(FieldSet, field.field_set_id).session_id
     displays.delete_field_groups(db, field_id)
     db.delete(field)
     db.commit()
+    notify_display_changed(request, session_id, None)
     return Response(status_code=204)

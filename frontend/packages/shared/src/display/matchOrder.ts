@@ -42,9 +42,12 @@ export function inDivision(
     (row.division_id === null && divisionId === soleDivisionId);
 }
 
-/** What a field display shows: the field's earliest match without a complete score. */
+/** What a field display shows: a match running on the field, else one that
+ * ended without a complete score, else the earliest not yet scored (an
+ * operator can start a later match first, so order alone isn't enough). */
 export function currentMatchForField(matches: LiveMatch[], fieldId: number): LiveMatch | null {
-  return sortMatches(matches.filter((m) => m.field_id === fieldId && !isFinished(m)))[0] ?? null;
+  const open = sortMatches(matches.filter((m) => m.field_id === fieldId && !isFinished(m)));
+  return open.find(isRunning) ?? open.find((m) => m.phase === "ended") ?? open[0] ?? null;
 }
 
 /** What Start begins: the queued match while it is still an unstarted match

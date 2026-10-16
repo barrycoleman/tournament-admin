@@ -191,8 +191,14 @@ def update_group(
             if "screen_settings" in changes:
                 settings = changes["screen_settings"]
             else:
-                # A different screen starts from its own defaults.
-                settings = group.screen_settings if screen == group.screen else {}
+                # Keep the stored settings when this screen accepts them (a match
+                # start leaves the old screen's settings behind); else start
+                # from the screen's own defaults.
+                try:
+                    clean_screen(screen, group.screen_settings, group.kind)
+                    settings = group.screen_settings
+                except ScreenSettingsError:
+                    settings = {}
             group.screen_settings = clean_screen(screen, settings, group.kind)
             group.screen = screen
         if "rotation" in changes:

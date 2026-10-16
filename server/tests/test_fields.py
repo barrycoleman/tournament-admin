@@ -169,3 +169,21 @@ def test_field_writes_reject_front_desk(client):
 
     assert client.patch(f"/api/fields/{field_id}", json={"name": "X"}, headers=headers).status_code == 403
     assert client.delete(f"/api/fields/{field_id}", headers=headers).status_code == 403
+
+
+def test_creating_and_deleting_a_field_and_a_field_set_announce_the_display_changes(client):
+    from display_helpers import admin_token, setup_event
+    from skills_helpers import next_event
+
+    session_id = setup_event(client)
+    with client.websocket_connect(f"/ws/active-session?token={admin_token(client)}") as socket:
+        field_set = client.post("/api/field-sets", json={"session_id": session_id, "name": "Side Fields"}).json()
+        assert next_event(socket, "display_changed")["data"]["session_id"] == session_id
+        field = client.post(
+            "/api/fields", json={"session_id": session_id, "field_set_id": field_set["id"], "name": "Side 1"}
+        ).json()
+        assert next_event(socket, "display_changed")["data"]["session_id"] == session_id
+        assert client.delete(f"/api/fields/{field['id']}").status_code == 204
+        assert next_event(socket, "display_changed")["data"]["session_id"] == session_id
+        assert client.delete(f"/api/field-sets/{field_set['id']}").status_code == 204
+        assert next_event(socket, "display_changed")["data"]["session_id"] == session_id

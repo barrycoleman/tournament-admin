@@ -178,8 +178,8 @@ test.describe.serial("display groups", () => {
   });
 
   test("a long schedule scrolls inside a bounded area", async ({ request }) => {
-    // Screens that show times wait for the session's time zone (they never fall back to the TV's).
-    // A session edit sends no live event, so reload the TV to read the new zone at once.
+    // Give the session an explicit zone. A session edit sends no live event, so reload the TV
+    // to read the new zone at once.
     await call(request, "patch", `/api/sessions/${saturday}`, { timezone: "UTC" });
     await screens["Big TV"].reload();
     const start = Date.now() + 60 * 60_000;

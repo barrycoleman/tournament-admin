@@ -16,6 +16,7 @@ from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.match import Match
 from tournament_server.models.session import TournamentSession
 from tournament_server.schemas.field_set import FieldSetCreate, FieldSetRead, FieldSetUpdate, QueuedMatchWrite, TimeoutWrite
+from tournament_server.routers.displays import notify_display_changed
 from tournament_server.services import displays, qualification
 
 router = APIRouter(prefix="/api/field-sets", tags=["field-sets"])
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/api/field-sets", tags=["field-sets"])
 @router.post("", response_model=FieldSetRead, status_code=201)
 def create_field_set(
     payload: FieldSetCreate,
+    request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_admin),
 ) -> FieldSet:
@@ -41,6 +43,7 @@ def create_field_set(
     displays.ensure_audience_group(db, field_set)
     db.commit()
     db.refresh(field_set)
+    notify_display_changed(request, payload.session_id, None)
     return field_set
 
 
@@ -86,6 +89,7 @@ def list_field_sets(
 @router.delete("/{field_set_id}", status_code=204)
 def delete_field_set(
     field_set_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_admin),
 ) -> Response:
@@ -116,8 +120,10 @@ def delete_field_set(
     for field in fields:
         db.delete(field)
     db.flush()
+    session_id = field_set.session_id
     db.delete(field_set)
     db.commit()
+    notify_display_changed(request, session_id, None)
     return Response(status_code=204)
 
 
