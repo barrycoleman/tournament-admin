@@ -491,6 +491,14 @@ third parties — deliberately deferred, not accidentally omitted.
     check-in, judge, display), replacing or extending today's
     `ScoringDevice` admit flow, with rename, disable, re-enable and
     delete, and idle auto-disable for operator devices (displays exempt).
+  - **Display groups and screens: first part built** (see
+    `2026-10-15-display-groups-design.md`): audience, field and pit
+    groups, the screen registry, Match Control, the Displays page and the
+    device app's display mode. Still for later (that spec's section 11):
+    skills field displays, alliance selection, inspection status, slides,
+    sponsor logos and score-reveal screens, new automatic switches
+    (queueing, "show to teams", "send to results"), and kiosk links with
+    the streaming overlay. The paragraph below is the original wish list.
   - **Display groups and screens.** A display device follows exactly one
     group: one audience group (always present, plays ceremony slides),
     one field group per field (created and renamed with the field, which

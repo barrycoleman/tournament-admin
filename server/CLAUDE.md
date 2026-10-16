@@ -843,6 +843,112 @@ role of a device closes its open sockets with code **4403**
 (`realtime.DEVICE_CHANGED_CLOSE_CODE`) so the device reconnects and sees
 its new state at once. A rename doesn't close them.
 
+`realtime.send_to_device(app, device_id, event, data)` is the one way to
+send to a single device: it writes only to that device's registered sockets
+(`display_identify` uses it), where every other broadcast goes to a channel.
+
+## Display groups
+
+See `docs/superpowers/specs/2026-10-15-display-groups-design.md`. A paired
+display device follows one **display group** per session; the group decides
+what the TV shows. `models/display.py` holds `DisplayGroup` and
+`DisplayAssignment`; the logic is `services/displays.py` and the routes are
+`routers/displays.py` (plus the field-set routes below).
+
+**Three kinds, and their lifecycle.** An `audience` group exists per field
+group (`field_set_id`, named after it, `screen` starts at `logo`,
+`play_sounds` default false). A `field` group exists per field (`field_id`,
+no `screen`: it always runs the field display). A `pit` group is made by an
+admin (`name`, nullable `division_id`, `screen` starts at
+`teamwork_rankings`, optional `rotation`). Audience and field groups are
+created and deleted *with* their field group or field, in the same
+transaction: creating a field set or field, `POST /api/sessions/{id}/copy-fields`
+for the fields it creates, and the delete routes and session deletion for the
+other way (a group's assignments go with it). `ensure_all_groups`, called from
+`create_app()`, creates any missing audience or field group at startup, so
+tournament files from before this feature work; it is idempotent. Deleting a
+division clears it from pit groups.
+
+**`display_assignments`.** One row per `(session_id, device_id)` (unique),
+pointing at a group of the same session. Only `display_device` devices can be
+assigned (422). A row is dropped when its device is deleted, when the device's
+role changes away from `display_device` (in every session), or when its group
+is deleted.
+
+**The screen registry** is `services/display_screens.py`: each screen key's
+allowed group kinds, whether it scrolls, and a settings validator. Keys:
+`match_intro`, `in_match`, `last_scored_match` (audience only),
+`teamwork_rankings`, `skills_rankings`, `upcoming_matches`, `match_results`,
+`schedule`, `elimination_bracket`, `logo` (audience and pit). Scrolling:
+`teamwork_rankings`, `skills_rankings`, `match_results`, `schedule`.
+`upcoming_matches` takes `count` (1-20, default 3) and `scope`
+(`field_set` or `division`; a pit group only `division`). Every other screen
+takes no settings. A rotation (pit groups only) is a list of
+`{screen, settings, seconds}` with 1-20 entries and `seconds` 5-300 (default
+20). An unknown key, a key not allowed for the kind, or bad settings is a 422
+naming the problem. Adding a screen is a registry line, a device module
+(`frontend/apps/device/src/display/screens/`) and an admin label, nothing
+else on the server.
+
+**Endpoints** (admin only unless stated; the full list is spec section 8):
+`GET /api/displays?session_id=` (groups with their displays and online state,
+plus unassigned displays; "online" is an open device socket),
+`POST /api/displays/pit-groups` (409 on a duplicate name in the session),
+`PATCH /api/displays/groups/{id}` (a field not allowed for the kind, such as
+`name` on an audience group, is a 422), `DELETE /api/displays/groups/{id}`
+(pit groups only; 409 otherwise), `PUT /api/displays/assignments`
+(`group_id` null unassigns), `POST /api/displays/{device_id}/identify` (204,
+404 for an unknown device), and `GET /api/displays/me` (display devices only,
+403 otherwise: `{device, session_id, group}`, where `group` is null when
+unassigned and carries `field_set: {queued_match_id, timeout_deadline}`).
+`POST /api/sessions/{id}/copy-displays {source_session_id}` is refused with
+409 if the target already has a pit group or an assignment, 422 if the source
+is the same session or has no display setup, 404 for an unknown session. It
+copies audience groups' screen, settings and sounds matched by field group
+name; recreates pit groups, matching `division_id` by division name (null if
+the division is gone or the event has one division); and recreates
+assignments matched by field group name (audience), field group and field
+name (field) or pit group name (pit), skipping devices no longer paired or no
+longer displays. It returns `{unplaced: [{device_id, device_name,
+source_group_name}]}` for displays whose group has no match.
+
+**Match Control state on `field_sets`.** `queued_match_id` is the next-match
+override: a plain integer, not a foreign key. `PUT /api/field-sets/{id}/queued-match
+{match_id | null}` sets or clears it; the match must be on that field group
+and not started (422). It is cleared when that match starts, when it gets a
+complete score, and by `services/deletion.delete_matches` (schedule clear or
+rebuild). `timeout_deadline` (UTC) is set by `POST /api/field-sets/{id}/timeout
+{seconds}` (10-600, default 180), cancelled by `DELETE` on the same path, and
+cleared by a match start; an expired deadline is simply ignored.
+
+**The start guard and automatic switch.** `POST /api/matches/{id}/start`
+refuses (409) while another match is running on the same field group (one
+running match per field group; scoring another field group's match is
+unaffected). On success it sets every audience group of that field group to
+`in_match`, keeping its `screen_settings`, clears the override and time-out,
+and broadcasts `display_changed` for each switched group and
+`field_set_changed`. After the match ends the audience stays on `in_match`
+until an admin picks another screen.
+
+**Reads for the screens.** Every endpoint a screen reads allows
+`display_device`. New reads: `GET /api/scores?session_id=` (each saved
+alliance score with its scoresheet `data`, effective `score`, per-team
+`no_show`/`dq` and `saved_at`), `GET /api/finals?session_id=&division_id=`
+(the session's brackets for the division, newest first, any role) and
+`GET /api/event/scoresheet-schema` (the teamwork scoresheet's fields, for
+score breakdowns). `MatchFormatRead` gained `game_model`,
+`autonomous_seconds` and `driver_seconds`; `MatchRead` gained
+`bracket_matchup_id` and `bracket_alliance_id`; `FieldSetRead` gained
+`queued_match_id` and `timeout_deadline`.
+
+**Time.** Displays render times in the *session's* time zone, never the TV's
+own: a session with no time zone shows UTC, labelled "UTC", the same as the
+admin.
+
+Tests: `tests/test_display_groups.py`, `test_display_screens.py`,
+`test_displays_api.py`, `test_copy_displays.py`, `test_match_control_displays.py`
+and `test_display_reads.py`, with helpers in `tests/display_helpers.py`.
+
 ## Real-time channels and live match control
 
 See
@@ -938,6 +1044,18 @@ truth for that richer shape):
 - `devices_changed` — `{}` (active-session channel only), after a device
   is paired, renamed, given a new role, disabled, enabled or deleted, and
   after the idle setting changes. The admin's Devices page refetches on it.
+- `display_changed` — `{session_id, group_id}` (active-session channel only),
+  after a display group is created, changed or deleted or its displays change
+  (an assignment, a move, a match start switching an audience group).
+  `group_id` is null for a bulk change (copy displays). Deleting a group sends
+  it with the deleted group's id, so a consumer refetches rather than looking
+  the group up.
+- `field_set_changed` — `{field_set_id}` (active-session channel only), after a
+  field group's next-match override or time-out changes, including a match start
+  or a complete score clearing them.
+- `display_identify` — `{device_id}`, sent only to that device's sockets (not a
+  channel broadcast), when an admin presses Identify; the device shows its name
+  full-screen for 10 seconds.
 
 Routing: `realtime.broadcast_for_session` always sends on
 `session:<id>`, and additionally on `active-session` when that session

@@ -1,6 +1,6 @@
 # Display Groups and Screens — Design
 
-**Status:** approved in brainstorming 2026-10-15.
+**Status:** implemented 2026-10-16 on branch display-groups.
 
 **Builds on:** device pairing (`2026-10-13-device-pairing-design.md`), the realtime design (`2026-09-11-realtime-websockets-design.md`, match control and its live events), skills challenges, finals, and the core architecture spec's §10 gap review ("Display groups and screens").
 

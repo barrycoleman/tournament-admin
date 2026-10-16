@@ -74,6 +74,23 @@ subscription/hosted competition-management products.
   enable or delete it, and an operator device goes idle after a
   configurable timeout. Scores can only be submitted from a paired device
   (or by an admin) and are attributed to the device's name.
+- **Displays**: any browser paired with the display role is a display
+  (a TV, a laptop, a phone). Each follows one group per session. An
+  *audience group* exists per field group and shows the screen the admin
+  picks (rankings, schedule, upcoming matches, results, bracket, logo, and
+  the match screens: intro, in match, last scored), switching to In Match
+  by itself when a match starts. A *field group* exists per field and
+  always shows that field's next match with the team numbers in very
+  large red and blue bars, then the match clock, so referees can check the
+  right robots are in the right alliance. A *pit group* is named by the
+  admin and shows one screen or a rotation of screens, with long lists
+  scrolling by themselves. Times show in the session's time zone, never
+  the TV's own. **Match Control** is the operator page: start, pause,
+  resume, end early and reset a match, choose the next match, pick the
+  audience screen, run a time-out and switch sounds on. The **Displays**
+  page places each display in a group, identifies a TV by flashing its
+  name, and copies a setup from another session. A display never goes
+  blank: it keeps its last picture when the connection drops and says so.
 - **Packaging**: primary distribution is a standalone PyInstaller
   executable per OS (Windows/Mac/Linux); Docker is a secondary option.
   Automatic timestamped SQLite backups on an interval and before risky
