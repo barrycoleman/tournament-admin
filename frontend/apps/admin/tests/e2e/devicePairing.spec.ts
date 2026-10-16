@@ -94,8 +94,8 @@ test.describe.serial("device pairing", () => {
     await sameBrowser.goto(`${server.baseUrl}/pair`);
     const code = (await sameBrowser.getByTestId("pairing-code").textContent())!.replace(" ", "");
     await pair(admin, code, "Admin Laptop Display", "Display");
-    await expect(sameBrowser.getByText("Paired as")).toBeVisible({ timeout: 10_000 });
-    await expect(sameBrowser.getByText("Admin Laptop Display")).toBeVisible();
+    // A paired display runs display mode, which shows its name until it is given a group.
+    await expect(sameBrowser.getByRole("heading", { name: "Admin Laptop Display" })).toBeVisible({ timeout: 10_000 });
     await admin.reload();
     await expect(admin.getByRole("heading", { name: "Devices", level: 1 })).toBeVisible();
   });
