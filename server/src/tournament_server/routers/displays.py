@@ -17,6 +17,8 @@ from tournament_server.models.field_set import FieldSet
 from tournament_server.models.session import TournamentSession
 from tournament_server.schemas.display import (
     AssignmentWrite,
+    CopyDisplaysRequest,
+    CopyDisplaysResult,
     DisplayDevice,
     DisplayGroupRead,
     DisplayGroupUpdate,
@@ -26,6 +28,7 @@ from tournament_server.schemas.display import (
     DisplaysRead,
     FieldSetLive,
     PitGroupCreate,
+    UnplacedDisplay,
 )
 from tournament_server.services import displays
 from tournament_server.services.display_screens import ScreenSettingsError, clean_rotation, clean_screen
@@ -305,3 +308,25 @@ def read_me(caller: Caller = Depends(get_caller), db: Session = Depends(get_db))
             )
             group = DisplayMeGroup(**fields, field_set=live)
     return DisplayMe(device=DisplayDevice(id=device.id, name=device.name), session_id=session_id, group=group)
+
+
+@router.post("/api/sessions/{session_id}/copy-displays", response_model=CopyDisplaysResult, status_code=201)
+def copy_displays(
+    session_id: int,
+    payload: CopyDisplaysRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> CopyDisplaysResult:
+    _session_or_404(db, session_id)
+    _session_or_404(db, payload.source_session_id)
+    if payload.source_session_id == session_id:
+        raise HTTPException(status_code=422, detail="A session can't copy its own displays")
+    if displays.session_has_display_setup(db, session_id):
+        raise HTTPException(status_code=409, detail="This session already has displays set up")
+    if not displays.session_has_display_setup(db, payload.source_session_id):
+        raise HTTPException(status_code=422, detail="The source session has no displays set up")
+    unplaced = displays.copy_displays(db, session_id, payload.source_session_id)
+    db.commit()
+    notify_display_changed(request, session_id, None)
+    return CopyDisplaysResult(unplaced=[UnplacedDisplay(**entry) for entry in unplaced])

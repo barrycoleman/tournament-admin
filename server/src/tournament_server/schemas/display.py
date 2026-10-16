@@ -82,3 +82,19 @@ class DisplayMe(BaseModel):
     device: DisplayDevice
     session_id: int | None
     group: DisplayMeGroup | None
+
+
+class CopyDisplaysRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_session_id: int
+
+
+class UnplacedDisplay(BaseModel):
+    device_id: int
+    device_name: str
+    source_group_name: str
+
+
+class CopyDisplaysResult(BaseModel):
+    unplaced: list[UnplacedDisplay]

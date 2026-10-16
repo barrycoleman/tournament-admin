@@ -6,9 +6,11 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from tournament_server.models.device import Device
+from tournament_server.models.division import Division
 from tournament_server.models.event import Event
 from tournament_server.models.display import DisplayAssignment, DisplayGroup
 from tournament_server.models.field import Field
@@ -185,3 +187,69 @@ def session_has_display_setup(db: Session, session_id: int) -> bool:
     return db.execute(
         select(DisplayGroup.id).where(DisplayGroup.session_id == session_id, DisplayGroup.kind == PIT)
     ).first() is not None
+
+
+def _copy_key(db: Session, group: DisplayGroup) -> tuple:
+    """A group's identity across sessions, case-folded: ("audience", set
+    name), ("field", set name, field name) or ("pit", name)."""
+    if group.kind == FIELD:
+        field = db.get(Field, group.field_id)
+        field_set = db.get(FieldSet, field.field_set_id)
+        return (FIELD, field_set.name.casefold(), field.name.casefold())
+    return (group.kind, group_name(db, group).casefold())
+
+
+def copy_displays(db: Session, target_session_id: int, source_session_id: int) -> list[dict]:
+    """Copies another session's display setup (spec section 4.5) and returns
+    the displays it couldn't place, as {device_id, device_name,
+    source_group_name}."""
+    targets: dict[tuple, DisplayGroup] = {}
+    for group in sorted(session_groups(db, target_session_id), key=lambda g: g.id):
+        targets.setdefault(_copy_key(db, group), group)
+    single_division = db.execute(select(func.count(Division.id))).scalar_one() == 1
+    copied_to: dict[int, DisplayGroup] = {}
+    for source in session_groups(db, source_session_id):
+        if source.kind == PIT:
+            keep_division = (
+                source.division_id is not None
+                and not single_division
+                and db.get(Division, source.division_id) is not None
+            )
+            copy = DisplayGroup(
+                session_id=target_session_id,
+                kind=PIT,
+                name=source.name,
+                division_id=source.division_id if keep_division else None,
+                screen=source.screen,
+                screen_settings=dict(source.screen_settings or {}),
+                rotation=[dict(entry) for entry in source.rotation] if source.rotation else None,
+            )
+            db.add(copy)
+            db.flush()
+            copied_to[source.id] = copy
+            continue
+        target = targets.get(_copy_key(db, source))
+        if target is None:
+            continue
+        if source.kind == AUDIENCE:
+            target.screen = source.screen
+            target.screen_settings = dict(source.screen_settings or {})
+            target.play_sounds = source.play_sounds
+        copied_to[source.id] = target
+    unplaced = []
+    for assignment in db.execute(
+        select(DisplayAssignment).where(DisplayAssignment.session_id == source_session_id).order_by(DisplayAssignment.id)
+    ).scalars().all():
+        device = db.get(Device, assignment.device_id)
+        if device is None or device.role != "display_device":
+            continue
+        target = copied_to.get(assignment.group_id)
+        if target is None:
+            source = db.get(DisplayGroup, assignment.group_id)
+            unplaced.append(
+                {"device_id": device.id, "device_name": device.name, "source_group_name": group_name(db, source)}
+            )
+            continue
+        db.add(DisplayAssignment(session_id=target_session_id, device_id=device.id, group_id=target.id))
+    db.flush()
+    return unplaced
