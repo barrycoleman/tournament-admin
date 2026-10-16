@@ -100,3 +100,24 @@
 .breakdown tr + tr { border-top: 1px solid rgb(255 255 255 / 0.2); }
 .breakdown__value--red { color: #ff8e86; }
 .breakdown__value--blue { color: #8db8ff; }
+
+.split { flex: 1; min-height: 0; display: grid; grid-template-columns: 2fr 1fr; gap: 1.5vw; }
+.scroll-area { flex: 1; min-height: 0; overflow: hidden; }
+.kiosk-table { width: 100%; border-collapse: collapse; background: var(--kiosk-band); color: var(--kiosk-ink-on-band); font-size: 1.7vw; }
+.kiosk-table thead th { position: sticky; top: 0; background: var(--kiosk-bg); color: var(--kiosk-ink); text-align: left; font-size: 1.1vw; text-transform: uppercase; padding: 0.4vw 0.8vw; }
+.kiosk-table td, .kiosk-table tbody th { padding: 0.5vw 0.8vw; text-align: left; }
+.kiosk-table tbody tr:nth-child(even) { background: var(--kiosk-band-alt); }
+.kiosk-table--large { font-size: 2.6vw; }
+.kiosk-table--compact { font-size: 1.4vw; }
+.kiosk-table__rank { font-weight: 900; }
+.kiosk-table__number { font-weight: 900; }
+.kiosk-table .is-done { opacity: 0.55; }
+.team-numbers { display: inline-flex; gap: 0.8vw; margin-right: 1.2vw; font-weight: 800; }
+.team-numbers--red { color: var(--kiosk-red); }
+.team-numbers--blue, .team-numbers--all { color: var(--kiosk-blue); }
+.score { display: inline-block; min-width: 3vw; font-weight: 900; }
+.score--red { color: var(--kiosk-red); }
+.score--blue, .score--all { color: var(--kiosk-blue); }
+.side-panel { min-height: 0; overflow: hidden; }
+.side-panel__title { margin: 0 0 0.4vw; font-size: 1.2vw; text-transform: uppercase; }
+.side-panel__end { text-align: right; font-weight: 800; white-space: nowrap; }

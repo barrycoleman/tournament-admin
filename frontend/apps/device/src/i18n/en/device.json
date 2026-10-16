@@ -29,6 +29,13 @@
     "nothingScored": "No match has been scored yet",
     "notSetUp": "Not set up for this session",
     "noSession": "No session is running",
+    "noRankings": "No rankings yet",
+    "schedulePanel": "Match schedule & results",
+    "col": {
+      "rank": "Rank", "team": "Team", "winPoints": "WP", "sos": "SoS", "record": "W-L-T",
+      "matches": "Matches", "average": "Average", "match": "Match", "teams": "Teams",
+      "field": "Field", "time": "Time", "score": "Score", "total": "Total"
+    },
     "waiting": "Waiting for data",
     "reconnecting": "Reconnecting…",
     "upNext": "Up next",

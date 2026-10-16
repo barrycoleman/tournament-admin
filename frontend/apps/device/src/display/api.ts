@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { AllianceScore, DisplayGroupState, FieldSetLive, LiveMatch } from "@tournament-admin/shared";
+import { inDivision, type AllianceScore, type DisplayGroupState, type FieldSetLive, type LiveMatch } from "@tournament-admin/shared";
 import { getJson } from "../deviceApi";
 
 export interface DisplayMeGroup extends DisplayGroupState {
@@ -206,4 +206,10 @@ export function useMergedRankings(sessionId: number, divisionId: number | null):
 export function useRanks(sessionId: number, divisionId: number | null): Map<number, number> | undefined {
   const rows = useMergedRankings(sessionId, divisionId);
   return rows ? new Map(rows.map((row) => [row.team_id, row.rank])) : undefined;
+}
+
+/** The match filter for a screen's division (see the shared inDivision rule). */
+export function useDivisionFilter(divisionId: number | null): (row: { division_id: number | null }) => boolean {
+  const sole = useSoleDivisionId();
+  return inDivision(divisionId, sole);
 }

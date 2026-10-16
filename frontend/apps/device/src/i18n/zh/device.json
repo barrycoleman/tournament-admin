@@ -29,6 +29,13 @@
     "nothingScored": "还没有比赛计分",
     "notSetUp": "本场次尚未设置",
     "noSession": "当前没有进行中的场次",
+    "noRankings": "暂无排名",
+    "schedulePanel": "比赛日程与结果",
+    "col": {
+      "rank": "排名", "team": "队伍", "winPoints": "胜点", "sos": "对手强度", "record": "胜-负-平",
+      "matches": "场数", "average": "平均分", "match": "比赛", "teams": "队伍",
+      "field": "场地", "time": "时间", "score": "得分", "total": "总分"
+    },
     "waiting": "正在等待数据",
     "reconnecting": "正在重新连接…",
     "upNext": "下一场",

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useEventInfo } from "../api";
 
@@ -27,7 +27,27 @@ export function ScreenFrame({
   );
 }
 
-export function ScreenNotice({ title, text }: { title: string; text: string }) {
+/** In a rotation a scrolling screen showing a notice has no list to scroll,
+ * so it reports done after `fitSeconds` and the rotation moves on. */
+export function ScreenNotice({
+  title,
+  text,
+  onDone,
+  fitSeconds,
+}: {
+  title: string;
+  text: string;
+  onDone?: () => void;
+  fitSeconds?: number;
+}) {
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+  const timed = onDone !== undefined && fitSeconds !== undefined;
+  useEffect(() => {
+    if (!timed) return;
+    const id = setTimeout(() => onDoneRef.current?.(), fitSeconds * 1000);
+    return () => clearTimeout(id);
+  }, [timed, fitSeconds]);
   return (
     <ScreenFrame title={title}>
       <p className="screen__notice">{text}</p>
@@ -36,7 +56,7 @@ export function ScreenNotice({ title, text }: { title: string; text: string }) {
 }
 
 /** Shown while a screen's data is loading or being retried; never a blank TV. */
-export function WaitingForData({ title }: { title: string }) {
+export function WaitingForData({ title, onDone, fitSeconds }: { title: string; onDone?: () => void; fitSeconds?: number }) {
   const { t } = useTranslation();
-  return <ScreenNotice title={title} text={t("display.waiting")} />;
+  return <ScreenNotice title={title} text={t("display.waiting")} onDone={onDone} fitSeconds={fitSeconds} />;
 }
