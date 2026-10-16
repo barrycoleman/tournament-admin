@@ -185,15 +185,19 @@ export function useSoleDivisionId(): number | null {
   return divisions.data?.length === 1 ? divisions.data[0].id : null;
 }
 
-/** Rankings for a division together with the rows that carry no division
- * (a single-division event's), each team once, in rank order. */
+/** Rankings for a division, plus the rows that carry no division when the
+ * screen has no division or the division is the event's only one (a
+ * single-division event's); each team once, in rank order. */
 export function useMergedRankings(sessionId: number, divisionId: number | null): Ranking[] | undefined {
+  const divisions = useDivisions();
+  const sole = useSoleDivisionId();
   const own = useRankings(sessionId, divisionId);
   const unscoped = useRankings(sessionId, null);
-  if (!own.data || !unscoped.data) return undefined;
+  const withUnscoped = divisionId === null || divisionId === sole;
+  if (!divisions.data || !own.data || (withUnscoped && !unscoped.data)) return undefined;
   const seen = new Set<number>();
   const rows: Ranking[] = [];
-  for (const row of [...own.data, ...unscoped.data]) {
+  for (const row of [...own.data, ...(withUnscoped ? unscoped.data! : [])]) {
     if (!seen.has(row.team_id)) {
       seen.add(row.team_id);
       rows.push(row);
@@ -214,15 +218,16 @@ export function useDivisionFilter(divisionId: number | null): (row: { division_i
   return inDivision(divisionId, sole);
 }
 
-/** The division's newest finals bracket (a single-division event's may carry
- * the sole division or none, so both are read); null when none exists yet,
- * undefined while loading. */
+/** The division's newest finals bracket (no-division brackets count only for
+ * a screen with no division or the event's only division); null when none
+ * exists yet, undefined while loading. */
 export function useNewestFinals(sessionId: number, divisionId: number | null): FinalsBracket | null | undefined {
   const divisions = useDivisions();
   const sole = useSoleDivisionId();
   const own = useFinals(sessionId, divisionId ?? sole);
   const unscoped = useFinals(sessionId, null);
-  if (!divisions.data || !own.data || !unscoped.data) return undefined;
-  const byId = new Map([...own.data, ...unscoped.data].map((bracket) => [bracket.id, bracket]));
+  const withUnscoped = divisionId === null || divisionId === sole;
+  if (!divisions.data || !own.data || (withUnscoped && !unscoped.data)) return undefined;
+  const byId = new Map([...own.data, ...(withUnscoped ? unscoped.data! : [])].map((bracket) => [bracket.id, bracket]));
   return [...byId.values()].sort((a, b) => b.id - a.id)[0] ?? null;
 }

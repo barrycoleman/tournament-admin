@@ -177,4 +177,18 @@ describe("Elimination Brackets", () => {
     expect(await screen.findByRole("heading", { name: "Final" })).toBeInTheDocument();
     expect(screen.getByTestId("matchup-1")).toBeInTheDocument();
   });
+
+  it("in a multi-division event, a division's group ignores a newer no-division bracket", async () => {
+    const matchup = (id: number) => [{ id, round_number: 1, position: 0, matchup_number: 1, alliance_a_id: 1, alliance_b_id: 4, winner_alliance_id: null }];
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/divisions": [{ id: 4, name: "Division 1" }, { id: 5, name: "Division 2" }],
+      "/api/displays/me": me(pitGroup({ screen: "elimination_bracket", division_id: 5 })),
+      "/api/finals?session_id=1&division_id=5": [bracket({ id: 1, division_id: 5, matchups: matchup(51) })],
+      "/api/finals?session_id=1": [bracket({ id: 2, division_id: null, matchups: matchup(52) })],
+    });
+    renderDisplay();
+    expect(await screen.findByTestId("matchup-51")).toBeInTheDocument();
+    expect(screen.queryByTestId("matchup-52")).not.toBeInTheDocument();
+  });
 });

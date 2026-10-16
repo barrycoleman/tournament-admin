@@ -69,6 +69,21 @@ describe("Teamwork Rankings", () => {
     expect(within(table).getAllByRole("row")[1]).toHaveTextContent(/1.*102B.*2.*39/);
   });
 
+  it("in a multi-division event, a division's group leaves out the no-division rankings", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/divisions": [{ id: 4, name: "Division 1" }, { id: 5, name: "Division 2" }],
+      "/api/displays/me": me(pitGroup({ screen: "teamwork_rankings", division_id: 5 })),
+      "/api/rankings?session_id=1&division_id=5": [ranking(3, 1, { division_id: 5 })],
+      "/api/rankings?session_id=1": [ranking(2, 1)],
+    });
+    renderDisplay();
+    const table = await screen.findByRole("table", { name: "Teamwork Rankings" });
+    expect(within(table).getAllByRole("row")).toHaveLength(2);
+    expect(within(table).getByText("103C")).toBeInTheDocument();
+    expect(within(table).queryByText("102B")).not.toBeInTheDocument();
+  });
+
   it("says when nothing is ranked yet", async () => {
     serveDisplay({ ...baseRoutes(), "/api/displays/me": me(pitGroup({ screen: "teamwork_rankings" })) });
     renderDisplay();
