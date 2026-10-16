@@ -7,9 +7,12 @@ export const RESYNC_MS = 10 * 60_000;
 export async function measureOffset(fetchImpl: typeof fetch = fetch): Promise<number> {
   const sent = Date.now();
   const response = await fetchImpl("/api/time-sync");
-  const body = (await response.json()) as { server_time: string };
+  if (!response.ok) throw new Error(`time-sync answered ${response.status}`);
+  const body = (await response.json()) as { server_time?: string };
   const received = Date.now();
-  return Date.parse(body.server_time) - (sent + received) / 2;
+  const serverMs = Date.parse(body.server_time ?? "");
+  if (!Number.isFinite(serverMs)) throw new Error("time-sync gave no usable time");
+  return serverMs - (sent + received) / 2;
 }
 
 /** Measures the offset now, every 10 minutes, and whenever `resyncKey` changes. */
