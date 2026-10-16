@@ -23,6 +23,7 @@
     "display_device": "显示屏"
   },
   "display": {
+    "enableSound": "点击以启用声音",
     "skillsOff": "未开展技能挑战赛",
     "top10": "前 10 名",
     "recentScores": "最新成绩",

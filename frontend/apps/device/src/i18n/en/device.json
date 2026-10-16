@@ -23,6 +23,7 @@
     "display_device": "Display"
   },
   "display": {
+    "enableSound": "Click to enable sound",
     "skillsOff": "Skills challenges aren't running",
     "top10": "Top 10",
     "recentScores": "Recent scores",

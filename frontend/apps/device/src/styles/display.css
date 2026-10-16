@@ -134,3 +134,8 @@
 .matchup__side.is-winner { font-weight: 900; box-shadow: inset 0.4vw 0 0 var(--kiosk-soon); }
 .matchup__seed { opacity: 0.8; }
 .matchup__wins { text-align: right; font-weight: 900; }
+
+.sound-note {
+  position: absolute; left: 1.5vw; bottom: 1.5vw; z-index: 30; cursor: pointer;
+  padding: 0.5vw 1vw; border: 0; border-radius: 0.5vw; background: var(--kiosk-surface); color: var(--kiosk-ink); font: inherit; font-size: 1.2vw;
+}

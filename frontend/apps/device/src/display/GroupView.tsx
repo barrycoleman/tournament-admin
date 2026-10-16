@@ -1,8 +1,10 @@
 import type { ScreenSettings } from "@tournament-admin/shared";
 import { useFieldSets, type DisplayMe, type DisplayMeGroup } from "./api";
 import type { ScreenContext } from "./screenTypes";
+import { AudienceSounds } from "./AudienceSounds";
 import { FieldDisplay } from "./FieldDisplay";
 import { TimeoutGate } from "./components/TimeoutGate";
+import { RotationRunner } from "./RotationRunner";
 import { screenModule } from "./screens/registry";
 
 export function screenContext(
@@ -36,11 +38,26 @@ export function GroupView({ me }: { me: DisplayMe & { session_id: number; group:
     group.kind === "pit"
       ? group.division_id
       : fieldSets.data?.find((fs) => fs.id === group.field_set_id)?.division_id ?? null;
-  // Pit rotations get the runner in Task 12.
-  const entry = group.kind === "pit" && group.rotation?.length ? group.rotation[0] : null;
-  const { Component } = screenModule(entry ? entry.screen : group.screen);
-  const screen = (
-    <Component context={screenContext(sessionId, group, divisionId, entry ? entry.settings : group.screen_settings)} />
+  const context = screenContext(sessionId, group, divisionId, group.screen_settings);
+  if (group.kind === "pit" && group.rotation?.length) {
+    const base = {
+      sessionId: context.sessionId,
+      fieldSetId: context.fieldSetId,
+      divisionId: context.divisionId,
+      queuedMatchId: context.queuedMatchId,
+    };
+    return <RotationRunner key={JSON.stringify(group.rotation)} entries={group.rotation} base={base} />;
+  }
+  const { Component } = screenModule(group.screen);
+  if (group.kind !== "audience") return <Component context={context} />;
+  return (
+    <>
+      <TimeoutGate deadline={timeoutDeadline}>
+        <Component context={context} />
+      </TimeoutGate>
+      {group.play_sounds && (
+        <AudienceSounds sessionId={sessionId} fieldSetId={group.field_set_id} timeoutDeadline={timeoutDeadline} />
+      )}
+    </>
   );
-  return group.kind === "audience" ? <TimeoutGate deadline={timeoutDeadline}>{screen}</TimeoutGate> : screen;
 }
