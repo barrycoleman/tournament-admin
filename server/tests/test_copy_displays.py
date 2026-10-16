@@ -50,6 +50,7 @@ def test_copy_matches_groups_by_name_and_lists_what_it_cannot_place(client, leag
         copied = _copy(client, sunday, saturday)
         assert copied.status_code == 201, copied.text
         assert next_event(socket, "display_changed")["data"] == {"session_id": sunday, "group_id": None}
+        next_event(socket, "devices_changed")
     assert sorted(copied.json()["unplaced"], key=lambda u: u["device_name"]) == [
         {"device_id": field_two["id"], "device_name": "F2", "source_group_name": "Field 2"},
         {"device_id": unplaced_tv["id"], "device_name": "Lost", "source_group_name": "Field 1"},

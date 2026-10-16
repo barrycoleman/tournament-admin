@@ -329,4 +329,5 @@ def copy_displays(
     unplaced = displays.copy_displays(db, session_id, payload.source_session_id)
     db.commit()
     notify_display_changed(request, session_id, None)
+    realtime.broadcast_active_session(request.app, "devices_changed", {})
     return CopyDisplaysResult(unplaced=[UnplacedDisplay(**entry) for entry in unplaced])
