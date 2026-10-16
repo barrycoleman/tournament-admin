@@ -23,6 +23,10 @@
     "display_device": "Display"
   },
   "display": {
+    "alliance": { "red": "Red alliance", "blue": "Blue alliance", "all": "Alliance" },
+    "breakdown": "Score breakdown",
+    "noMoreMatches": "No more matches here",
+    "nothingScored": "No match has been scored yet",
     "notSetUp": "Not set up for this session",
     "noSession": "No session is running",
     "waiting": "Waiting for data",

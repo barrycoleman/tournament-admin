@@ -23,6 +23,10 @@
     "display_device": "显示屏"
   },
   "display": {
+    "alliance": { "red": "红方联盟", "blue": "蓝方联盟", "all": "联盟" },
+    "breakdown": "得分明细",
+    "noMoreMatches": "这里没有更多比赛",
+    "nothingScored": "还没有比赛计分",
     "notSetUp": "本场次尚未设置",
     "noSession": "当前没有进行中的场次",
     "waiting": "正在等待数据",

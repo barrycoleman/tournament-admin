@@ -26,3 +26,10 @@ export function teamPlace(team: Team | undefined): string {
   if (!team) return "";
   return [team.city, team.state, team.country].filter(Boolean).join(", ");
 }
+
+/** A group's score: its alliances' best saved score (a cooperative game's
+ * alliances carry the same mirrored score). */
+export function groupScore(group: AllianceGroup, scores: Map<number, number>): number | null {
+  const values = group.allianceIds.map((id) => scores.get(id)).filter((v): v is number => v !== undefined);
+  return values.length ? Math.max(...values) : null;
+}
