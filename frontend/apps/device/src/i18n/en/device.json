@@ -26,6 +26,37 @@
     "notSetUp": "Not set up for this session",
     "noSession": "No session is running",
     "waiting": "Waiting for data",
-    "reconnecting": "Reconnecting…"
+    "reconnecting": "Reconnecting…",
+    "upNext": "Up next",
+    "startsIn": "{{time}} to go",
+    "late": "{{time}} late",
+    "matchOver": "Match over",
+    "driverNext": "Driver control next",
+    "paused": "Paused",
+    "timeout": "Time-out",
+    "fieldDone": "No more matches on this field",
+    "noMatchYet": "No match has started yet",
+    "period": {
+      "autonomous": "Autonomous",
+      "driver": "Driver control"
+    },
+    "round": {
+      "qualification": "Qualification {{number}}",
+      "practice": "Practice {{number}}",
+      "elimination": "Elimination {{number}}",
+      "finals": "Final {{label}}"
+    },
+    "screens": {
+      "match_intro": "Match Intro",
+      "in_match": "In Match",
+      "last_scored_match": "Last Scored Match",
+      "teamwork_rankings": "Teamwork Rankings",
+      "skills_rankings": "Skills Rankings",
+      "upcoming_matches": "Upcoming Matches",
+      "match_results": "Match Results",
+      "schedule": "Match Schedule",
+      "elimination_bracket": "Elimination Brackets",
+      "logo": "Logo"
+    }
   }
 }

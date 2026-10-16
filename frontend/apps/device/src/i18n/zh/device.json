@@ -26,6 +26,37 @@
     "notSetUp": "本场次尚未设置",
     "noSession": "当前没有进行中的场次",
     "waiting": "正在等待数据",
-    "reconnecting": "正在重新连接…"
+    "reconnecting": "正在重新连接…",
+    "upNext": "下一场",
+    "startsIn": "还有 {{time}}",
+    "late": "已延误 {{time}}",
+    "matchOver": "比赛结束",
+    "driverNext": "即将进入手动控制",
+    "paused": "已暂停",
+    "timeout": "暂停时间",
+    "fieldDone": "本场地没有更多比赛",
+    "noMatchYet": "还没有比赛开始",
+    "period": {
+      "autonomous": "自动阶段",
+      "driver": "手动控制"
+    },
+    "round": {
+      "qualification": "资格赛 {{number}}",
+      "practice": "练习赛 {{number}}",
+      "elimination": "淘汰赛 {{number}}",
+      "finals": "决赛 {{label}}"
+    },
+    "screens": {
+      "match_intro": "比赛介绍",
+      "in_match": "比赛进行中",
+      "last_scored_match": "最近计分的比赛",
+      "teamwork_rankings": "团队赛排名",
+      "skills_rankings": "技能赛排名",
+      "upcoming_matches": "即将进行的比赛",
+      "match_results": "比赛结果",
+      "schedule": "比赛日程",
+      "elimination_bracket": "淘汰赛对阵",
+      "logo": "标志"
+    }
   }
 }
