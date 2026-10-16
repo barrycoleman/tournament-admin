@@ -33,15 +33,22 @@ export function DisplayRows({
 }) {
   const { t } = useTranslation();
   const { assign, identify } = useDisplayMutations(sessionId);
-  if (displays.length === 0) return <p className="table__secondary">{t("displays.noDisplays")}</p>;
   const failed = assign.isError ? assign.error : identify.isError ? identify.error : null;
+  const alert = failed && (
+    <p className="alert alert-danger" role="alert">
+      {apiErrorMessage(failed, t("errors.generic"))}
+    </p>
+  );
+  if (displays.length === 0)
+    return (
+      <>
+        {alert}
+        <p className="table__secondary">{t("displays.noDisplays")}</p>
+      </>
+    );
   return (
     <>
-      {failed && (
-        <p className="alert alert-danger" role="alert">
-          {apiErrorMessage(failed, t("errors.generic"))}
-        </p>
-      )}
+      {alert}
       <ul className="list-plain">
         {displays.map((display) => (
           <li key={display.device_id} className="list-row">

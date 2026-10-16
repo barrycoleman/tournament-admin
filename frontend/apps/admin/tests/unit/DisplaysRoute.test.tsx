@@ -243,6 +243,20 @@ describe("Displays page", () => {
     );
   });
 
+  it("clears the chosen copy source when the page switches sessions, leaving Copy disabled", async () => {
+    renderRoute();
+    await screen.findByRole("option", { name: "Sunday" });
+    fireEvent.change(screen.getByLabelText("Session"), { target: { value: "2" } });
+    const copy = await screen.findByRole("region", { name: "Copy displays" });
+    fireEvent.change(within(copy).getByLabelText("Copy from"), { target: { value: "1" } });
+    expect(within(copy).getByRole("button", { name: "Copy displays" })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("Session"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("Session"), { target: { value: "2" } });
+    const again = await screen.findByRole("region", { name: "Copy displays" });
+    expect(within(again).getByLabelText("Copy from")).toHaveValue("");
+    expect(within(again).getByRole("button", { name: "Copy displays" })).toBeDisabled();
+  });
+
   it("copies another session's displays into an empty session and lists those it couldn't place", async () => {
     stub({
       "POST /api/sessions/2/copy-displays": {

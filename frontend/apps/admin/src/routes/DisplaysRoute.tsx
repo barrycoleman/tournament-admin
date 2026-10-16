@@ -65,7 +65,8 @@ export function DisplaysRoute() {
           id="displays-session"
           value={sessionId ?? ""}
           onChange={(e) => {
-            setChosen(Number(e.target.value));
+            setChosen(e.target.value === "" ? null : Number(e.target.value));
+            setCopyFrom("");
             setUnplaced(null);
           }}
         >
@@ -105,7 +106,7 @@ export function DisplaysRoute() {
             <button
               className="btn"
               type="button"
-              disabled={copyFrom === "" || mutations.copy.isPending}
+              disabled={copyFrom === "" || Number(copyFrom) === sessionId || mutations.copy.isPending}
               onClick={() =>
                 mutations.copy.mutate(Number(copyFrom), {
                   onSuccess: (result) => setUnplaced(result.unplaced),
