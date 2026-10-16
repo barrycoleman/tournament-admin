@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "./i18nSetup";
 import "./styles/device.css";
+import "./styles/display.css";
 import { App } from "./App";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

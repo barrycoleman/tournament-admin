@@ -5,22 +5,31 @@ import { useDeviceSocket } from "./useDeviceSocket";
 import { PairingScreen } from "./screens/PairingScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { BlockedScreen } from "./screens/BlockedScreen";
+import { DisplayApp } from "./display/DisplayApp";
+import { RECONNECTED, createEventBus } from "./display/events";
 
 export function App() {
   const { t } = useTranslation();
   const session = useDeviceSession();
+  const [bus] = useState(createEventBus);
   const [pairingReachable, setPairingReachable] = useState(true);
   const onReachability = useCallback((reachable: boolean) => setPairingReachable(reachable), []);
   const [socketReachable, setSocketReachable] = useState(true);
   const onSocketReachability = useCallback((reachable: boolean) => setSocketReachable(reachable), []);
+  const onSocketOpen = useCallback(() => bus.emit({ event: RECONNECTED, data: null }), [bus]);
   const onHome = session.screen.kind === "home";
-  useDeviceSocket(onHome ? session.accessToken : null, session.recheck, onSocketReachability);
+  useDeviceSocket(onHome ? session.accessToken : null, session.recheck, onSocketReachability, bus.emit, onSocketOpen);
 
   const unreachable =
     session.screen.kind === "pairing"
       ? !pairingReachable
       : session.unreachable || (onHome && !socketReachable);
   const { screen } = session;
+
+  // A paired Display runs the kiosk screens (display groups design).
+  if (screen.kind === "home" && screen.device.role === "display_device" && session.accessToken) {
+    return <DisplayApp accessToken={session.accessToken} device={screen.device} bus={bus} unreachable={unreachable} />;
+  }
 
   return (
     <main className="device-screen">

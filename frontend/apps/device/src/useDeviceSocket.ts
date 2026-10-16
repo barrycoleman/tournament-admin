@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { LiveEvent } from "./display/events";
 
 const DEVICE_CHANGED = 4403;
 const POLICY_VIOLATION = 1008;
@@ -8,14 +9,18 @@ const RECONNECT_MS = 3_000;
  * this device was disabled, deleted or changed role, and a 1008 close means
  * the server refused it, so either signs in again. Any other close or a
  * failed connect reports the server unreachable and reconnects; an open
- * socket reports it reachable. */
+ * socket reports it reachable. Every message is passed to `onMessage`, and
+ * every successful open to `onOpen`, so display mode can refresh after a
+ * reconnect. */
 export function useDeviceSocket(
   accessToken: string | null,
   onDeviceChanged: () => void,
-  onReachability: (reachable: boolean) => void
+  onReachability: (reachable: boolean) => void,
+  onMessage?: (message: LiveEvent) => void,
+  onOpen?: () => void
 ): void {
-  const callbacks = useRef({ onDeviceChanged, onReachability });
-  callbacks.current = { onDeviceChanged, onReachability };
+  const callbacks = useRef({ onDeviceChanged, onReachability, onMessage, onOpen });
+  callbacks.current = { onDeviceChanged, onReachability, onMessage, onOpen };
 
   useEffect(() => {
     if (!accessToken) return undefined;
@@ -37,7 +42,18 @@ export function useDeviceSocket(
         return;
       }
       socket.onopen = () => {
-        if (!stopped) callbacks.current.onReachability(true);
+        if (stopped) return;
+        callbacks.current.onReachability(true);
+        callbacks.current.onOpen?.();
+      };
+      socket.onmessage = (message: MessageEvent<string>) => {
+        if (stopped) return;
+        try {
+          const parsed = JSON.parse(message.data) as LiveEvent;
+          if (parsed && typeof parsed.event === "string") callbacks.current.onMessage?.(parsed);
+        } catch {
+          // A frame that isn't JSON is ignored.
+        }
       };
       socket.onclose = (event: CloseEvent | { code: number }) => {
         if (stopped) return;

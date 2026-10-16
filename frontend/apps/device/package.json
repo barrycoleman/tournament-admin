@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.59.0",
     "@tournament-admin/shared": "*",
     "i18next": "^23.15.0",
     "qrcode": "^1.5.4",

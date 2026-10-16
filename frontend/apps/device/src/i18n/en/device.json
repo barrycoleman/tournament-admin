@@ -21,5 +21,11 @@
     "judge": "Judge",
     "front_desk": "Check-in",
     "display_device": "Display"
+  },
+  "display": {
+    "notSetUp": "Not set up for this session",
+    "noSession": "No session is running",
+    "waiting": "Waiting for data",
+    "reconnecting": "Reconnecting…"
   }
 }

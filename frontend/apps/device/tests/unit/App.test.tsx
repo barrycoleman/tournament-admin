@@ -57,6 +57,21 @@ afterEach(() => {
 });
 
 describe("device app", () => {
+  it("a paired display runs display mode", async () => {
+    localStorage.setItem("tournament-admin.device.v1", JSON.stringify({ deviceToken: "dev-token" }));
+    serve((url) => {
+      if (url === "/api/auth/device") {
+        return { status: 200, body: { access_token: "a", expires_in: 1800, device: { ...DEVICE, role: "display_device", name: "Big TV" } } };
+      }
+      if (url === "/api/displays/me") return { status: 200, body: { device: { id: 7, name: "Big TV" }, session_id: 1, group: null } };
+      if (url === "/api/time-sync") return { status: 200, body: { server_time: new Date().toISOString(), boot_id: "b" } };
+      return { status: 404, body: {} };
+    });
+    render(<App />);
+    expect(await screen.findByText("Not set up for this session")).toBeInTheDocument();
+    expect(screen.queryByText("Paired as")).not.toBeInTheDocument();
+  });
+
   it("shows a code and a QR link, and keeps it although the device clock is past expires_at", async () => {
     serve((url) => (url === "/api/pairing" ? { status: 201, body: CODE } : { status: 200, body: { status: "waiting" } }));
     render(<App />);

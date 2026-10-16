@@ -21,5 +21,11 @@
     "judge": "评委",
     "front_desk": "签到",
     "display_device": "显示屏"
+  },
+  "display": {
+    "notSetUp": "本场次尚未设置",
+    "noSession": "当前没有进行中的场次",
+    "waiting": "正在等待数据",
+    "reconnecting": "正在重新连接…"
   }
 }

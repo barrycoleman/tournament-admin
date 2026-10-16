@@ -141,3 +141,22 @@ export function pairingLink(origin: string, code: string): string {
 export function formatCode(code: string): string {
   return `${code.slice(0, 3)} ${code.slice(3)}`;
 }
+
+/** A request the server answered with a status other than 2xx (and not 5xx,
+ * which `send` already reports as Unreachable). */
+export class ApiStatusError extends Error {
+  status: number;
+
+  constructor(status: number) {
+    super(`The server answered ${status}`);
+    this.name = "ApiStatusError";
+    this.status = status;
+  }
+}
+
+/** An authorized GET for display screens' data. */
+export async function getJson<T>(path: string, accessToken: string): Promise<T> {
+  const response = await send(path, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!response.ok) throw new ApiStatusError(response.status);
+  return readJson<T>(response);
+}

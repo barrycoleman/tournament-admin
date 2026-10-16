@@ -1,0 +1,50 @@
+/* Kiosk screens for paired displays: a dark room, read from across it.
+   Sizes follow the viewport width so one layout reads on a 24" monitor
+   and on a projector. */
+.display {
+  --kiosk-bg: #0e0d0b;
+  --kiosk-surface: #1d1b17;
+  --kiosk-band: #f1ece2;
+  --kiosk-band-alt: #ddd5c4;
+  --kiosk-ink: #f6f3ec;
+  --kiosk-ink-on-band: #1b1815;
+  --kiosk-muted: #a59d8c;
+  --kiosk-red: #c8322b;
+  --kiosk-blue: #1f63c6;
+  --kiosk-early: #2f9e5a;
+  --kiosk-soon: #e3b21a;
+  --kiosk-late: #d23c2c;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--kiosk-bg);
+  color: var(--kiosk-ink);
+  cursor: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 1.6vw;
+  line-height: 1.2;
+}
+.display * { scrollbar-width: none; }
+.display *::-webkit-scrollbar { display: none; }
+
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 2vw 3vw; }
+.screen__header { flex: none; margin-bottom: 1.5vw; }
+.screen__event { margin: 0; font-size: 1.4vw; color: var(--kiosk-muted); }
+.screen__title { margin: 0.2vw 0 0; font-size: 4vw; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; }
+.screen__subtitle { margin: 0.2vw 0 0; font-size: 2vw; color: var(--kiosk-muted); }
+.screen__body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.screen__notice { margin: auto; font-size: 3vw; text-align: center; color: var(--kiosk-muted); }
+
+.logo-screen, .name-screen { align-items: center; justify-content: center; text-align: center; }
+.logo-screen__name { font-size: 6vw; font-weight: 800; margin: 0; }
+.name-screen__name { font-size: 7vw; font-weight: 800; margin: 0; }
+.name-screen__text { font-size: 2.6vw; color: var(--kiosk-muted); }
+
+.identify {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgb(0 0 0 / 0.85); font-size: 9vw; font-weight: 800; z-index: 20;
+}
+.display-badge {
+  position: absolute; right: 1.5vw; bottom: 1.5vw; margin: 0; padding: 0.4vw 1vw; z-index: 30;
+  border-radius: 0.5vw; background: var(--kiosk-soon); color: var(--kiosk-ink-on-band); font-size: 1.2vw;
+}
