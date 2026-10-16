@@ -89,13 +89,13 @@ describe("match lists", () => {
   it("Upcoming Matches shows the next few on the audience's field group", async () => {
     serveDisplay({
       ...baseRoutes(),
-      "/api/displays/me": me(audienceGroup({ screen: "upcoming_matches", screen_settings: { count: 1, scope: "field_set" } })),
+      "/api/displays/me": me(audienceGroup({ screen: "upcoming_matches", screen_settings: { count: 3, scope: "field_set" } })),
       "/api/matches?session_id=1": matches,
     });
     renderDisplay();
     const table = await screen.findByRole("table", { name: "Upcoming Matches" });
-    expect(within(table).getAllByRole("row")).toHaveLength(2);
-    expect(within(table).getByText("Q3")).toBeInTheDocument();
+    // Q5 is on field 9, outside the audience's field set, so it is left out.
+    expect(within(table).getAllByRole("row").slice(1).map((r) => r.textContent?.slice(0, 2))).toEqual(["Q3", "Q4"]);
   });
 
   it("Upcoming Matches by division includes other field groups' matches", async () => {

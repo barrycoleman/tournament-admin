@@ -34,10 +34,12 @@ describe("notice rotation timer", () => {
   });
 
   it("a waiting notice reports done too, and a notice without both props never does", async () => {
-    const onDone = vi.fn();
-    wrap(<WaitingForData title="T" onDone={onDone} fitSeconds={3} />);
-    wrap(<ScreenNotice title="U" text="x" onDone={onDone} />);
+    const waitingDone = vi.fn();
+    const noticeDone = vi.fn();
+    wrap(<WaitingForData title="T" onDone={waitingDone} fitSeconds={3} />);
+    wrap(<ScreenNotice title="U" text="x" onDone={noticeDone} />);
     await act(() => vi.advanceTimersByTimeAsync(10_000));
-    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(waitingDone).toHaveBeenCalledTimes(1);
+    expect(noticeDone).not.toHaveBeenCalled();
   });
 });
