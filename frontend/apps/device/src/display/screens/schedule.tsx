@@ -16,7 +16,7 @@ function ScheduleScreen({ context, onDone, fitSeconds }: ScreenProps) {
   const timeZone = useSessionTimeZone(context.sessionId);
   const keep = useDivisionFilter(context.divisionId);
   const title = t("display.screens.schedule");
-  if (!matches.data || !fields.data || !format.data || !teams || !timeZone) return <WaitingForData title={title} onDone={onDone} fitSeconds={fitSeconds} />;
+  if (!matches.data || !fields.data || !format.data || !teams || timeZone === undefined) return <WaitingForData title={title} onDone={onDone} fitSeconds={fitSeconds} />;
   const rows = sortMatches(matches.data.filter((m) => keep(m) && m.status !== "not_played"));
   if (rows.length === 0) return <ScreenNotice title={title} text={t("display.noMoreMatches")} onDone={onDone} fitSeconds={fitSeconds} />;
   const fieldName = (id: number | null) => fields.data?.find((f) => f.id === id)?.name ?? "";

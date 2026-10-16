@@ -174,9 +174,12 @@ export function useTeamsById(): Map<number, Team> | undefined {
   return teams.data ? new Map(teams.data.map((team) => [team.id, team])) : undefined;
 }
 
-export function useSessionTimeZone(sessionId: number): string | null {
+/** The session's zone; null once the sessions have loaded and it has none
+ * (times then show in UTC); undefined while the sessions are still loading. */
+export function useSessionTimeZone(sessionId: number): string | null | undefined {
   const sessions = useSessions();
-  return sessions.data?.find((s) => s.id === sessionId)?.timezone ?? null;
+  if (!sessions.data) return undefined;
+  return sessions.data.find((s) => s.id === sessionId)?.timezone ?? null;
 }
 
 /** The event's only division, or null when it has several. */

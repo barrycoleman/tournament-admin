@@ -34,10 +34,12 @@ export function formatOffset(msToStart: number): string {
   return msToStart >= 0 ? formatClock(msToStart / 1000) : formatClock(Math.floor(-msToStart / 1000));
 }
 
+/** A time of day in the session's zone, never the device's; UTC, labeled, when the session has none. */
 export function formatTime(iso: string, timeZone: string | null, locale?: string): string {
-  return new Intl.DateTimeFormat(locale, {
+  const text = new Intl.DateTimeFormat(locale, {
     hour: "numeric",
     minute: "2-digit",
-    timeZone: timeZone ?? undefined,
+    timeZone: timeZone ?? "UTC",
   }).format(new Date(iso));
+  return timeZone ? text : `${text} UTC`;
 }

@@ -49,7 +49,7 @@ function EliminationBracketScreen({ context }: ScreenProps) {
   const teams = useTeamsById();
   const timeZone = useSessionTimeZone(context.sessionId);
   const title = t("display.screens.elimination_bracket");
-  if (bracket === undefined || !matches.data || !scores.data || !fields.data || !teams || !timeZone) return <WaitingForData title={title} />;
+  if (bracket === undefined || !matches.data || !scores.data || !fields.data || !teams || timeZone === undefined) return <WaitingForData title={title} />;
   if (bracket === null) return <ScreenNotice title={title} text={t("display.noEliminations")} />;
 
   if (bracket.format === "single_elimination") {

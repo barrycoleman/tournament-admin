@@ -16,7 +16,7 @@ export function MatchSchedulePanel({ sessionId, keep }: { sessionId: number; kee
   const format = useMatchFormat();
   const teams = useTeamsById();
   const timeZone = useSessionTimeZone(sessionId);
-  if (!matches.data || !scores.data || !fields.data || !format.data || !teams || !timeZone) return null;
+  if (!matches.data || !scores.data || !fields.data || !format.data || !teams || timeZone === undefined) return null;
   const recent = scoredMatches(matches.data, scores.data, keep).slice(0, RECENT).reverse();
   const next = upcomingMatches(matches.data, keep, NEXT);
   const gameModel = format.data.game_model;

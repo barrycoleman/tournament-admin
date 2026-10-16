@@ -149,6 +149,39 @@ describe("match lists", () => {
     expect(rows[3]).toHaveTextContent(/1:10/);
   });
 
+  it("the Schedule shows times in UTC, labeled, when the session has no zone", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/sessions": [{ id: 1, label: "Saturday", timezone: null }],
+      "/api/displays/me": me(pitGroup({ screen: "schedule" })),
+      "/api/matches?session_id=1": matches,
+    });
+    renderDisplay();
+    const rows = within(await screen.findByRole("table", { name: "Match Schedule" })).getAllByRole("row").slice(1);
+    expect(rows[3]).toHaveTextContent(/4:10.*UTC/);
+  });
+
+  it("Upcoming Matches shows times in UTC, labeled, when the session has no zone", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/sessions": [{ id: 1, label: "Saturday", timezone: null }],
+      "/api/displays/me": me(audienceGroup({ screen: "upcoming_matches", screen_settings: { count: 3, scope: "field_set" } })),
+      "/api/matches?session_id=1": matches,
+    });
+    renderDisplay();
+    const table = await screen.findByRole("table", { name: "Upcoming Matches" });
+    expect(within(table).getAllByRole("row")[1]).toHaveTextContent(/4:05.*UTC/);
+  });
+
+  it("the Schedule keeps waiting while the sessions have not loaded", async () => {
+    const routes = { ...baseRoutes(), "/api/displays/me": me(pitGroup({ screen: "schedule" })), "/api/matches?session_id=1": matches } as Record<string, unknown>;
+    delete routes["/api/sessions"];
+    serveDisplay(routes);
+    renderDisplay();
+    expect(await screen.findByText("Waiting for data")).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Match Schedule" })).not.toBeInTheDocument();
+  });
+
   it("Schedule lists every match in order with field and time", async () => {
     serveDisplay({
       ...baseRoutes(),

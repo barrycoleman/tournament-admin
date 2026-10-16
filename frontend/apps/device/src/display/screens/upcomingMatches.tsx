@@ -16,7 +16,7 @@ function UpcomingMatchesScreen({ context }: ScreenProps) {
   const timeZone = useSessionTimeZone(context.sessionId);
   const inDivision = useDivisionFilter(context.divisionId);
   const title = t("display.screens.upcoming_matches");
-  if (!matches.data || !fields.data || !format.data || !teams || !timeZone) return <WaitingForData title={title} />;
+  if (!matches.data || !fields.data || !format.data || !teams || timeZone === undefined) return <WaitingForData title={title} />;
   const byFieldSet = context.settings.scope === "field_set" && context.fieldSetId !== null;
   const keep = byFieldSet ? onFields(fieldIdsOf(fields.data, context.fieldSetId)) : inDivision;
   const rows = upcomingMatches(matches.data, keep, context.settings.count ?? UPCOMING_COUNT.default);
