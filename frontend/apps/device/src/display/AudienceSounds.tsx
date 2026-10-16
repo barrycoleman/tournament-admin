@@ -21,6 +21,12 @@ export function AudienceSounds({
   const { t } = useTranslation();
   const provided = useContext(SoundPlayerContext);
   const [player] = useState(() => provided ?? new SoundPlayer());
+  useEffect(
+    () => () => {
+      if (!provided) player.close();
+    },
+    [player, provided]
+  );
   const [blocked, setBlocked] = useState(() => player.blocked);
   const now = useServerNow();
   const matches = useMatches(sessionId);
@@ -48,7 +54,10 @@ export function AudienceSounds({
       type="button"
       className="sound-note"
       onClick={() => {
-        void player.unlock().then(() => setBlocked(player.blocked));
+        player
+          .unlock()
+          .then(() => setBlocked(player.blocked))
+          .catch(() => undefined);
       }}
     >
       {t("display.enableSound")}

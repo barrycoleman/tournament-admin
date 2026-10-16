@@ -42,7 +42,13 @@ describe("timeoutCues", () => {
   });
 });
 
+const contexts: FakeContext[] = [];
+
 class FakeContext {
+  constructor() {
+    contexts.push(this);
+  }
+  close = vi.fn(async () => {});
   state = "suspended";
   currentTime = 0;
   destination = {};
@@ -93,6 +99,17 @@ describe("audience sounds", () => {
     fireEvent.click(note);
     await act(() => vi.advanceTimersByTimeAsync(100));
     expect(screen.queryByRole("button", { name: "Click to enable sound" })).not.toBeInTheDocument();
+  });
+
+  it("closes its audio context when the display unmounts", async () => {
+    contexts.length = 0;
+    vi.stubGlobal("AudioContext", FakeContext);
+    serveDisplay({ ...baseRoutes(), "/api/displays/me": me(audienceGroup({ screen: "logo", play_sounds: true })) });
+    const { unmount } = renderDisplay();
+    await screen.findByRole("button", { name: "Click to enable sound" });
+    expect(contexts).toHaveLength(1);
+    unmount();
+    expect(contexts[0].close).toHaveBeenCalledTimes(1);
   });
 
   it("shows no note when sounds are off", async () => {

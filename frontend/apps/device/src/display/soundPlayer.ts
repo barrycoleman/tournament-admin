@@ -37,6 +37,13 @@ export class SoundPlayer {
     await this.ensure()?.resume();
   }
 
+  /** Releases the browser's audio context; a later use makes a new one. */
+  close(): void {
+    const context = this.context;
+    this.context = null;
+    void context?.close().catch(() => undefined);
+  }
+
   play(cue: Cue): void {
     const context = this.ensure();
     if (context === null || context.state !== "running") return;
