@@ -1,11 +1,13 @@
 import { isScreenKey, type ScreenKey } from "@tournament-admin/shared";
 import type { ScreenModule } from "../screenTypes";
+import { eliminationBracketScreen } from "./eliminationBracket";
 import { inMatchScreen } from "./inMatch";
 import { lastScoredMatchScreen } from "./lastScoredMatch";
 import { logoScreen } from "./logo";
 import { matchIntroScreen } from "./matchIntro";
 import { matchResultsScreen } from "./matchResults";
 import { scheduleScreen } from "./schedule";
+import { skillsRankingsScreen } from "./skillsRankings";
 import { teamworkRankingsScreen } from "./teamworkRankings";
 import { upcomingMatchesScreen } from "./upcomingMatches";
 
@@ -16,9 +18,11 @@ const MODULES: Partial<Record<ScreenKey, ScreenModule>> = {
   in_match: inMatchScreen,
   last_scored_match: lastScoredMatchScreen,
   teamwork_rankings: teamworkRankingsScreen,
+  skills_rankings: skillsRankingsScreen,
   upcoming_matches: upcomingMatchesScreen,
   match_results: matchResultsScreen,
   schedule: scheduleScreen,
+  elimination_bracket: eliminationBracketScreen,
   logo: logoScreen,
 };
 

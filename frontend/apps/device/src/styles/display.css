@@ -121,3 +121,16 @@
 .side-panel { min-height: 0; overflow: hidden; }
 .side-panel__title { margin: 0 0 0.4vw; font-size: 1.2vw; text-transform: uppercase; }
 .side-panel__end { text-align: right; font-weight: 800; white-space: nowrap; }
+
+.side-stack { display: flex; flex-direction: column; gap: 1vw; min-height: 0; }
+.kiosk-table .is-current { outline: 0.3vw solid var(--kiosk-soon); outline-offset: -0.3vw; }
+.bracket__rounds { flex: 1; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2vw; }
+.bracket__round { display: flex; flex-direction: column; justify-content: space-around; gap: 1vw; }
+.bracket__round-name { margin: 0; font-size: 1.3vw; text-transform: uppercase; color: var(--kiosk-muted); }
+.matchup { display: flex; flex-direction: column; border-radius: 0.5vw; overflow: hidden; }
+.matchup__side { display: grid; grid-template-columns: 2.5vw 1fr 2.5vw; align-items: center; gap: 0.5vw; padding: 0.4vw 0.6vw; font-size: 1.6vw; font-weight: 700; }
+.matchup__side:first-child { background: var(--kiosk-red); }
+.matchup__side:last-child { background: var(--kiosk-blue); }
+.matchup__side.is-winner { font-weight: 900; box-shadow: inset 0.4vw 0 0 var(--kiosk-soon); }
+.matchup__seed { opacity: 0.8; }
+.matchup__wins { text-align: right; font-weight: 900; }

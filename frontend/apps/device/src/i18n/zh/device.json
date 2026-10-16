@@ -23,6 +23,12 @@
     "display_device": "显示屏"
   },
   "display": {
+    "skillsOff": "未开展技能挑战赛",
+    "top10": "前 10 名",
+    "recentScores": "最新成绩",
+    "noEliminations": "淘汰赛尚未开始",
+    "finalsRankings": "决赛排名",
+    "bracket": { "final": "决赛", "semifinals": "半决赛", "quarterfinals": "四分之一决赛", "round": "第 {{number}} 轮" },
     "alliance": { "red": "红方联盟", "blue": "蓝方联盟", "all": "联盟" },
     "breakdown": "得分明细",
     "noMoreMatches": "这里没有更多比赛",

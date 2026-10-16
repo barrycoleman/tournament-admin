@@ -23,6 +23,12 @@
     "display_device": "Display"
   },
   "display": {
+    "skillsOff": "Skills challenges aren't running",
+    "top10": "Top 10",
+    "recentScores": "Recent scores",
+    "noEliminations": "No eliminations yet",
+    "finalsRankings": "Finals rankings",
+    "bracket": { "final": "Final", "semifinals": "Semifinals", "quarterfinals": "Quarterfinals", "round": "Round {{number}}" },
     "alliance": { "red": "Red alliance", "blue": "Blue alliance", "all": "Alliance" },
     "breakdown": "Score breakdown",
     "noMoreMatches": "No more matches here",

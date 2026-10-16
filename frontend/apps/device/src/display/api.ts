@@ -213,3 +213,16 @@ export function useDivisionFilter(divisionId: number | null): (row: { division_i
   const sole = useSoleDivisionId();
   return inDivision(divisionId, sole);
 }
+
+/** The division's newest finals bracket (a single-division event's may carry
+ * the sole division or none, so both are read); null when none exists yet,
+ * undefined while loading. */
+export function useNewestFinals(sessionId: number, divisionId: number | null): FinalsBracket | null | undefined {
+  const divisions = useDivisions();
+  const sole = useSoleDivisionId();
+  const own = useFinals(sessionId, divisionId ?? sole);
+  const unscoped = useFinals(sessionId, null);
+  if (!divisions.data || !own.data || !unscoped.data) return undefined;
+  const byId = new Map([...own.data, ...unscoped.data].map((bracket) => [bracket.id, bracket]));
+  return [...byId.values()].sort((a, b) => b.id - a.id)[0] ?? null;
+}
