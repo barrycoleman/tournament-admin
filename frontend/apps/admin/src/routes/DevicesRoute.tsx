@@ -77,6 +77,7 @@ export function DevicesRoute() {
                 <tr>
                   <th scope="col">{t("devices.columns.name")}</th>
                   <th scope="col">{t("devices.columns.role")}</th>
+                  <th scope="col">{t("devices.columns.group")}</th>
                   <th scope="col">{t("devices.columns.status")}</th>
                   <th scope="col">{t("devices.columns.lastSeen")}</th>
                   <th scope="col" className="table__actions">
@@ -89,6 +90,7 @@ export function DevicesRoute() {
                   <tr key={device.id}>
                     <td>{device.name}</td>
                     <td>{t(`devices.roles.${device.role}`, { defaultValue: device.role })}</td>
+                    <td>{device.role === "display_device" ? (device.display_group ?? t("devices.noGroup")) : ""}</td>
                     <td>
                       <span className={`badge ${STATUS_BADGE[device.status] ?? "badge-neutral"}`}>
                         {t(`devices.status.${device.status}`, { defaultValue: device.status })}

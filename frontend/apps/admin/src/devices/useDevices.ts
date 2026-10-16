@@ -7,6 +7,7 @@ export interface DeviceRead {
   id: number;
   name: string;
   role: string;
+  display_group: string | null;
   status: DeviceStatus;
   paired_at: string;
   paired_by: string;

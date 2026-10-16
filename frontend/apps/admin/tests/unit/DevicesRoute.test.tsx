@@ -24,6 +24,7 @@ function device(overrides: Partial<DeviceRead>): DeviceRead {
     id: 1,
     name: "Device",
     role: "scorer",
+    display_group: null,
     status: "active",
     paired_at: minutesAgo(60),
     paired_by: "admin",
@@ -90,6 +91,14 @@ describe("DevicesRoute", () => {
       device({ id: 3, name: "Tablet 2", role: "front_desk", status: "disabled", disabled_at: minutesAgo(1) }),
     ];
     stub();
+  });
+
+  it("shows each display's group", async () => {
+    devices = [device({ id: 3, name: "Big TV", role: "display_device", display_group: "Main Fields" })];
+    stub();
+    renderRoute();
+    const row = (await screen.findByText("Big TV")).closest("tr")!;
+    expect(row).toHaveTextContent("Main Fields");
   });
 
   it("lists devices with their role, status and when they were last seen", async () => {

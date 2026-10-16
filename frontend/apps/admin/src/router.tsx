@@ -12,6 +12,7 @@ import { EventSetupRoute } from "./routes/EventSetupRoute";
 import { SettingsRolesRoute } from "./routes/SettingsRolesRoute";
 import { BackupsRoute } from "./routes/BackupsRoute";
 import { DevicesRoute } from "./routes/DevicesRoute";
+import { DisplaysRoute } from "./routes/DisplaysRoute";
 import { MatchControlRoute } from "./routes/MatchControlRoute";
 import { DivisionsRoute } from "./routes/DivisionsRoute";
 import { TeamsRoute } from "./routes/TeamsRoute";
@@ -127,6 +128,7 @@ export const router = createBrowserRouter([
       { path: "backups", element: <BackupsRoute /> },
       { path: "devices", element: <DevicesRoute /> },
       { path: "match-control", element: <MatchControlRoute /> },
+      { path: "displays", element: <DisplaysRoute /> },
       { path: "divisions", element: <DivisionsRoute /> },
       { path: "teams", element: <TeamsRoute /> },
       { path: "sessions", element: <SessionsRoute /> },
