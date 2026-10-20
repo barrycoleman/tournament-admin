@@ -55,7 +55,7 @@ const MATCH_FORMAT = {
 };
 const TEAMS = [1, 2, 3, 4].map((id) => ({ id, number: `${id}0${id}`, name: `Team ${id}`, division_id: 1 }));
 const PARTICIPANTS = TEAMS.map((team) => ({ id: team.id, session_id: 1, team_id: team.id, checked_in: true }));
-const MAIN_SET: FieldSetRead = { id: 10, session_id: 1, name: "Main Fields", division_id: null };
+const MAIN_SET: FieldSetRead = { id: 10, session_id: 1, name: "Main Fields", division_id: null, purpose: "teamwork" };
 const FIELD_A: FieldRead = { id: 100, field_set_id: 10, name: "Field A" };
 const SCHEDULERS = [
   { name: "simple_random", version: "1.0.0", display_name: "Simple random" },

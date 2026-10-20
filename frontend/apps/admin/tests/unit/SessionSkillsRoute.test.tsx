@@ -39,7 +39,7 @@ const BOTH: SessionSkillsType[] = [
 ];
 
 function attempt(id: number, team_id: number, skills_type: string, number: number, score: number): SkillsAttemptRead {
-  return { id, team_id, skills_type, number, score, data: { score }, recorded_at: "", updated_at: "" };
+  return { id, team_id, skills_type, number, score, data: { score }, recorded_at: "", updated_at: "", field_id: null };
 }
 
 interface StubOptions {

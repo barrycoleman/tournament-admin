@@ -14,6 +14,7 @@ import { BackupsRoute } from "./routes/BackupsRoute";
 import { DevicesRoute } from "./routes/DevicesRoute";
 import { DisplaysRoute } from "./routes/DisplaysRoute";
 import { MatchControlRoute } from "./routes/MatchControlRoute";
+import { SkillsControlRoute } from "./routes/SkillsControlRoute";
 import { DivisionsRoute } from "./routes/DivisionsRoute";
 import { TeamsRoute } from "./routes/TeamsRoute";
 import { SessionsRoute } from "./routes/SessionsRoute";
@@ -129,6 +130,7 @@ export const router = createBrowserRouter([
       { path: "backups", element: <BackupsRoute /> },
       { path: "devices", element: <DevicesRoute /> },
       { path: "match-control", element: <MatchControlRoute /> },
+      { path: "skills-control", element: <RequiresGamePlugin><SkillsControlRoute /></RequiresGamePlugin> },
       { path: "displays", element: <DisplaysRoute /> },
       { path: "divisions", element: <DivisionsRoute /> },
       { path: "teams", element: <TeamsRoute /> },

@@ -74,6 +74,7 @@ describe("AppShell role-gated navigation", () => {
     renderShell();
 
     expect(screen.getByRole("link", { name: "Sessions" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Skills Control" })).toHaveAttribute("href", "/skills-control");
     expect(screen.getByRole("link", { name: "Season rankings" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Check-In" })).not.toBeInTheDocument();
   });

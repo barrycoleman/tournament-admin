@@ -48,8 +48,8 @@ describe("readiness", () => {
 
   it("counts only fields in field sets scoped to the division (null = unassigned)", () => {
     const fieldSets = [
-      { id: 1, session_id: 1, name: "Unassigned", division_id: null },
-      { id: 2, session_id: 1, name: "Blue", division_id: 2 },
+      { id: 1, session_id: 1, name: "Unassigned", division_id: null, purpose: "teamwork" as const },
+      { id: 2, session_id: 1, name: "Blue", division_id: 2, purpose: "teamwork" as const },
     ];
     const fields = [
       { id: 10, field_set_id: 1, name: "A" },

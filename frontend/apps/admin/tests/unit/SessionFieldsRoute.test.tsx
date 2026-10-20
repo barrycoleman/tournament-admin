@@ -30,7 +30,7 @@ const TWO_DIVISIONS: Division[] = [
   ...ONE_DIVISION,
   { id: 2, event_id: 1, name: "Blue", target_team_count: null },
 ];
-const MAIN_SET: FieldSetRead = { id: 10, session_id: 1, name: "Main Fields", division_id: null };
+const MAIN_SET: FieldSetRead = { id: 10, session_id: 1, name: "Main Fields", division_id: null, purpose: "teamwork" };
 const FIELD_A: FieldRead = { id: 100, field_set_id: 10, name: "Field A" };
 
 const NOT_HANDLED = Symbol("not handled");

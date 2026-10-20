@@ -45,11 +45,15 @@ export interface SessionRead {
   live_scores_finals?: boolean;
 }
 
+export type FieldSetPurpose = "teamwork" | "skills";
+
 export interface FieldSetRead {
   id: number;
   session_id: number;
   name: string;
   division_id: number | null;
+  /** Teamwork sets run matches; skills sets run skills runs. */
+  purpose: FieldSetPurpose;
 }
 
 export interface FieldRead {
@@ -193,6 +197,8 @@ export interface QualificationPreview {
 export interface SkillsType {
   key: string;
   label: string;
+  /** How long one run of this type lasts; null or missing when the game gives no length. */
+  run_seconds?: number | null;
 }
 
 export interface SkillsSettingsRead {
@@ -224,6 +230,8 @@ export interface SkillsAttemptRead {
   data: ScoresheetValues;
   recorded_at: string;
   updated_at: string;
+  /** The skills field it was scored on; null when entered on the Skills page. */
+  field_id: number | null;
 }
 
 export interface SkillsRankingRead {

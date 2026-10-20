@@ -1255,3 +1255,9 @@
 .match-scoring__items { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-1) var(--space-3); margin: var(--space-3) 0 0; }
 .match-scoring__items > div { display: contents; }
 .match-scoring__items dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.skills-control { display: grid; gap: var(--space-4); }
+.skills-set__header { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-4); }
+.skills-set__timer { min-width: 240px; }
+.skills-set__row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1); }
+.skills-set__row-actions .form-actions { margin: 0; }

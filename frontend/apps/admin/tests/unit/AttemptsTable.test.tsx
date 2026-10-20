@@ -28,7 +28,7 @@ const SCORE: ScoresheetField = {
 };
 
 function attempt(id: number, team_id: number, skills_type: string, number: number, score: number): SkillsAttemptRead {
-  return { id, team_id, skills_type, number, score, data: { score }, recorded_at: "", updated_at: "" };
+  return { id, team_id, skills_type, number, score, data: { score }, recorded_at: "", updated_at: "", field_id: null };
 }
 
 const ATTEMPTS = [attempt(1, 1, "autonomous", 1, 20), attempt(2, 1, "driver", 1, 34), attempt(3, 2, "driver", 1, 30)];

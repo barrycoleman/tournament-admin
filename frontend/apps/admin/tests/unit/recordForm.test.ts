@@ -3,7 +3,7 @@ import { attemptStatus, matchTeams, teamMatches } from "../../src/skills/recordF
 import type { SkillsAttemptRead, TeamSummary } from "../../src/types";
 
 function attempt(id: number, team_id: number, skills_type: string): SkillsAttemptRead {
-  return { id, team_id, skills_type, number: 1, score: 10, data: {}, recorded_at: "", updated_at: "" };
+  return { id, team_id, skills_type, number: 1, score: 10, data: {}, recorded_at: "", updated_at: "", field_id: null };
 }
 
 const TEAMS: TeamSummary[] = [

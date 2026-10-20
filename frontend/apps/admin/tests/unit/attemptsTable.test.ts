@@ -13,7 +13,7 @@ const TEAMS: TeamSummary[] = [
 ];
 
 function attempt(id: number, team_id: number, skills_type: string, number: number, score: number): SkillsAttemptRead {
-  return { id, team_id, skills_type, number, score, data: {}, recorded_at: "", updated_at: "" };
+  return { id, team_id, skills_type, number, score, data: {}, recorded_at: "", updated_at: "", field_id: null };
 }
 
 const ATTEMPTS = [
