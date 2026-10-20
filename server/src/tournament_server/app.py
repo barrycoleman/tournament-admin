@@ -76,6 +76,7 @@ async def _recover_in_flight_matches(app: FastAPI) -> None:
     from tournament_server.models.event import Event
     from tournament_server.models.match import Match
     from tournament_server.realtime import broadcast_for_session
+    from tournament_server.services import live_scores
 
     db = app.state.session_factory()
     try:
@@ -125,6 +126,7 @@ async def _recover_in_flight_matches(app: FastAPI) -> None:
                         ),
                     },
                 )
+                live_scores.on_match_phase_changed(app, db, match)
                 if next_auto_phase(match.phase) is not None:
                     schedule_auto_advance(app, match.id, _auto_advance_match(app, match.id))
             elif next_auto_phase(match.phase) is not None:

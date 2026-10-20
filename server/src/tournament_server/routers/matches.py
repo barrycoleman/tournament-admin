@@ -33,7 +33,7 @@ from tournament_server.schemas.match import (
     MatchRead,
     MatchResetRequest,
 )
-from tournament_server.services import displays, qualification
+from tournament_server.services import displays, live_scores, qualification
 from tournament_server.services.match_labeling import match_label
 from tournament_server.services.skills_runs import SKILLS_SET_DETAIL
 
@@ -314,6 +314,7 @@ async def _auto_advance_match(
                 match.phase_deadline.isoformat() if match.phase_deadline else None
             )},
         )
+        live_scores.on_match_phase_changed(request_app, db, match)
 
         if new_phase in ("autonomous", "driver"):
             schedule_auto_advance(
@@ -362,6 +363,7 @@ def start_match(
         request.app, db, match.session_id, "match_phase_changed",
         {"match_id": match.id, "phase": match.phase, "phase_deadline": match.phase_deadline.isoformat()},
     )
+    live_scores.on_match_phase_changed(request.app, db, match)
     schedule_auto_advance(request.app, match.id, _auto_advance_match(request.app, match.id))
     for group_id in switched:
         broadcast_active_session(
@@ -400,6 +402,7 @@ def start_driver(
         request.app, db, match.session_id, "match_phase_changed",
         {"match_id": match.id, "phase": match.phase, "phase_deadline": match.phase_deadline.isoformat()},
     )
+    live_scores.on_match_phase_changed(request.app, db, match)
     schedule_auto_advance(request.app, match.id, _auto_advance_match(request.app, match.id))
 
     return _to_match_read(match, db)
@@ -493,6 +496,7 @@ def end_match(
         request.app, db, match.session_id, "match_phase_changed",
         {"match_id": match.id, "phase": "ended", "phase_deadline": None},
     )
+    live_scores.on_match_phase_changed(request.app, db, match)
     return _to_match_read(match, db)
 
 
@@ -534,4 +538,5 @@ def reset_match(
         request.app, db, match.session_id, "match_reset",
         {"match_id": match.id, "phase": match.phase},
     )
+    live_scores.on_match_phase_changed(request.app, db, match)
     return _to_match_read(match, db)

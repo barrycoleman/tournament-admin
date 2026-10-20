@@ -8,8 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server import realtime
-from tournament_server.auth import Caller, get_caller, require_admin
-from tournament_server.deps import get_db, get_session_id, get_the_event
+from tournament_server.auth import Caller, get_caller, require_admin, require_any_role
+from tournament_server.deps import get_db, get_optional_game_plugin, get_session_id, get_the_event
 from tournament_server.models.device import Device
 from tournament_server.models.display import DisplayAssignment, DisplayGroup
 from tournament_server.models.division import Division
@@ -30,7 +30,7 @@ from tournament_server.schemas.display import (
     PitGroupCreate,
     UnplacedDisplay,
 )
-from tournament_server.services import displays
+from tournament_server.services import displays, live_scores
 from tournament_server.services.display_screens import ScreenSettingsError, clean_rotation, clean_screen
 
 router = APIRouter(tags=["displays"])
@@ -314,6 +314,19 @@ def read_me(caller: Caller = Depends(get_caller), db: Session = Depends(get_db))
             )
             group = DisplayMeGroup(**fields, field_set=live)
     return DisplayMe(device=DisplayDevice(id=device.id, name=device.name), session_id=session_id, group=group)
+
+
+@router.get("/api/displays/live-scores")
+def read_live_scores(
+    request: Request,
+    field_set_id: int | None = None,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
+) -> dict:
+    """Live totals a display may show now (live scoring spec §7), for start-up and reconnect."""
+    event = get_the_event(db)
+    plugin = get_optional_game_plugin(request, event) if event is not None else None
+    return live_scores.live_snapshot(db, plugin, field_set_id)
 
 
 @router.post("/api/sessions/{session_id}/copy-displays", response_model=CopyDisplaysResult, status_code=201)

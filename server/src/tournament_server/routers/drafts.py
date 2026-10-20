@@ -59,11 +59,15 @@ def patch_draft(
     alliance = _alliance_or_404(db, match, alliance_id)
     plugin = get_game_plugin_for_event(request, db)
     try:
-        draft = drafts.apply_patch(db, plugin, match, alliance, payload, device_name or ADMIN_DEVICE_NAME)
+        # Read the answer under the same lock as the write, so it is this
+        # patch's version and not a later concurrent patch's.
+        with drafts.DRAFT_WRITE_LOCK:
+            draft = drafts.apply_patch(db, plugin, match, alliance, payload, device_name or ADMIN_DEVICE_NAME)
+            result = drafts.alliance_draft(db, plugin, match, alliance.id)
     except ScoreRefused as refused:
         raise HTTPException(status_code=refused.status_code, detail=refused.detail) from refused
     drafts.broadcast_draft_changed(
         request.app, db, plugin, match, drafts.alliances_showing(db, plugin, match, draft.alliance_id)
     )
     live_scores.on_draft_changed(request.app, db, match)
-    return drafts.alliance_draft(db, plugin, match, alliance.id)
+    return result

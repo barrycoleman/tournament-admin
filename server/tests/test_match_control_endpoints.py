@@ -95,7 +95,21 @@ def _active_session_ws(client: TestClient):
     """
     token = client.headers["Authorization"].removeprefix("Bearer ")
     with client.websocket_connect(f"/ws/active-session?token={token}") as ws:
-        yield ws
+        yield _WithoutLiveScores(ws)
+
+
+class _WithoutLiveScores:
+    """These tests are about the match-control events; the live totals sent
+    alongside them (covered in test_live_scores.py) are skipped."""
+
+    def __init__(self, ws) -> None:
+        self._ws = ws
+
+    def receive_json(self):
+        while True:
+            message = self._ws.receive_json()
+            if message["event"] != "live_score":
+                return message
 
 
 def _wait_for_phase(client: TestClient, match_id: int, phase: str, timeout: float = 6.0):
