@@ -128,6 +128,23 @@ describe("skills field TV", () => {
   });
 });
 
+describe("skills field TV submit ordering", () => {
+  it("shows the final score when the attempts refetch lands before the run disappears", async () => {
+    set = { timer: timer(), fields: [fieldRow(run())] };
+    const { emit } = showFieldTv();
+    expect(await screen.findByText("101A")).toBeInTheDocument();
+
+    attempts = [{ id: 9, team_id: 1, skills_type: "autonomous", score: 23, recorded_at: iso(0), field_id: 31 }];
+    emit("skills_changed", { session_id: 1 });
+    await act(() => vi.advanceTimersByTimeAsync(200));
+    expect(screen.getByText("101A")).toBeInTheDocument();
+
+    set = { timer: timer(), fields: [fieldRow(null)] };
+    emit("skills_run_changed", { field_set_id: 20, field_id: 31 });
+    expect(await screen.findByTestId("skills-final")).toHaveTextContent("23");
+  });
+});
+
 describe("skills set TV", () => {
   it("shows the set's name, type and countdown, and never a score", async () => {
     set = { timer: timer({ phase: "running", deadline: iso(30_000) }), fields: [fieldRow(run({ phase: "running", deadline: iso(30_000) }))] };

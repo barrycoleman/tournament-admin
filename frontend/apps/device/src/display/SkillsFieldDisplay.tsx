@@ -37,21 +37,28 @@ export function SkillsFieldDisplay({
   const fieldName = fields.data?.find((field) => field.id === fieldId)?.name ?? "";
   const run = set.data?.fields.find((field) => field.field_id === fieldId)?.run ?? null;
   const latest = latestFieldAttempt(attempts.data ?? [], fieldId);
-  // The newest attempt on this field while the last run was showing. An attempt
-  // newer than it, once the run is gone, is that run's submitted score; none
-  // (a discard, or a TV switched on between runs) means waiting.
-  const seenWhileRunning = useRef<number | undefined>(undefined);
+  // The newest attempt on this field when the current run first showed (once
+  // attempts were loaded), frozen while that run shows: the submit's two
+  // refetches (run, attempts) may land in either order. An attempt newer than
+  // it, once the run is gone, is that run's submitted score; none (a discard,
+  // or a TV switched on between runs) means waiting.
+  const baseline = useRef<{ runId: number; latestId: number } | undefined>(undefined);
+  const runId = run?.id ?? null;
+  const attemptsLoaded = attempts.data !== undefined;
+  const latestId = latest?.id ?? 0;
   useEffect(() => {
-    if (run) seenWhileRunning.current = latest?.id ?? 0;
-  }, [run, latest]);
+    if (runId !== null && attemptsLoaded && baseline.current?.runId !== runId) {
+      baseline.current = { runId, latestId };
+    }
+  }, [runId, attemptsLoaded, latestId]);
 
   if (!set.data || !settings.data) return <WaitingForData title={fieldName} />;
   const types = settings.data.types;
   const typeLabel = (key: string) => types.find((type) => type.key === key)?.label ?? key;
 
   if (!run) {
-    const baseline = seenWhileRunning.current;
-    const submitted = baseline !== undefined && latest !== null && latest.id > baseline ? latest : null;
+    const base = baseline.current?.latestId;
+    const submitted = base !== undefined && latest !== null && latest.id > base ? latest : null;
     if (!submitted) return <ScreenNotice title={fieldName} text={t("display.skills.waiting")} />;
     const team = teams?.get(submitted.team_id);
     return (

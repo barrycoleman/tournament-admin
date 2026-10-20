@@ -63,7 +63,7 @@ describe("live totals on In Match", () => {
     expect(screen.queryByTestId("live-red")).not.toBeInTheDocument();
   });
 
-  it("ignores a stray live_score that arrives after the match ended or before it started", async () => {
+  it("ignores a stray live_score that arrives after the match ended", async () => {
     matches = [match({ id: 5, label: "Q5", match_number: 5, phase: "ended" })];
     const { emit } = show();
     expect(await screen.findByText("Match over")).toBeInTheDocument();
@@ -73,7 +73,7 @@ describe("live totals on In Match", () => {
     expect(screen.queryByTestId("live-blue")).not.toBeInTheDocument();
   });
 
-  it("hides totals for a match that has not started", async () => {
+  it("shows no totals on the next-match view of a match that has not started", async () => {
     matches = [match({ id: 5, label: "Q5", match_number: 5, phase: "not_started" })];
     live = { matches: [TOTALS], skills: [] };
     show(fieldGroup(), { "/api/displays/live-scores?field_set_id=10": () => live });
