@@ -2,9 +2,20 @@ from __future__ import annotations
 
 import datetime as dt
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from tournament_server.services.devices import MAX_IDLE_MINUTES, MIN_IDLE_MINUTES
+
+
+class BindingRead(BaseModel):
+    field_id: int
+    field_name: str
+
+
+class BindingWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field_id: int
 
 
 class DeviceRead(BaseModel):
@@ -17,6 +28,8 @@ class DeviceRead(BaseModel):
     last_seen_at: dt.datetime
     disabled_at: dt.datetime | None
     display_group: str | None = None
+    # A scorer's or referee's field in the active session.
+    binding: BindingRead | None = None
 
 
 class DeviceSelf(BaseModel):

@@ -18,7 +18,7 @@ from tournament_server.models.scoring_draft import SkillsRun
 from tournament_server.models.session import TournamentSession
 from tournament_server.schemas.field_set import FieldSetCreate, FieldSetRead, FieldSetUpdate, QueuedMatchWrite, TimeoutWrite
 from tournament_server.routers.displays import notify_display_changed
-from tournament_server.services import displays, qualification, skills_runs
+from tournament_server.services import displays, qualification, scorer_bindings, skills_runs
 
 router = APIRouter(prefix="/api/field-sets", tags=["field-sets"])
 
@@ -158,6 +158,7 @@ def delete_field_set(
                 detail="Field set has scheduled matches; clear the schedule first",
             )
     displays.delete_field_set_groups(db, field_set_id)
+    cleared = scorer_bindings.clear_for_fields(db, field_ids)
     for field in fields:
         db.delete(field)
     db.flush()
@@ -165,6 +166,7 @@ def delete_field_set(
     db.delete(field_set)
     db.commit()
     notify_display_changed(request, session_id, None)
+    scorer_bindings.notify(request.app, cleared)
     return Response(status_code=204)
 
 

@@ -19,7 +19,7 @@ from tournament_server.schemas.session import (
     SessionRead,
     SessionUpdate,
 )
-from tournament_server.services import displays, live_scores, skills_runs
+from tournament_server.services import displays, live_scores, scorer_bindings, skills_runs
 from tournament_server.services.deletion import (
     delete_session,
     scored_session_ids,
@@ -133,8 +133,10 @@ def remove_session(
             detail="This session has scored matches, so it can't be deleted.",
         )
     request.app.state.backups.snapshot_quietly("before-delete-session")
+    cleared = scorer_bindings.clear_for_session(db, session_id)
     was_active = delete_session(db, session_obj)
     db.commit()
+    scorer_bindings.notify(request.app, cleared)
     if was_active:
         broadcast_active_session(request.app, "active_session_changed", {"active_session_id": None})
     return Response(status_code=204)

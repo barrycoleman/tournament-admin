@@ -26,10 +26,11 @@ from tournament_server.services.devices import (
     PAIRABLE_ROLES,
     clean_name,
     device_status,
+    SCORING_ROLES,
     idle_minutes_for,
     name_key,
 )
-from tournament_server.services import displays
+from tournament_server.services import displays, scorer_bindings
 from tournament_server.services.pairing import PairingStore
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
@@ -48,6 +49,7 @@ def to_device_read(device: Device, db: Session) -> DeviceRead:
         last_seen_at=device.last_seen_at,
         disabled_at=device.disabled_at,
         display_group=displays.display_group_name(db, device.id) if device.role == "display_device" else None,
+        binding=scorer_bindings.binding_read(db, device.id) if device.role in SCORING_ROLES else None,
     )
 
 
@@ -205,6 +207,8 @@ def update_device(
         device.role = role
         if role_changed and before["role"] == "display_device":
             displays.delete_device_assignments(db, device.id)
+        if role_changed and role not in SCORING_ROLES:
+            scorer_bindings.clear_for_device(db, device.id)
     if "name" in changes:
         name = checked_name(changes["name"])
         clash = db.execute(
@@ -275,6 +279,7 @@ def delete_device(
     device = _device_or_404(db, device_id)
     audit_device(db, device.id, "delete", device_snapshot(device), None)
     displays.delete_device_assignments(db, device.id)
+    scorer_bindings.clear_for_device(db, device.id)
     db.delete(device)
     db.commit()
     realtime.close_device_sockets(request.app, device_id)

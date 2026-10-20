@@ -12,7 +12,7 @@ from tournament_server.models.match import Match
 from tournament_server.models.session import TournamentSession
 from tournament_server.schemas.field import FieldCreate, FieldRead, FieldUpdate
 from tournament_server.routers.displays import notify_display_changed
-from tournament_server.services import displays
+from tournament_server.services import displays, scorer_bindings
 
 router = APIRouter(prefix="/api/fields", tags=["fields"])
 
@@ -122,7 +122,9 @@ def delete_field(
         )
     session_id = db.get(FieldSet, field.field_set_id).session_id
     displays.delete_field_groups(db, field_id)
+    cleared = scorer_bindings.clear_for_fields(db, [field_id])
     db.delete(field)
     db.commit()
     notify_display_changed(request, session_id, None)
+    scorer_bindings.notify(request.app, cleared)
     return Response(status_code=204)
