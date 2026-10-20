@@ -54,8 +54,8 @@ def test_broadcast_active_session_delivers_to_all_subscribers(running_loop):
     realtime.init_realtime_state(app)
     realtime.set_event_loop(app, running_loop)
     ws1, ws2 = _FakeWebSocket(), _FakeWebSocket()
-    realtime.register_active_session(app, ws1)
-    realtime.register_active_session(app, ws2)
+    realtime.register_active_session(app, ws1, "admin")
+    realtime.register_active_session(app, ws2, "admin")
 
     realtime.broadcast_active_session(app, "match_phase_changed", {"match_id": 1})
 
@@ -93,7 +93,7 @@ def test_unregister_removes_a_subscriber(running_loop):
     realtime.init_realtime_state(app)
     realtime.set_event_loop(app, running_loop)
     ws = _FakeWebSocket()
-    realtime.register_active_session(app, ws)
+    realtime.register_active_session(app, ws, "admin")
     realtime.unregister_active_session(app, ws)
 
     realtime.broadcast_active_session(app, "match_phase_changed", {"match_id": 1})
@@ -120,8 +120,8 @@ def test_broadcast_survives_a_dead_subscriber_and_removes_it(running_loop):
     dead = _FakeWebSocket()
     dead.closed = True
     alive = _FakeWebSocket()
-    realtime.register_active_session(app, dead)
-    realtime.register_active_session(app, alive)
+    realtime.register_active_session(app, dead, "admin")
+    realtime.register_active_session(app, alive, "admin")
 
     realtime.broadcast_active_session(app, "match_phase_changed", {"match_id": 1})
 
@@ -166,7 +166,7 @@ def test_broadcast_for_session_also_broadcasts_active_session_when_matching(
     session_subscriber = _FakeWebSocket()
     active_subscriber = _FakeWebSocket()
     realtime.register_session(app, 1, session_subscriber)
-    realtime.register_active_session(app, active_subscriber)
+    realtime.register_active_session(app, active_subscriber, "admin")
 
     realtime.broadcast_for_session(app, db, 1, "score_saved", {"match_id": 5})
 
@@ -190,7 +190,7 @@ def test_broadcast_for_session_skips_active_session_when_not_the_active_one(
     session_subscriber = _FakeWebSocket()
     active_subscriber = _FakeWebSocket()
     realtime.register_session(app, 2, session_subscriber)
-    realtime.register_active_session(app, active_subscriber)
+    realtime.register_active_session(app, active_subscriber, "admin")
 
     realtime.broadcast_for_session(app, db, 2, "score_saved", {"match_id": 5})
 
@@ -210,7 +210,7 @@ def test_broadcast_for_session_skips_active_session_when_no_event_row(
     session_subscriber = _FakeWebSocket()
     active_subscriber = _FakeWebSocket()
     realtime.register_session(app, 1, session_subscriber)
-    realtime.register_active_session(app, active_subscriber)
+    realtime.register_active_session(app, active_subscriber, "admin")
 
     realtime.broadcast_for_session(app, db, 1, "score_saved", {"match_id": 5})
 

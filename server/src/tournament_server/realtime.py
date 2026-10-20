@@ -21,6 +21,9 @@ DEVICE_CHANGED_CLOSE_CODE = 4403
 class ConnectionRegistry:
     def __init__(self) -> None:
         self.active_session: set[WebSocket] = set()
+        # The caller's role for each active-session socket, so a broadcast
+        # can go to some roles only (live scoring design §8).
+        self.active_roles: dict[WebSocket, str] = {}
         self.by_session: dict[int, set[WebSocket]] = {}
         self.by_device: dict[int, set[WebSocket]] = {}
         self.event_loop: asyncio.AbstractEventLoop | None = None
@@ -34,12 +37,14 @@ def set_event_loop(app: "FastAPI", loop: asyncio.AbstractEventLoop) -> None:
     app.state.realtime.event_loop = loop
 
 
-def register_active_session(app: "FastAPI", websocket: WebSocket) -> None:
+def register_active_session(app: "FastAPI", websocket: WebSocket, role: str) -> None:
     app.state.realtime.active_session.add(websocket)
+    app.state.realtime.active_roles[websocket] = role
 
 
 def unregister_active_session(app: "FastAPI", websocket: WebSocket) -> None:
     app.state.realtime.active_session.discard(websocket)
+    app.state.realtime.active_roles.pop(websocket, None)
 
 
 def register_session(app: "FastAPI", session_id: int, websocket: WebSocket) -> None:
@@ -81,10 +86,14 @@ def close_device_sockets(app: "FastAPI", device_id: int) -> None:
     asyncio.run_coroutine_threadsafe(_close(), registry.event_loop)
 
 
-async def _send_to_all(subscribers: set[WebSocket], event: str, data: dict) -> None:
+async def _send_to_all(
+    subscribers: set[WebSocket], event: str, data: dict, targets: list[WebSocket] | None = None
+) -> None:
+    """Sends to `targets` (every subscriber when None) and drops any socket
+    that fails from `subscribers`."""
     message = {"event": event, "data": data}
     dead: list[WebSocket] = []
-    for ws in list(subscribers):
+    for ws in list(subscribers) if targets is None else targets:
         try:
             await ws.send_json(message)
         except Exception:
@@ -93,13 +102,27 @@ async def _send_to_all(subscribers: set[WebSocket], event: str, data: dict) -> N
         subscribers.discard(ws)
 
 
-def broadcast_active_session(app: "FastAPI", event: str, data: dict) -> None:
+def broadcast_active_session(
+    app: "FastAPI", event: str, data: dict, roles: tuple[str, ...] | None = None
+) -> None:
+    """Sends on the active-session channel: to every socket, or with `roles`
+    only to sockets whose caller has one of them. "admin" is never implied;
+    list it when admins should get the event."""
     registry = app.state.realtime
     if registry.event_loop is None or not registry.active_session:
         return
-    asyncio.run_coroutine_threadsafe(
-        _send_to_all(registry.active_session, event, data), registry.event_loop
-    )
+
+    # The registry is mutated on the event-loop thread, so the targets are picked there too.
+    async def _send() -> None:
+        targets = [
+            ws for ws in list(registry.active_session)
+            if roles is None or registry.active_roles.get(ws) in roles
+        ]
+        await _send_to_all(registry.active_session, event, data, targets)
+        for ws in [ws for ws in registry.active_roles if ws not in registry.active_session]:
+            del registry.active_roles[ws]
+
+    asyncio.run_coroutine_threadsafe(_send(), registry.event_loop)
 
 
 def broadcast_session(app: "FastAPI", session_id: int, event: str, data: dict) -> None:
@@ -172,6 +195,23 @@ def send_to_device(app: "FastAPI", device_id: int, event: str, data: dict) -> No
 
     async def _send() -> None:
         sockets = registry.by_device.get(device_id)
+        if sockets:
+            await _send_to_all(sockets, event, data)
+
+    asyncio.run_coroutine_threadsafe(_send(), registry.event_loop)
+
+
+def send_to_devices_and_admins(app: "FastAPI", device_ids: list[int], event: str, data: dict) -> None:
+    """Sends to every admin on the active-session channel and to the listed
+    devices' sockets, each socket once (scorer_binding_changed)."""
+    registry = app.state.realtime
+    if registry.event_loop is None:
+        return
+
+    async def _send() -> None:
+        sockets = {ws for ws in registry.active_session if registry.active_roles.get(ws) == "admin"}
+        for device_id in device_ids:
+            sockets |= registry.by_device.get(device_id, set())
         if sockets:
             await _send_to_all(sockets, event, data)
 

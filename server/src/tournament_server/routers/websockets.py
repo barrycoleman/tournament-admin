@@ -54,7 +54,7 @@ async def active_session_channel(websocket: WebSocket) -> None:
     if caller is None:
         return
     await websocket.accept()
-    realtime.register_active_session(websocket.app, websocket)
+    realtime.register_active_session(websocket.app, websocket, caller.role)
     if caller.device_id is not None:
         realtime.register_device_socket(websocket.app, caller.device_id, websocket)
     try:
