@@ -6,9 +6,10 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Iterable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.skills import SkillsAttempt, SkillsSettings
 from tournament_server.models.team import Team
@@ -68,6 +69,35 @@ def event_attempts(db: Session, event_id: int) -> dict[str, int]:
 
 def session_allowed(db: Session, session_obj: TournamentSession, type_keys: list[str]) -> dict[str, int]:
     return effective_allowed(type_keys, event_attempts(db, session_obj.event_id), session_obj.skills_attempts)
+
+
+def attempt_refusal(
+    db: Session, session_obj: TournamentSession, team: Team, skills_type: str, types: dict[str, dict]
+) -> str | None:
+    """Why `team` can't take another `skills_type` attempt in this session (a
+    409 detail), or None. Only submitted attempts count; `types` maps each
+    plugin type key to its entry."""
+    checked_in = db.execute(
+        select(SessionParticipation.id).where(
+            SessionParticipation.session_id == session_obj.id,
+            SessionParticipation.team_id == team.id,
+            SessionParticipation.checked_in.is_(True),
+        )
+    ).first()
+    if checked_in is None:
+        return f"Team {team.number} is not checked in for this session."
+    allowed = session_allowed(db, session_obj, list(types))[skills_type]
+    used = db.execute(
+        select(func.count(SkillsAttempt.id)).where(
+            SkillsAttempt.session_id == session_obj.id,
+            SkillsAttempt.team_id == team.id,
+            SkillsAttempt.skills_type == skills_type,
+        )
+    ).scalar_one()
+    if used >= allowed:
+        return f"Team {team.number} has used all {allowed} {types[skills_type]['label']} attempts."
+    return None
+
 
 
 def attempt_numbers(attempts: Iterable[SkillsAttempt]) -> dict[int, int]:

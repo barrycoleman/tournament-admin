@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tournament_server.auth import require_admin, require_any_role
@@ -14,7 +14,6 @@ from tournament_server.db import utc_now
 from tournament_server.deps import get_db, get_event_or_404, get_optional_game_plugin
 from tournament_server.device_auth import require_paired_scoring_device
 from tournament_server.models.event import Event
-from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.skills import SkillsAttempt, SkillsSettings
 from tournament_server.models.team import Team
@@ -230,28 +229,9 @@ def create_skills_attempt(
     team = db.get(Team, payload.team_id)
     if team is None or team.event_id != event.id:
         raise HTTPException(status_code=422, detail="Unknown team")
-    checked_in = db.execute(
-        select(SessionParticipation.id).where(
-            SessionParticipation.session_id == session_id,
-            SessionParticipation.team_id == team.id,
-            SessionParticipation.checked_in.is_(True),
-        )
-    ).first()
-    if checked_in is None:
-        raise HTTPException(status_code=409, detail=f"Team {team.number} is not checked in for this session.")
-    allowed = skills.session_allowed(db, session_obj, list(types))[payload.skills_type]
-    used = db.execute(
-        select(func.count(SkillsAttempt.id)).where(
-            SkillsAttempt.session_id == session_id,
-            SkillsAttempt.team_id == team.id,
-            SkillsAttempt.skills_type == payload.skills_type,
-        )
-    ).scalar_one()
-    if used >= allowed:
-        label = types[payload.skills_type]["label"]
-        raise HTTPException(
-            status_code=409, detail=f"Team {team.number} has used all {allowed} {label} attempts."
-        )
+    refusal = skills.attempt_refusal(db, session_obj, team, payload.skills_type, types)
+    if refusal is not None:
+        raise HTTPException(status_code=409, detail=refusal)
     violations = scoresheet_violations(plugin.module.skills_scoresheet_schema(payload.skills_type), payload.data)
     if violations:
         return _violations_response(violations)
