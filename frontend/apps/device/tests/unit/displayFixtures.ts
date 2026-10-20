@@ -3,7 +3,7 @@ import type { LiveMatch } from "@tournament-admin/shared";
 export const EVENT = { id: 1, name: "Spring Invitational", active_session_id: 1, game_plugin_name: "game" };
 export const SESSIONS = [{ id: 1, label: "Saturday", timezone: "UTC" }];
 export const DIVISIONS = [{ id: 4, name: "Division 1" }];
-export const FIELD_SETS = [{ id: 10, session_id: 1, name: "Main Fields", division_id: null }];
+export const FIELD_SETS = [{ id: 10, session_id: 1, name: "Main Fields", division_id: null, purpose: "teamwork" }];
 export const FIELDS = [
   { id: 1, field_set_id: 10, name: "Field 1" },
   { id: 2, field_set_id: 10, name: "Field 2" },

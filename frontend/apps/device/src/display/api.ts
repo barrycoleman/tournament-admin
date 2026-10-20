@@ -1,6 +1,13 @@
 import { createContext, useCallback, useContext } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { inDivision, type AllianceScore, type DisplayGroupState, type FieldSetLive, type LiveMatch } from "@tournament-admin/shared";
+import {
+  inDivision,
+  type AllianceScore,
+  type DisplayGroupState,
+  type FieldSetLive,
+  type LiveMatch,
+  type SkillsSet,
+} from "@tournament-admin/shared";
 import { getJson } from "../deviceApi";
 
 export interface DisplayMeGroup extends DisplayGroupState {
@@ -48,6 +55,7 @@ export interface FieldSet {
   session_id: number;
   name: string;
   division_id: number | null;
+  purpose: "teamwork" | "skills";
 }
 export interface SessionInfo {
   id: number;
@@ -66,7 +74,7 @@ export interface Ranking {
 export interface SkillsSettings {
   enabled: boolean;
   attempts: Record<string, number>;
-  types: { key: string; label: string }[];
+  types: { key: string; label: string; run_seconds?: number | null }[];
 }
 export interface SkillsRankingRow {
   rank: number;
@@ -80,6 +88,7 @@ export interface SkillsAttempt {
   skills_type: string;
   score: number;
   recorded_at: string;
+  field_id: number | null;
 }
 export interface FinalsBracket {
   id: number;
@@ -131,6 +140,8 @@ export const paths = {
       : `/api/rankings?session_id=${sessionId}&division_id=${divisionId}`,
   skillsRankings: (sessionId: number, tab: string) =>
     `/api/skills/rankings?tab=${encodeURIComponent(tab)}&session_id=${sessionId}`,
+  skillsSet: (fieldSetId: number) => `/api/field-sets/${fieldSetId}/skills`,
+  liveScores: (fieldSetId: number) => `/api/displays/live-scores?field_set_id=${fieldSetId}`,
   skillsAttempts: (sessionId: number) => `/api/sessions/${sessionId}/skills/attempts`,
   finals: (sessionId: number, divisionId: number | null) =>
     divisionId === null
@@ -164,6 +175,8 @@ export const useRankings = (sessionId: number, divisionId: number | null) =>
   useJson<Ranking[]>(["rankings", sessionId, divisionId], paths.rankings(sessionId, divisionId));
 export const useSkillsRankings = (sessionId: number, tab: string) =>
   useJson<SkillsRankingRow[]>(["skillsRankings", sessionId, tab], paths.skillsRankings(sessionId, tab));
+export const useSkillsSet = (fieldSetId: number) =>
+  useJson<SkillsSet>(["skillsSet", fieldSetId], paths.skillsSet(fieldSetId));
 export const useSkillsAttempts = (sessionId: number) =>
   useJson<SkillsAttempt[]>(["skillsAttempts", sessionId], paths.skillsAttempts(sessionId));
 export const useFinals = (sessionId: number, divisionId: number | null) =>

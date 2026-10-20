@@ -139,3 +139,23 @@
   position: absolute; left: 1.5vw; bottom: 1.5vw; z-index: 30; cursor: pointer;
   padding: 0.5vw 1vw; border: 0; border-radius: 0.5vw; background: var(--kiosk-surface); color: var(--kiosk-ink); font: inherit; font-size: 1.2vw;
 }
+
+/* Live totals: one coloured block per alliance under the clock, tagged as not yet official. */
+.in-match__live { display: flex; justify-content: center; gap: 4vw; margin-top: 2vw; }
+.live-total { display: flex; align-items: baseline; gap: 1vw; margin: 0; padding: 0.6vw 2.5vw; border-radius: 1vw; font-variant-numeric: tabular-nums; }
+.live-total--red { background: var(--kiosk-red); }
+.live-total--blue,
+.live-total--all { background: var(--kiosk-blue); }
+.live-total__score { font-size: 7vw; font-weight: 900; line-height: 1; }
+.live-total__tag { padding: 0.2vw 0.8vw; border-radius: 0.5vw; background: var(--kiosk-band); color: var(--kiosk-ink-on-band); font-size: 1.4vw; font-weight: 800; text-transform: uppercase; }
+
+/* Skills TVs. */
+.skills-field .screen__body,
+.skills-set-tv .screen__body { align-items: center; justify-content: center; gap: 1.5vw; }
+.skills-field__team { margin: 0; text-align: center; }
+.skills-field__number { display: block; font-size: 9vw; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.skills-field__name { display: block; font-size: 3vw; color: var(--kiosk-muted); }
+.skills-field__label { margin: 0; font-size: 3vw; color: var(--kiosk-muted); }
+.skills-field__total { margin: 0; font-size: 10vw; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.skills-breakdown { margin: 0; padding: 0; list-style: none; min-width: 40vw; font-size: 3vw; }
+.skills-breakdown li { display: flex; justify-content: space-between; gap: 4vw; padding: 0.4vw 0; border-bottom: 1px solid var(--kiosk-surface); }

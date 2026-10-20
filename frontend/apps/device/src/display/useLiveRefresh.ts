@@ -13,6 +13,8 @@ const REFRESH: Record<string, readonly string[]> = {
   match_reset: ["matches"],
   new_match_created: ["matches", "finals"],
   score_saved: ["matches", "scores", "finals"],
+  match_submitted: ["matches", "scores"],
+  skills_run_changed: ["skillsSet"],
   qualification_status_changed: ["matches"],
   ranking_updated: ["rankings"],
   skills_changed: ["skillsRankings", "skillsAttempts"],

@@ -23,6 +23,13 @@
     "display_device": "显示屏"
   },
   "display": {
+    "live": "实时",
+    "skills": {
+      "waiting": "技能赛 · 等待下一支队伍",
+      "runOver": "本轮结束",
+      "finalScore": "最终得分",
+      "timeUp": "时间到"
+    },
     "enableSound": "点击以启用声音",
     "skillsOff": "未开展技能挑战赛",
     "top10": "前 10 名",

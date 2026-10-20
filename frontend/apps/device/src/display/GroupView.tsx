@@ -3,6 +3,9 @@ import { useFieldSets, type DisplayMe, type DisplayMeGroup } from "./api";
 import type { ScreenContext } from "./screenTypes";
 import { AudienceSounds } from "./AudienceSounds";
 import { FieldDisplay } from "./FieldDisplay";
+import { WaitingForData } from "./components/ScreenFrame";
+import { SkillsFieldDisplay } from "./SkillsFieldDisplay";
+import { SkillsSetDisplay } from "./SkillsSetDisplay";
 import { TimeoutGate } from "./components/TimeoutGate";
 import { RotationRunner } from "./RotationRunner";
 import { screenModule } from "./screens/registry";
@@ -27,12 +30,23 @@ export function GroupView({ me }: { me: DisplayMe & { session_id: number; group:
   const { group, session_id: sessionId } = me;
   const fieldSets = useFieldSets(sessionId);
   const timeoutDeadline = group.field_set?.timeout_deadline ?? null;
+  const fieldSetId = group.kind === "pit" ? null : group.field_set_id;
+  // A skills set's groups show skills screens, so wait to know the set's purpose.
+  if (fieldSetId !== null && !fieldSets.data) return <WaitingForData title={group.name} />;
+  const skills = fieldSetId !== null && fieldSets.data?.find((fs) => fs.id === fieldSetId)?.purpose === "skills";
   if (group.kind === "field" && group.field_id !== null) {
     return (
       <TimeoutGate deadline={timeoutDeadline}>
-        <FieldDisplay sessionId={sessionId} fieldId={group.field_id} />
+        {skills && fieldSetId !== null ? (
+          <SkillsFieldDisplay sessionId={sessionId} fieldSetId={fieldSetId} fieldId={group.field_id} />
+        ) : (
+          <FieldDisplay sessionId={sessionId} fieldId={group.field_id} />
+        )}
       </TimeoutGate>
     );
+  }
+  if (group.kind === "audience" && skills && fieldSetId !== null) {
+    return <SkillsSetDisplay sessionId={sessionId} fieldSetId={fieldSetId} />;
   }
   const divisionId =
     group.kind === "pit"

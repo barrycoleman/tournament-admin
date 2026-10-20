@@ -1,7 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { COUNT_IN_PHASES, formatClock, remainingSeconds, type LiveMatch } from "@tournament-admin/shared";
-import { useRanks, useTeamsById } from "../api";
+import { useFields, useMatchFormat, useRanks, useTeamsById } from "../api";
+import { allianceGroups, groupScore } from "../logic/alliances";
 import { matchTitle } from "../matchTitle";
+import { useLiveScores } from "../useLiveScores";
 import { PeriodIcon } from "./PeriodIcon";
 import { ScreenFrame } from "./ScreenFrame";
 
@@ -11,13 +13,23 @@ function periodOf(phase: string): "autonomous" | "driver" | null {
   return null;
 }
 
-/** The match clock, shared by the field display and the audience's In Match screen. */
+/** The match clock, shared by the field display and the audience's In Match
+ * screen, with each alliance's live total while the server sends one. */
 export function InMatchView({ match, sessionId, now }: { match: LiveMatch; sessionId: number; now: number }) {
   const { t } = useTranslation();
   const teams = useTeamsById();
   const ranks = useRanks(sessionId, match.division_id);
+  const fields = useFields(sessionId);
+  const format = useMatchFormat();
+  const fieldSetId = fields.data?.find((field) => field.id === match.field_id)?.field_set_id ?? null;
+  const live = useLiveScores(fieldSetId);
   const remaining = remainingSeconds(match, now) ?? 0;
   const period = periodOf(match.phase);
+  // Totals show only while the clock is on the match, whatever arrives: the
+  // server clears them when the clock stops, but a draft change can race that.
+  const clockRunning = match.phase !== "not_started" && match.phase !== "ended";
+  const liveEntry = clockRunning ? live.matches.find((entry) => entry.match_id === match.id) : undefined;
+  const liveScores = liveEntry ? new Map(liveEntry.alliances.map((row) => [row.alliance_id, row.score])) : null;
 
   let centre;
   if (match.phase === "ended") {
@@ -57,7 +69,19 @@ export function InMatchView({ match, sessionId, now }: { match: LiveMatch; sessi
           ))
         )}
       </ul>
-      <div className="in-match__centre">{centre}</div>
+      <div className="in-match__centre">
+        {centre}
+        {liveScores && format.data && (
+          <div className="in-match__live">
+            {allianceGroups(match, format.data.game_model).map((group) => (
+              <p key={group.station} className={`live-total live-total--${group.station}`} data-testid={`live-${group.station}`}>
+                <span className="live-total__score">{groupScore(group, liveScores) ?? 0}</span>
+                <span className="live-total__tag">{t("display.live")}</span>
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
       {match.paused && (
         <p className="in-match__paused" role="status">
           {t("display.paused")}

@@ -23,6 +23,13 @@
     "display_device": "Display"
   },
   "display": {
+    "live": "Live",
+    "skills": {
+      "waiting": "Skills · Waiting for the next team",
+      "runOver": "Run over",
+      "finalScore": "Final score",
+      "timeUp": "Time's up"
+    },
     "enableSound": "Click to enable sound",
     "skillsOff": "Skills challenges aren't running",
     "top10": "Top 10",
