@@ -16,9 +16,17 @@ interface SessionFormValues {
   label: string;
   sessionDate: string;
   timezone: string;
+  liveQualification: boolean;
+  liveFinals: boolean;
 }
 
-const EMPTY_FORM: SessionFormValues = { label: "", sessionDate: "", timezone: "" };
+const EMPTY_FORM: SessionFormValues = {
+  label: "",
+  sessionDate: "",
+  timezone: "",
+  liveQualification: true,
+  liveFinals: false,
+};
 
 function SessionForm({
   initial,
@@ -28,6 +36,7 @@ function SessionForm({
   isSaving,
   error,
   inline = false,
+  showLiveSwitches = false,
 }: {
   initial: SessionFormValues;
   onSubmit: (values: SessionFormValues) => void;
@@ -37,6 +46,8 @@ function SessionForm({
   error: string | null;
   /** Inside a table row: the row already frames it, so skip the panel box. */
   inline?: boolean;
+  /** Only when editing: a new session starts with the server defaults. */
+  showLiveSwitches?: boolean;
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState(initial);
@@ -91,6 +102,27 @@ function SessionForm({
           ))}
         </select>
       </div>
+      {showLiveSwitches && (
+        <fieldset className="field">
+          <legend className="field__label">{t("sessions.liveScoresLegend")}</legend>
+          <label className="choice">
+            <input
+              type="checkbox"
+              checked={values.liveQualification}
+              onChange={(event) => setValues({ ...values, liveQualification: event.target.checked })}
+            />{" "}
+            {t("sessions.liveQualificationLabel")}
+          </label>
+          <label className="choice">
+            <input
+              type="checkbox"
+              checked={values.liveFinals}
+              onChange={(event) => setValues({ ...values, liveFinals: event.target.checked })}
+            />{" "}
+            {t("sessions.liveFinalsLabel")}
+          </label>
+        </fieldset>
+      )}
       {error && (
         <p className="alert alert-danger" role="alert">
           {error}
@@ -149,6 +181,8 @@ export function SessionsRoute() {
           label: values.label,
           session_date: values.sessionDate || null,
           timezone: values.timezone || null,
+          live_scores_qualification: values.liveQualification,
+          live_scores_finals: values.liveFinals,
         },
       }),
     onSuccess: () => {
@@ -209,10 +243,13 @@ export function SessionsRoute() {
                   <td colSpan={4}>
                     <SessionForm
                       inline
+                      showLiveSwitches
                       initial={{
                         label: session.label,
                         sessionDate: session.session_date ?? "",
                         timezone: session.timezone ?? "",
+                        liveQualification: session.live_scores_qualification ?? true,
+                        liveFinals: session.live_scores_finals ?? false,
                       }}
                       onSubmit={(values) => updateMutation.mutate({ id: session.id, values })}
                       onCancel={() => {

@@ -7,7 +7,7 @@ import { RecordAttemptForm } from "../skills/RecordAttemptForm";
 import { SessionAttemptsSettings } from "../skills/SessionAttemptsSettings";
 import { useSessionSkills, useSkillsAttempts } from "../skills/useSessionSkills";
 import { useSkillsSettings } from "../skills/useSkillsSettings";
-import type { ParticipationRead, SessionRead, TeamSummary } from "../types";
+import type { FieldRead, ParticipationRead, SessionRead, TeamSummary } from "../types";
 
 export function SessionSkillsRoute() {
   const { t } = useTranslation();
@@ -23,6 +23,12 @@ export function SessionSkillsRoute() {
   const participants = useQuery({
     queryKey: ["participants", session.id],
     queryFn: () => apiRequest<ParticipationRead[]>(`/api/sessions/${session.id}/participants`),
+  });
+
+  // Only names the field on each attempt: a failed read just drops the names.
+  const fields = useQuery({
+    queryKey: ["fields", session.id],
+    queryFn: () => apiRequest<FieldRead[]>(`/api/fields?session_id=${session.id}`),
   });
 
   if (settings.isLoading) return <p>{t("skills.page.loading")}</p>;
@@ -68,6 +74,7 @@ export function SessionSkillsRoute() {
         types={sessionSkills.data.types}
         attempts={attempts.data}
         teams={teams.data}
+        fields={fields.data ?? []}
       />
     </div>
   );

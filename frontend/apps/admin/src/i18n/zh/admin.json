@@ -360,7 +360,11 @@
       "staleDivisionNote": "单组别赛事使用未分配的场地组排赛程，请设为“未分配”以启用。",
       "copyFromLabel": "或从以下场次复制场地",
       "copyFromPlaceholder": "选择场次…",
-      "copyAction": "复制场地"
+      "copyAction": "复制场地",
+      "purposeLabel": "用途",
+      "purpose": { "teamwork": "团队赛", "skills": "技能赛" },
+      "teamworkHeading": "团队赛场地组",
+      "skillsHeading": "技能赛场地组"
     },
     "setActiveShortAction": "设为当前",
     "setActiveAriaLabel": "将 {{name}} 设为当前场次",
@@ -373,7 +377,10 @@
     "deletePhrasePrompt": "输入“{{name}}”以确认",
     "deleteConfirm": "删除场次",
     "skillsTab": "技能赛",
-    "awardsTab": "奖项"
+    "awardsTab": "奖项",
+    "liveScoresLegend": "显示屏上的实时比分",
+    "liveQualificationLabel": "在练习赛和资格赛期间在显示屏上显示实时比分",
+    "liveFinalsLabel": "在决赛期间在显示屏上显示实时比分"
   },
   "frontDeskCheckin": {
     "heading": "队伍签到",
@@ -782,7 +789,10 @@
     "idleSave": "保存",
     "idleSaved": "已保存。",
     "justNow": "刚刚",
-    "loadError": "无法加载设备。"
+    "loadError": "无法加载设备。",
+    "binding": "计分 · {{field}}",
+    "clearBinding": "清除",
+    "clearBindingLabel": "清除 {{name}} 的场地"
   },
   "displayScreens": {
     "match_intro": "比赛介绍",

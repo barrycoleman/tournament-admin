@@ -362,7 +362,11 @@
       "staleDivisionNote": "Single-division events schedule on unassigned field sets — set this to Unassigned to use it.",
       "copyFromLabel": "Or copy fields from",
       "copyFromPlaceholder": "Choose a session…",
-      "copyAction": "Copy fields"
+      "copyAction": "Copy fields",
+      "purposeLabel": "Purpose",
+      "purpose": { "teamwork": "Teamwork", "skills": "Skills" },
+      "teamworkHeading": "Teamwork field sets",
+      "skillsHeading": "Skills field sets"
     },
     "setActiveShortAction": "Set active",
     "setActiveAriaLabel": "Set {{name}} as the active session",
@@ -375,7 +379,10 @@
     "deletePhrasePrompt": "Type \"{{name}}\" to confirm",
     "deleteConfirm": "Delete session",
     "skillsTab": "Skills",
-    "awardsTab": "Awards"
+    "awardsTab": "Awards",
+    "liveScoresLegend": "Live scores on displays",
+    "liveQualificationLabel": "Show live scores on displays in practice and qualification",
+    "liveFinalsLabel": "Show live scores on displays in finals"
   },
   "frontDeskCheckin": {
     "heading": "Team Check-In",
@@ -785,7 +792,10 @@
     "idleSave": "Save",
     "idleSaved": "Saved.",
     "justNow": "just now",
-    "loadError": "Couldn't load the devices."
+    "loadError": "Couldn't load the devices.",
+    "binding": "Scoring · {{field}}",
+    "clearBinding": "Clear",
+    "clearBindingLabel": "Clear {{name}}'s field"
   },
   "displayScreens": {
     "match_intro": "Match Intro",

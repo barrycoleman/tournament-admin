@@ -24,13 +24,15 @@ export function checkReadiness(input: {
   ];
 }
 
-/** Fields the generator will use for this division: those in sets assigned to it (`null` = unassigned sets). */
+/** Fields the generator will use for this division: those in teamwork sets assigned to it (`null` = unassigned sets). */
 export function countUsableFields(
   fieldSets: FieldSetRead[],
   fields: FieldRead[],
   divisionId: number | null
 ): number {
-  const setIds = new Set(fieldSets.filter((fs) => fs.division_id === divisionId).map((fs) => fs.id));
+  const setIds = new Set(
+    fieldSets.filter((fs) => fs.purpose !== "skills" && fs.division_id === divisionId).map((fs) => fs.id)
+  );
   return fields.filter((field) => setIds.has(field.field_set_id)).length;
 }
 

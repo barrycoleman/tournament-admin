@@ -31,7 +31,8 @@ function attempt(id: number, team_id: number, skills_type: string, number: numbe
   return { id, team_id, skills_type, number, score, data: { score }, recorded_at: "", updated_at: "", field_id: null };
 }
 
-const ATTEMPTS = [attempt(1, 1, "autonomous", 1, 20), attempt(2, 1, "driver", 1, 34), attempt(3, 2, "driver", 1, 30)];
+const FIELDS = [{ id: 31, field_set_id: 20, name: "Skills 1" }];
+const ATTEMPTS = [{ ...attempt(1, 1, "autonomous", 1, 20), field_id: 31 }, attempt(2, 1, "driver", 1, 34), attempt(3, 2, "driver", 1, 30)];
 
 function stub(onPut: (body: unknown) => unknown = () => attempt(1, 1, "autonomous", 1, 30)) {
   vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
@@ -53,7 +54,7 @@ function renderTable() {
   return render(
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
-        <AttemptsTable sessionId={1} types={TYPES} attempts={ATTEMPTS} teams={TEAMS} />
+        <AttemptsTable sessionId={1} types={TYPES} attempts={ATTEMPTS} teams={TEAMS} fields={FIELDS} />
       </I18nextProvider>
     </QueryClientProvider>
   );
@@ -72,7 +73,7 @@ describe("AttemptsTable", () => {
     renderTable();
     const alpha = screen.getByRole("row", { name: /101/ });
     const cells = within(alpha).getAllByRole("cell");
-    expect(cells[1]).toHaveTextContent("20 · — · —");
+    expect(cells[1]).toHaveTextContent("20 Skills 1 · — · —");
     expect(cells[2]).toHaveTextContent("34 · — · —");
     expect(cells[3]).toHaveTextContent("54");
   });
@@ -151,5 +152,14 @@ describe("AttemptsTable", () => {
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
     expect(requests("DELETE")).toEqual([["/api/skills/attempts/1", { method: "DELETE" }]]);
     expect(requests("PUT")).toHaveLength(0);
+  });
+
+  it("shows the field an attempt was scored on", () => {
+    stub();
+    renderTable();
+    const cell = screen.getByRole("button", { name: /Edit Autonomous attempt 1 for team 101/ }).closest("td")!;
+    expect(cell).toHaveTextContent("Skills 1");
+    const driver = screen.getByRole("button", { name: /Edit Driver attempt 1 for team 101/ }).closest("td")!;
+    expect(driver).not.toHaveTextContent("Skills 1");
   });
 });

@@ -33,6 +33,9 @@ const TWO_DIVISIONS: Division[] = [
 const MAIN_SET: FieldSetRead = { id: 10, session_id: 1, name: "Main Fields", division_id: null, purpose: "teamwork" };
 const FIELD_A: FieldRead = { id: 100, field_set_id: 10, name: "Field A" };
 
+const SKILLS_SET: FieldSetRead = { id: 11, session_id: 1, name: "Skills Row", division_id: null, purpose: "skills" };
+const SKILLS_FIELD: FieldRead = { id: 110, field_set_id: 11, name: "Skills 1" };
+
 const NOT_HANDLED = Symbol("not handled");
 type Override = (path: string, options?: { method?: string; body?: unknown }) => unknown;
 
@@ -273,5 +276,45 @@ describe("SessionFieldsRoute", () => {
 
       expect(await screen.findByRole("alert")).toHaveTextContent("This session already has fields");
     });
+  });
+
+  it("lists teamwork and skills field sets in separate sections", async () => {
+    stubServer({ divisions: ONE_DIVISION, fieldSets: [MAIN_SET, SKILLS_SET], fields: [FIELD_A, SKILLS_FIELD] });
+    renderFields();
+    const teamwork = await screen.findByRole("region", { name: "Teamwork field sets" });
+    const skills = screen.getByRole("region", { name: "Skills field sets" });
+    expect(within(teamwork).getByRole("region", { name: "Main Fields" })).toBeInTheDocument();
+    expect(within(teamwork).queryByRole("region", { name: "Skills Row" })).not.toBeInTheDocument();
+    expect(within(skills).getByRole("region", { name: "Skills Row" })).toHaveTextContent("Skills 1");
+    expect(within(within(skills).getByRole("region", { name: "Skills Row" })).getByLabelText("Purpose")).toHaveValue("skills");
+  });
+
+  it("hides the skills section while there is no skills set", async () => {
+    stubServer({ divisions: ONE_DIVISION, fieldSets: [MAIN_SET], fields: [FIELD_A] });
+    renderFields();
+    expect(await screen.findByRole("region", { name: "Teamwork field sets" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Skills field sets" })).not.toBeInTheDocument();
+  });
+
+  it("changes a set's purpose", async () => {
+    stubServer({ divisions: ONE_DIVISION, fieldSets: [MAIN_SET], fields: [FIELD_A] }, (path, options) =>
+      path === "/api/field-sets/10" && options?.method === "PATCH" ? { ...MAIN_SET, purpose: "skills" } : NOT_HANDLED
+    );
+    renderFields();
+    const card = await screen.findByRole("region", { name: "Main Fields" });
+    fireEvent.change(within(card).getByLabelText("Purpose"), { target: { value: "skills" } });
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith("/api/field-sets/10", { method: "PATCH", body: { purpose: "skills" } })
+    );
+  });
+
+  it("shows the server's refusal when a set's purpose can't change", async () => {
+    stubServer({ divisions: ONE_DIVISION, fieldSets: [MAIN_SET], fields: [FIELD_A] }, (path, options) =>
+      path === "/api/field-sets/10" && options?.method === "PATCH" ? new ApiError(409, "This field set has matches.") : NOT_HANDLED
+    );
+    renderFields();
+    const card = await screen.findByRole("region", { name: "Main Fields" });
+    fireEvent.change(within(card).getByLabelText("Purpose"), { target: { value: "skills" } });
+    expect(await within(card).findByRole("alert")).toHaveTextContent("This field set has matches.");
   });
 });

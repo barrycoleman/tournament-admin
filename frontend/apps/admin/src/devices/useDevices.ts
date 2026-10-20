@@ -3,11 +3,17 @@ import { apiRequest } from "@tournament-admin/shared";
 
 export type DeviceStatus = "active" | "idle" | "disabled";
 
+export interface DeviceBinding {
+  field_id: number;
+  field_name: string;
+}
+
 export interface DeviceRead {
   id: number;
   name: string;
   role: string;
   display_group: string | null;
+  binding: DeviceBinding | null;
   status: DeviceStatus;
   paired_at: string;
   paired_by: string;
@@ -63,6 +69,10 @@ export function useDeviceMutations() {
     }),
     remove: useMutation({
       mutationFn: (id: number) => apiRequest<void>(`/api/devices/${id}`, { method: "DELETE" }),
+      onSuccess: refresh,
+    }),
+    clearBinding: useMutation({
+      mutationFn: (id: number) => apiRequest<void>(`/api/devices/${id}/binding`, { method: "DELETE" }),
       onSuccess: refresh,
     }),
     saveSettings: useMutation({

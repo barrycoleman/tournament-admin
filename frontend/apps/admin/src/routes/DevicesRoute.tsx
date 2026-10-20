@@ -29,7 +29,7 @@ export function DevicesRoute() {
   const queryClient = useQueryClient();
   const devices = useDevices();
   const settings = useDeviceSettings();
-  const { setEnabled, remove, saveSettings } = useDeviceMutations();
+  const { setEnabled, remove, saveSettings, clearBinding } = useDeviceMutations();
   const [editing, setEditing] = useState<DeviceRead | null>(null);
   const [deleting, setDeleting] = useState<DeviceRead | null>(null);
   const [idleDraft, setIdleDraft] = useState("");
@@ -38,7 +38,9 @@ export function DevicesRoute() {
   useRealtimeChannel({
     path: "/ws/active-session",
     onEvent: (event) => {
-      if (event.event === "devices_changed") void queryClient.invalidateQueries({ queryKey: DEVICES_KEY });
+      if (event.event === "devices_changed" || event.event === "scorer_binding_changed") {
+        void queryClient.invalidateQueries({ queryKey: DEVICES_KEY });
+      }
     },
   });
 
@@ -90,7 +92,26 @@ export function DevicesRoute() {
                   <tr key={device.id}>
                     <td>{device.name}</td>
                     <td>{t(`devices.roles.${device.role}`, { defaultValue: device.role })}</td>
-                    <td>{device.role === "display_device" ? (device.display_group ?? t("devices.noGroup")) : ""}</td>
+                    <td>
+                      {device.role === "display_device" ? (
+                        device.display_group ?? t("devices.noGroup")
+                      ) : device.binding ? (
+                        <span className="devices__binding">
+                          {t("devices.binding", { field: device.binding.field_name })}{" "}
+                          <button
+                            className="btn btn-small"
+                            type="button"
+                            disabled={clearBinding.isPending}
+                            aria-label={t("devices.clearBindingLabel", { name: device.name })}
+                            onClick={() => clearBinding.mutate(device.id)}
+                          >
+                            {t("devices.clearBinding")}
+                          </button>
+                        </span>
+                      ) : (
+                        ""
+                      )}
+                    </td>
                     <td>
                       <span className={`badge ${STATUS_BADGE[device.status] ?? "badge-neutral"}`}>
                         {t(`devices.status.${device.status}`, { defaultValue: device.status })}
@@ -124,6 +145,11 @@ export function DevicesRoute() {
         {setEnabled.isError && (
           <p className="alert alert-danger" role="alert">
             {apiErrorMessage(setEnabled.error, t("errors.generic"))}
+          </p>
+        )}
+        {clearBinding.isError && (
+          <p className="alert alert-danger" role="alert">
+            {apiErrorMessage(clearBinding.error, t("errors.generic"))}
           </p>
         )}
       </section>

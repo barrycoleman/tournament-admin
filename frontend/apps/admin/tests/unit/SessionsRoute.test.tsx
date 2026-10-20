@@ -117,7 +117,13 @@ describe("SessionsRoute", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
-      expect(patchBody).toEqual({ label: "Renamed", session_date: null, timezone: null })
+      expect(patchBody).toEqual({
+        label: "Renamed",
+        session_date: null,
+        timezone: null,
+        live_scores_qualification: true,
+        live_scores_finals: false,
+      })
     );
   });
 
@@ -295,5 +301,55 @@ describe("SessionsRoute", () => {
         "This session has scored matches"
       );
     });
+  });
+
+  it("edits a session's live-score switches", async () => {
+    let patchBody: unknown = null;
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
+      if (path === "/api/sessions" && !options) {
+        return [
+          {
+            id: 1, event_id: 1, label: "Saturday", session_date: null, timezone: null,
+            live_scores_qualification: true, live_scores_finals: false,
+          },
+        ] as never;
+      }
+      if (path === "/api/sessions/1" && (options as { method?: string })?.method === "PATCH") {
+        patchBody = (options as { body: unknown }).body;
+        return { id: 1, event_id: 1, label: "Saturday", session_date: null, timezone: null } as never;
+      }
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderRoute();
+
+    await screen.findByText("Saturday");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const qualification = screen.getByLabelText("Show live scores on displays in practice and qualification");
+    const finals = screen.getByLabelText("Show live scores on displays in finals");
+    expect(qualification).toBeChecked();
+    expect(finals).not.toBeChecked();
+    fireEvent.click(qualification);
+    fireEvent.click(finals);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(patchBody).toEqual({
+        label: "Saturday",
+        session_date: null,
+        timezone: null,
+        live_scores_qualification: false,
+        live_scores_finals: true,
+      })
+    );
+  });
+
+  it("leaves the live-score switches out of a new session's form", async () => {
+    vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+      if (path === "/api/sessions") return [] as never;
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderRoute();
+    fireEvent.click(await screen.findByRole("button", { name: "Add session..." }));
+    expect(screen.queryByLabelText("Show live scores on displays in finals")).not.toBeInTheDocument();
   });
 });

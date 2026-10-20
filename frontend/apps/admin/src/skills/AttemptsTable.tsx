@@ -1,6 +1,6 @@
 import { Fragment, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { SessionSkillsType, SkillsAttemptRead, TeamSummary } from "../types";
+import type { FieldRead, SessionSkillsType, SkillsAttemptRead, TeamSummary } from "../types";
 import { buildAttemptRows, filterAttemptRows } from "./attemptsTable";
 import { EditAttemptDialog } from "./EditAttemptDialog";
 
@@ -9,12 +9,15 @@ export function AttemptsTable({
   types,
   attempts,
   teams,
+  fields,
 }: {
   sessionId: number;
   types: SessionSkillsType[];
   attempts: SkillsAttemptRead[];
   /** Every team (not just checked-in ones): a team may have been un-checked-in after recording. */
   teams: TeamSummary[];
+  /** The session's fields, to name the skills field an attempt was scored on. */
+  fields: FieldRead[];
 }) {
   const { t } = useTranslation();
   const headingId = useId();
@@ -22,6 +25,8 @@ export function AttemptsTable({
   const [filter, setFilter] = useState("");
   const [editing, setEditing] = useState<SkillsAttemptRead | null>(null);
   const rows = useMemo(() => buildAttemptRows(attempts, teams, types), [attempts, teams, types]);
+  const fieldName = (id: number | null) =>
+    id === null ? null : (fields.find((field) => field.id === id)?.name ?? null);
   const visible = filterAttemptRows(rows, filter);
   const editingType = editing ? types.find((type) => type.key === editing.skills_type) : undefined;
   const editingTeam = editing ? teams.find((team) => team.id === editing.team_id) : undefined;
@@ -69,6 +74,7 @@ export function AttemptsTable({
                         <Fragment key={attempt?.id ?? `empty-${index}`}>
                           {index > 0 && <span aria-hidden="true"> · </span>}
                           {attempt ? (
+                            <>
                             <button
                               type="button"
                               className="btn-link"
@@ -82,6 +88,10 @@ export function AttemptsTable({
                             >
                               {attempt.score}
                             </button>
+                            {fieldName(attempt.field_id) && (
+                              <span className="table__secondary"> {fieldName(attempt.field_id)}</span>
+                            )}
+                            </>
                           ) : (
                             <span>{t("skills.table.emptySlot")}</span>
                           )}

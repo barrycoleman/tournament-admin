@@ -30,6 +30,7 @@ function device(overrides: Partial<DeviceRead>): DeviceRead {
     paired_by: "admin",
     last_seen_at: minutesAgo(0),
     disabled_at: null,
+    binding: null,
     ...overrides,
   };
 }
@@ -224,6 +225,38 @@ describe("DevicesRoute", () => {
     expect(vi.mocked(useRealtimeChannel).mock.calls[0][0].path).toBe("/ws/active-session");
     const before = devicesFetches();
     act(() => onEvent?.({ event: "devices_changed", data: {} } as RealtimeEvent));
+    await waitFor(() => expect(devicesFetches()).toBeGreaterThan(before));
+  });
+
+  it("shows a scorer's field binding and clears it", async () => {
+    devices = [device({ id: 2, name: "Tablet 1", role: "scorer", binding: { field_id: 5, field_name: "Field 2" } })];
+    stub({ "DELETE /api/devices/2/binding": undefined });
+    renderRoute();
+    const row = await rowFor("Tablet 1");
+    expect(row).toHaveTextContent("Scoring · Field 2");
+    fireEvent.click(within(row).getByRole("button", { name: "Clear Tablet 1's field" }));
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/devices/2/binding", { method: "DELETE" }));
+  });
+
+  it("shows nothing in the Group column for an unbound scorer", async () => {
+    devices = [device({ id: 2, name: "Tablet 1", role: "scorer" })];
+    stub();
+    renderRoute();
+    const row = await rowFor("Tablet 1");
+    expect(within(row).queryByRole("button", { name: /field$/ })).not.toBeInTheDocument();
+    expect(row).not.toHaveTextContent("Scoring");
+  });
+
+  it("refetches the list on a scorer_binding_changed event", async () => {
+    let onEvent: ((event: RealtimeEvent) => void) | undefined;
+    vi.mocked(useRealtimeChannel).mockImplementation((options) => {
+      onEvent = options.onEvent;
+      return { connected: true };
+    });
+    renderRoute();
+    await rowFor("Pit TV");
+    const before = devicesFetches();
+    act(() => onEvent?.({ event: "scorer_binding_changed", data: { device_id: 2 } } as RealtimeEvent));
     await waitFor(() => expect(devicesFetches()).toBeGreaterThan(before));
   });
 });

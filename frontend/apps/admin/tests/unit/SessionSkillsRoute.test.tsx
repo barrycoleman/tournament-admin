@@ -75,6 +75,7 @@ function stub({
     if (path === "/api/teams") return TEAMS as never;
     if (path === "/api/sessions/1/participants") return PARTICIPANTS as never;
     if (path.startsWith("/api/skills/types/")) return [SCORE] as never;
+    if (path === "/api/fields?session_id=1") return [] as never;
     throw new Error(`unexpected request: ${path}`);
   });
 }

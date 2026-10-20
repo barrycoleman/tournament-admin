@@ -74,4 +74,17 @@ describe("readiness", () => {
     expect(countCheckedInTeams(teams, participants, null)).toBe(2);
     expect(countCheckedInTeams(teams, participants, 2)).toBe(1);
   });
+
+  it("never counts a skills set's fields", () => {
+    const fieldSets = [
+      { id: 1, session_id: 1, name: "Main Fields", division_id: null, purpose: "teamwork" as const },
+      { id: 2, session_id: 1, name: "Skills Row", division_id: null, purpose: "skills" as const },
+    ];
+    const fields = [
+      { id: 10, field_set_id: 1, name: "A" },
+      { id: 11, field_set_id: 2, name: "Skills 1" },
+      { id: 12, field_set_id: 2, name: "Skills 2" },
+    ];
+    expect(countUsableFields(fieldSets, fields, null)).toBe(1);
+  });
 });

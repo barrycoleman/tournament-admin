@@ -6,7 +6,9 @@ import { apiRequest } from "@tournament-admin/shared";
 import { InlineEditableText } from "../components/InlineEditableText";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { apiErrorMessage } from "../apiErrorMessage";
-import type { Division, FieldRead, FieldSetRead, SessionRead } from "../types";
+import type { Division, FieldRead, FieldSetPurpose, FieldSetRead, SessionRead } from "../types";
+
+const PURPOSES: FieldSetPurpose[] = ["teamwork", "skills"];
 
 type PendingDelete =
   | { kind: "field"; id: number; fieldSetId: number; name: string }
@@ -137,6 +139,16 @@ export function SessionFieldsRoute() {
     onError: (error, { id }) => setCardError(id, apiErrorMessage(error, generic)),
   });
 
+  const purposeMutation = useMutation({
+    mutationFn: ({ id, purpose }: { id: number; purpose: FieldSetPurpose }) =>
+      apiRequest<FieldSetRead>(`/api/field-sets/${id}`, { method: "PATCH", body: { purpose } }),
+    onSuccess: (_set, { id }) => {
+      setCardError(id, null);
+      refresh();
+    },
+    onError: (error, { id }) => setCardError(id, apiErrorMessage(error, generic)),
+  });
+
   const renameFieldMutation = useMutation({
     mutationFn: ({ id, name }: { id: number; name: string }) =>
       apiRequest<FieldRead>(`/api/fields/${id}`, { method: "PATCH", body: { name } }),
@@ -237,7 +249,18 @@ export function SessionFieldsRoute() {
           )}
         </div>
       ) : (
-        fieldSets.map((fieldSet) => {
+        PURPOSES.filter(
+          (purpose) => purpose === "teamwork" || fieldSets.some((fieldSet) => fieldSet.purpose === purpose)
+        ).map((purpose) => (
+          <section
+            key={purpose}
+            className="field-set-group"
+            aria-labelledby={`field-sets-${purpose}-heading`}
+          >
+            <h2 id={`field-sets-${purpose}-heading`}>{t(`sessions.fields.${purpose}Heading`)}</h2>
+            {fieldSets
+              .filter((fieldSet) => fieldSet.purpose === purpose)
+              .map((fieldSet) => {
           const setFields = fields.filter((field) => field.field_set_id === fieldSet.id);
           const newFieldName = newFieldNames[fieldSet.id] ?? "";
           const renamingThisSet = renameSetMutation.variables?.id === fieldSet.id;
@@ -281,6 +304,23 @@ export function SessionFieldsRoute() {
                     </select>
                   </label>
                 )}
+                <label className="field-set-card__division">
+                  <span>{t("sessions.fields.purposeLabel")}</span>
+                  <select
+                    className="select"
+                    value={fieldSet.purpose}
+                    disabled={purposeMutation.isPending && purposeMutation.variables?.id === fieldSet.id}
+                    onChange={(event) =>
+                      purposeMutation.mutate({ id: fieldSet.id, purpose: event.target.value as FieldSetPurpose })
+                    }
+                  >
+                    {PURPOSES.map((purpose) => (
+                      <option key={purpose} value={purpose}>
+                        {t(`sessions.fields.purpose.${purpose}`)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <button
                   type="button"
                   className="btn btn-danger btn-small"
@@ -368,7 +408,9 @@ export function SessionFieldsRoute() {
               )}
             </section>
           );
-        })
+        })}
+          </section>
+        ))
       )}
       <form
         className="form-actions"
