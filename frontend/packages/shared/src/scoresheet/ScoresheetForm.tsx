@@ -159,12 +159,14 @@ export interface ScoresheetFormProps {
   onChange: (values: ScoresheetValues) => void;
   /** Field name -> message, shown beside that field. */
   errors?: Record<string, string>;
+  /** Field name -> a passing note (e.g. "Changed by Tablet 2"), shown beside that field and highlighting its row. */
+  notes?: Record<string, string>;
   t: ScoresheetTranslate;
   idPrefix: string;
 }
 
 /** A plugin scoresheet drawn from its field list. Knows nothing about skills or teamwork. */
-export function ScoresheetForm({ fields, values, onChange, errors = {}, t, idPrefix }: ScoresheetFormProps) {
+export function ScoresheetForm({ fields, values, onChange, errors = {}, notes = {}, t, idPrefix }: ScoresheetFormProps) {
   return (
     <div className="scoresheet">
       {fields.map((field) => {
@@ -172,8 +174,9 @@ export function ScoresheetForm({ fields, values, onChange, errors = {}, t, idPre
         const error = errors[field.name];
         const errorId = error ? `${id}-error` : undefined;
         const Widget = WIDGETS[field.widget];
+        const note = notes[field.name];
         return (
-          <div key={field.name} className="scoresheet__row">
+          <div key={field.name} className={note ? "scoresheet__row scoresheet__row--flash" : "scoresheet__row"}>
             <Widget
               field={field}
               value={values[field.name]}
@@ -185,6 +188,11 @@ export function ScoresheetForm({ fields, values, onChange, errors = {}, t, idPre
             {error && (
               <p className="field__hint field__error" id={errorId}>
                 {error}
+              </p>
+            )}
+            {note && (
+              <p className="field__hint scoresheet__note" role="status">
+                {note}
               </p>
             )}
           </div>
