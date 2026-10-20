@@ -172,4 +172,16 @@ describe("SessionMatchesRoute", () => {
     expect(await screen.findByRole("gridcell", { name: "Not played" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Finalize qualification" })).toBeInTheDocument();
   });
+
+  it("links unsubmitted matches to Score, completed ones to View score, and not played ones to nothing", async () => {
+    stub([
+      ...MATCHES,
+      { ...MATCHES[1], id: 3, label: "P2", match_number: 2, status: "not_played", scheduled_time: "2026-11-07T17:20:00Z" },
+    ]);
+    renderMatches();
+    await screen.findByRole("gridcell", { name: "P1" });
+    expect(screen.getByRole("link", { name: "Score" })).toHaveAttribute("href", "/sessions/1/matches/1/score");
+    expect(screen.getByRole("link", { name: "View score" })).toHaveAttribute("href", "/sessions/1/matches/2/score");
+    expect(screen.getAllByRole("link")).toHaveLength(2);
+  });
 });

@@ -23,6 +23,7 @@ import { SessionCheckinRoute } from "./routes/SessionCheckinRoute";
 import { SessionFieldsRoute } from "./routes/SessionFieldsRoute";
 import { SessionScheduleRoute } from "./routes/SessionScheduleRoute";
 import { SessionMatchesRoute } from "./routes/SessionMatchesRoute";
+import { MatchScoringRoute } from "./routes/MatchScoringRoute";
 import { SessionSkillsRoute } from "./routes/SessionSkillsRoute";
 import { SessionRankingsRoute } from "./routes/SessionRankingsRoute";
 import { SessionAwardsRoute } from "./routes/SessionAwardsRoute";
@@ -155,6 +156,7 @@ export const router = createBrowserRouter([
           { path: "fields", element: <SessionFieldsRoute /> },
           { path: "schedule", element: <SessionScheduleRoute /> },
           { path: "matches", element: <RequiresGamePlugin><SessionMatchesRoute /></RequiresGamePlugin> },
+          { path: "matches/:matchId/score", element: <RequiresGamePlugin><MatchScoringRoute /></RequiresGamePlugin> },
           { path: "skills", element: <RequiresGamePlugin><SessionSkillsRoute /></RequiresGamePlugin> },
           { path: "rankings", element: <RequiresGamePlugin><SessionRankingsRoute /></RequiresGamePlugin> },
           { path: "awards", element: <SessionAwardsRoute /> },

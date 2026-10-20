@@ -7,7 +7,7 @@ import {
   type ScreenSettings,
 } from "@tournament-admin/shared";
 import type { DisplaysRead, FieldRead, FieldSetLiveRead } from "../displays/types";
-import type { TeamSummary } from "../types";
+import type { SessionRead, TeamSummary } from "../types";
 
 /** Which reads each live event makes stale on this page. */
 const LIVE: Record<string, readonly string[]> = {
@@ -17,6 +17,7 @@ const LIVE: Record<string, readonly string[]> = {
   match_reset: ["matches"],
   new_match_created: ["matches"],
   score_saved: ["matches", "scores"],
+  match_submitted: ["matches", "scores"],
   field_set_changed: ["fieldSets"],
   display_changed: ["displays"],
   active_session_changed: ["event"],
@@ -52,8 +53,12 @@ export function useMatchControlData(sessionId: number) {
       queryKey: ["displays", sessionId],
       queryFn: () => apiRequest<DisplaysRead>(`/api/displays?session_id=${sessionId}`),
     }),
+    sessions: useQuery({ queryKey: ["sessions"], queryFn: () => apiRequest<SessionRead[]>("/api/sessions") }),
   };
 }
+
+/** The session switch that governs live totals for a match's round. */
+export type LiveScoresSwitch = "live_scores_qualification" | "live_scores_finals";
 
 export type MatchAction = "start" | "start-driver" | "pause" | "resume" | "end" | "reset";
 
@@ -80,6 +85,11 @@ export function useMatchControlActions() {
     cancelTimeout: useMutation({
       mutationFn: (fieldSetId: number) => apiRequest(`/api/field-sets/${fieldSetId}/timeout`, { method: "DELETE" }),
       onSuccess: () => refresh("fieldSets"),
+    }),
+    setLiveScores: useMutation({
+      mutationFn: ({ sessionId, field, value }: { sessionId: number; field: LiveScoresSwitch; value: boolean }) =>
+        apiRequest<SessionRead>(`/api/sessions/${sessionId}`, { method: "PATCH", body: { [field]: value } }),
+      onSuccess: () => refresh("sessions"),
     }),
     updateGroup: useMutation({
       mutationFn: ({

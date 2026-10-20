@@ -21,6 +21,8 @@ export interface FieldSetLiveRead {
   id: number;
   session_id: number;
   name: string;
+  /** Teamwork sets run matches here; skills sets are run from Skills Control. */
+  purpose: "teamwork" | "skills";
   division_id: number | null;
   queued_match_id: number | null;
   timeout_deadline: string | null;

@@ -330,7 +330,10 @@
       "allRounds": "All rounds",
       "teamSearchLabel": "Search by team number or name",
       "empty": "No matches yet.",
-      "goToSchedule": "Go to Schedule"
+      "goToSchedule": "Go to Schedule",
+      "columnScore": "Score",
+      "score": "Score",
+      "viewScore": "View score"
     },
     "fields": {
       "empty": "This session has no fields yet.",
@@ -845,7 +848,11 @@
       "driver": "Driver control",
       "ended": "Ended"
     },
-    "versus": "vs"
+    "versus": "vs",
+    "score": "Score",
+    "hideLive": "Hide live scores",
+    "showLive": "Show live scores",
+    "scoreSaved": "Score saved."
   },
   "displays": {
     "heading": "Displays",
@@ -902,5 +909,89 @@
       "scopeFieldSet": "This field group",
       "scopeDivision": "The whole division"
     }
+  },
+  "scoring": {
+    "loading": "Loading…",
+    "offline": "Offline, changes not saved yet",
+    "reconnecting": "Offline, reconnecting…",
+    "error": "Something went wrong. Try again.",
+    "changedBy": "Changed by {{device}}",
+    "scoreSoFar": "Score so far: {{score}}",
+    "sharedSheet": "Shared score",
+    "alliances": "Alliances",
+    "noShow": "No-show {{team}}",
+    "dq": "DQ {{team}}",
+    "submit": "Submit",
+    "submitting": "Submitting…",
+    "submitAnyway": "Submit anyway",
+    "violationsHeading": "The game's rules found problems:",
+    "savedHeading": "Saved",
+    "gone": "This match is no longer available.",
+    "missingHeading": "Missing scores",
+    "missingOne": "{{alliances}} has no score. Save it with zero points?",
+    "missingMany": "{{alliances}} have no score. Save them with zero points?",
+    "saveZero": "Save with zero points and submit",
+    "allianceFallback": "Alliance {{id}}",
+    "station": {
+      "red": "Red",
+      "blue": "Blue"
+    },
+    "phase": {
+      "not_started": "Not started",
+      "countdown_autonomous": "Starting autonomous",
+      "autonomous": "Autonomous",
+      "awaiting_driver": "Waiting for driver control",
+      "countdown_driver": "Starting driver control",
+      "driver": "Driver control",
+      "ended": "Ended"
+    },
+    "clock": {
+      "heading": "Timer",
+      "start": "Start",
+      "startDriver": "Start driver",
+      "pause": "Pause",
+      "resume": "Resume",
+      "end": "End",
+      "endHeading": "End the match now?",
+      "endNow": "End now",
+      "reset": "Reset timer",
+      "resetHeading": "Reset the timer?",
+      "resetSegment": "Reset current segment",
+      "resetMatch": "Reset entire match timer",
+      "resetWarning": "Resetting the entire match timer also clears the draft scores.",
+      "cancel": "Cancel",
+      "paused": "Paused"
+    },
+    "skills": {
+      "noRun": "No run on this field.",
+      "gone": "This field is no longer a skills field.",
+      "saved": "Saved: {{team}} · {{type}} · {{score}}",
+      "fieldTimer": "Field timer",
+      "setTimer": "Set timer",
+      "followsSet": "Following the set timer",
+      "alone": "On its own timer",
+      "discard": "Discard",
+      "discardHeading": "Discard this run? No attempt is used.",
+      "discardNow": "Discard run",
+      "phase": {
+        "ready": "Ready",
+        "running": "Running",
+        "ended": "Run over"
+      }
+    }
+  },
+  "matchScoring": {
+    "heading": "Score {{match}}",
+    "back": "Back to matches",
+    "loading": "Loading…",
+    "officialScore": "Score: {{score}}",
+    "noShowTag": "no-show",
+    "dqTag": "DQ",
+    "correct": "Correct score",
+    "correctHint": "Saving replaces the official score and recalculates the rankings.",
+    "saveCorrection": "Save correction",
+    "saveAnyway": "Save anyway",
+    "cancel": "Cancel",
+    "corrected": "Score corrected."
   }
 }

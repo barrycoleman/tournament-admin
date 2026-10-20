@@ -120,8 +120,18 @@ export function SessionMatchesRoute() {
         name: t("sessions.matches.columnStatus"),
         renderCell: ({ row }) => t(`sessions.matches.status.${row.status}`, { defaultValue: row.status }),
       },
+      {
+        key: "score",
+        name: t("sessions.matches.columnScore"),
+        renderCell: ({ row }) =>
+          row.status === "not_played" ? null : (
+            <Link to={`/sessions/${session.id}/matches/${row.id}/score`}>
+              {row.status === "completed" ? t("sessions.matches.viewScore") : t("sessions.matches.score")}
+            </Link>
+          ),
+      },
     ],
-    [t, stations]
+    [t, stations, session.id]
   );
 
   if (isLoading) {

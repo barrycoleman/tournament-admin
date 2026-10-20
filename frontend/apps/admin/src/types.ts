@@ -39,6 +39,10 @@ export interface SessionRead {
   qualification_finalized_at: string | null;
   /** Played count -> drops chosen at finalize; {} for head-to-head; null while open. */
   qualification_drops: Record<string, number> | null;
+  /** Live totals on displays for practice and qualification (and skills); the server's default is on. */
+  live_scores_qualification?: boolean;
+  /** Live totals on displays for finals; the server's default is off. */
+  live_scores_finals?: boolean;
 }
 
 export interface FieldSetRead {

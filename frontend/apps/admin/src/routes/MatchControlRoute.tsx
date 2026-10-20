@@ -21,8 +21,8 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Modal } from "../components/Modal";
 import { ScreenSettingsEditor } from "../displays/ScreenSettingsEditor";
 import type { DisplayGroupRead, FieldRead, FieldSetLiveRead } from "../displays/types";
-import { useMatchControlActions, useMatchControlData } from "../matchControl/useMatchControl";
-import type { EventRead, TeamSummary } from "../types";
+import { useMatchControlActions, useMatchControlData, type LiveScoresSwitch } from "../matchControl/useMatchControl";
+import type { EventRead, SessionRead, TeamSummary } from "../types";
 
 const STORAGE_KEY = "tournament-admin.matchControl.fieldSet";
 /** Phases a "reset this period" applies to (the server refuses it elsewhere). */
@@ -81,7 +81,8 @@ function MatchControlBody({ sessionId }: { sessionId: number }) {
   const { t } = useTranslation();
   const data = useMatchControlData(sessionId);
   const [selected, setSelected] = useState<number | null>(readStoredFieldSet);
-  const fieldSets = data.fieldSets.data ?? [];
+  // Matches run on teamwork sets only; skills sets belong to Skills Control.
+  const fieldSets = (data.fieldSets.data ?? []).filter((fs) => fs.purpose !== "skills");
   if (data.fieldSets.data && fieldSets.length === 0) return <p>{t("matchControl.noFields")}</p>;
   const fieldSet = fieldSets.find((fs) => fs.id === selected) ?? fieldSets[0];
   if (!fieldSet || !data.fields.data || !data.matches.data || !data.teams.data || !data.scores.data || !data.displays.data) {
@@ -115,6 +116,7 @@ function MatchControlBody({ sessionId }: { sessionId: number }) {
         scores={data.scores.data}
         teams={new Map(data.teams.data.map((team) => [team.id, team]))}
         audience={audience}
+        session={data.sessions.data?.find((s) => s.id === sessionId) ?? null}
       />
     </>
   );
@@ -127,6 +129,7 @@ function FieldSetPanel({
   scores,
   teams,
   audience,
+  session,
 }: {
   fieldSet: FieldSetLiveRead;
   fields: FieldRead[];
@@ -134,6 +137,7 @@ function FieldSetPanel({
   scores: AllianceScore[];
   teams: Map<number, TeamSummary>;
   audience: DisplayGroupRead | null;
+  session: SessionRead | null;
 }) {
   const { t } = useTranslation();
   const now = useNow();
@@ -154,6 +158,9 @@ function FieldSetPanel({
   );
   const timeoutLeft = fieldSet.timeout_deadline ? (Date.parse(fieldSet.timeout_deadline) - now) / 1000 : 0;
   const failed = Object.values(actions).find((mutation) => mutation.isError);
+  const liveSwitch: LiveScoresSwitch = current?.is_finals ? "live_scores_finals" : "live_scores_qualification";
+  // An older server leaves the switches out; fall back to its defaults (qualification on, finals off).
+  const liveOn = session ? (session[liveSwitch] ?? liveSwitch === "live_scores_qualification") : null;
   const act = (matchId: number, action: Parameters<typeof actions.matchAction.mutate>[0]["action"], body?: unknown) =>
     actions.matchAction.mutate({ matchId, action, body });
 
@@ -231,8 +238,25 @@ function FieldSetPanel({
             <p>
               {current.paused ? t("matchControl.paused") : t(`matchControl.phase.${current.phase}`, { defaultValue: current.phase })}
             </p>
+            <div className="form-actions">
+              {current.status !== "completed" && (
+                <Link className="btn" to={`/sessions/${current.session_id}/matches/${current.id}/score`}>
+                  {t("matchControl.score")}
+                </Link>
+              )}
+              {session && liveOn !== null && (
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={actions.setLiveScores.isPending}
+                  onClick={() => actions.setLiveScores.mutate({ sessionId: session.id, field: liveSwitch, value: !liveOn })}
+                >
+                  {liveOn ? t("matchControl.hideLive") : t("matchControl.showLive")}
+                </button>
+              )}
+            </div>
             {current.phase === "ended" ? (
-              <p>{t("matchControl.waitingForScore")}</p>
+              <p>{current.status === "completed" ? t("matchControl.scoreSaved") : t("matchControl.waitingForScore")}</p>
             ) : (
               <div className="form-actions">
                 {current.phase === "awaiting_driver" && (

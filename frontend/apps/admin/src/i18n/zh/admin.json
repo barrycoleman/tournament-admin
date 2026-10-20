@@ -328,7 +328,10 @@
       "allRounds": "所有轮次",
       "teamSearchLabel": "按队伍编号或名称搜索",
       "empty": "还没有比赛。",
-      "goToSchedule": "前往赛程"
+      "goToSchedule": "前往赛程",
+      "columnScore": "分数",
+      "score": "计分",
+      "viewScore": "查看分数"
     },
     "fields": {
       "empty": "该场次还没有场地。",
@@ -842,7 +845,11 @@
       "driver": "手动控制",
       "ended": "已结束"
     },
-    "versus": "对"
+    "versus": "对",
+    "score": "计分",
+    "hideLive": "隐藏实时分数",
+    "showLive": "显示实时分数",
+    "scoreSaved": "分数已保存。"
   },
   "displays": {
     "heading": "显示屏",
@@ -899,5 +906,89 @@
       "scopeFieldSet": "本场地组",
       "scopeDivision": "整个分组"
     }
+  },
+  "scoring": {
+    "loading": "加载中…",
+    "offline": "离线，更改尚未保存",
+    "reconnecting": "离线，正在重新连接…",
+    "error": "出错了，请重试。",
+    "changedBy": "由 {{device}} 更改",
+    "scoreSoFar": "当前得分：{{score}}",
+    "sharedSheet": "共同得分",
+    "alliances": "联盟",
+    "noShow": "{{team}} 缺席",
+    "dq": "{{team}} 取消资格",
+    "submit": "提交",
+    "submitting": "正在提交…",
+    "submitAnyway": "仍然提交",
+    "violationsHeading": "比赛规则发现以下问题：",
+    "savedHeading": "已保存",
+    "gone": "此比赛已不可用。",
+    "missingHeading": "缺少分数",
+    "missingOne": "{{alliances}} 没有分数。以零分保存吗？",
+    "missingMany": "{{alliances}} 没有分数。以零分保存吗？",
+    "saveZero": "以零分保存并提交",
+    "allianceFallback": "联盟 {{id}}",
+    "station": {
+      "red": "红方",
+      "blue": "蓝方"
+    },
+    "phase": {
+      "not_started": "未开始",
+      "countdown_autonomous": "自动阶段即将开始",
+      "autonomous": "自动阶段",
+      "awaiting_driver": "等待手动控制",
+      "countdown_driver": "手动控制即将开始",
+      "driver": "手动控制",
+      "ended": "已结束"
+    },
+    "clock": {
+      "heading": "计时",
+      "start": "开始",
+      "startDriver": "开始手动控制",
+      "pause": "暂停",
+      "resume": "继续",
+      "end": "结束",
+      "endHeading": "现在结束比赛？",
+      "endNow": "立即结束",
+      "reset": "重置计时",
+      "resetHeading": "重置计时？",
+      "resetSegment": "重置当前阶段",
+      "resetMatch": "重置整场比赛计时",
+      "resetWarning": "重置整场比赛计时也会清除草稿分数。",
+      "cancel": "取消",
+      "paused": "已暂停"
+    },
+    "skills": {
+      "noRun": "此场地没有进行中的挑战。",
+      "gone": "此场地已不是技能场地。",
+      "saved": "已保存：{{team}} · {{type}} · {{score}}",
+      "fieldTimer": "场地计时",
+      "setTimer": "场地组计时",
+      "followsSet": "跟随场地组计时",
+      "alone": "使用自己的计时",
+      "discard": "放弃",
+      "discardHeading": "放弃这次挑战？不会占用尝试次数。",
+      "discardNow": "放弃挑战",
+      "phase": {
+        "ready": "就绪",
+        "running": "进行中",
+        "ended": "挑战结束"
+      }
+    }
+  },
+  "matchScoring": {
+    "heading": "为 {{match}} 计分",
+    "back": "返回比赛列表",
+    "loading": "加载中…",
+    "officialScore": "得分：{{score}}",
+    "noShowTag": "缺席",
+    "dqTag": "取消资格",
+    "correct": "更正分数",
+    "correctHint": "保存会替换正式分数并重新计算排名。",
+    "saveCorrection": "保存更正",
+    "saveAnyway": "仍然保存",
+    "cancel": "取消",
+    "corrected": "分数已更正。"
   }
 }

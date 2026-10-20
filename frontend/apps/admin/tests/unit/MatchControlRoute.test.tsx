@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ApiError, initI18n, type LiveMatch } from "@tournament-admin/shared";
+import { ApiError, initI18n, type LiveMatch, type RealtimeEvent } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
 import { MatchControlRoute } from "../../src/routes/MatchControlRoute";
 
@@ -12,7 +12,7 @@ vi.mock("@tournament-admin/shared", async (importOriginal) => {
   return { ...actual, apiRequest: vi.fn(), useRealtimeChannel: vi.fn() };
 });
 
-import { apiRequest } from "@tournament-admin/shared";
+import { apiRequest, useRealtimeChannel } from "@tournament-admin/shared";
 
 const soon = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString();
 function match(overrides: Partial<LiveMatch>): LiveMatch {
@@ -34,12 +34,14 @@ let fieldSets: Record<string, unknown>[];
 let matches: LiveMatch[];
 let scores: Record<string, unknown>[];
 let audience: Record<string, unknown>;
+let sessions: Record<string, unknown>[];
 
 function stub() {
   vi.mocked(apiRequest).mockImplementation(async (path: string, options?: { method?: string }) => {
     const key = `${options?.method ?? "GET"} ${path}`;
     const routes: Record<string, unknown> = {
       "GET /api/event": { id: 1, name: "E", game_plugin_name: "g", game_plugin_locked: false, created_at: "", ...event },
+      "GET /api/sessions": sessions,
       "GET /api/field-sets?session_id=1": fieldSets,
       "GET /api/fields?session_id=1": [
         { id: 1, field_set_id: 10, name: "Field 1" },
@@ -76,11 +78,13 @@ function renderRoute() {
 
 beforeEach(() => {
   vi.mocked(apiRequest).mockReset();
+  vi.mocked(useRealtimeChannel).mockReset();
   localStorage.clear();
   event = { active_session_id: 1 };
   fieldSets = [
-    { id: 10, session_id: 1, name: "Main Fields", division_id: null, queued_match_id: null, timeout_deadline: null },
-    { id: 11, session_id: 1, name: "Side Fields", division_id: null, queued_match_id: null, timeout_deadline: null },
+    { id: 10, session_id: 1, name: "Main Fields", division_id: null, queued_match_id: null, timeout_deadline: null, purpose: "teamwork" },
+    { id: 11, session_id: 1, name: "Side Fields", division_id: null, queued_match_id: null, timeout_deadline: null, purpose: "teamwork" },
+    { id: 12, session_id: 1, name: "Skills Row", division_id: null, queued_match_id: null, timeout_deadline: null, purpose: "skills" },
   ];
   matches = [match({ id: 1 }), match({ id: 2, field_id: 2 }), match({ id: 3, field_id: 3 })];
   scores = [];
@@ -88,6 +92,13 @@ beforeEach(() => {
     id: 50, session_id: 1, kind: "audience", name: "Main Fields", field_set_id: 10, field_id: null, division_id: null,
     screen: "logo", screen_settings: {}, rotation: null, play_sounds: false, displays: [],
   };
+  sessions = [
+    {
+      id: 1, event_id: 1, label: "Saturday", session_date: null, timezone: null, has_scored_matches: false,
+      qualification_finalized_at: null, qualification_drops: null,
+      live_scores_qualification: true, live_scores_finals: false,
+    },
+  ];
   stub();
 });
 
@@ -239,5 +250,70 @@ describe("Match Control", () => {
     const latestPanel = await screen.findByRole("region", { name: "Time-out" });
     fireEvent.click(await within(latestPanel).findByRole("button", { name: "Cancel time-out" }));
     await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/field-sets/10/timeout", { method: "DELETE" }));
+  });
+
+  it("links the current match to its scoring page", async () => {
+    matches = [match({ id: 1, phase: "driver", phase_deadline: soon(1) })];
+    stub();
+    renderRoute();
+    const timer = await screen.findByRole("region", { name: "Timer" });
+    expect(within(timer).getByRole("link", { name: "Score" })).toHaveAttribute("href", "/sessions/1/matches/1/score");
+  });
+
+  it("hides live scores for a qualification match and shows them for a finals match", async () => {
+    matches = [match({ id: 1, phase: "driver", phase_deadline: soon(1) })];
+    stub();
+    renderRoute();
+    const timer = await screen.findByRole("region", { name: "Timer" });
+    fireEvent.click(await within(timer).findByRole("button", { name: "Hide live scores" }));
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith("/api/sessions/1", { method: "PATCH", body: { live_scores_qualification: false } })
+    );
+    cleanup();
+    matches = [match({ id: 1, phase: "driver", phase_deadline: soon(1), is_finals: true, round_type: "elimination" })];
+    stub();
+    renderRoute();
+    const finalsTimer = await screen.findByRole("region", { name: "Timer" });
+    fireEvent.click(await within(finalsTimer).findByRole("button", { name: "Show live scores" }));
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith("/api/sessions/1", { method: "PATCH", body: { live_scores_finals: true } })
+    );
+  });
+
+  it("stops waiting for the score when the match is submitted", async () => {
+    let onEvent: ((event: RealtimeEvent) => void) | undefined;
+    vi.mocked(useRealtimeChannel).mockImplementation((options) => {
+      onEvent = options.onEvent;
+      return { connected: true };
+    });
+    matches = [match({ id: 1, phase: "ended" })];
+    stub();
+    renderRoute();
+    const timer = await screen.findByRole("region", { name: "Timer" });
+    expect(within(timer).getByText("Match over — waiting for the score.")).toBeInTheDocument();
+    matches = [match({ id: 1, phase: "ended", status: "completed" })];
+    scores = [
+      { match_id: 1, alliance_id: 11, score: 9, data: {}, teams: [], saved_at: soon(0) },
+      { match_id: 1, alliance_id: 12, score: 3, data: {}, teams: [], saved_at: soon(0) },
+    ];
+    stub();
+    act(() => onEvent?.({ event: "match_submitted", data: { match_id: 1 } }));
+    expect(await within(timer).findByText("Score saved.")).toBeInTheDocument();
+    expect(within(timer).queryByText("Match over — waiting for the score.")).not.toBeInTheDocument();
+    expect(within(timer).queryByRole("link", { name: "Score" })).not.toBeInTheDocument();
+  });
+
+  it("lists teamwork field sets only", async () => {
+    renderRoute();
+    expect(await screen.findByRole("tab", { name: "Main Fields" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Side Fields" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Skills Row" })).not.toBeInTheDocument();
+  });
+
+  it("says there are no fields when the session has only skills sets", async () => {
+    fieldSets = [fieldSets[2]];
+    stub();
+    renderRoute();
+    expect(await screen.findByText("This session has no fields yet.")).toBeInTheDocument();
   });
 });
