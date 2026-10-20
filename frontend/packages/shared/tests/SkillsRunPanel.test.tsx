@@ -95,6 +95,12 @@ describe("SkillsRunPanel", () => {
     expect(screen.getByText("No run on this field.")).toBeInTheDocument();
   });
 
+  it("shows a readable phase even for one with no translation", async () => {
+    run = { ...RUN, phase: "paused_by_ref" as unknown as SkillsRun["phase"] };
+    renderPanel();
+    expect(await screen.findByText(/Paused by ref · Following the set timer/)).toBeInTheDocument();
+  });
+
   it("discards the run after asking", async () => {
     renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: "Discard" }));

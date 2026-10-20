@@ -9,7 +9,7 @@ import {
   type ScoresheetValues,
 } from "../scoresheet";
 import { errorText, scoringPaths } from "./api";
-import { ClockControls } from "./ClockControls";
+import { ClockControls, humanize } from "./ClockControls";
 import { teamFlagKey } from "./mergeDraft";
 import { flashKey, useLiveDraft } from "./useLiveDraft";
 import type {
@@ -99,7 +99,7 @@ export function LiveScoringPage({
   const [clockBusy, setClockBusy] = useState(false);
   const [clockError, setClockError] = useState<string | null>(null);
 
-  const stationLabel = (station: string) => t(`scoring.station.${station}`, { defaultValue: station });
+  const stationLabel = (station: string) => t(`scoring.station.${station}`, { defaultValue: humanize(station) });
   const ordered = [...alliances].sort((a, b) => a.alliance_id - b.alliance_id);
   const sheets: Sheet[] = cooperative
     ? [

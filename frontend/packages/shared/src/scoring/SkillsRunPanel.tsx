@@ -3,7 +3,7 @@ import { apiRequest } from "../api-client";
 import { formatClock } from "../display/clock";
 import { ScoresheetForm, defaultValues, type ScoresheetField, type ScoresheetTranslate } from "../scoresheet";
 import { scoringPaths } from "./api";
-import { useClockNow } from "./ClockControls";
+import { humanize, useClockNow } from "./ClockControls";
 import { useSkillsRun } from "./useLiveDraft";
 import type { ScoringRequest, ScoringSocket, SkillsPhase, SkillsTimerAction } from "./types";
 
@@ -146,7 +146,7 @@ export function SkillsRunPanel({
             {formatClock(timerSeconds(run, run.follows_set ? (timer?.run_seconds ?? null) : null, now))}
           </p>
           <p>
-            {run.paused ? t("scoring.clock.paused") : t(`scoring.skills.phase.${run.phase}`)}
+            {run.paused ? t("scoring.clock.paused") : t(`scoring.skills.phase.${run.phase}`, { defaultValue: humanize(run.phase) })}
             {" · "}
             {run.follows_set ? t("scoring.skills.followsSet") : t("scoring.skills.alone")}
           </p>

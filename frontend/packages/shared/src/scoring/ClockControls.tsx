@@ -21,6 +21,12 @@ export interface ClockControlsProps {
   busy?: boolean;
 }
 
+/** A readable fallback for an enum value with no translation: "countdown_driver" -> "Countdown driver". Never a raw key. */
+export function humanize(value: string): string {
+  const text = value.replace(/_/g, " ").trim();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 export function useClockNow(intervalMs = 250): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -61,7 +67,7 @@ export function ClockControls({ match, matchFormat, t, onAction, busy = false }:
         {clockText(match, matchFormat, now)}
       </p>
       <p className="clock-controls__phase">
-        {match.paused ? t("scoring.clock.paused") : t(`scoring.phase.${match.phase}`, { defaultValue: match.phase })}
+        {match.paused ? t("scoring.clock.paused") : t(`scoring.phase.${match.phase}`, { defaultValue: humanize(match.phase) })}
       </p>
       {!finished && (
         <div className="form-actions">

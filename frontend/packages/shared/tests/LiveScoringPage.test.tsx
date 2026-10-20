@@ -253,6 +253,11 @@ describe("LiveScoringPage", () => {
     expect(screen.getByRole("region", { name: "Blue" })).toBeInTheDocument();
   });
 
+  it("names an unknown station readably", async () => {
+    renderPage({ alliances: [{ alliance_id: 11, station: "green_team", teams: [{ id: 1, number: "101A", name: "Rockets" }] }] });
+    expect(await screen.findByRole("region", { name: "Green team" })).toBeInTheDocument();
+  });
+
   it("posts clock actions for the match", async () => {
     renderPage({ match: liveMatch({ phase: "awaiting_driver", phase_deadline: null }) });
     const clock = await screen.findByRole("region", { name: "Timer" });
@@ -301,6 +306,15 @@ describe("ClockControls", () => {
     expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
     expect(screen.getByTestId("scoring-clock")).toHaveTextContent("0:42");
     expect(screen.getByText("Paused")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["countdown_autonomous", "Starting autonomous"],
+    ["countdown_driver", "Starting driver control"],
+  ])("shows readable text for the %s phase", (phase, text) => {
+    renderClock(liveMatch({ phase }), HEAD_TO_HEAD);
+    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.queryByText(/_/)).not.toBeInTheDocument();
   });
 
   it("starts a match that has not started", () => {
