@@ -468,8 +468,10 @@ function createMatchController(get: () => UseLiveDraftOptions, rerender: () => v
       state.error = null;
       state.submitting = true;
       if (ids.length === 0) {
+        // Nothing to save at zero; still wait for this device's own queued changes before Submit.
+        state.submitAfterFlush = state.lastForce;
         notify();
-        void postSubmit(state.lastForce);
+        queue.pump();
         return;
       }
       // Re-post Submit once the zero drafts below are acknowledged.

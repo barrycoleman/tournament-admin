@@ -522,6 +522,26 @@ describe("review fixes", () => {
     expect(server.calls.map((call) => call.path)).toEqual(["/api/matches/1/submit", "/api/matches/1/alliances/11/draft"]);
   });
 
+  it("waits for this device's queued change before re-posting Submit when no alliance needs zero", async () => {
+    const server = fakeServer({ "/api/matches/1/draft": MATCH_DRAFT });
+    const { result } = renderDraft(server);
+    await waitFor(() => expect(result.current.draft).not.toBeNull());
+    act(() => result.current.submit());
+    await act(async () => server.calls[0].reject(new ApiError(409, "Alliance 12 has no draft score.")));
+    expect(result.current.missing).toEqual([12]);
+    act(() => result.current.setItem(12, "balls", 4));
+    expect(server.calls).toHaveLength(2);
+    act(() => result.current.confirmZeroAndSubmit());
+    expect(server.calls).toHaveLength(2);
+    await act(async () => server.calls[1].resolve(draft({ alliance_id: 12, data: { balls: 4 }, version: 1 })));
+    await waitFor(() => expect(server.calls).toHaveLength(3));
+    expect(server.calls.map((call) => call.path)).toEqual([
+      "/api/matches/1/submit",
+      "/api/matches/1/alliances/12/draft",
+      "/api/matches/1/submit",
+    ]);
+  });
+
   it("cancels a waiting Submit when one of this device's changes is refused", async () => {
     const server = fakeServer({ "/api/matches/1/draft": MATCH_DRAFT });
     const { result } = renderDraft(server);
