@@ -66,3 +66,9 @@ class SkillsFieldRead(BaseModel):
 class SkillsSetRead(BaseModel):
     timer: SkillsSetTimerRead
     fields: list[SkillsFieldRead]
+
+
+class SkillsTypeWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    skills_type: str

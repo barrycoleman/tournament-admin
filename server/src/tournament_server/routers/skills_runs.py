@@ -13,7 +13,17 @@ from tournament_server.device_auth import require_paired_scoring_device
 from tournament_server.models.field import Field
 from tournament_server.models.field_set import FieldSet
 from tournament_server.plugin_registry.loader import LoadedPlugin
-from tournament_server.schemas.skills_run import SkillsRunCreate, SkillsRunPatch, SkillsRunRead, SkillsSetRead
+from tournament_server.realtime import broadcast_active_session, broadcast_session
+from tournament_server.routers.skills import numbered_read
+from tournament_server.schemas.draft import SubmitRequest
+from tournament_server.schemas.skills import SkillsAttemptRead
+from tournament_server.schemas.skills_run import (
+    SkillsRunCreate,
+    SkillsRunPatch,
+    SkillsRunRead,
+    SkillsSetRead,
+    SkillsTypeWrite,
+)
 from tournament_server.services import skills, skills_runs
 
 router = APIRouter(tags=["skills-runs"])
@@ -114,3 +124,80 @@ def read_skills_set(
         return skills_runs.read_set(db, plugin, field_set)
     except skills_runs.RunRefused as refused:
         return _refusal(refused)
+
+
+@router.post("/api/fields/{field_id}/skills-run/submit", response_model=SkillsAttemptRead)
+def submit_skills_run(
+    field_id: int,
+    payload: SubmitRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _device: str | None = Depends(require_paired_scoring_device),
+) -> Any:
+    field = _field_or_404(db, field_id)
+    plugin = _plugin_or_409(request, db)
+    try:
+        attempt = skills_runs.submit_run(db, plugin, field, force=payload.force)
+    except skills_runs.RunRefused as refused:
+        return _refusal(refused)
+    data = {"session_id": attempt.session_id}
+    broadcast_session(request.app, attempt.session_id, "skills_changed", data)
+    broadcast_active_session(request.app, "skills_changed", data)
+    skills_runs.notify(request.app, field.field_set_id, field.id)
+    return numbered_read(db, attempt)
+
+
+@router.post("/api/fields/{field_id}/skills-run/{action}", response_model=SkillsRunRead)
+def field_timer(
+    field_id: int,
+    action: skills_runs.TimerAction,
+    request: Request,
+    db: Session = Depends(get_db),
+    _device: str | None = Depends(require_paired_scoring_device),
+) -> Any:
+    field = _field_or_404(db, field_id)
+    plugin = _plugin_or_409(request, db)
+    try:
+        run = skills_runs.field_timer_action(db, plugin, field, action.value)
+    except skills_runs.RunRefused as refused:
+        return _refusal(refused)
+    skills_runs.schedule_expiry(request.app, run.field_set_id, run.field_id, run.deadline)
+    skills_runs.notify(request.app, run.field_set_id, run.field_id)
+    return skills_runs.run_read(db, plugin, run)
+
+
+@router.post("/api/field-sets/{field_set_id}/skills-timer/{action}", response_model=SkillsSetRead)
+def set_timer(
+    field_set_id: int,
+    action: skills_runs.TimerAction,
+    request: Request,
+    db: Session = Depends(get_db),
+    _device: str | None = Depends(require_paired_scoring_device),
+) -> Any:
+    field_set = _field_set_or_404(db, field_set_id)
+    plugin = _plugin_or_409(request, db)
+    try:
+        timer = skills_runs.set_timer_action(db, plugin, field_set, action.value)
+    except skills_runs.RunRefused as refused:
+        return _refusal(refused)
+    skills_runs.schedule_expiry(request.app, field_set_id, None, timer.deadline)
+    skills_runs.notify(request.app, field_set_id)
+    return skills_runs.read_set(db, plugin, field_set)
+
+
+@router.put("/api/field-sets/{field_set_id}/skills-timer", response_model=SkillsSetRead)
+def set_skills_type(
+    field_set_id: int,
+    payload: SkillsTypeWrite,
+    request: Request,
+    db: Session = Depends(get_db),
+    _device: str | None = Depends(require_paired_scoring_device),
+) -> Any:
+    field_set = _field_set_or_404(db, field_set_id)
+    plugin = _plugin_or_409(request, db)
+    try:
+        skills_runs.set_set_type(db, plugin, field_set, payload.skills_type)
+    except skills_runs.RunRefused as refused:
+        return _refusal(refused)
+    skills_runs.notify(request.app, field_set_id)
+    return skills_runs.read_set(db, plugin, field_set)

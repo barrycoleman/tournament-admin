@@ -3,12 +3,14 @@ each session's allowed attempts. The pure rules live in skills_rules.py and
 the ranking in skills_ranking.py."""
 from __future__ import annotations
 
+import json
 from collections import Counter
 from typing import Any, Iterable
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from tournament_server.db import utc_now
 from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.skills import SkillsAttempt, SkillsSettings
@@ -127,4 +129,31 @@ def compute_rankings(
         skills_depth(allowed.values()),
         {s.id: session_order_key(s.session_date, s.id) for s in sessions},
         team_numbers,
+    )
+
+
+def new_attempt(
+    plugin: LoadedPlugin,
+    session_id: int,
+    team_id: int,
+    skills_type: str,
+    data: dict,
+    score: int,
+    *,
+    field_id: int | None = None,
+) -> SkillsAttempt:
+    """A recorded attempt, not yet added to the session. `field_id` is set when
+    it comes from a skills run on that field."""
+    now = utc_now()
+    return SkillsAttempt(
+        session_id=session_id,
+        team_id=team_id,
+        skills_type=skills_type,
+        data_json=json.dumps(data),
+        score=score,
+        plugin_name=plugin.name,
+        plugin_version=plugin.version,
+        field_id=field_id,
+        recorded_at=now,
+        updated_at=now,
     )

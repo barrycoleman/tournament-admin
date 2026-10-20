@@ -183,6 +183,7 @@ def _attempt_read(attempt: SkillsAttempt, number: int) -> SkillsAttemptRead:
         id=attempt.id,
         team_id=attempt.team_id,
         skills_type=attempt.skills_type,
+        field_id=attempt.field_id,
         number=number,
         score=attempt.score,
         data=json.loads(attempt.data_json),
@@ -191,7 +192,7 @@ def _attempt_read(attempt: SkillsAttempt, number: int) -> SkillsAttemptRead:
     )
 
 
-def _numbered_read(db: Session, attempt: SkillsAttempt) -> SkillsAttemptRead:
+def numbered_read(db: Session, attempt: SkillsAttempt) -> SkillsAttemptRead:
     return _attempt_read(attempt, skills.attempt_numbers(_session_attempts(db, attempt.session_id))[attempt.id])
 
 
@@ -236,23 +237,12 @@ def create_skills_attempt(
     if violations:
         return _violations_response(violations)
     score = _score(plugin, payload.skills_type, payload.data)
-    now = utc_now()
-    attempt = SkillsAttempt(
-        session_id=session_id,
-        team_id=team.id,
-        skills_type=payload.skills_type,
-        data_json=json.dumps(payload.data),
-        score=score,
-        plugin_name=plugin.name,
-        plugin_version=plugin.version,
-        recorded_at=now,
-        updated_at=now,
-    )
+    attempt = skills.new_attempt(plugin, session_id, team.id, payload.skills_type, payload.data, score)
     db.add(attempt)
     db.commit()
     db.refresh(attempt)
     _broadcast_skills_changed(request, session_id)
-    return _numbered_read(db, attempt)
+    return numbered_read(db, attempt)
 
 
 def _attempt_or_404(db: Session, attempt_id: int) -> SkillsAttempt:
@@ -283,7 +273,7 @@ def update_skills_attempt(
     db.commit()
     db.refresh(attempt)
     _broadcast_skills_changed(request, attempt.session_id)
-    return _numbered_read(db, attempt)
+    return numbered_read(db, attempt)
 
 
 @router.delete("/api/skills/attempts/{attempt_id}", status_code=204)

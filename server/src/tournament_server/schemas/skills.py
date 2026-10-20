@@ -61,6 +61,8 @@ class SkillsAttemptRead(BaseModel):
     id: int
     team_id: int
     skills_type: str
+    # The skills field the attempt was run on; None when entered directly.
+    field_id: int | None = None
     # 1, 2, 3, ... per team and type in this session, by (recorded_at, id).
     number: int
     score: int

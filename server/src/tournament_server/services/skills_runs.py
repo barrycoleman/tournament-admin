@@ -1,12 +1,15 @@
 """Skills runs and skills field-set timers (live scoring design §4.3, §4.4, §6)."""
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
+import enum
 import json
+import logging
 import math
 from typing import Any, NamedTuple
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -15,6 +18,7 @@ from tournament_server.db import utc_now
 from tournament_server.models.field import Field
 from tournament_server.models.field_set import SKILLS, FieldSet
 from tournament_server.models.scoring_draft import SkillsRun, SkillsSetTimer
+from tournament_server.models.skills import SkillsAttempt
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
 from tournament_server.plugin_registry.loader import LoadedPlugin
@@ -383,3 +387,178 @@ def notify(app, field_set_id: int, field_id: int | None = None) -> None:
     realtime.broadcast_active_session(app, "skills_run_changed", data, roles=RUN_EVENT_ROLES)
     with app.state.session_factory() as db:
         live_scores.on_skills_changed(app, db, field_set_id)
+
+
+logger = logging.getLogger(__name__)
+
+NO_RUN_LENGTH = skills.NO_RUN_SECONDS_DETAIL
+NO_FOLLOWING_RUN = "No run is following this field set."
+RUNS_EXIST = "Finish or discard this set's runs first."
+TIMER_NOT_READY = "The timer has already started; reset it first."
+TIMER_NOT_RUNNING = "The timer is not running."
+TIMER_NOT_PAUSED = "The timer is not paused."
+EXPIRY_GRACE_SECONDS = 0.05
+
+
+class TimerAction(str, enum.Enum):
+    START = "start"
+    PAUSE = "pause"
+    RESUME = "resume"
+    END = "end"
+    RESET = "reset"
+
+
+def _apply_action(row: SkillsSetTimer | SkillsRun, action: str, length: int | None, now: dt.datetime) -> None:
+    """One timer control on a set timer or a run's own timer, like the match
+    clock: start from ready (deadline = now + the type's run length), pause and
+    resume a running timer, end it, or reset it to ready from anywhere."""
+    state = timer_state(row, now)
+    if action == TimerAction.START:
+        if state.phase != READY:
+            raise RunRefused(409, TIMER_NOT_READY)
+        if length is None:
+            raise RunRefused(409, NO_RUN_LENGTH)
+        _copy_state(row, TimerState(RUNNING, now + dt.timedelta(seconds=length), False, None))
+    elif action == TimerAction.PAUSE:
+        if state.phase != RUNNING or state.paused:
+            raise RunRefused(409, TIMER_NOT_RUNNING)
+        _copy_state(row, TimerState(RUNNING, None, True, state.remaining))
+    elif action == TimerAction.RESUME:
+        if state.phase != RUNNING or not state.paused:
+            raise RunRefused(409, TIMER_NOT_PAUSED)
+        _copy_state(row, TimerState(RUNNING, now + dt.timedelta(seconds=state.remaining), False, None))
+    elif action == TimerAction.END:
+        if state.phase != RUNNING:
+            raise RunRefused(409, TIMER_NOT_RUNNING)
+        _copy_state(row, TimerState(ENDED, None, False, None))
+    else:
+        _copy_state(row, _READY_STATE)
+
+
+def _field_timer_action(db: Session, plugin: LoadedPlugin, field: Field, action: str) -> SkillsRun:
+    """A control on the field's own timer. The first one takes the run off the
+    set timer, starting from the set timer's current state; from then on only
+    this field's controls move it, and its length is its own type's."""
+    field_set = skills_set_for_field(db, field)
+    run = _run_or_404(db, field.id)
+    now = utc_now()
+    if run.follows_set:
+        _copy_state(run, timer_state(find_set_timer(db, field_set.id), now))
+        run.follows_set = False
+    _apply_action(run, action, _run_length(plugin, run.skills_type), now)
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+def _set_timer_action(db: Session, plugin: LoadedPlugin, field_set: FieldSet, action: str) -> SkillsSetTimer:
+    """A control on the set timer, which every run following the set reads."""
+    require_skills_set(field_set)
+    set_timer = ensure_set_timer(db, field_set)
+    if action == TimerAction.START and not following_runs(db, field_set.id):
+        raise RunRefused(409, NO_FOLLOWING_RUN)
+    _apply_action(set_timer, action, _run_length(plugin, set_skills_type(plugin, set_timer)), utc_now())
+    db.commit()
+    return set_timer
+
+
+def _set_set_type(db: Session, plugin: LoadedPlugin, field_set: FieldSet, skills_type: str) -> SkillsSetTimer:
+    """Changes the set's skills type, only while the set has no run at all."""
+    require_skills_set(field_set)
+    if skills_type not in [t["key"] for t in skills.plugin_types(plugin)]:
+        raise RunRefused(422, f"Unknown skills type: {skills_type!r}")
+    if db.execute(select(SkillsRun.id).where(SkillsRun.field_set_id == field_set.id).limit(1)).first() is not None:
+        raise RunRefused(409, RUNS_EXIST)
+    set_timer = ensure_set_timer(db, field_set)
+    set_timer.skills_type = skills_type
+    _copy_state(set_timer, _READY_STATE)
+    db.commit()
+    return set_timer
+
+
+def _submit_run(db: Session, plugin: LoadedPlugin, field: Field, *, force: bool) -> SkillsAttempt:
+    """Turns the field's run into a recorded attempt (with the field's id) and
+    deletes the run, re-checking the team's attempt limit inside the write."""
+    skills_set_for_field(db, field)
+    run = _run_or_404(db, field.id)
+    run_id, session_id, team_id, skills_type = run.id, run.session_id, run.team_id, run.skills_type
+    schema = plugin.module.skills_scoresheet_schema(skills_type)
+    # Items nobody touched count at their default, as the scoresheet shows them.
+    data = {**{item["name"]: item["default"] for item in schema}, **json.loads(run.data_json)}
+    violations = scoresheet_violations(schema, data)
+    if violations and not force:
+        raise RunRefused(422, {"detail": SCORESHEET_ERRORS, "violations": violations})
+    try:
+        score = int(plugin.module.calculate_skills_score(skills_type, data))
+    except Exception as exc:  # noqa: BLE001 - a plugin bug becomes a readable 422, not a 500
+        raise RunRefused(422, f"Plugin could not score this scoresheet: {exc}")
+    session_obj = db.get(TournamentSession, session_id)
+    team = db.get(Team, team_id)
+    types = {t["key"]: t for t in skills.plugin_types(plugin)}
+    # Claim the run first. The delete is this transaction's first write, so
+    # SQLite serialises two submits here, and the count below sees every
+    # attempt already committed (two fields racing one team's last attempt).
+    if db.execute(delete(SkillsRun).where(SkillsRun.id == run_id)).rowcount == 0:
+        db.rollback()
+        raise RunRefused(404, NO_RUN)
+    refusal = skills.attempt_refusal(db, session_obj, team, skills_type, types)
+    if refusal is not None:
+        db.rollback()
+        raise RunRefused(409, refusal)
+    attempt = skills.new_attempt(plugin, session_id, team_id, skills_type, data, score, field_id=field.id)
+    db.add(attempt)
+    db.commit()
+    db.refresh(attempt)
+    return attempt
+
+
+def breakdown(plugin: LoadedPlugin, skills_type: str, data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Each scoresheet item's label and value (None until entered), in schema order."""
+    return [
+        {"label": item["label"], "value": data.get(item["name"])}
+        for item in plugin.module.skills_scoresheet_schema(skills_type)
+    ]
+
+
+def _log_expiry_failure(future) -> None:
+    if future.cancelled():
+        return
+    error = future.exception()
+    if error is not None:
+        logger.error("Skills timer expiry notice failed", exc_info=error)
+
+
+def schedule_expiry(app, field_set_id: int, field_id: int | None, deadline: dt.datetime | None) -> None:
+    """Announces the set or run again just after `deadline`, so displays switch
+    to the breakdown when a timer runs out. A stale notice (the timer was
+    paused, reset or ended meanwhile) only repeats the current state."""
+    loop = app.state.realtime.event_loop
+    if loop is None or deadline is None:
+        return
+    delay = max(0.0, (deadline - utc_now()).total_seconds()) + EXPIRY_GRACE_SECONDS
+
+    async def _announce() -> None:
+        await asyncio.sleep(delay)
+        notify(app, field_set_id, field_id)
+
+    asyncio.run_coroutine_threadsafe(_announce(), loop).add_done_callback(_log_expiry_failure)
+
+
+def field_timer_action(db: Session, plugin: LoadedPlugin, field: Field, action: str) -> SkillsRun:
+    with DRAFT_WRITE_LOCK:
+        return _field_timer_action(db, plugin, field, action)
+
+
+def set_timer_action(db: Session, plugin: LoadedPlugin, field_set: FieldSet, action: str) -> SkillsSetTimer:
+    with DRAFT_WRITE_LOCK:
+        return _set_timer_action(db, plugin, field_set, action)
+
+
+def set_set_type(db: Session, plugin: LoadedPlugin, field_set: FieldSet, skills_type: str) -> SkillsSetTimer:
+    with DRAFT_WRITE_LOCK:
+        return _set_set_type(db, plugin, field_set, skills_type)
+
+
+def submit_run(db: Session, plugin: LoadedPlugin, field: Field, *, force: bool) -> SkillsAttempt:
+    with DRAFT_WRITE_LOCK:
+        return _submit_run(db, plugin, field, force=force)

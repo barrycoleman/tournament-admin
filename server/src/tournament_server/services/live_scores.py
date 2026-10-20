@@ -9,6 +9,7 @@ displays get `{"match_id", "cleared": True}`.
 """
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -16,9 +17,11 @@ from sqlalchemy.orm import Session
 
 from tournament_server import realtime
 from tournament_server.deps import get_the_event
+from tournament_server.models.field_set import SKILLS, FieldSet
 from tournament_server.models.match import Match
+from tournament_server.models.scoring_draft import SkillsRun
 from tournament_server.models.session import TournamentSession
-from tournament_server.services import displays, drafts, qualification
+from tournament_server.services import displays, drafts, qualification, skills_runs
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -93,6 +96,10 @@ def on_switches_changed(app: "FastAPI", db: Session, session_id: int) -> None:
         select(Match).where(Match.session_id == session_id, Match.phase.in_(LIVE_PHASES)).order_by(Match.id)
     ).scalars().all():
         on_match_phase_changed(app, db, match)
+    for skills_set_id in db.execute(
+        select(FieldSet.id).where(FieldSet.session_id == session_id, FieldSet.purpose == SKILLS)
+    ).scalars().all():
+        on_skills_changed(app, db, skills_set_id)
 
 
 def live_snapshot(db: Session, plugin: "LoadedPlugin | None", field_set_id: int | None) -> dict:
@@ -111,11 +118,49 @@ def live_snapshot(db: Session, plugin: "LoadedPlugin | None", field_set_id: int 
         for match in db.execute(query).scalars().all()
         if match_live_allowed(db, match)
     ]
-    # Skills fields join in Task 10 (skills_live_payloads).
-    return {"matches": matches, "skills": []}
+    if field_set_id is not None:
+        skills_sets = [field_set_id]
+    else:
+        skills_sets = db.execute(
+            select(FieldSet.id)
+            .where(FieldSet.session_id == event.active_session_id, FieldSet.purpose == SKILLS)
+            .order_by(FieldSet.id)
+        ).scalars().all()
+    skills = [payload for set_id in skills_sets for payload in skills_live_payloads(db, plugin, set_id)]
+    return {"matches": matches, "skills": skills}
+
+
+def skills_live_payloads(db: Session, plugin: "LoadedPlugin | None", field_set_id: int) -> list[dict]:
+    """What displays may show for a skills set's fields (spec §7): a run's live
+    total while its timer runs and the session's live_scores_qualification
+    switch is on; once its timer has ended, the breakdown and total whatever
+    the switch, until it is submitted or discarded."""
+    field_set = db.get(FieldSet, field_set_id)
+    if plugin is None or field_set is None or field_set.purpose != SKILLS:
+        return []
+    session_obj = db.get(TournamentSession, field_set.session_id)
+    set_timer = skills_runs.find_set_timer(db, field_set_id)
+    payloads = []
+    for run in db.execute(
+        select(SkillsRun).where(SkillsRun.field_set_id == field_set_id).order_by(SkillsRun.field_id)
+    ).scalars().all():
+        phase = skills_runs.effective_timer(run, set_timer).phase
+        data = json.loads(run.data_json)
+        score = skills_runs.run_score(plugin, run.skills_type, data)
+        if phase == skills_runs.ENDED:
+            payloads.append(
+                {"field_id": run.field_id, "breakdown": skills_runs.breakdown(plugin, run.skills_type, data), "score": score}
+            )
+        elif phase == skills_runs.RUNNING and session_obj.live_scores_qualification:
+            payloads.append({"field_id": run.field_id, "score": score})
+    return payloads
 
 
 def on_skills_changed(app: "FastAPI", db: Session, field_set_id: int) -> None:
-    """A skills run or timer on this set changed: push its live scores.
-    Task 10 fills this in; until then nothing is sent."""
-    return None
+    """A skills set's runs or timer changed: every field of the set gets its
+    payload, or `cleared` when nothing may be shown."""
+    shown = {payload["field_id"]: payload for payload in skills_live_payloads(db, _plugin(app, db), field_set_id)}
+    for field_id in displays.field_ids_for_set(db, field_set_id):
+        realtime.broadcast_active_session(
+            app, "live_score", shown.get(field_id, {"field_id": field_id, "cleared": True}), roles=LIVE_SCORE_ROLES
+        )
