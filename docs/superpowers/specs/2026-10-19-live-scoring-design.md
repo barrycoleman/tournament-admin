@@ -106,7 +106,7 @@ The draft's score uses the plugin's `calculate_score`. A draft that makes `calcu
 All under a skills field (`/api/fields/{id}/…`) or set (`/api/field-sets/{id}/…`); a teamwork field or set → 409.
 
 - **`POST /api/fields/{id}/skills-run`**, body `{team_id, skills_type?}` → the run. Checks: skills enabled, the team checked in for the session, attempts of that type left (counting submitted attempts), no run on the field. `skills_type` defaults to the set's; a type other than the set's is allowed only with `follows_set: false` in the body (the run starts on its own timer).
-- **`GET /api/field-sets/{id}/skills`** → `{timer, runs: [...], fields: [{field_id, name, run?}]}` for Skills Control, the scoring page and displays.
+- **`GET /api/field-sets/{id}/skills`** → `{timer, fields: [{field_id, name, run?}]}` for Skills Control, the scoring page and displays.
 - **`PATCH /api/fields/{id}/skills-run/draft`**, body `{changes}`: merged like teamwork drafts against `skills_scoresheet_schema(type)`.
 - **`POST /api/fields/{id}/skills-run/{start|pause|resume|end|reset}`**: the field's own timer. The first one sets `follows_set = false`. Start sets `deadline = now + run_seconds`.
 - **`POST /api/field-sets/{id}/skills-timer/{start|pause|resume|end|reset}`**: the set timer; acts on every run following the set at once. Start is refused if no run follows the set.
@@ -181,7 +181,7 @@ Realtime registers each active-session socket with its caller's role so events c
 - A live-score switch flipped mid-match: takes effect at once.
 - Skills: no run for a team not checked in or out of attempts; the limit is re-checked on submit; discard uses nothing; a set's type can't change while runs exist.
 - Purpose changes: refused while the set has matches (to skills) or runs (to teamwork).
-- Bindings to a deleted field or a session no longer active are cleared; the device is told (`scorer_binding_changed`) and asks to pick again (scorer-app spec).
+- A binding to a deleted field is cleared and the device is told (`scorer_binding_changed`). Bindings belong to a session, so when another session becomes active a device simply has none there (the existing `active_session_changed` event tells it to re-read); it asks to pick again (scorer-app spec).
 - A plugin without `run_seconds` fails the conformance tool; at runtime the server refuses to start a skills timer for that type (409) rather than guessing.
 
 ## 13. Testing
