@@ -31,6 +31,7 @@ from tournament_server.schemas.skills_run import (
 )
 from tournament_server.services import skills
 from tournament_server.services.drafts import DRAFT_WRITE_LOCK
+from tournament_server.services.scoresheets import sheet_with_defaults
 from tournament_server.services.skills_rules import scoresheet_violations
 
 SKILLS_SET_DETAIL = "This is a skills field set."
@@ -168,9 +169,11 @@ def _run_length(plugin: LoadedPlugin, skills_type: str | None) -> int | None:
 
 
 def run_score(plugin: LoadedPlugin, skills_type: str, data: dict[str, Any]) -> int:
-    """The score so far; 0 while the plugin can't score the sheet yet."""
+    """The score so far, items not entered yet counting at their defaults;
+    0 while the plugin can't score the sheet yet."""
     try:
-        return int(plugin.module.calculate_skills_score(skills_type, data))
+        sheet = sheet_with_defaults(plugin.module.skills_scoresheet_schema(skills_type), data)
+        return int(plugin.module.calculate_skills_score(skills_type, sheet))
     except Exception:  # noqa: BLE001 - a half-filled sheet just shows 0
         return 0
 
@@ -484,7 +487,7 @@ def _submit_run(db: Session, plugin: LoadedPlugin, field: Field, *, force: bool)
     run_id, session_id, team_id, skills_type = run.id, run.session_id, run.team_id, run.skills_type
     schema = plugin.module.skills_scoresheet_schema(skills_type)
     # Items nobody touched count at their default, as the scoresheet shows them.
-    data = {**{item["name"]: item["default"] for item in schema}, **json.loads(run.data_json)}
+    data = sheet_with_defaults(schema, json.loads(run.data_json))
     violations = scoresheet_violations(schema, data)
     if violations and not force:
         raise RunRefused(422, {"detail": SCORESHEET_ERRORS, "violations": violations})
@@ -513,11 +516,10 @@ def _submit_run(db: Session, plugin: LoadedPlugin, field: Field, *, force: bool)
 
 
 def breakdown(plugin: LoadedPlugin, skills_type: str, data: dict[str, Any]) -> list[dict[str, Any]]:
-    """Each scoresheet item's label and value (None until entered), in schema order."""
-    return [
-        {"label": item["label"], "value": data.get(item["name"])}
-        for item in plugin.module.skills_scoresheet_schema(skills_type)
-    ]
+    """Each scoresheet item's label and value (its default until entered), in schema order."""
+    schema = plugin.module.skills_scoresheet_schema(skills_type)
+    sheet = sheet_with_defaults(schema, data)
+    return [{"label": item["label"], "value": sheet.get(item["name"])} for item in schema]
 
 
 def _log_expiry_failure(future) -> None:

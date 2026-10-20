@@ -71,7 +71,12 @@ describe("SkillsRunPanel", () => {
     expect(within(panel).getByText(/Run over · Following the set timer/)).toBeInTheDocument();
     expect(within(panel).getByRole("group", { name: "Field timer" })).toBeInTheDocument();
     fireEvent.click(within(screen.getByRole("group", { name: "Set timer" })).getByRole("button", { name: "Reset timer" }));
+    const confirm = screen.getByRole("group", { name: "Reset the set timer? Entries are kept." });
+    expect(confirm).toHaveTextContent("Fields affected: 1");
+    expect(request).not.toHaveBeenCalledWith("/api/field-sets/9/skills-timer/reset", { method: "POST" });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Reset timer" }));
     await waitFor(() => expect(request).toHaveBeenCalledWith("/api/field-sets/9/skills-timer/reset", { method: "POST" }));
+    expect(screen.queryByRole("group", { name: "Reset the set timer? Entries are kept." })).not.toBeInTheDocument();
     fireEvent.click(await within(panel).findByRole("button", { name: "Increase Score" }));
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith("/api/fields/3/skills-run/draft", { method: "PATCH", body: { changes: { score: 5 } } })
@@ -93,6 +98,27 @@ describe("SkillsRunPanel", () => {
     );
     expect(await screen.findByText("Saved: 101A Rockets · Driver · 4")).toBeInTheDocument();
     expect(screen.getByText("No run on this field.")).toBeInTheDocument();
+  });
+
+  it("asks before ending or resetting the field's own timer", async () => {
+    run = { ...RUN, follows_set: false, phase: "running", deadline: "2999-01-01T00:00:00Z" };
+    renderPanel();
+    const fieldTimer = await screen.findByRole("group", { name: "Field timer" });
+    fireEvent.click(within(fieldTimer).getByRole("button", { name: "End" }));
+    let confirm = screen.getByRole("group", { name: "End this field's timer?" });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("group", { name: "End this field's timer?" })).not.toBeInTheDocument();
+    expect(request).not.toHaveBeenCalledWith("/api/fields/3/skills-run/end", { method: "POST" });
+
+    fireEvent.click(within(fieldTimer).getByRole("button", { name: "End" }));
+    confirm = screen.getByRole("group", { name: "End this field's timer?" });
+    fireEvent.click(within(confirm).getByRole("button", { name: "End now" }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith("/api/fields/3/skills-run/end", { method: "POST" }));
+
+    fireEvent.click(within(fieldTimer).getByRole("button", { name: "Reset timer" }));
+    confirm = screen.getByRole("group", { name: "Reset this field's timer? Entries are kept." });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Reset timer" }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith("/api/fields/3/skills-run/reset", { method: "POST" }));
   });
 
   it("shows a readable phase even for one with no translation", async () => {

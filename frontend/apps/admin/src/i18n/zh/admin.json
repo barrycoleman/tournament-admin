@@ -981,6 +981,11 @@
       "discard": "放弃",
       "discardHeading": "放弃这次挑战？不会占用尝试次数。",
       "discardNow": "放弃挑战",
+      "endFieldHeading": "结束此场地的计时？",
+      "resetFieldHeading": "重置此场地的计时？已录入的内容保留。",
+      "endSetHeading": "结束场地组计时？",
+      "resetSetHeading": "重置场地组计时？已录入的内容保留。",
+      "setAffects": "受影响的场地：{{count}}",
       "phase": {
         "ready": "就绪",
         "running": "进行中",
@@ -1037,6 +1042,18 @@
     "discardHeading": "放弃 {{name}} 上的这一轮？",
     "discardBody": "队伍 {{number}} 的记录将被丢弃，不消耗尝试次数。",
     "discardConfirm": "放弃这一轮",
+    "confirmTimer": {
+      "endSetHeading": "结束 {{name}} 的场地组计时？",
+      "endSetBody": "所有跟随场地组计时的场地上的这一轮将立即结束。受影响的场地：{{count}}",
+      "resetSetHeading": "重置 {{name}} 的场地组计时？",
+      "resetSetBody": "所有跟随场地组计时的场地将回到计时开始，已录入的内容保留。受影响的场地：{{count}}",
+      "endFieldHeading": "结束 {{name}} 的计时？",
+      "endFieldBody": "队伍 {{number}} 的这一轮将立即结束。",
+      "resetFieldHeading": "重置 {{name}} 的计时？",
+      "resetFieldBody": "队伍 {{number}} 的计时将回到开始，已录入的内容保留。",
+      "endConfirm": "结束计时",
+      "resetConfirm": "重置计时"
+    },
     "cancel": "取消"
   }
 }

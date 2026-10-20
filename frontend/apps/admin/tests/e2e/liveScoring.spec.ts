@@ -287,6 +287,9 @@ test.describe.serial("live scoring", () => {
 
     // Ending the set timer ends Skills 1 and 2; Skills 3 keeps running alone.
     await card.getByRole("group", { name: "Set timer" }).getByRole("button", { name: "End", exact: true }).click();
+    const endSet = page.getByRole("alertdialog", { name: "End the set timer on Skills Row?" });
+    await expect(endSet).toContainText("Fields affected: 2");
+    await endSet.getByRole("button", { name: "End timer" }).click();
     await expect(skillsTv.getByText("Run over")).toBeVisible({ timeout: 10_000 });
     const breakdown = skillsTv.getByRole("list", { name: "Score breakdown" });
     await expect(breakdown).toContainText("Score");

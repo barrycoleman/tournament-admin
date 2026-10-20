@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { formatClock, skillsClockPhase, skillsClockSeconds } from "@tournament-admin/shared";
 import { useFields, useSkillsAttempts, useSkillsSet, useSkillsSettings, useTeamsById, type SkillsAttempt } from "./api";
 import { ScreenFrame, ScreenNotice, WaitingForData } from "./components/ScreenFrame";
+import { formatSheetValue } from "./components/ScoreBreakdown";
 import { useServerNow } from "./serverClock";
 import { useLiveScores } from "./useLiveScores";
 
@@ -93,7 +94,7 @@ export function SkillsFieldDisplay({
             {(entry?.breakdown ?? []).map((item) => (
               <li key={item.label}>
                 <span>{item.label}</span>
-                <span>{String(item.value)}</span>
+                <span>{formatSheetValue(item.value)}</span>
               </li>
             ))}
           </ul>

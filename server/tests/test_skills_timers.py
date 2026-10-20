@@ -241,7 +241,7 @@ def test_skills_live_scores_follow_the_timer_and_the_switch(client, event):
         _set_action(client, event, "end")
         breakdown = {
             "field_id": first,
-            "breakdown": [{"label": "Objects Scored", "value": 4}, {"label": "Robot Parked", "value": None}],
+            "breakdown": [{"label": "Objects Scored", "value": 4}, {"label": "Robot Parked", "value": False}],
             "score": 8,
         }
         assert _next_live(socket, first) == breakdown

@@ -28,47 +28,75 @@ function timerSeconds(
   return Math.max(0, (Date.parse(timer.deadline) - now) / 1000);
 }
 
+/** A timer's buttons. End and Reset ask first, like the match clock's. */
 function TimerButtons({
   label,
   phase,
   paused,
   t,
+  confirmHeadings,
+  note,
   onAction,
 }: {
   label: string;
   phase: SkillsPhase;
   paused: boolean;
   t: ScoresheetTranslate;
+  /** The question each confirmation asks. */
+  confirmHeadings: { end: string; reset: string };
+  /** An extra line under the question (how many fields a set timer moves). */
+  note?: string;
   onAction: (action: SkillsTimerAction) => void;
 }) {
+  const [confirming, setConfirming] = useState<"end" | "reset" | null>(null);
+  const act = (action: SkillsTimerAction) => {
+    setConfirming(null);
+    onAction(action);
+  };
   return (
-    <div className="form-actions" role="group" aria-label={label}>
-      {phase === "ready" && (
-        <button className="btn btn-primary" type="button" onClick={() => onAction("start")}>
-          {t("scoring.clock.start")}
-        </button>
-      )}
-      {phase === "running" &&
-        (paused ? (
-          <button className="btn btn-primary" type="button" onClick={() => onAction("resume")}>
-            {t("scoring.clock.resume")}
+    <>
+      <div className="form-actions" role="group" aria-label={label}>
+        {phase === "ready" && (
+          <button className="btn btn-primary" type="button" onClick={() => act("start")}>
+            {t("scoring.clock.start")}
           </button>
-        ) : (
-          <button className="btn" type="button" onClick={() => onAction("pause")}>
-            {t("scoring.clock.pause")}
+        )}
+        {phase === "running" &&
+          (paused ? (
+            <button className="btn btn-primary" type="button" onClick={() => act("resume")}>
+              {t("scoring.clock.resume")}
+            </button>
+          ) : (
+            <button className="btn" type="button" onClick={() => act("pause")}>
+              {t("scoring.clock.pause")}
+            </button>
+          ))}
+        {phase === "running" && (
+          <button className="btn" type="button" onClick={() => setConfirming("end")}>
+            {t("scoring.clock.end")}
           </button>
-        ))}
-      {phase === "running" && (
-        <button className="btn" type="button" onClick={() => onAction("end")}>
-          {t("scoring.clock.end")}
-        </button>
+        )}
+        {phase !== "ready" && (
+          <button className="btn" type="button" onClick={() => setConfirming("reset")}>
+            {t("scoring.clock.reset")}
+          </button>
+        )}
+      </div>
+      {confirming !== null && (
+        <div className="clock-controls__confirm" role="group" aria-label={confirmHeadings[confirming]}>
+          <p>{confirmHeadings[confirming]}</p>
+          {note && <p className="field__hint">{note}</p>}
+          <div className="form-actions">
+            <button className="btn btn-danger" type="button" onClick={() => act(confirming)}>
+              {confirming === "end" ? t("scoring.clock.endNow") : t("scoring.clock.reset")}
+            </button>
+            <button className="btn" type="button" onClick={() => setConfirming(null)}>
+              {t("scoring.clock.cancel")}
+            </button>
+          </div>
+        </div>
       )}
-      {phase !== "ready" && (
-        <button className="btn" type="button" onClick={() => onAction("reset")}>
-          {t("scoring.clock.reset")}
-        </button>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -108,6 +136,7 @@ export function SkillsRunPanel({
   const title = field?.name ?? t("scoring.loading");
   const run = live.run;
   const timer = live.set?.timer ?? null;
+  const followingCount = live.set?.fields.filter((entry) => entry.run?.follows_set).length ?? 0;
 
   return (
     <section className="panel skills-run" role="region" aria-label={title}>
@@ -155,6 +184,10 @@ export function SkillsRunPanel({
             phase={run.phase}
             paused={run.paused}
             t={t}
+            confirmHeadings={{
+              end: t("scoring.skills.endFieldHeading", { defaultValue: "End this field's timer?" }),
+              reset: t("scoring.skills.resetFieldHeading", { defaultValue: "Reset this field's timer? Entries are kept." }),
+            }}
             onAction={(action) => live.timerAction("field", action)}
           />
           {run.follows_set && timer && (
@@ -163,6 +196,11 @@ export function SkillsRunPanel({
               phase={timer.phase}
               paused={timer.paused}
               t={t}
+              confirmHeadings={{
+                end: t("scoring.skills.endSetHeading", { defaultValue: "End the set timer?" }),
+                reset: t("scoring.skills.resetSetHeading", { defaultValue: "Reset the set timer? Entries are kept." }),
+              }}
+              note={t("scoring.skills.setAffects", { count: followingCount, defaultValue: "Fields affected: {{count}}" })}
               onAction={(action) => live.timerAction("set", action)}
             />
           )}

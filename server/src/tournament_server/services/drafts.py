@@ -31,6 +31,7 @@ from tournament_server.services.score_submission import (
     ScoreRefused,
     write_alliance_score,
 )
+from tournament_server.services.scoresheets import sheet_with_defaults
 from tournament_server.services.skills_rules import _field_problem
 
 if TYPE_CHECKING:
@@ -132,6 +133,12 @@ def _draft_row(db: Session, alliance_id: int) -> ScoreDraft | None:
     )
 
 
+def _full_sheet(plugin: "LoadedPlugin", draft: ScoreDraft) -> dict[str, Any]:
+    """The draft's sheet as the scoring page shows it: every item the
+    scorers never touched at its default."""
+    return sheet_with_defaults(plugin.module.scoresheet_schema(), json.loads(draft.data_json))
+
+
 def _stored_flags(draft: ScoreDraft) -> list[TeamFlags]:
     return [TeamFlags(**entry) for entry in json.loads(draft.teams_json)]
 
@@ -227,7 +234,7 @@ def draft_score(plugin: "LoadedPlugin", draft: ScoreDraft | None, team_ids, fina
     if team_flags.alliance_out(_stored_flags(draft), team_ids, finals=finals):
         return 0
     try:
-        return int(plugin.module.calculate_score(json.loads(draft.data_json)))
+        return int(plugin.module.calculate_score(_full_sheet(plugin, draft)))
     except Exception:
         return 0
 
@@ -340,7 +347,7 @@ def submit_match(
         draft = _draft_row(db, shared_id)
         if draft is None:
             raise ScoreRefused(status_code=409, detail=f"Alliance {shared_id} has no draft score.")
-        data = json.loads(draft.data_json)
+        data = _full_sheet(plugin, draft)
         flags = _stored_flags(draft)
         shared_out = team_flags.alliance_out(flags, team_ids[shared_id], finals=False)
         for alliance_id in alliance_ids:
@@ -372,7 +379,7 @@ def submit_match(
             if record is not None and not record.mirrored and not is_admin:
                 raise ScoreRefused(status_code=409, detail=SCORE_ALREADY_SUBMITTED_DETAIL)
             own = [flag for flag in _stored_flags(draft) if flag.team_id in team_ids[alliance_id]]
-            writes.append((alliance_id, json.loads(draft.data_json), own))
+            writes.append((alliance_id, _full_sheet(plugin, draft), own))
         checked = list(writes)
 
     violations = []

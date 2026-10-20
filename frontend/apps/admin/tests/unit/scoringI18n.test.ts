@@ -8,7 +8,7 @@ const KEYS = [
   ...["red", "blue"].map((k) => `scoring.station.${k}`),
   ...["not_started", "countdown_autonomous", "autonomous", "awaiting_driver", "countdown_driver", "driver", "ended"].map((k) => `scoring.phase.${k}`),
   ..."heading start startDriver pause resume end endHeading endNow reset resetHeading resetSegment resetMatch resetWarning cancel paused".split(" ").map((k) => `scoring.clock.${k}`),
-  ..."noRun gone saved fieldTimer setTimer followsSet alone discard discardHeading discardNow".split(" ").map((k) => `scoring.skills.${k}`),
+  ..."noRun gone saved fieldTimer setTimer followsSet alone discard discardHeading discardNow endFieldHeading resetFieldHeading endSetHeading resetSetHeading setAffects".split(" ").map((k) => `scoring.skills.${k}`),
   ...["ready", "running", "ended"].map((k) => `scoring.skills.phase.${k}`),
   "scoresheet.increase",
   "scoresheet.decrease",

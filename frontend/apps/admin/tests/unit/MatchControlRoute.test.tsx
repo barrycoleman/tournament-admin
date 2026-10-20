@@ -189,6 +189,8 @@ describe("Match Control", () => {
     fireEvent.click(within(timer).getByRole("button", { name: "Reset" }));
     const dialog = screen.getByRole("alertdialog", { name: "Reset the match?" });
     expect(within(dialog).queryByRole("button", { name: "Reset this period" })).not.toBeInTheDocument();
+    // The whole-match reset also deletes every scorer's draft scores.
+    expect(dialog).toHaveTextContent("Resetting the entire match timer also clears the draft scores.");
     fireEvent.click(within(dialog).getByRole("button", { name: "Reset the whole match" }));
     await waitFor(() =>
       expect(apiRequest).toHaveBeenCalledWith("/api/matches/1/reset", { method: "POST", body: { scope: "full" } })

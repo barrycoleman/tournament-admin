@@ -12,7 +12,8 @@ export interface LiveMatchScore {
 }
 export interface BreakdownItem {
   label: string;
-  value: number | string | boolean;
+  /** Null for an item nobody entered (the server sends defaults, but a display never trusts that). */
+  value: number | string | boolean | null;
 }
 export interface LiveSkillsScore {
   field_id: number;

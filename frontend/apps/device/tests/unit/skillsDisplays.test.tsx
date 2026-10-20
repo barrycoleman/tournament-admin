@@ -105,6 +105,29 @@ describe("skills field TV", () => {
     expect(screen.getByTestId("skills-total")).toHaveTextContent("21");
   });
 
+  it("shows a dash for a breakdown item not entered, never null", async () => {
+    set = { timer: timer({ phase: "ended" }), fields: [fieldRow(run({ phase: "ended" }))] };
+    live = {
+      matches: [],
+      skills: [
+        {
+          field_id: 31,
+          score: 4,
+          breakdown: [
+            { label: "Score", value: 4 },
+            { label: "Parked", value: null },
+            { label: "Bonus", value: true },
+          ],
+        },
+      ],
+    };
+    showFieldTv();
+    const breakdown = await screen.findByRole("list", { name: "Score breakdown" });
+    expect(breakdown).not.toHaveTextContent("null");
+    const rows = within(breakdown).getAllByRole("listitem").map((row) => row.textContent);
+    expect(rows).toEqual(["Score4", "Parked–", "Bonus✓"]);
+  });
+
   it("shows the final score after Submit, and waiting again after a Discard", async () => {
     set = { timer: timer(), fields: [fieldRow(run())] };
     const { emit } = showFieldTv();

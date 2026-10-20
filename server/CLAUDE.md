@@ -970,7 +970,11 @@ server order; `item_meta` records the device name or "Admin" and the time, and
 `version` goes up by 1. Team flags are stored under `team:<id>:no_show` and
 `team:<id>:dq`. It is a 409 `SCORE_ALREADY_SUBMITTED_DETAIL` once every
 alliance has a score, and a 409 for a not-played match. The score so far is
-`calculate_score` with the team flags applied, and 0 when the plugin raises.
+`calculate_score` with the team flags applied, and 0 when the plugin raises. A
+draft or run holds only the items someone changed, so every item never touched
+counts at its scoresheet default (`services/scoresheets.sheet_with_defaults`):
+in the score so far, in Submit's checks, in the stored official sheet, and in a
+skills run's live total and breakdown.
 
 **Submit.** `POST /api/matches/{id}/submit` (`{force}`) locks the match row and
 re-checks `is_submitted` in the transaction, so a second Submit is a 409. An
@@ -1041,7 +1045,7 @@ must be listed to reach admins); `send_to_devices_and_admins` carries
 Tests: `test_scoring_tables.py`, `test_field_set_purpose.py`,
 `test_session_live_switches.py`, `test_realtime_roles.py`,
 `test_score_submission_service.py`, `test_drafts.py`, `test_live_scores.py`,
-`test_draft_submit.py`, `test_skills_runs.py`, `test_skills_timers.py`,
+`test_draft_submit.py`, `test_partial_sheets.py`, `test_skills_runs.py`, `test_skills_timers.py`,
 `test_scorer_bindings.py`, `test_skills_attempt_field.py` and
 `test_skills_display_reads.py`.
 

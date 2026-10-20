@@ -24,6 +24,11 @@ import { useSkillsControlActions } from "./useSkillsControl";
 
 type FieldRef = { id: number; name: string };
 
+/** A timer action that needs a confirmation first: the set's, or one field's. */
+type PendingTimer =
+  | { scope: "set"; action: "end" | "reset" }
+  | { scope: "field"; action: "end" | "reset"; field: FieldRef; teamNumber: string };
+
 /** The phase label key: a paused running timer reads "paused". */
 function phaseKey(timer: SkillsClockState, now: number): string {
   const phase = skillsClockPhase(timer, now);
@@ -98,7 +103,9 @@ export function SkillsSetCard({
   const [starting, setStarting] = useState<FieldRef | null>(null);
   const [scoring, setScoring] = useState<FieldRef | null>(null);
   const [discarding, setDiscarding] = useState<(FieldRef & { teamNumber: string }) | null>(null);
+  const [pendingTimer, setPendingTimer] = useState<PendingTimer | null>(null);
   const hasRuns = set.fields.some((field) => field.run !== null);
+  const followingCount = set.fields.filter((field) => field.run?.follows_set).length;
   const typeLabel = (key: string) => types.find((type) => type.key === key)?.label ?? key;
   const runSeconds = (key: string) => types.find((type) => type.key === key)?.run_seconds ?? null;
   const teamNumber = (id: number) => teams.find((team) => team.id === id)?.number ?? "?";
@@ -143,7 +150,11 @@ export function SkillsSetCard({
               timer={set.timer}
               now={now}
               disabled={busy}
-              onAction={(action) => actions.setTimer.mutate({ fieldSetId: fieldSet.id, action })}
+              onAction={(action) =>
+                action === "end" || action === "reset"
+                  ? setPendingTimer({ scope: "set", action })
+                  : actions.setTimer.mutate({ fieldSetId: fieldSet.id, action })
+              }
             />
           </div>
         </div>
@@ -211,7 +222,9 @@ export function SkillsSetCard({
                             now={now}
                             disabled={busy}
                             onAction={(action) =>
-                              actions.fieldTimer.mutate({ fieldSetId: fieldSet.id, fieldId: row.field_id, action })
+                              action === "end" || action === "reset"
+                                ? setPendingTimer({ scope: "field", action, field, teamNumber: run.team_number })
+                                : actions.fieldTimer.mutate({ fieldSetId: fieldSet.id, fieldId: row.field_id, action })
                             }
                           />
                         </div>
@@ -261,6 +274,31 @@ export function SkillsSetCard({
             </button>
           </div>
         </Modal>
+      )}
+      {pendingTimer && (
+        <ConfirmDialog
+          heading={
+            pendingTimer.scope === "set"
+              ? t(`skillsControl.confirmTimer.${pendingTimer.action}SetHeading`, { name: fieldSet.name })
+              : t(`skillsControl.confirmTimer.${pendingTimer.action}FieldHeading`, { name: pendingTimer.field.name })
+          }
+          body={
+            pendingTimer.scope === "set"
+              ? t(`skillsControl.confirmTimer.${pendingTimer.action}SetBody`, { count: followingCount })
+              : t(`skillsControl.confirmTimer.${pendingTimer.action}FieldBody`, { number: pendingTimer.teamNumber })
+          }
+          confirmLabel={t(`skillsControl.confirmTimer.${pendingTimer.action}Confirm`)}
+          cancelLabel={t("skillsControl.cancel")}
+          onConfirm={() => {
+            if (pendingTimer.scope === "set") {
+              actions.setTimer.mutate({ fieldSetId: fieldSet.id, action: pendingTimer.action });
+            } else {
+              actions.fieldTimer.mutate({ fieldSetId: fieldSet.id, fieldId: pendingTimer.field.id, action: pendingTimer.action });
+            }
+            setPendingTimer(null);
+          }}
+          onCancel={() => setPendingTimer(null)}
+        />
       )}
       {discarding && (
         <ConfirmDialog

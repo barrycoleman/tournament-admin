@@ -984,6 +984,11 @@
       "discard": "Discard",
       "discardHeading": "Discard this run? No attempt is used.",
       "discardNow": "Discard run",
+      "endFieldHeading": "End this field's timer?",
+      "resetFieldHeading": "Reset this field's timer? Entries are kept.",
+      "endSetHeading": "End the set timer?",
+      "resetSetHeading": "Reset the set timer? Entries are kept.",
+      "setAffects": "Fields affected: {{count}}",
       "phase": {
         "ready": "Ready",
         "running": "Running",
@@ -1040,6 +1045,18 @@
     "discardHeading": "Discard the run on {{name}}?",
     "discardBody": "Team {{number}}'s entries are thrown away and no attempt is used.",
     "discardConfirm": "Discard run",
+    "confirmTimer": {
+      "endSetHeading": "End the set timer on {{name}}?",
+      "endSetBody": "The run ends now on every field following the set timer. Fields affected: {{count}}",
+      "resetSetHeading": "Reset the set timer on {{name}}?",
+      "resetSetBody": "The set timer goes back to the start for every field following it. Entries are kept. Fields affected: {{count}}",
+      "endFieldHeading": "End the timer on {{name}}?",
+      "endFieldBody": "Team {{number}}'s run ends now.",
+      "resetFieldHeading": "Reset the timer on {{name}}?",
+      "resetFieldBody": "Team {{number}}'s timer goes back to the start. Its entries are kept.",
+      "endConfirm": "End timer",
+      "resetConfirm": "Reset timer"
+    },
     "cancel": "Cancel"
   }
 }

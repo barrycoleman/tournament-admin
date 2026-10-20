@@ -398,6 +398,7 @@ function FieldSetPanel({
       {resetting && current && (
         <Modal labelledBy="reset-heading" onCancel={() => setResetting(false)}>
           <h2 id="reset-heading">{t("matchControl.resetHeading")}</h2>
+          <p className="field__hint">{t("scoring.clock.resetWarning")}</p>
           <div className="dialog__actions">
             {SECTION_PHASES.has(current.phase) && (
               <button

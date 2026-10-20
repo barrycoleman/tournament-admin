@@ -243,6 +243,53 @@ describe("Skills Control", () => {
     await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/fields/31/skills-run", { method: "DELETE" }));
   });
 
+  it("asks before ending or resetting the set timer, naming how many fields it moves", async () => {
+    skillsSet.timer = { ...skillsSet.timer, phase: "running", deadline: inSeconds(30) };
+    skillsSet.fields[1] = {
+      field_id: 32,
+      name: "Skills 2",
+      run: run({ id: 2, field_id: 32, team_id: 2, team_number: "22B", team_name: "Bravo", phase: "running", deadline: inSeconds(30) }),
+    };
+    renderRoute();
+    const timer = within(await card()).getByRole("group", { name: "Set timer" });
+
+    fireEvent.click(within(timer).getByRole("button", { name: "End" }));
+    let dialog = screen.getByRole("alertdialog", { name: "End the set timer on Skills Row?" });
+    // Skills 1 and Skills 2 follow the set; Skills 3 runs on its own timer.
+    expect(dialog).toHaveTextContent("Fields affected: 2");
+    expect(apiRequest).not.toHaveBeenCalledWith("/api/field-sets/20/skills-timer/end", { method: "POST" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "End timer" }));
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/field-sets/20/skills-timer/end", { method: "POST" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+
+    fireEvent.click(within(timer).getByRole("button", { name: "Reset" }));
+    dialog = screen.getByRole("alertdialog", { name: "Reset the set timer on Skills Row?" });
+    expect(dialog).toHaveTextContent("Fields affected: 2");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(apiRequest).not.toHaveBeenCalledWith("/api/field-sets/20/skills-timer/reset", { method: "POST" });
+  });
+
+  it("asks before ending or resetting a field's own timer", async () => {
+    renderRoute();
+    const three = within(await card()).getByRole("row", { name: "Skills 3" });
+    const timer = within(three).getByRole("group", { name: "Timer for Skills 3" });
+
+    fireEvent.click(within(timer).getByRole("button", { name: "End" }));
+    let dialog = screen.getByRole("alertdialog", { name: "End the timer on Skills 3?" });
+    expect(dialog).toHaveTextContent("Team 55E's run ends now.");
+    expect(apiRequest).not.toHaveBeenCalledWith("/api/fields/33/skills-run/end", { method: "POST" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "End timer" }));
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/fields/33/skills-run/end", { method: "POST" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+
+    fireEvent.click(within(timer).getByRole("button", { name: "Reset" }));
+    dialog = screen.getByRole("alertdialog", { name: "Reset the timer on Skills 3?" });
+    expect(dialog).toHaveTextContent("Team 55E's timer goes back to the start. Its entries are kept.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reset timer" }));
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/fields/33/skills-run/reset", { method: "POST" }));
+  });
+
   it("opens the scoring panel for a field's run", async () => {
     renderRoute();
     fireEvent.click(within(within(await card()).getByRole("row", { name: "Skills 1" })).getByRole("button", { name: "Score" }));
