@@ -153,7 +153,7 @@ Realtime registers each active-session socket with its caller's role so events c
 - Each change is sent at once as a PATCH of that item. Changes not yet acknowledged are queued in order; while any are queued and the connection is down, a banner reads "Offline, changes not saved yet". On reconnect the queue is sent, then the draft is fetched again.
 - Incoming `score_draft_changed` with a newer version replaces the sheet; items whose `item_meta` device differs from this device and changed flash for 2 s with "Changed by <device>".
 - Clock controls for the match's field: Start (Start driver after the first part of a two-part match), Pause/Resume, Reset timer (on a two-part match it asks: Reset current segment / Reset entire match timer; the whole-match reset warns that drafts are cleared) and End. Skills: the field's own timer and the set's timer.
-- Submit shows the plugin's problems per alliance with "Submit anyway". After any Submit (this device or another, via `match_submitted`), the page shows "Saved" with the official score. A skills run has Submit and Discard.
+- Submit shows the plugin's problems per alliance with "Submit anyway". When the server refuses because an alliance has no draft, the page asks "<alliance> has no score. Save it with zero points?" (listing every such alliance); confirming fills each with the scoresheet defaults and submits in one step, cancelling saves nothing. After any Submit (this device or another, via `match_submitted`), the page shows "Saved" with the official score. A skills run has Submit and Discard.
 - A 409 "already submitted" from a PATCH switches to "Saved"; a match that disappears (deleted, not played) shows "This match is no longer available".
 
 ## 10. Admin app

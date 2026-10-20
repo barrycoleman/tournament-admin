@@ -28,7 +28,7 @@
 ## Review Focus
 
 1. **Two tablets editing different items of one match at the same moment.** Neither change may be lost; the merged draft holds both — Task 6 `test_concurrent_patches_never_lose_a_change`; two Submits at once write one score — Task 8 `test_two_submits_at_once_write_one_score`.
-2. **A split-scored match submitted before the other alliance is touched.** Submit is refused naming that alliance, and only the explicit "Use the default score" button fills it — Task 8 (missing-draft 409) and Task 12/13 (409 → button → PATCH → submit).
+2. **A split-scored match submitted before the other alliance is touched.** Submit is refused naming that alliance; the page asks once, naming every unscored alliance ("Blue 102B has no score. Save it with zero points?"), and only on confirm saves them at zero and re-posts Submit, while Cancel saves nothing — Task 8 (missing-draft 409) and Task 12/13 (409 → question → PATCH(es) → Submit).
 3. **A tablet that drops off the network mid-match.** Changes queue in order, one in flight, and are sent then refetched on reconnect — Task 12 "keeps changes queued while offline, then sends them and refetches on reconnect"; Task 18 offline E2E.
 4. **Finals scores leaking to TVs or non-scoring sockets.** Totals go only to display_device and admin, never by default in finals — Task 4 `test_a_role_filtered_broadcast_reaches_only_the_listed_roles` / `test_admin_is_never_implied`; Task 7 finals tests; Task 18 finals E2E.
 5. **Two skills fields racing a team's last attempt.** Exactly one submit succeeds and the other run stays in place — Task 10 `test_submit_rechecks_the_attempt_limit`.
@@ -7030,9 +7030,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces (`scoring/mergeDraft.ts`): `teamFlagKey(teamId, flag)`, `parseTeamFlagKey(key)`, `DraftLike`, `withPending(draft, pending)`, `mergeIncoming(local, incoming, pending) -> AllianceDraft`, `changedByOthers(prev, next, myDevice) -> string[]`.
 - Produces (`scoring/useLiveDraft.ts`): `flashKey(allianceId, item)`, `useLiveDraft(options: UseLiveDraftOptions) -> LiveDraftState`, `useSkillsRun(options: UseSkillsRunOptions) -> SkillsRunState`, `SkillsSaved`.
 
-> **Plan note:** the skeleton's `useLiveDraft({ matchId, myDeviceName, socketEvents })` gains `sessionId` (to read the official scores for "Saved"), an optional `request` (the device app makes requests through its own fetch helper, never the shared `apiRequest`, so the hook can't hard-wire it) and `defaults` (see the next note). `socketEvents` is a `ScoringSocket` (`{connected, subscribe}`); the admin feeds it from `useRealtimeChannel` through `createScoringHub()`, the device app will feed it from its event bus. `pending` is the number of unacknowledged changes (the per-item pending values stay inside the hook and are what `mergeIncoming` lays on top). `flashing` is keyed by `flashKey(allianceId, item)`. The state also carries `loading`, `submitting`, `saved` (the official scores once submitted), `missingDraft`, `fillDefaults(allianceId)` and `error`. `useSkillsRun` takes `{fieldId, fieldSetId, myDeviceName, socketEvents, request?, defaults?}` and adds `set`, `run`, `discard()` and `timerAction("field" | "set", action)`.
+> **Plan note:** the skeleton's `useLiveDraft({ matchId, myDeviceName, socketEvents })` gains `sessionId` (to read the official scores for "Saved"), an optional `request` (the device app makes requests through its own fetch helper, never the shared `apiRequest`, so the hook can't hard-wire it), `defaults` and `cooperative` (see the next note). `socketEvents` is a `ScoringSocket` (`{connected, subscribe}`); the admin feeds it from `useRealtimeChannel` through `createScoringHub()`, the device app will feed it from its event bus. `pending` is the number of unacknowledged changes (the per-item pending values stay inside the hook and are what `mergeIncoming` lays on top). `flashing` is keyed by `flashKey(allianceId, item)`. The state also carries `loading`, `submitting`, `saved` (the official scores once submitted), `missing`, `confirmZeroAndSubmit()`, `cancelMissing()` and `error`. `useSkillsRun` takes `{fieldId, fieldSetId, myDeviceName, socketEvents, request?, defaults?}` and adds `set`, `run`, `discard()` and `timerAction("field" | "set", action)`.
 >
-> **Plan note:** Task 8 refuses Submit with 409 `"Alliance {id} has no draft score."` while any alliance has no draft. That guard keeps a split-scored match from being half-saved, so the hook never fills drafts on its own: `submit()` waits for this device's queued changes to be acknowledged, posts Submit, and on that 409 sets `missingDraft` to the named alliance (no error, nothing submitted). `fillDefaults(allianceId)` is the explicit way out: it PATCHes that alliance with the scoresheet `defaults`, and the scorer presses Submit again. A skills run has one scorer and no such guard, so `useSkillsRun.submit()` still sends the defaults of items the run never set before submitting.
+> **Plan note:** Task 8 refuses Submit with 409 `"Alliance {id} has no draft score."` while any alliance has no draft, so a split-scored match is never half-saved; the server refusal stays as it is and the hook never fills drafts on its own. `submit()` waits for this device's queued changes to be acknowledged and posts Submit. On that 409 it sets `missing` to the named alliance plus every other alliance still at `version: 0` with nothing queued (a cooperative game: only the lowest alliance, which holds the shared draft), with no error and nothing submitted. The page asks once, naming them all ("Blue 102B has no score. Save it with zero points?"). `confirmZeroAndSubmit()` PATCHes each missing alliance with the scoresheet `defaults` and re-posts Submit (same `force`) as soon as those PATCHes are acknowledged, in one action; `cancelMissing()` drops the question and saves nothing. A skills run has one scorer and no such guard, so `useSkillsRun.submit()` still sends the defaults of items the run never set before submitting.
 >
 > **Plan note:** Task 8's whole-match reset broadcasts drafts with `version: 0`, and the next PATCH starts a new row at version 1, so versions are not monotonic across a reset. The hook therefore always applies an incoming `version: 0` draft, and on `match_reset` for its match it refetches the draft and takes the server's copy whatever its version.
 
@@ -7340,7 +7340,7 @@ describe("useLiveDraft", () => {
     await waitFor(() => expect(result.current.saved).toHaveLength(1));
   });
 
-  it("refuses to submit while an alliance has no draft, names it, and fills it with the defaults only when asked", async () => {
+  it("lists the alliances without a draft on a 409 and, when confirmed, saves them at zero and submits again", async () => {
     const server = fakeServer({ "/api/matches/1/draft": MATCH_DRAFT });
     const { result } = renderDraft(server);
     await waitFor(() => expect(result.current.draft).not.toBeNull());
@@ -7350,24 +7350,37 @@ describe("useLiveDraft", () => {
     expect(server.calls).toHaveLength(1);
     expect(server.calls[0]).toMatchObject({ path: "/api/matches/1/submit", options: { method: "POST", body: { force: false } } });
     await act(async () => server.calls[0].reject(new ApiError(409, "Alliance 12 has no draft score.")));
-    expect(result.current.missingDraft).toBe(12);
+    expect(result.current.missing).toEqual([12]);
     expect(result.current.error).toBeNull();
+    expect(result.current.submitting).toBe(false);
     expect(result.current.submitted).toBe(false);
 
-    act(() => result.current.fillDefaults(12));
-    expect(result.current.missingDraft).toBeNull();
+    act(() => result.current.confirmZeroAndSubmit());
+    expect(result.current.missing).toEqual([]);
     expect(server.calls[1]).toMatchObject({
       path: "/api/matches/1/alliances/12/draft",
       options: { method: "PATCH", body: { changes: { balls: 0, parked: false } } },
     });
     await act(async () => server.calls[1].resolve(draft({ alliance_id: 12, data: { balls: 0, parked: false }, version: 1 })));
-    await waitFor(() => expect(result.current.pending).toBe(0));
-
-    act(() => result.current.submit());
     await waitFor(() => expect(server.calls).toHaveLength(3));
     expect(server.calls[2]).toMatchObject({ path: "/api/matches/1/submit", options: { body: { force: false } } });
     await act(async () => server.calls[2].resolve({ match_id: 1, submitted: true, alliances: [] }));
     await waitFor(() => expect(result.current.submitted).toBe(true));
+  });
+
+  it("lists every alliance still without a draft, and Cancel saves nothing", async () => {
+    const server = fakeServer({
+      "/api/matches/1/draft": { ...MATCH_DRAFT, alliances: [draft({ alliance_id: 11 }), draft({ alliance_id: 12 })] },
+    });
+    const { result } = renderDraft(server);
+    await waitFor(() => expect(result.current.draft).not.toBeNull());
+    act(() => result.current.submit());
+    await act(async () => server.calls[0].reject(new ApiError(409, "Alliance 11 has no draft score.")));
+    expect(result.current.missing).toEqual([11, 12]);
+    act(() => result.current.cancelMissing());
+    expect(result.current.missing).toEqual([]);
+    expect(server.calls).toHaveLength(1);
+    expect(result.current.pending).toBe(0);
   });
 
   it("shows the plugin's violations per alliance and submits anyway", async () => {
@@ -8027,8 +8040,10 @@ export interface UseLiveDraftOptions {
   myDeviceName: string;
   socketEvents: ScoringSocket;
   request?: ScoringRequest;
-  /** The scoresheet's defaults, which `fillDefaults` sends for an alliance nobody has scored. */
+  /** The scoresheet's defaults, which `confirmZeroAndSubmit` saves for each alliance nobody has scored. */
   defaults?: ScoresheetValues;
+  /** Cooperative games keep one shared draft on the lowest alliance id; only it can be missing. */
+  cooperative?: boolean;
 }
 
 export interface LiveDraftState {
@@ -8049,10 +8064,12 @@ export interface LiveDraftState {
   /** The official scores of this match once submitted (null while loading them). */
   saved: AllianceScore[] | null;
   violations: SubmitViolation[] | null;
-  /** The alliance Submit was refused for because nobody has scored it yet (409); null otherwise. */
-  missingDraft: number | null;
-  /** Sends the scoresheet defaults as that alliance's draft (the scorer then presses Submit again). */
-  fillDefaults: (allianceId: number) => void;
+  /** Alliances with no draft after Submit was refused for one (409), in id order; empty otherwise. */
+  missing: number[];
+  /** Saves each missing alliance with the scoresheet defaults (zero points), then submits again. */
+  confirmZeroAndSubmit: () => void;
+  /** Drops the missing-alliance question; nothing is saved. */
+  cancelMissing: () => void;
   /** The match was deleted or marked not played. */
   gone: boolean;
   /** A refused request: the server's text, "" when it gave none; null when nothing failed. */
@@ -8068,7 +8085,8 @@ function createMatchController(get: () => UseLiveDraftOptions, notify: () => voi
     saved: null as AllianceScore[] | null,
     gone: false,
     violations: null as SubmitViolation[] | null,
-    missingDraft: null as number | null,
+    missing: [] as number[],
+    lastForce: false,
     error: null as string | null,
     submitting: false,
     refetchAfterFlush: false,
@@ -8168,6 +8186,14 @@ function createMatchController(get: () => UseLiveDraftOptions, notify: () => voi
     }
   }
 
+  /** The alliance the server named plus every other one still without a draft here (cooperative: the shared one). */
+  function missingAlliances(named: number): number[] {
+    const ids = [...state.server.keys()].sort((a, b) => a - b);
+    if (get().cooperative) return ids.slice(0, 1);
+    const unscored = ids.filter((id) => (state.server.get(id)?.version ?? 0) === 0 && !queue.pending[id]);
+    return [...new Set([named, ...unscored])].sort((a, b) => a - b);
+  }
+
   async function postSubmit(force: boolean) {
     try {
       await request<MatchDraft>(scoringPaths.submit(get().matchId), { method: "POST", body: { force } });
@@ -8178,7 +8204,7 @@ function createMatchController(get: () => UseLiveDraftOptions, notify: () => voi
       const missing = missingDraftAlliance(error);
       if (violations) state.violations = violations;
       // Nothing is saved while any alliance is unscored (two scorers splitting a match); the page names it.
-      else if (missing !== null) state.missingDraft = missing;
+      else if (missing !== null) state.missing = missingAlliances(missing);
       else if (isSubmittedError(error)) await markSubmitted();
       else if (isGoneError(error)) state.gone = true;
       else state.error = errorText(error) ?? "";
@@ -8248,19 +8274,30 @@ function createMatchController(get: () => UseLiveDraftOptions, notify: () => voi
       if (state.submitted || state.gone || state.submitting) return;
       state.submitting = true;
       state.violations = null;
-      state.missingDraft = null;
+      state.missing = [];
+      state.lastForce = force;
       state.error = null;
       // Submit only once every change made here has been acknowledged.
       state.submitAfterFlush = force;
       notify();
       queue.pump();
     },
-    fillDefaults(allianceId: number) {
+    confirmZeroAndSubmit() {
       const { defaults } = get();
-      if (!defaults || state.submitted || state.gone) return;
-      state.missingDraft = null;
+      if (!defaults || state.missing.length === 0 || state.submitted || state.gone) return;
+      const ids = state.missing;
+      state.missing = [];
       state.error = null;
-      queue.push({ scope: allianceId, changes: { ...defaults }, keys: Object.keys(defaults) }, { ...defaults });
+      state.submitting = true;
+      // Re-post Submit once the zero drafts below are acknowledged.
+      state.submitAfterFlush = state.lastForce;
+      for (const id of ids) {
+        queue.push({ scope: id, changes: { ...defaults }, keys: Object.keys(defaults) }, { ...defaults });
+      }
+    },
+    cancelMissing() {
+      state.missing = [];
+      notify();
     },
     snapshot(connected: boolean): LiveDraftState {
       const ids = [...state.server.keys()].sort((a, b) => a - b);
@@ -8277,8 +8314,9 @@ function createMatchController(get: () => UseLiveDraftOptions, notify: () => voi
         submitted: state.submitted,
         saved: state.saved,
         violations: state.violations,
-        missingDraft: state.missingDraft,
-        fillDefaults: this.fillDefaults,
+        missing: state.missing,
+        confirmZeroAndSubmit: this.confirmZeroAndSubmit,
+        cancelMissing: this.cancelMissing,
         gone: state.gone,
         error: state.error,
       };
@@ -8596,7 +8634,7 @@ export * from "./scoring";
 - [ ] **Step 6: Run the tests and type checks**
 
 Run: `cd frontend/packages/shared && npx vitest run && npx tsc --noEmit -p tsconfig.json`
-Expected: all pass (the new file's 21 tests included).
+Expected: all pass (the new file's 22 tests included).
 
 Run: `cd frontend/apps/admin && npx tsc -b && cd ../device && npx tsc -b`
 Expected: both pass (the new exports clash with nothing either app imports).
@@ -8605,7 +8643,7 @@ Expected: both pass (the new exports clash with nothing either app imports).
 
 ```bash
 git add frontend/packages/shared/src/scoring frontend/packages/shared/src/index.ts frontend/packages/shared/tests/scoring.test.tsx
-git commit -m "Add shared live draft sync: one PATCH per change sent in order with one in flight, a pending map laid over the server's copy, offline detection with a held queue that flushes and refetches on reconnect, newer-version merging of score_draft_changed with a two-second Changed by flash, Submit with violations and force, a named alliance with no draft and an explicit fill with the default score, Saved and gone states, and the same for one skills run.
+git commit -m "Add shared live draft sync: one PATCH per change sent in order with one in flight, a pending map laid over the server's copy, offline detection with a held queue that flushes and refetches on reconnect, newer-version merging of score_draft_changed with a two-second Changed by flash, Submit with violations and force, unscored alliances listed on the server's missing-draft refusal and saved at zero then resubmitted only when confirmed, Saved and gone states, and the same for one skills run.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -8621,7 +8659,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: Task 12 (`useLiveDraft`, `useSkillsRun`, `flashKey`, `teamFlagKey`, `scoringPaths`, `errorText`, the types), the existing match clock endpoints (`POST /api/matches/{id}/{start|start-driver|pause|resume|end}`, `POST /api/matches/{id}/reset` with `{scope: "section" | "full"}`), `ScoresheetForm`, `defaultValues`, `formatClock`, `remainingSeconds`, `LiveMatch`.
-- Produces: the missing-draft notice, which names the alliance by colour and team numbers ("Blue 102B has no score yet…") and offers "Use the default score for <alliance>" (`fillDefaults`; a cooperative game fills the lowest alliance, which holds the shared draft); `ClockControls({ match, matchFormat, t, onAction, busy? })`, `ClockMatch`, `isTwoPart(format)`, `useClockNow(intervalMs?)`; `LiveScoringPage(props: LiveScoringPageProps)`, `ScoringTeam`, `ScoringAlliance`; `SkillsRunPanel(props: SkillsRunPanelProps)`; `ScoresheetForm`'s new optional `notes` prop.
+- Produces: the missing-score question (`role="alertdialog"`, "Missing scores"), which names every unscored alliance by colour and team numbers ("Blue 102B has no score. Save it with zero points?", or "Red 101A, Blue 102B have no score. Save them with zero points?") with "Save with zero points and submit" (`confirmZeroAndSubmit`) and Cancel (`cancelMissing`); `ClockControls({ match, matchFormat, t, onAction, busy? })`, `ClockMatch`, `isTwoPart(format)`, `useClockNow(intervalMs?)`; `LiveScoringPage(props: LiveScoringPageProps)`, `ScoringTeam`, `ScoringAlliance`; `SkillsRunPanel(props: SkillsRunPanelProps)`; `ScoresheetForm`'s new optional `notes` prop.
 - Produces the `scoring.*` translation keys these components call (the caller's `t`); Task 14 adds them to the admin app, the scorer-app spec to the device app. The English values are in `tests/scoringT.ts` below.
 
 > **Plan note:** the skeleton names the whole-match reset scope `match`; the server's `MatchResetRequest` takes `"section" | "full"` (`schemas/match.py`), and Match Control already posts `full`. "Reset entire match timer" posts `{scope: "full"}`.
@@ -8659,8 +8697,10 @@ const EN: Record<string, string> = {
   "scoring.violationsHeading": "The game's rules found problems:",
   "scoring.savedHeading": "Saved",
   "scoring.gone": "This match is no longer available.",
-  "scoring.missingDraft": "{{alliance}} has no score yet. Score it, or use the default score, then Submit again.",
-  "scoring.useDefaults": "Use the default score for {{alliance}}",
+  "scoring.missingHeading": "Missing scores",
+  "scoring.missingOne": "{{alliances}} has no score. Save it with zero points?",
+  "scoring.missingMany": "{{alliances}} have no score. Save them with zero points?",
+  "scoring.saveZero": "Save with zero points and submit",
   "scoring.allianceFallback": "Alliance {{id}}",
   "scoring.station.red": "Red",
   "scoring.station.blue": "Blue",
@@ -8885,20 +8925,38 @@ describe("LiveScoringPage", () => {
     expect(saved).toHaveTextContent("Blue 102B: 1");
   });
 
-  it("names an alliance nobody scored, uses its default score only when asked, then submits", async () => {
+  it("asks before saving an unscored alliance at zero; Cancel saves nothing, confirming submits", async () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Submit" }));
-    const warning = await screen.findByRole("alert");
-    expect(warning).toHaveTextContent("Blue 102B has no score yet.");
+    const question = await screen.findByRole("alertdialog", { name: "Missing scores" });
+    expect(question).toHaveTextContent("Blue 102B has no score. Save it with zero points?");
+
+    fireEvent.click(within(question).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(request).not.toHaveBeenCalledWith("/api/matches/1/alliances/12/draft", expect.anything());
-    fireEvent.click(within(warning).getByRole("button", { name: "Use the default score for Blue 102B" }));
+    expect(submitted).toBe(false);
+    expect(screen.getByRole("region", { name: "Blue" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    fireEvent.click(
+      within(await screen.findByRole("alertdialog", { name: "Missing scores" })).getByRole("button", {
+        name: "Save with zero points and submit",
+      })
+    );
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith("/api/matches/1/alliances/12/draft", { method: "PATCH", body: { changes: { balls: 0 } } })
     );
-    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
     expect(await screen.findByRole("region", { name: "Saved" })).toBeInTheDocument();
     expect(submitted).toBe(true);
+  });
+
+  it("names every unscored alliance in one question", async () => {
+    drafts = [draft({ alliance_id: 11 }), draft({ alliance_id: 12 })];
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Submit" }));
+    expect(await screen.findByRole("alertdialog", { name: "Missing scores" })).toHaveTextContent(
+      "Red 101A, Blue 102B have no score. Save them with zero points?"
+    );
   });
 
   it("shows Saved with the official scores when another device submits", async () => {
@@ -9412,7 +9470,7 @@ export function LiveScoringPage({
 }: LiveScoringPageProps) {
   const cooperative = matchFormat.game_model === "cooperative_score";
   const defaults = useMemo(() => defaultValues(schema), [schema]);
-  const live = useLiveDraft({ matchId, sessionId, myDeviceName, socketEvents, request, defaults });
+  const live = useLiveDraft({ matchId, sessionId, myDeviceName, socketEvents, request, defaults, cooperative });
   const narrow = useNarrow();
   const [tab, setTab] = useState(0);
   const [clockBusy, setClockBusy] = useState(false);
@@ -9588,16 +9646,21 @@ export function LiveScoringPage({
           );
         })}
       </div>
-      {live.missingDraft !== null && (
-        <div className="alert alert-warning" role="alert">
-          <p>{t("scoring.missingDraft", { alliance: allianceName(live.missingDraft) })}</p>
-          <button
-            className="btn"
-            type="button"
-            onClick={() => live.fillDefaults(cooperative ? (ordered[0]?.alliance_id ?? live.missingDraft ?? 0) : (live.missingDraft ?? 0))}
-          >
-            {t("scoring.useDefaults", { alliance: allianceName(live.missingDraft) })}
-          </button>
+      {live.missing.length > 0 && (
+        <div className="alert alert-warning" role="alertdialog" aria-label={t("scoring.missingHeading")}>
+          <p>
+            {t(live.missing.length === 1 ? "scoring.missingOne" : "scoring.missingMany", {
+              alliances: live.missing.map(allianceName).join(", "),
+            })}
+          </p>
+          <div className="form-actions">
+            <button className="btn btn-primary" type="button" onClick={() => live.confirmZeroAndSubmit()}>
+              {t("scoring.saveZero")}
+            </button>
+            <button className="btn" type="button" onClick={() => live.cancelMissing()}>
+              {t("scoring.clock.cancel")}
+            </button>
+          </div>
         </div>
       )}
       {live.violations && (
@@ -9894,7 +9957,7 @@ Expected: both pass.
 
 ```bash
 git add frontend/packages/shared/src/scoring frontend/packages/shared/src/scoresheet/ScoresheetForm.tsx frontend/packages/shared/tests/scoringT.ts frontend/packages/shared/tests/LiveScoringPage.test.tsx frontend/packages/shared/tests/SkillsRunPanel.test.tsx
-git commit -m "Add the shared live scoring page: a column per alliance (tabs under 720 px, one shared sheet for cooperative games) with No-show and DQ toggles and the score so far, Changed by notes beside fields another device changed, the offline banner, Submit with per-alliance problems and Submit anyway, the notice naming an alliance nobody scored with its Use the default score button, the Saved and no-longer-available views, clock controls with the two reset choices and the drafts-cleared warning, and a skills run panel with field and set timers, Submit and Discard.
+git commit -m "Add the shared live scoring page: a column per alliance (tabs under 720 px, one shared sheet for cooperative games) with No-show and DQ toggles and the score so far, Changed by notes beside fields another device changed, the offline banner, Submit with per-alliance problems and Submit anyway, the question naming every alliance nobody scored with Save with zero points and submit or Cancel, the Saved and no-longer-available views, clock controls with the two reset choices and the drafts-cleared warning, and a skills run panel with field and set timers, Submit and Discard.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -10873,8 +10936,10 @@ and these top-level keys:
   "violationsHeading": "The game's rules found problems:",
   "savedHeading": "Saved",
   "gone": "This match is no longer available.",
-  "missingDraft": "{{alliance}} has no score yet. Score it, or use the default score, then Submit again.",
-  "useDefaults": "Use the default score for {{alliance}}",
+  "missingHeading": "Missing scores",
+  "missingOne": "{{alliances}} has no score. Save it with zero points?",
+  "missingMany": "{{alliances}} have no score. Save them with zero points?",
+  "saveZero": "Save with zero points and submit",
   "allianceFallback": "Alliance {{id}}",
   "station": {
     "red": "Red",
@@ -10977,8 +11042,10 @@ and these top-level keys:
   "violationsHeading": "比赛规则发现以下问题：",
   "savedHeading": "已保存",
   "gone": "此比赛已不可用。",
-  "missingDraft": "{{alliance}} 还没有分数。请为其计分，或使用默认分数，然后再次提交。",
-  "useDefaults": "为 {{alliance}} 使用默认分数",
+  "missingHeading": "缺少分数",
+  "missingOne": "{{alliances}} 没有分数。以零分保存吗？",
+  "missingMany": "{{alliances}} 没有分数。以零分保存吗？",
+  "saveZero": "以零分保存并提交",
   "allianceFallback": "联盟 {{id}}",
   "station": {
     "red": "红方",
