@@ -350,6 +350,17 @@ def submit_match(
             if alliance_id == shared_id or own or shared_out:
                 writes.append((alliance_id, data, own))
         checked = [(shared_id, data, flags)]
+        # write_alliance_score commits per alliance, so every refusal it could
+        # raise for a partner is decided here, before the first write.
+        for alliance_id, _data, own in writes:
+            record = records.get(alliance_id)
+            if record is not None and not record.mirrored and not is_admin:
+                raise ScoreRefused(status_code=409, detail=SCORE_ALREADY_SUBMITTED_DETAIL)
+            if alliance_id != shared_id and not team_flags.alliance_out(own, team_ids[alliance_id], finals=finals):
+                try:
+                    plugin.module.calculate_score(data)
+                except Exception as exc:
+                    raise ScoreRefused(status_code=422, detail=f"Plugin could not score this scoresheet: {exc}")
     else:
         for alliance_id in alliance_ids:
             draft = _draft_row(db, alliance_id)

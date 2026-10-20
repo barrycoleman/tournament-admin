@@ -321,3 +321,37 @@ def test_a_partial_official_score_post_keeps_the_drafts(client):
     )
     assert posted.status_code == 200
     assert len(draft_rows(client)) == 2
+
+
+def test_a_cooperative_submit_refuses_before_writing_when_a_partner_was_scored_earlier(cooperative_client):
+    client = cooperative_client
+    setup = cooperative_setup(client)
+    _t1, _t2 = setup["teams"]
+    tablet = paired_device(client, role="scorer")
+    official = client.post(
+        f"/api/matches/{setup['match_id']}/alliances/{setup['blue']}/score", json={"data": {"objects_scored": 3}}
+    )
+    assert official.status_code == 200, official.text
+    before = {alliance_id: (record.id, record.data_json) for alliance_id, record in _records(client).items()}
+    patch_draft(
+        client, setup, "red", {"objects_scored": 10}, teams=[{"team_id": _t2, "no_show": True}], headers=tablet["headers"]
+    )
+    refused = _submit(client, setup["match_id"], headers=tablet["headers"])
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == SCORE_ALREADY_SUBMITTED_DETAIL
+    assert {alliance_id: (record.id, record.data_json) for alliance_id, record in _records(client).items()} == before
+    assert setup["blue"] in before
+
+
+def test_a_cooperative_submit_scores_every_written_alliance_before_writing(cooperative_client, monkeypatch):
+    client = cooperative_client
+    setup = cooperative_setup(client)
+    t1, _t2 = setup["teams"]
+    patch_draft(client, setup, "red", {"objects_scored": 10}, teams=[{"team_id": t1, "no_show": True}])
+    module = client.app.state.game_plugins["cooperative-game"].module
+    monkeypatch.setattr(module, "calculate_score", lambda data: (_ for _ in ()).throw(RuntimeError("boom")))
+    refused = _submit(client, setup["match_id"])
+    assert refused.status_code == 422
+    assert refused.json()["detail"].startswith("Plugin could not score this scoresheet")
+    assert _records(client) == {}
+    assert len(draft_rows(client)) == 1
