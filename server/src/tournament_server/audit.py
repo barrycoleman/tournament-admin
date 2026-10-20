@@ -43,6 +43,11 @@ def actor_scope(name: str):
 #   write hashed or encrypted secrets straight into the audit log. This is
 #   exercised by every login, event creation, and device pairing in
 #   the test suite.
+# - "score_drafts", "skills_set_timers", "skills_runs" and
+#   "scorer_bindings" are live scoring's working rows (live scoring design
+#   §4.6): a scorer's every counter press writes one, so auditing them would
+#   flood the log. The submitted score records and skills attempts they turn
+#   into are audited as usual.
 _EXCLUDED_TABLES = {
     "audit_log",
     "role_credentials",
@@ -50,6 +55,10 @@ _EXCLUDED_TABLES = {
     "signing_keys",
     "password_encryption_keys",
     "devices",
+    "score_drafts",
+    "skills_set_timers",
+    "skills_runs",
+    "scorer_bindings",
 }
 
 

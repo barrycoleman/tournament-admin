@@ -125,6 +125,8 @@ def upgrade() -> None:
     sa.Column('qualification_drops', sa.JSON(), nullable=True),
     sa.Column('skills_attempts', sa.JSON(), nullable=True),
     sa.Column('awards_finalized_at', tournament_server.db.UTCDateTime(), nullable=True),
+    sa.Column('live_scores_qualification', sa.Boolean(), server_default=sa.text('1'), nullable=False),
+    sa.Column('live_scores_finals', sa.Boolean(), server_default=sa.text('0'), nullable=False),
     sa.ForeignKeyConstraint(['event_id'], ['events.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -160,6 +162,7 @@ def upgrade() -> None:
     sa.Column('division_id', sa.Integer(), nullable=True),
     sa.Column('queued_match_id', sa.Integer(), nullable=True),
     sa.Column('timeout_deadline', tournament_server.db.UTCDateTime(), nullable=True),
+    sa.Column('purpose', sa.String(length=20), server_default='teamwork', nullable=False),
     sa.ForeignKeyConstraint(['division_id'], ['divisions.id'], ),
     sa.ForeignKeyConstraint(['session_id'], ['sessions.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -257,6 +260,51 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('session_id', 'device_id', name='uq_display_assignment_session_device')
     )
+    op.create_table('scorer_bindings',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('session_id', sa.Integer(), nullable=False),
+    sa.Column('device_id', sa.Integer(), nullable=False),
+    sa.Column('field_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['device_id'], ['devices.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['field_id'], ['fields.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['session_id'], ['sessions.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('session_id', 'device_id', name='uq_scorer_binding_session_device')
+    )
+    op.create_table('skills_runs',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('field_id', sa.Integer(), nullable=False),
+    sa.Column('field_set_id', sa.Integer(), nullable=False),
+    sa.Column('session_id', sa.Integer(), nullable=False),
+    sa.Column('team_id', sa.Integer(), nullable=False),
+    sa.Column('skills_type', sa.String(length=50), nullable=False),
+    sa.Column('data_json', sa.Text(), nullable=False),
+    sa.Column('item_meta_json', sa.Text(), nullable=False),
+    sa.Column('version', sa.Integer(), nullable=False),
+    sa.Column('follows_set', sa.Boolean(), nullable=False),
+    sa.Column('phase', sa.String(length=20), nullable=False),
+    sa.Column('deadline', tournament_server.db.UTCDateTime(), nullable=True),
+    sa.Column('paused', sa.Boolean(), nullable=False),
+    sa.Column('remaining_seconds_at_pause', sa.Integer(), nullable=True),
+    sa.Column('created_by_device', sa.String(length=200), nullable=True),
+    sa.Column('created_at', tournament_server.db.UTCDateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['field_id'], ['fields.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('field_id', name='uq_skills_run_field')
+    )
+    op.create_table('skills_set_timers',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('field_set_id', sa.Integer(), nullable=False),
+    sa.Column('skills_type', sa.String(length=50), nullable=True),
+    sa.Column('phase', sa.String(length=20), nullable=False),
+    sa.Column('deadline', tournament_server.db.UTCDateTime(), nullable=True),
+    sa.Column('paused', sa.Boolean(), nullable=False),
+    sa.Column('remaining_seconds_at_pause', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['field_set_id'], ['field_sets.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('field_set_id', name='uq_skills_set_timer_field_set')
+    )
     op.create_table('finals_brackets',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('session_id', sa.Integer(), nullable=False),
@@ -309,6 +357,7 @@ def upgrade() -> None:
     sa.Column('plugin_version', sa.String(length=50), nullable=False),
     sa.Column('recorded_at', tournament_server.db.UTCDateTime(), nullable=False),
     sa.Column('updated_at', tournament_server.db.UTCDateTime(), nullable=False),
+    sa.Column('field_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['session_id'], ['sessions.id'], ),
     sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -424,9 +473,27 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('score_record_id', 'team_id', name='uq_score_record_team')
     )
+    op.create_table('score_drafts',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('match_id', sa.Integer(), nullable=False),
+    sa.Column('alliance_id', sa.Integer(), nullable=False),
+    sa.Column('data_json', sa.Text(), nullable=False),
+    sa.Column('teams_json', sa.Text(), nullable=False),
+    sa.Column('item_meta_json', sa.Text(), nullable=False),
+    sa.Column('version', sa.Integer(), nullable=False),
+    sa.Column('updated_at', tournament_server.db.UTCDateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['alliance_id'], ['alliances.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['match_id'], ['matches.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('alliance_id', name='uq_score_draft_alliance')
+    )
 
 
 def downgrade() -> None:
+    op.drop_table('score_drafts')
+    op.drop_table('skills_set_timers')
+    op.drop_table('skills_runs')
+    op.drop_table('scorer_bindings')
     op.drop_table('display_assignments')
     op.drop_table('display_groups')
     op.drop_table('score_record_teams')

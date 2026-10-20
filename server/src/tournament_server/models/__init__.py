@@ -21,6 +21,7 @@ from tournament_server.models.role_credential import RoleCredential
 from tournament_server.models.schedule_generation import ScheduleGeneration
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.score_record_team import ScoreRecordTeam
+from tournament_server.models.scoring_draft import ScoreDraft, ScorerBinding, SkillsRun, SkillsSetTimer
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.signing_key import SigningKey
 from tournament_server.models.skills import SkillsAttempt, SkillsSettings
@@ -52,10 +53,14 @@ __all__ = [
     "ScheduleGeneration",
     "ScoreRecord",
     "ScoreRecordTeam",
+    "ScoreDraft",
+    "ScorerBinding",
     "SessionParticipation",
     "SessionPlayingWindow",
     "SigningKey",
     "SkillsAttempt",
+    "SkillsRun",
+    "SkillsSetTimer",
     "SkillsSettings",
     "TournamentSession",
     "Team",

@@ -7,6 +7,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from tournament_server.db import Base, UTCDateTime
 
+# A field set's purpose (live scoring design §4.1): teamwork sets run
+# matches; skills sets run skills runs and are ignored by scheduling,
+# finals, Match Control and the audience In Match switch.
+TEAMWORK = "teamwork"
+SKILLS = "skills"
+
 
 class FieldSet(Base):
     __tablename__ = "field_sets"
@@ -24,3 +30,4 @@ class FieldSet(Base):
     queued_match_id: Mapped[int | None] = mapped_column(Integer, default=None)
     # A running time-out ends here; an expired deadline is simply ignored.
     timeout_deadline: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, default=None)
+    purpose: Mapped[str] = mapped_column(String(20), default=TEAMWORK, server_default=TEAMWORK)

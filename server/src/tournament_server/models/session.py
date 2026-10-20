@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Date, ForeignKey, JSON, String
+from sqlalchemy import Boolean, Date, ForeignKey, JSON, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tournament_server.db import Base, UTCDateTime
@@ -28,3 +28,7 @@ class TournamentSession(Base):
     skills_attempts: Mapped[dict[str, int] | None] = mapped_column(JSON, default=None)
     # Set when an admin finalizes the session's awards; NULL while they are live.
     awards_finalized_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, default=None)
+    # Whether displays get live totals (live scoring design §7): practice and
+    # qualification matches and skills runs follow the first, finals the second.
+    live_scores_qualification: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"))
+    live_scores_finals: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))

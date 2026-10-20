@@ -43,3 +43,7 @@ class SkillsAttempt(Base):
     plugin_version: Mapped[str] = mapped_column(String(50))
     recorded_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utc_now)
     updated_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utc_now)
+    # The skills field the run was scored on, when it came from a live run.
+    # A plain integer, not a foreign key: a field can be deleted and the
+    # attempt stays.
+    field_id: Mapped[int | None] = mapped_column(Integer, default=None)
