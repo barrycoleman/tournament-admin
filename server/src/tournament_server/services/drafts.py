@@ -360,7 +360,7 @@ def submit_match(
                 try:
                     plugin.module.calculate_score(data)
                 except Exception as exc:
-                    raise ScoreRefused(status_code=422, detail=f"Plugin could not score this scoresheet: {exc}")
+                    raise ScoreRefused(status_code=422, detail=f"Plugin could not score this scoresheet: {exc}") from exc
     else:
         for alliance_id in alliance_ids:
             draft = _draft_row(db, alliance_id)
