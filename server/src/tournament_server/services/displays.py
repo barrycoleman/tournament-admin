@@ -15,7 +15,7 @@ from tournament_server.models.division import Division
 from tournament_server.models.event import Event
 from tournament_server.models.display import DisplayAssignment, DisplayGroup
 from tournament_server.models.field import Field
-from tournament_server.models.field_set import FieldSet
+from tournament_server.models.field_set import SKILLS, FieldSet
 from tournament_server.models.match import Match
 
 AUDIENCE = "audience"
@@ -284,7 +284,12 @@ def running_match(db: Session, field_set_id: int, exclude_id: int | None = None)
 def on_match_started(db: Session, field_set_id: int) -> list[int]:
     """A match on this field set just started (spec section 6.3): its audience
     groups move to In Match, keeping their settings, and its override and
-    time-out are cleared. Returns the ids of the audience groups it switched."""
+    time-out are cleared. Returns the ids of the audience groups it switched.
+    A skills set has no In Match screen (live scoring design §11): nothing
+    changes and nothing is returned."""
+    field_set = db.get(FieldSet, field_set_id)
+    if field_set is not None and field_set.purpose == SKILLS:
+        return []
     switched = []
     for group in db.execute(
         select(DisplayGroup).where(DisplayGroup.kind == AUDIENCE, DisplayGroup.field_set_id == field_set_id)
@@ -292,7 +297,6 @@ def on_match_started(db: Session, field_set_id: int) -> list[int]:
         if group.screen != "in_match":
             group.screen = "in_match"
             switched.append(group.id)
-    field_set = db.get(FieldSet, field_set_id)
     if field_set is not None:
         field_set.queued_match_id = None
         field_set.timeout_deadline = None

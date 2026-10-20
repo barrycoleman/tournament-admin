@@ -19,7 +19,7 @@ from tournament_server.schemas.session import (
     SessionRead,
     SessionUpdate,
 )
-from tournament_server.services import displays
+from tournament_server.services import displays, live_scores, skills_runs
 from tournament_server.services.deletion import (
     delete_session,
     scored_session_ids,
@@ -27,6 +27,8 @@ from tournament_server.services.deletion import (
 )
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
+
+LIVE_SCORE_SWITCHES = ("live_scores_qualification", "live_scores_finals")
 
 
 def _to_read(session_obj: TournamentSession, has_scored_matches: bool) -> SessionRead:
@@ -56,6 +58,8 @@ def create_session(
         label=payload.label,
         session_date=payload.session_date,
         timezone=payload.timezone,
+        live_scores_qualification=payload.live_scores_qualification,
+        live_scores_finals=payload.live_scores_finals,
     )
     db.add(session_obj)
     db.commit()
@@ -67,6 +71,7 @@ def create_session(
 def update_session(
     session_id: int,
     payload: SessionUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_admin),
 ) -> SessionRead:
@@ -76,6 +81,9 @@ def update_session(
     updates = payload.model_dump(exclude_unset=True)
     if "label" in updates and updates["label"] is None:
         raise HTTPException(status_code=422, detail="label cannot be null")
+    for key in LIVE_SCORE_SWITCHES:
+        if key in updates and updates[key] is None:
+            raise HTTPException(status_code=422, detail=f"{key} cannot be null")
     if "timezone" in updates and updates["timezone"] is not None:
         try:
             ZoneInfo(updates["timezone"])
@@ -83,10 +91,15 @@ def update_session(
             raise HTTPException(
                 status_code=422, detail=f"Unknown timezone: {updates['timezone']!r}"
             )
+    switches_changed = any(
+        key in updates and updates[key] != getattr(session_obj, key) for key in LIVE_SCORE_SWITCHES
+    )
     for key, value in updates.items():
         setattr(session_obj, key, value)
     db.commit()
     db.refresh(session_obj)
+    if switches_changed:
+        live_scores.on_switches_changed(request.app, db, session_obj.id)
     return _to_read(session_obj, session_has_scores(db, session_obj.id))
 
 
@@ -158,11 +171,15 @@ def copy_fields(
     copies: list[FieldSet] = []
     for source_set in source_sets:
         copy = FieldSet(
-            session_id=session_id, name=source_set.name, division_id=source_set.division_id
+            session_id=session_id,
+            name=source_set.name,
+            division_id=source_set.division_id,
+            purpose=source_set.purpose,
         )
         db.add(copy)
         db.flush()
         displays.ensure_audience_group(db, copy)
+        skills_runs.ensure_set_timer(db, copy)
         for field in db.execute(
             select(Field).where(Field.field_set_id == source_set.id).order_by(Field.id)
         ).scalars().all():

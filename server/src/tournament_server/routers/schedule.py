@@ -15,7 +15,7 @@ from tournament_server.deps import get_db, get_the_event
 from tournament_server.models.alliance import Alliance, AllianceTeam
 from tournament_server.models.division import Division
 from tournament_server.models.field import Field
-from tournament_server.models.field_set import FieldSet
+from tournament_server.models.field_set import TEAMWORK, FieldSet
 from tournament_server.models.match import Match
 from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.schedule_generation import ScheduleGeneration
@@ -431,7 +431,10 @@ def generate_schedule(
         team_query = team_query.where(Team.division_id == payload.division_id)
     teams = db.execute(team_query).scalars().all()
 
-    field_set_query = select(FieldSet).where(FieldSet.session_id == payload.session_id)
+    # Skills sets never get scheduled matches (live scoring design §4.1).
+    field_set_query = select(FieldSet).where(
+        FieldSet.session_id == payload.session_id, FieldSet.purpose == TEAMWORK
+    )
     if payload.division_id is None:
         field_set_query = field_set_query.where(FieldSet.division_id.is_(None))
     else:

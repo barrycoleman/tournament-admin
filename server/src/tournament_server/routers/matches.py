@@ -22,6 +22,7 @@ from tournament_server.models.alliance import Alliance, AllianceTeam
 from tournament_server.models.bracket_matchup import BracketMatchup
 from tournament_server.models.division import Division
 from tournament_server.models.field import Field
+from tournament_server.models.field_set import SKILLS, FieldSet
 from tournament_server.models.match import Match
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
@@ -34,6 +35,7 @@ from tournament_server.schemas.match import (
 )
 from tournament_server.services import displays, qualification
 from tournament_server.services.match_labeling import match_label
+from tournament_server.services.skills_runs import SKILLS_SET_DETAIL
 
 router = APIRouter(prefix="/api/matches", tags=["matches"])
 
@@ -137,8 +139,12 @@ def create_match(
         )
     if payload.division_id is not None and db.get(Division, payload.division_id) is None:
         raise HTTPException(status_code=404, detail="Division not found")
-    if payload.field_id is not None and db.get(Field, payload.field_id) is None:
-        raise HTTPException(status_code=404, detail="Field not found")
+    if payload.field_id is not None:
+        field = db.get(Field, payload.field_id)
+        if field is None:
+            raise HTTPException(status_code=404, detail="Field not found")
+        if db.get(FieldSet, field.field_set_id).purpose == SKILLS:
+            raise HTTPException(status_code=409, detail=SKILLS_SET_DETAIL)
     for alliance_payload in payload.alliances:
         for team_id in alliance_payload.team_ids:
             if db.get(Team, team_id) is None:
@@ -337,6 +343,8 @@ def start_match(
             status_code=409, detail=f"Match is not in not_started (currently {match.phase})"
         )
     field_set_id = displays.field_set_id_for_field(db, match.field_id)
+    if field_set_id is not None and db.get(FieldSet, field_set_id).purpose == SKILLS:
+        raise HTTPException(status_code=409, detail=SKILLS_SET_DETAIL)
     if field_set_id is not None and displays.running_match(db, field_set_id, exclude_id=match.id) is not None:
         raise HTTPException(status_code=409, detail="Another match is running on this field group.")
     plugin = get_game_plugin_for_event(request, db)

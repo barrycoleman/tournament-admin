@@ -1,20 +1,26 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
+
+
+FieldSetPurpose = Literal["teamwork", "skills"]
 
 
 class FieldSetCreate(BaseModel):
     session_id: int
     name: str
     division_id: int | None = None
+    purpose: FieldSetPurpose = "teamwork"
 
 
 class FieldSetUpdate(BaseModel):
     name: str | None = None
     division_id: int | None = None
+    purpose: FieldSetPurpose | None = None
 
 
 class FieldSetRead(BaseModel):
@@ -24,6 +30,7 @@ class FieldSetRead(BaseModel):
     session_id: int
     name: str
     division_id: int | None
+    purpose: str = "teamwork"
     queued_match_id: int | None = None
     timeout_deadline: dt.datetime | None = None
 

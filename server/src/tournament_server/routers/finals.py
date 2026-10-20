@@ -19,7 +19,7 @@ from tournament_server.models.bracket_alliance import BracketAlliance, BracketAl
 from tournament_server.models.bracket_matchup import BracketMatchup
 from tournament_server.models.division import Division
 from tournament_server.models.field import Field
-from tournament_server.models.field_set import FieldSet
+from tournament_server.models.field_set import SKILLS, TEAMWORK, FieldSet
 from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.finals_result import FinalsResult
 from tournament_server.models.match import Match
@@ -47,6 +47,7 @@ from tournament_server.services.finals import (
     start_score_chase,
     total_rounds_for_bracket_size,
 )
+from tournament_server.services.skills_runs import SKILLS_SET_DETAIL
 from tournament_server.services.team_assignment import get_sole_division_id
 
 router = APIRouter(prefix="/api/finals", tags=["finals"])
@@ -206,7 +207,7 @@ def start_finals(
     field_set_id = payload.field_set_id
     if field_set_id is None:
         existing_sets_query = select(FieldSet).where(
-            FieldSet.session_id == payload.session_id
+            FieldSet.session_id == payload.session_id, FieldSet.purpose == TEAMWORK
         )
         if payload.division_id is None:
             existing_sets_query = existing_sets_query.where(FieldSet.division_id.is_(None))
@@ -238,6 +239,8 @@ def start_finals(
         field_set = db.get(FieldSet, field_set_id)
         if field_set is None or field_set.session_id != payload.session_id:
             raise HTTPException(status_code=404, detail="FieldSet not found")
+        if field_set.purpose == SKILLS:
+            raise HTTPException(status_code=409, detail=SKILLS_SET_DETAIL)
         if field_set.division_id != payload.division_id:
             raise HTTPException(
                 status_code=422, detail="That FieldSet belongs to a different division"

@@ -11,15 +11,43 @@ from tournament_server.db import utc_now
 from tournament_server.deps import get_db, get_session_id
 from tournament_server.models.division import Division
 from tournament_server.models.field import Field
-from tournament_server.models.field_set import FieldSet
+from tournament_server.models.field_set import SKILLS, FieldSet
 from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.match import Match
+from tournament_server.models.scoring_draft import SkillsRun
 from tournament_server.models.session import TournamentSession
 from tournament_server.schemas.field_set import FieldSetCreate, FieldSetRead, FieldSetUpdate, QueuedMatchWrite, TimeoutWrite
 from tournament_server.routers.displays import notify_display_changed
-from tournament_server.services import displays, qualification
+from tournament_server.services import displays, qualification, skills_runs
 
 router = APIRouter(prefix="/api/field-sets", tags=["field-sets"])
+
+FIELD_SET_HAS_MATCHES_DETAIL = "This field set has matches."
+FIELD_SET_HAS_RUNS_DETAIL = "This field set has skills runs."
+
+
+def _check_purpose_change(db: Session, field_set: FieldSet, purpose: str) -> None:
+    """A set becomes a skills set only with no matches (or finals bracket,
+    whose runs would land on it), and a teamwork set only with no runs."""
+    if purpose == field_set.purpose:
+        return
+    if purpose == SKILLS:
+        field_ids = displays.field_ids_for_set(db, field_set.id)
+        has_match = bool(field_ids) and db.execute(
+            select(Match.id).where(Match.field_id.in_(field_ids)).limit(1)
+        ).first() is not None
+        has_bracket = db.execute(
+            select(FinalsBracket.id).where(FinalsBracket.field_set_id == field_set.id).limit(1)
+        ).first() is not None
+        if has_match or has_bracket:
+            raise HTTPException(status_code=409, detail=FIELD_SET_HAS_MATCHES_DETAIL)
+        return
+    has_run = db.execute(
+        select(SkillsRun.id).where(SkillsRun.field_set_id == field_set.id).limit(1)
+    ).first() is not None
+    if has_run:
+        raise HTTPException(status_code=409, detail=FIELD_SET_HAS_RUNS_DETAIL)
+
 
 
 @router.post("", response_model=FieldSetRead, status_code=201)
@@ -37,10 +65,12 @@ def create_field_set(
         session_id=payload.session_id,
         name=payload.name,
         division_id=payload.division_id,
+        purpose=payload.purpose,
     )
     db.add(field_set)
     db.flush()
     displays.ensure_audience_group(db, field_set)
+    skills_runs.ensure_set_timer(db, field_set)
     db.commit()
     db.refresh(field_set)
     notify_display_changed(request, payload.session_id, None)
@@ -51,6 +81,7 @@ def create_field_set(
 def update_field_set(
     field_set_id: int,
     payload: FieldSetUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_admin),
 ) -> FieldSet:
@@ -68,8 +99,18 @@ def update_field_set(
         if division_id is not None and db.get(Division, division_id) is None:
             raise HTTPException(status_code=404, detail="Division not found")
         field_set.division_id = division_id
+    purpose_changed = False
+    if "purpose" in updates:
+        if updates["purpose"] is None:
+            raise HTTPException(status_code=422, detail="purpose cannot be null")
+        _check_purpose_change(db, field_set, updates["purpose"])
+        purpose_changed = updates["purpose"] != field_set.purpose
+        field_set.purpose = updates["purpose"]
+        skills_runs.ensure_set_timer(db, field_set)
     db.commit()
     db.refresh(field_set)
+    if purpose_changed:
+        displays.notify_field_set_changed(request.app, field_set_id)
     return field_set
 
 
