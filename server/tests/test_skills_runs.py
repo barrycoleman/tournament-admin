@@ -169,3 +169,28 @@ def test_deleting_a_field_deletes_its_run(client, event):
     assert client.delete(f"/api/fields/{field_id}").status_code == 204
     with client.app.state.session_factory() as db:
         assert db.execute(select(SkillsRun)).scalars().all() == []
+
+
+def test_concurrent_run_patches_never_lose_a_change(client, event):
+    from concurrent.futures import ThreadPoolExecutor
+
+    field_id = event["set"]["field_ids"][0]
+    start_run(client, field_id, event["teams"][0])
+    url = f"/api/fields/{field_id}/skills-run/draft"
+    changes = [{"objects_scored": n % 30} if n % 2 else {"parked": bool(n % 4)} for n in range(40)]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        responses = list(pool.map(lambda change: client.patch(url, json={"changes": change}), changes))
+    assert [response.status_code for response in responses] == [200] * len(changes)
+    assert sorted(response.json()["version"] for response in responses) == list(range(1, len(changes) + 1))
+    run = run_on(client, event["set"]["id"], field_id)
+    assert run["version"] == len(changes)
+    assert set(run["data"]) == {"objects_scored", "parked"}
+    assert set(run["item_meta"]) == {"objects_scored", "parked"}
+
+
+def test_a_patch_after_a_discard_gets_no_run(client, event):
+    field_id = event["set"]["field_ids"][0]
+    start_run(client, field_id, event["teams"][0])
+    assert client.delete(f"/api/fields/{field_id}/skills-run").status_code == 204
+    refused = client.patch(f"/api/fields/{field_id}/skills-run/draft", json={"changes": {"parked": True}})
+    assert (refused.status_code, refused.json()["detail"]) == (404, "This field has no run.")

@@ -26,6 +26,7 @@ from tournament_server.schemas.skills_run import (
     SkillsSetTimerRead,
 )
 from tournament_server.services import skills
+from tournament_server.services.drafts import DRAFT_WRITE_LOCK
 from tournament_server.services.skills_rules import scoresheet_violations
 
 SKILLS_SET_DETAIL = "This is a skills field set."
@@ -134,7 +135,9 @@ def run_on_field(db: Session, field_id: int) -> SkillsRun | None:
 
 
 def _run_or_404(db: Session, field_id: int) -> SkillsRun:
-    run = run_on_field(db, field_id)
+    run = db.execute(
+        select(SkillsRun).where(SkillsRun.field_id == field_id).execution_options(populate_existing=True)
+    ).scalars().first()
     if run is None:
         raise RunRefused(404, NO_RUN)
     return run
@@ -193,7 +196,7 @@ def _start_next_batch(db: Session, field_set_id: int, set_timer: SkillsSetTimer,
     _copy_state(set_timer, _READY_STATE)
 
 
-def create_run(
+def _create_run(
     db: Session, plugin: LoadedPlugin, field: Field, payload: SkillsRunCreate, device_name: str
 ) -> SkillsRun:
     field_set = skills_set_for_field(db, field)
@@ -251,7 +254,7 @@ def create_run(
     return run
 
 
-def patch_run(
+def _patch_run(
     db: Session, plugin: LoadedPlugin, field: Field, changes: dict[str, Any], device_name: str
 ) -> SkillsRun:
     """Merges changed items into the run's sheet: each accepted item overwrites
@@ -280,9 +283,27 @@ def patch_run(
 
 def discard_run(db: Session, field: Field) -> None:
     """Throws the field's run away; no attempt is used."""
-    skills_set_for_field(db, field)
-    db.delete(_run_or_404(db, field.id))
-    db.commit()
+    with DRAFT_WRITE_LOCK:
+        skills_set_for_field(db, field)
+        db.delete(_run_or_404(db, field.id))
+        db.commit()
+
+
+def create_run(
+    db: Session, plugin: LoadedPlugin, field: Field, payload: SkillsRunCreate, device_name: str
+) -> SkillsRun:
+    with DRAFT_WRITE_LOCK:
+        return _create_run(db, plugin, field, payload, device_name)
+
+
+def patch_run(
+    db: Session, plugin: LoadedPlugin, field: Field, changes: dict[str, Any], device_name: str
+) -> SkillsRun:
+    """Merges changed items into the run's sheet (see _patch_run). The load,
+    merge and commit run under the process-wide draft lock, so two devices
+    patching different items never write back copies missing each other's."""
+    with DRAFT_WRITE_LOCK:
+        return _patch_run(db, plugin, field, changes, device_name)
 
 
 def _run_read(db: Session, plugin: LoadedPlugin, run: SkillsRun, set_timer: SkillsSetTimer | None) -> SkillsRunRead:
