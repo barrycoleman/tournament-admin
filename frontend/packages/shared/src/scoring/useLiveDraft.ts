@@ -51,6 +51,7 @@ class ChangeQueue {
   pending: Record<number, Record<string, unknown>> = {};
   sending = false;
   failed = false;
+  disposed = false;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -68,7 +69,7 @@ class ChangeQueue {
   }
 
   pump() {
-    if (this.sending) return;
+    if (this.sending || this.disposed) return;
     const head = this.entries[0];
     if (!head) {
       this.onIdle();
@@ -77,6 +78,7 @@ class ChangeQueue {
     this.sending = true;
     void this.send(head).then((outcome) => {
       this.sending = false;
+      if (this.disposed) return;
       if (outcome === "retry") {
         this.failed = true;
         this.changed();
@@ -107,7 +109,7 @@ class ChangeQueue {
   }
 
   scheduleRetry() {
-    if (this.retryTimer !== null) return;
+    if (this.retryTimer !== null || this.disposed) return;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
       this.pump();
@@ -128,6 +130,7 @@ class ChangeQueue {
   }
 
   dispose() {
+    this.disposed = true;
     if (this.retryTimer !== null) clearTimeout(this.retryTimer);
     this.retryTimer = null;
   }
@@ -241,7 +244,7 @@ export interface LiveDraftState {
   error: string | null;
 }
 
-function createMatchController(get: () => UseLiveDraftOptions, notify: () => void) {
+function createMatchController(get: () => UseLiveDraftOptions, rerender: () => void) {
   const state = {
     alive: false,
     loaded: false,
@@ -256,6 +259,9 @@ function createMatchController(get: () => UseLiveDraftOptions, notify: () => voi
     submitting: false,
     refetchAfterFlush: false,
     submitAfterFlush: null as boolean | null,
+  };
+  const notify = () => {
+    if (state.alive) rerender();
   };
   const request: ScoringRequest = (path, options) => (get().request ?? apiRequest)(path, options);
   const flasher = new Flasher(notify);
@@ -285,7 +291,10 @@ function createMatchController(get: () => UseLiveDraftOptions, notify: () => voi
         state.gone = true;
         return "clear";
       }
-      // Refused (bad value, wrong role): drop it and show the server's copy again.
+      // Refused (bad value, wrong role): drop it and show the server's copy again;
+      // a waiting Submit is cancelled so the scorer sees that copy first.
+      state.submitAfterFlush = null;
+      state.submitting = false;
       state.error = errorText(error) ?? "";
       state.refetchAfterFlush = true;
       return "drop";
@@ -392,12 +401,15 @@ function createMatchController(get: () => UseLiveDraftOptions, notify: () => voi
       if (!(key in mine)) flasher.flash(flashKey(draft.alliance_id, key), draft.item_meta[key].device_name);
     }
     state.server.set(draft.alliance_id, draft);
+    // Another scorer started an alliance the Save-with-zero question named: leave it alone.
+    state.missing = state.missing.filter((id) => id !== draft.alliance_id);
     notify();
   }
 
   return {
     start() {
       state.alive = true;
+      queue.disposed = false;
       void load();
     },
     stop() {
@@ -450,10 +462,16 @@ function createMatchController(get: () => UseLiveDraftOptions, notify: () => voi
     confirmZeroAndSubmit() {
       const { defaults } = get();
       if (!defaults || state.missing.length === 0 || state.submitted || state.gone) return;
-      const ids = state.missing;
+      // Only alliances still without a draft: another scorer may have started one since the question.
+      const ids = state.missing.filter((id) => (state.server.get(id)?.version ?? 0) === 0 && !queue.pending[id]);
       state.missing = [];
       state.error = null;
       state.submitting = true;
+      if (ids.length === 0) {
+        notify();
+        void postSubmit(state.lastForce);
+        return;
+      }
       // Re-post Submit once the zero drafts below are acknowledged.
       state.submitAfterFlush = state.lastForce;
       for (const id of ids) {
@@ -548,7 +566,7 @@ export interface SkillsRunState {
 
 const RUN_SCOPE = 0;
 
-function createSkillsController(get: () => UseSkillsRunOptions, notify: () => void) {
+function createSkillsController(get: () => UseSkillsRunOptions, rerender: () => void) {
   const state = {
     alive: false,
     loaded: false,
@@ -561,6 +579,9 @@ function createSkillsController(get: () => UseSkillsRunOptions, notify: () => vo
     submitting: false,
     refetchAfterFlush: false,
     submitAfterFlush: null as boolean | null,
+  };
+  const notify = () => {
+    if (state.alive) rerender();
   };
   const request: ScoringRequest = (path, options) => (get().request ?? apiRequest)(path, options);
   const flasher = new Flasher(notify);
@@ -627,6 +648,8 @@ function createSkillsController(get: () => UseSkillsRunOptions, notify: () => vo
       if (isNetworkError(error)) return "retry";
       state.error = errorText(error) ?? "";
       state.refetchAfterFlush = true;
+      state.submitAfterFlush = null;
+      state.submitting = false;
       // 422: just this change was refused. Anything else: the run is gone (submitted or discarded elsewhere).
       return error instanceof ApiError && error.status === 422 ? "drop" : "clear";
     }
@@ -682,6 +705,7 @@ function createSkillsController(get: () => UseSkillsRunOptions, notify: () => vo
   return {
     start() {
       state.alive = true;
+      queue.disposed = false;
       void load();
     },
     stop() {

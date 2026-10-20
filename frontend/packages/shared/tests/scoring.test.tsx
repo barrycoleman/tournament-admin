@@ -4,6 +4,7 @@ import { ApiError, type ApiRequestOptions } from "../src/api-client";
 import type { RealtimeEvent } from "../src/realtime";
 import {
   FLASH_MS,
+  RETRY_MS,
   SCORE_ALREADY_SUBMITTED_DETAIL,
   changedByOthers,
   createScoringHub,
@@ -463,5 +464,87 @@ describe("useSkillsRun", () => {
       "POST /api/fields/3/skills-run/resume",
       "POST /api/field-sets/9/skills-timer/end",
     ]);
+  });
+});
+
+describe("review fixes", () => {
+  it("stops retrying and notifying after unmount", async () => {
+    const server = fakeServer({ "/api/matches/1/draft": MATCH_DRAFT });
+    const { result, unmount } = renderDraft(server);
+    await waitFor(() => expect(result.current.draft).not.toBeNull());
+    act(() => result.current.setItem(11, "balls", 3));
+    unmount();
+    vi.useFakeTimers();
+    await act(async () => server.calls[0].reject(new TypeError("Failed to fetch")));
+    server.mock.mockClear();
+    act(() => vi.advanceTimersByTime(RETRY_MS * 3));
+    expect(server.mock).not.toHaveBeenCalled();
+    expect(server.calls).toHaveLength(1);
+  });
+
+  it("keeps a change queued on a 503 instead of dropping it", async () => {
+    const server = fakeServer({ "/api/matches/1/draft": MATCH_DRAFT });
+    const { result } = renderDraft(server);
+    await waitFor(() => expect(result.current.draft).not.toBeNull());
+    act(() => result.current.setItem(11, "balls", 3));
+    await act(async () => server.calls[0].reject(new ApiError(503, "Service Unavailable")));
+    expect(result.current.offline).toBe(true);
+    expect(result.current.pending).toBe(1);
+    expect(result.current.draft?.alliances[0].data).toEqual({ balls: 3 });
+  });
+
+  it("keeps a skills change queued on a 502", async () => {
+    const server = fakeServer({ "/api/field-sets/9/skills": skillsSet(RUN) });
+    const { result } = renderHook(() =>
+      useSkillsRun({ fieldId: 3, fieldSetId: 9, myDeviceName: "Admin", socketEvents: fakeSocket().socket, request: server.request })
+    );
+    await waitFor(() => expect(result.current.run).not.toBeNull());
+    act(() => result.current.setItem("balls", 4));
+    await act(async () => server.calls[0].reject(new ApiError(502, "Bad Gateway")));
+    expect(result.current.offline).toBe(true);
+    expect(result.current.pending).toBe(1);
+    expect(result.current.run?.data).toEqual({ balls: 4 });
+  });
+
+  it("does not save a missing alliance at zero once another scorer has started it", async () => {
+    const server = fakeServer({
+      "/api/matches/1/draft": { ...MATCH_DRAFT, alliances: [draft({ alliance_id: 11 }), draft({ alliance_id: 12 })] },
+    });
+    const { socket, emit } = fakeSocket();
+    const { result } = renderDraft(server, socket);
+    await waitFor(() => expect(result.current.draft).not.toBeNull());
+    act(() => result.current.submit());
+    await act(async () => server.calls[0].reject(new ApiError(409, "Alliance 11 has no draft score.")));
+    expect(result.current.missing).toEqual([11, 12]);
+    emit({ event: "score_draft_changed", data: { match_id: 1, ...draft({ alliance_id: 12, data: { balls: 5 }, version: 1 }) } });
+    expect(result.current.missing).toEqual([11]);
+    act(() => result.current.confirmZeroAndSubmit());
+    expect(server.calls.map((call) => call.path)).toEqual(["/api/matches/1/submit", "/api/matches/1/alliances/11/draft"]);
+  });
+
+  it("cancels a waiting Submit when one of this device's changes is refused", async () => {
+    const server = fakeServer({ "/api/matches/1/draft": MATCH_DRAFT });
+    const { result } = renderDraft(server);
+    await waitFor(() => expect(result.current.draft).not.toBeNull());
+    act(() => result.current.setItem(11, "balls", 99));
+    act(() => result.current.submit());
+    await act(async () => server.calls[0].reject(new ApiError(422, "", { detail: { violations: ["balls must be at most 10"] } })));
+    await waitFor(() => expect(result.current.draft?.alliances[0].data).toEqual({ balls: 2 }));
+    expect(server.calls).toHaveLength(1);
+    expect(result.current.submitting).toBe(false);
+    expect(result.current.error).toBe("balls must be at most 10");
+  });
+
+  it("cancels a waiting skills Submit when a change is refused", async () => {
+    const server = fakeServer({ "/api/field-sets/9/skills": skillsSet(RUN) });
+    const { result } = renderHook(() =>
+      useSkillsRun({ fieldId: 3, fieldSetId: 9, myDeviceName: "Admin", socketEvents: fakeSocket().socket, request: server.request })
+    );
+    await waitFor(() => expect(result.current.run).not.toBeNull());
+    act(() => result.current.setItem("balls", 99));
+    act(() => result.current.submit());
+    await act(async () => server.calls[0].reject(new ApiError(422, "", { detail: { violations: ["too many"] } })));
+    expect(server.calls).toHaveLength(1);
+    expect(result.current.submitting).toBe(false);
   });
 });

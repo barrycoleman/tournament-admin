@@ -18,9 +18,13 @@ export const scoringPaths = {
   skillsSchema: (skillsType: string) => `/api/skills/types/${skillsType}/schema`,
 };
 
-/** A request that never reached the server (fetch rejects with a TypeError, not an ApiError). */
+/**
+ * A request worth retrying: it never reached the server (fetch rejects with a
+ * TypeError, not an ApiError) or a server/proxy error says to try again (5xx, 408, 429).
+ */
 export function isNetworkError(error: unknown): boolean {
-  return !(error instanceof ApiError);
+  if (!(error instanceof ApiError)) return true;
+  return error.status >= 500 || error.status === 408 || error.status === 429;
 }
 
 /** The `violations` list of a 422, whether the route put it at the top level or under `detail`. */
