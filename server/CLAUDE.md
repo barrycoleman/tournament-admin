@@ -48,7 +48,7 @@ working example); a **scheduler** plugin (`kind: "scheduler"`, folder
 `SCHEDULER_PLUGIN_KIND`, and `plugins/schedulers/simple_random/plugin.py`
 for a complete working example).
 
-Skills challenges: `skills_types()` returns the game's skills types as `[{"key", "label"}]` in tie-break priority order. Keys are unique, match `^[a-z0-9_]+$`, and must not be `overall` (the rankings tab that sums every type). An empty list means the game has no skills. `skills_scoresheet_schema(skills_type)` and `calculate_skills_score(skills_type, scoresheet)` take the type key. Conformance checks the types' shape, then each type's schema and its scoring (an int, deterministic on the defaults sheet), and skips the per-type checks for an empty list. The sample game has `autonomous` then `driver`, each a single `score` counter.
+Skills challenges: `skills_types()` returns the game's skills types as `[{"key", "label", "run_seconds"}]` in tie-break priority order. Keys are unique, match `^[a-z0-9_]+$`, and must not be `overall` (the rankings tab that sums every type). An empty list means the game has no skills. `skills_scoresheet_schema(skills_type)` and `calculate_skills_score(skills_type, scoresheet)` take the type key. Conformance checks the types' shape, then each type's schema and its scoring (an int, deterministic on the defaults sheet), and skips the per-type checks for an empty list. `run_seconds` is a positive integer (the length of one run of that type) and the conformance tool requires it. `services/skills.run_seconds(plugin, type)` returns None for a plugin that does not give it, and starting a timer for such a type is a 409 "This skills type has no run length." The sample game has `autonomous` then `driver`, each a single `score` counter and each 60 seconds.
 
 One game plugin ships with the server, `plugins/games/sample_cooperative/`
 ("Sample Cooperative Game"): two teams per match share one score entered
@@ -282,7 +282,7 @@ go stale relative to the plugin's logic. A Match becomes `"completed"` once
 every Alliance has a saved `ScoreRecord`, which triggers a ranking recompute
 for its session/division.
 
-Once an alliance has a `ScoreRecord`, only an admin may change it. A scorer or referee re-submitting gets 409 "This score has already been submitted; ask an admin to correct it." Their first submission (from a paired device) is unchanged, and admin submissions still create or overwrite, including after qualification is finalized. Draft scores that scorers may overwrite belong to the later live-scoring spec. The one exception is a record the cooperative mirror created (`ScoreRecord.mirrored` is true): it was never submitted for that alliance, so a scorer or referee may submit it once, which clears the flag (see Cooperative scoring).
+Once an alliance has a `ScoreRecord`, only an admin may change it. A scorer or referee re-submitting gets 409 "This score has already been submitted; ask an admin to correct it." Their first submission (from a paired device) is unchanged, and admin submissions still create or overwrite, including after qualification is finalized. Scorers edit drafts instead (see Live scoring); `POST …/score` stays the admin correction path. The one exception is a record the cooperative mirror created (`ScoreRecord.mirrored` is true): it was never submitted for that alliance, so a scorer or referee may submit it once, which clears the flag (see Cooperative scoring).
 
 Win-point allocation (2/1/0 for win/tie/loss) and strength-of-schedule
 (sum of opponents' current win points) are computed by the core server,
@@ -949,6 +949,102 @@ Tests: `tests/test_display_groups.py`, `test_display_screens.py`,
 `test_displays_api.py`, `test_copy_displays.py`, `test_match_control_displays.py`
 and `test_display_reads.py`, with helpers in `tests/display_helpers.py`.
 
+## Live scoring
+
+See `docs/superpowers/specs/2026-10-19-live-scoring-design.md`. Drafts never
+count: `score_drafts`, `skills_runs`, `skills_set_timers` and `scorer_bindings`
+live in `models/scoring_draft.py`, are left out of the audit log
+(`audit._EXCLUDED_TABLES`), and nothing that treats "a score record exists" as
+"scored" reads them. Teamwork drafts, skills runs, Submit, the whole-match
+reset and the official-score route all serialise under
+`services.drafts.DRAFT_WRITE_LOCK`.
+
+**Teamwork drafts** (`services/drafts.py`, `routers/drafts.py`). One row per
+alliance; a cooperative game has one shared row on the match's lowest alliance
+id. `GET /api/matches/{id}/draft` returns `MatchDraftRead` (an alliance with no
+draft reads as `data: {}`, `version: 0`).
+`PATCH /api/matches/{id}/alliances/{aid}/draft` takes `{changes, teams?}`
+(`extra=forbid`). Each item is checked alone by `item_violations`; any bad item
+is a 422 `{violations}` with nothing applied. Last write wins per item by
+server order; `item_meta` records the device name or "Admin" and the time, and
+`version` goes up by 1. Team flags are stored under `team:<id>:no_show` and
+`team:<id>:dq`. It is a 409 `SCORE_ALREADY_SUBMITTED_DETAIL` once every
+alliance has a score, and a 409 for a not-played match. The score so far is
+`calculate_score` with the team flags applied, and 0 when the plugin raises.
+
+**Submit.** `POST /api/matches/{id}/submit` (`{force}`) locks the match row and
+re-checks `is_submitted` in the transaction, so a second Submit is a 409. An
+alliance with no draft is a 409 `"Alliance {id} has no draft score."` (the
+scoring page asks "<alliance> has no score. Save it with zero points?" and,
+on confirm, fills the defaults and submits after its queued changes flush).
+Violations are a 422 `{violations: [{alliance_id, messages}]}` unless `force`.
+It then writes through `services/score_submission.write_alliance_score` and
+`after_scores_written`, the same path `POST …/score` uses (mirroring, per-team
+flags, completion, queued override, finals advancing, rankings), deletes the
+drafts and broadcasts `match_submitted`. `POST …/score` completing a match also
+deletes its drafts and clears its live totals. The whole-match reset, marking a
+match not played and every match deletion path delete drafts
+(`delete_match_drafts`); a section reset keeps them.
+
+**Live scores** (`services/live_scores.py`). `sessions.live_scores_qualification`
+(default true; practice, qualification and skills) and
+`sessions.live_scores_finals` (default false). A teamwork match is live in
+`LIVE_PHASES` (`countdown_autonomous`, `autonomous`, `awaiting_driver`,
+`countdown_driver`, `driver`, paused or not) and never once completed or
+not played. A skills run's total is sent while its timer runs and the switch is
+on; its breakdown is sent after the timer regardless of the switch, until
+submit or discard. The entry points are `on_draft_changed`,
+`on_match_phase_changed` (after every phase and reset broadcast, including the
+auto-advance task), `on_switches_changed` and `on_skills_changed`.
+`GET /api/displays/live-scores?field_set_id=` (`live_snapshot`, any role) is
+the start-up and reconnect read. Displays also hide a live total by the
+match's own phase, not only on `cleared`.
+
+**Field-set purpose.** `field_sets.purpose` is `teamwork` or `skills`.
+Schedule generation, finals, Match Control's reads and the audience In Match
+switch use teamwork sets only. A match on a skills field is a 409 "This is a
+skills field set." Changing a set to skills while it has matches is a 409
+"This field set has matches."; changing it to teamwork while it has runs is a
+409 "This field set has skills runs." Skills endpoints on a teamwork field or
+set are a 409 "This is not a skills field." / "This is not a skills field
+set."
+
+**Skills runs and timers** (`services/skills_runs.py`,
+`routers/skills_runs.py`). One `skills_set_timers` row per skills set
+(`ensure_set_timer`; the type defaults to the game's first type, then the last
+used) and at most one `skills_runs` row per field; the routes are in spec
+§6.1. A run follows the set until its first field-level timer action
+(`follows_set = false`, copying the set's state first); after that only that
+field's controls move it and it may have any type. A run created while the set
+timer runs gets its own timer; one created after the set ended starts the next
+batch. A set Start is refused with no following run (409 "No run is following
+this field set."); a type change is refused while any run exists (409 "Finish
+or discard this set's runs first."). A running timer past its deadline reads
+as ended. Submit re-checks the attempt limit inside the transaction, validates
+with `skills_rules.scoresheet_violations`, writes the attempt with `field_id`
+(now on `SkillsAttemptRead`) and deletes the run; Discard uses no attempt.
+Displays may read `GET /api/field-sets/{id}/skills`.
+
+**Scorer bindings** (`services/scorer_bindings.py`, `routers/bindings.py`). One
+per session and device; it belongs to its session and is not cleared when the
+active session changes. `GET/PUT/DELETE /api/devices/me/binding` (scorer and
+referee devices; 422 "Pick a field in the active session."),
+`DELETE /api/devices/{id}/binding` (admin), and `DeviceRead.binding:
+{field_id, field_name} | null`. A binding is cleared when its field is deleted.
+
+**Role-filtered broadcasts.** `register_active_session(app, websocket, role)`
+records each socket's role; `broadcast_active_session(app, event, data,
+roles=…)` sends to the listed roles only (`None` means everyone, and `"admin"`
+must be listed to reach admins); `send_to_devices_and_admins` carries
+`scorer_binding_changed`.
+
+Tests: `test_scoring_tables.py`, `test_field_set_purpose.py`,
+`test_session_live_switches.py`, `test_realtime_roles.py`,
+`test_score_submission_service.py`, `test_drafts.py`, `test_live_scores.py`,
+`test_draft_submit.py`, `test_skills_runs.py`, `test_skills_timers.py`,
+`test_scorer_bindings.py`, `test_skills_attempt_field.py` and
+`test_skills_display_reads.py`.
+
 ## Real-time channels and live match control
 
 See
@@ -1056,6 +1152,26 @@ truth for that richer shape):
 - `display_identify` — `{device_id}`, sent only to that device's sockets (not a
   channel broadcast), when an admin presses Identify; the device shows its name
   full-screen for 10 seconds.
+
+Live-scoring events:
+
+- `score_draft_changed` — one alliance's full draft (`AllianceDraftRead` plus
+  `match_id`: `alliance_id, data, teams, item_meta, version, score`), to admin,
+  scorer and referee sockets only, after every draft change and a whole-match
+  reset (empty drafts, `version: 0`). A client applies it only when `version`
+  is newer than the one it holds.
+- `match_submitted` — `{match_id}`, to every socket, after a Submit.
+- `live_score` — `{match_id, alliances: [{alliance_id, score}]}`,
+  `{field_id, score?, breakdown?}`, `{match_id, cleared: true}` or
+  `{field_id, cleared: true}`, to display and admin sockets only.
+- `skills_run_changed` — `{field_set_id, field_id?}`, to admin, scorer, referee
+  and display sockets, when a run is created, its timer or the set's moves, its
+  draft changes, or it is submitted or discarded.
+- `scorer_binding_changed` — `{device_id}`, to admins and that device, on every
+  binding change.
+
+The active-session channel records each socket's role, so these role-filtered
+events go only to the roles listed above.
 
 Routing: `realtime.broadcast_for_session` always sends on
 `session:<id>`, and additionally on `active-session` when that session

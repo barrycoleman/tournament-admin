@@ -1,6 +1,6 @@
 # Live Scoring, Skills Fields and Skills Control — Design
 
-**Status:** approved design, not yet planned.
+**Status:** implemented 2026-10-19 on branch live-scoring.
 
 **Builds on:** skills challenges (`2026-10-08-skills-challenges-design.md`), per-team DQ/no-show (`2026-10-08-per-team-dq-no-show-design.md`), device pairing (`2026-10-13-device-pairing-design.md`), display groups (`2026-10-15-display-groups-design.md`), the realtime design (`2026-09-11-realtime-websockets-design.md`) and the core architecture spec's §6 (the deferred live-score preview, which this replaces).
 

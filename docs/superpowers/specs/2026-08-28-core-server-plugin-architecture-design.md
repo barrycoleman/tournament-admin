@@ -47,8 +47,8 @@ Explicitly out of scope / deferred:
 - Any external results-registry sync or SMS-style reminder integration.
 - A "single shared server across divisions" split mode — divisions are
   first-class scoped data in one server/file instead.
-- Live in-progress score preview during scoring (see §6) — designed here,
-  building it can wait.
+- Live in-progress score preview during scoring (see §6) — built as live
+  scoring, see `2026-10-19-live-scoring-design.md`.
 - Cryptographic plugin signing / OS-level plugin sandboxing (see §9).
 
 ## 2. Architecture
@@ -274,6 +274,8 @@ during elimination/finals rounds so results aren't spoiled before the
 official reveal. This round-type gate is captured now so it isn't
 forgotten when the feature is eventually built.
 
+*As built (live scoring, 2026-10-19): drafts saved on every change and merged item by item across devices, one Submit per match, and live totals on displays under per-session switches, on for practice and qualification and off for finals by default. See `docs/superpowers/specs/2026-10-19-live-scoring-design.md`.*
+
 ## 7. Error handling, offline recovery, and packaging
 
 **Offline recovery**: the scorer SPA keeps an on-device log (browser
@@ -369,7 +371,7 @@ third parties — deliberately deferred, not accidentally omitted.
 - Admin UI, scorer/tablet UI, and Pi display client implementations.
 - The first real game's plugin (scoring rules, once the target game's
   rules are in hand).
-- Whether/when to build the deferred live-score-preview feature (§6).
+- ~~Whether/when to build the deferred live-score-preview feature (§6).~~ Built as live scoring (`2026-10-19-live-scoring-design.md`).
 - Whether to eventually add cryptographic plugin signing or OS-level
   sandboxing (§9) if a third-party plugin ecosystem emerges.
 - **A new subsystem, not decomposed here yet: a read-only
@@ -497,7 +499,7 @@ third parties — deliberately deferred, not accidentally omitted.
     `2026-10-15-display-groups-design.md`): audience, field and pit
     groups, the screen registry, Match Control, the Displays page and the
     device app's display mode. Still for later (that spec's section 11):
-    skills field displays, alliance selection, inspection status, slides,
+    alliance selection, inspection status, slides,
     sponsor logos and score-reveal screens, new automatic switches
     (queueing, "show to teams", "send to results"), and kiosk links with
     the streaming overlay. The paragraph below is the original wish list.
@@ -563,6 +565,5 @@ third parties — deliberately deferred, not accidentally omitted.
   - **Already planned here but not built:** automatic interval backups
     (§7; only the pre-migration backup exists), the server address as a
     QR code and LAN discovery (above), sponsor logos from `Asset` (§3)
-    rotating on displays, inspection (`InspectionRecord`), and several
-    devices editing one live score (the deferred live-score preview,
-    §6).
+    rotating on displays, and inspection (`InspectionRecord`). Several
+    devices editing one live score is built (live scoring).

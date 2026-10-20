@@ -86,11 +86,23 @@ subscription/hosted competition-management products.
   admin and shows one screen or a rotation of screens, with long lists
   scrolling by themselves. Times show in the session's time zone, never
   the TV's own. **Match Control** is the operator page: start, pause,
-  resume, end early and reset a match, choose the next match, pick the
+  resume, end early and reset a match (tablets and the admin can run a
+  match's clock), choose the next match, pick the
   audience screen, run a time-out and switch sounds on. The **Displays**
   page places each display in a group, identifies a TV by flashing its
   name, and copies a setup from another session. A display never goes
   blank: it keeps its last picture when the connection drops and says so.
+- **Live scoring**: every change a scorer or admin makes is saved on the
+  server as a draft that never counts until Submit. Several tablets can
+  score one match together and see each other's changes, with the item
+  another device changed flashing with its name. One Submit makes the score
+  official on every device. Displays show a running total marked "Live"
+  during practice and qualification (and finals only when an admin turns
+  that on), never after the clock ends. Skills fields run timed runs on a
+  shared field-set timer or a field's own, with a field TV that shows the
+  team, the countdown and, after the timer, the breakdown the team checks.
+  The admin scores and corrects teamwork matches (in any session) and runs
+  skills fields from Skills Control.
 - **Packaging**: primary distribution is a standalone PyInstaller
   executable per OS (Windows/Mac/Linux); Docker is a secondary option.
   Automatic timestamped SQLite backups on an interval and before risky
