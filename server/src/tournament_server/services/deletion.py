@@ -25,14 +25,15 @@ from tournament_server.models.schedule_generation import ScheduleGeneration
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.skills import SkillsAttempt
-from tournament_server.services import displays
+from tournament_server.services import displays, drafts
 
 
 def delete_matches(db: Session, matches: Iterable[Match]) -> None:
-    """Deletes matches with their alliances, alliance teams and score records,
+    """Deletes matches with their alliances, alliance teams, score records and draft scores,
     and drops any next-match override that points at one of them."""
     matches = list(matches)
     displays.clear_queued_matches(db, [match.id for match in matches])
+    drafts.delete_match_drafts(db, [match.id for match in matches])
     for match in matches:
         for alliance in db.execute(select(Alliance).where(Alliance.match_id == match.id)).scalars().all():
             for record in db.execute(

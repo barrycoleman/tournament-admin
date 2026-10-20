@@ -35,3 +35,9 @@ class MatchDraftRead(BaseModel):
     match_id: int
     submitted: bool
     alliances: list[AllianceDraftRead]
+
+
+class SubmitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    force: bool = False

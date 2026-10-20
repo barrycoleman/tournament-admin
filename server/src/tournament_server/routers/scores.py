@@ -20,7 +20,7 @@ from tournament_server.models.alliance import Alliance
 from tournament_server.models.match import Match
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.schemas.score_record import AllianceScoreRead, ScoreRecordRead, ScoreSubmit, TeamFlags
-from tournament_server.services import team_flags
+from tournament_server.services import drafts, live_scores, team_flags
 from tournament_server.services.score_submission import (
     SCORE_ALREADY_SUBMITTED_DETAIL,  # noqa: F401  (re-exported for callers of this module)
     ScoreRefused,
@@ -106,19 +106,28 @@ def submit_score(
         device_friendly_name if device_friendly_name is not None else audit.current_actor.get()
     )
     try:
-        record, computed_score, _mirrored = write_alliance_score(
-            db,
-            plugin,
-            match,
-            alliance,
-            data=payload.data,
-            teams=payload.teams,
-            sitting=payload.sitting,
-            force=payload.force,
-            submitted_by=submitted_by,
-            is_admin=role == "admin",
-        )
+        # Serialised with draft patches, so a patch sees this score or none.
+        with drafts.DRAFT_WRITE_LOCK:
+            record, computed_score, _mirrored = write_alliance_score(
+                db,
+                plugin,
+                match,
+                alliance,
+                data=payload.data,
+                teams=payload.teams,
+                sitting=payload.sitting,
+                force=payload.force,
+                submitted_by=submitted_by,
+                is_admin=role == "admin",
+            )
     except ScoreRefused as refused:
         raise HTTPException(status_code=refused.status_code, detail=refused.detail) from refused
     after_scores_written(request.app, db, plugin, match, [alliance_id])
+    db.refresh(match)
+    if match.status == "completed":
+        # No stale draft or live total may outlive an official score.
+        with drafts.DRAFT_WRITE_LOCK:
+            drafts.delete_match_drafts(db, [match.id])
+            db.commit()
+        live_scores.on_match_phase_changed(request.app, db, match)
     return _to_score_record_read(record, computed_score)

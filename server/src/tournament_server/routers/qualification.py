@@ -12,7 +12,7 @@ from tournament_server.realtime import broadcast_for_session
 from tournament_server.routers.sessions import _to_read
 from tournament_server.schemas.qualification import FinalizeRequest, QualificationPreviewRead
 from tournament_server.schemas.session import SessionRead
-from tournament_server.services import qualification
+from tournament_server.services import drafts, qualification
 from tournament_server.services.deletion import session_has_scores
 from tournament_server.services.ranking import recompute_all_rankings
 from tournament_server.services.ranking_rules import suggest_finalize_drops
@@ -98,6 +98,8 @@ def finalize(
     except qualification.QualificationConflictError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    # Drafts of the matches just marked not played can never be submitted.
+    drafts.delete_match_drafts(db, [match.id for match in state.unplayed])
     return _after_change(request, db, session_obj, plugin)
 
 

@@ -26,7 +26,11 @@ from tournament_server.models.scoring_draft import ScoreDraft
 from tournament_server.schemas.draft import AllianceDraftRead, DraftPatch, ItemMeta, MatchDraftRead
 from tournament_server.schemas.score_record import TeamFlags
 from tournament_server.services import qualification, team_flags
-from tournament_server.services.score_submission import SCORE_ALREADY_SUBMITTED_DETAIL, ScoreRefused
+from tournament_server.services.score_submission import (
+    SCORE_ALREADY_SUBMITTED_DETAIL,
+    ScoreRefused,
+    write_alliance_score,
+)
 from tournament_server.services.skills_rules import _field_problem
 
 if TYPE_CHECKING:
@@ -301,3 +305,105 @@ def delete_match_drafts(db: Session, match_ids: list[int]) -> None:
     """Deletes these matches' drafts. Doesn't commit."""
     if match_ids:
         db.execute(delete(ScoreDraft).where(ScoreDraft.match_id.in_(list(match_ids))))
+
+
+def submit_match(
+    db: Session,
+    plugin: "LoadedPlugin",
+    match: Match,
+    *,
+    force: bool,
+    submitted_by: str | None,
+    is_admin: bool,
+) -> list[int]:
+    """Turns the match's drafts into official score records, all or nothing:
+    every check runs before the first write. The caller holds
+    DRAFT_WRITE_LOCK. Returns the match's alliance ids. Raises ScoreRefused."""
+    if match.status == qualification.NOT_PLAYED:
+        raise ScoreRefused(status_code=409, detail=qualification.NOT_PLAYED_SCORE_DETAIL)
+    if is_submitted(db, match):
+        raise ScoreRefused(status_code=409, detail=SCORE_ALREADY_SUBMITTED_DETAIL)
+
+    alliance_ids = match_alliance_ids(db, match.id)
+    alliances = {alliance_id: db.get(Alliance, alliance_id) for alliance_id in alliance_ids}
+    team_ids = {alliance_id: team_flags.alliance_team_ids(db, alliance_id) for alliance_id in alliance_ids}
+    records = {
+        record.alliance_id: record
+        for record in db.execute(select(ScoreRecord).where(ScoreRecord.alliance_id.in_(alliance_ids))).scalars()
+    }
+    finals = _finals(match)
+
+    # (alliance id, data, its own flags), in alliance order.
+    writes: list[tuple[int, dict, list[TeamFlags]]] = []
+    if _cooperative(plugin):
+        shared_id = alliance_ids[0]
+        draft = _draft_row(db, shared_id)
+        if draft is None:
+            raise ScoreRefused(status_code=409, detail=f"Alliance {shared_id} has no draft score.")
+        data = json.loads(draft.data_json)
+        flags = _stored_flags(draft)
+        shared_out = team_flags.alliance_out(flags, team_ids[shared_id], finals=False)
+        for alliance_id in alliance_ids:
+            own = [flag for flag in flags if flag.team_id in team_ids[alliance_id]]
+            # The shared alliance mirrors its data to partners; a partner is
+            # written too when it has its own flags or nothing was mirrored.
+            if alliance_id == shared_id or own or shared_out:
+                writes.append((alliance_id, data, own))
+        checked = [(shared_id, data, flags)]
+    else:
+        for alliance_id in alliance_ids:
+            draft = _draft_row(db, alliance_id)
+            record = records.get(alliance_id)
+            if draft is None:
+                if record is not None:
+                    continue
+                raise ScoreRefused(status_code=409, detail=f"Alliance {alliance_id} has no draft score.")
+            if record is not None and not record.mirrored and not is_admin:
+                raise ScoreRefused(status_code=409, detail=SCORE_ALREADY_SUBMITTED_DETAIL)
+            own = [flag for flag in _stored_flags(draft) if flag.team_id in team_ids[alliance_id]]
+            writes.append((alliance_id, json.loads(draft.data_json), own))
+        checked = list(writes)
+
+    violations = []
+    for alliance_id, data, flags in checked:
+        try:
+            messages = plugin.module.validate(data)
+        except Exception as exc:
+            raise ScoreRefused(status_code=422, detail=f"Plugin could not validate this scoresheet: {exc}")
+        if messages:
+            violations.append({"alliance_id": alliance_id, "messages": list(messages)})
+        if not team_flags.alliance_out(flags, team_ids[alliance_id], finals=finals):
+            try:
+                plugin.module.calculate_score(data)
+            except Exception as exc:
+                raise ScoreRefused(status_code=422, detail=f"Plugin could not score this scoresheet: {exc}")
+    if violations and not force:
+        raise ScoreRefused(status_code=422, detail={"violations": violations})
+
+    for alliance_id, data, flags in writes:
+        write_alliance_score(
+            db,
+            plugin,
+            match,
+            alliances[alliance_id],
+            data=data,
+            teams=flags,
+            sitting=False,
+            force=True,
+            submitted_by=submitted_by,
+            is_admin=is_admin,
+        )
+    delete_match_drafts(db, [match.id])
+    db.commit()
+    return alliance_ids
+
+
+def broadcast_drafts_cleared(app: "FastAPI", db: Session, match: Match) -> None:
+    """Tells scoring devices every alliance's draft is now empty (version 0)."""
+    for alliance_id in match_alliance_ids(db, match.id):
+        realtime.broadcast_active_session(
+            app,
+            "score_draft_changed",
+            {"match_id": match.id, **empty_alliance_draft(alliance_id).model_dump(mode="json")},
+            roles=DRAFT_EVENT_ROLES,
+        )

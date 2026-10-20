@@ -33,7 +33,7 @@ from tournament_server.schemas.match import (
     MatchRead,
     MatchResetRequest,
 )
-from tournament_server.services import displays, live_scores, qualification
+from tournament_server.services import displays, drafts, live_scores, qualification
 from tournament_server.services.match_labeling import match_label
 from tournament_server.services.skills_runs import SKILLS_SET_DETAIL
 
@@ -531,12 +531,19 @@ def reset_match(
     match.phase_deadline = None
     match.paused = False
     match.remaining_seconds_at_pause = None
-    db.commit()
+    # The whole-match reset starts scoring over (spec §5.1); a section reset keeps the drafts.
+    clears_drafts = payload.scope == "full"
+    with drafts.DRAFT_WRITE_LOCK:
+        if clears_drafts:
+            drafts.delete_match_drafts(db, [match.id])
+        db.commit()
     db.refresh(match)
 
     broadcast_for_session(
         request.app, db, match.session_id, "match_reset",
         {"match_id": match.id, "phase": match.phase},
     )
+    if clears_drafts:
+        drafts.broadcast_drafts_cleared(request.app, db, match)
     live_scores.on_match_phase_changed(request.app, db, match)
     return _to_match_read(match, db)
