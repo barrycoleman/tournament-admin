@@ -275,8 +275,8 @@ def test_sample_game_declares_a_five_minute_default_cycle_time():
 def test_skills_types_are_autonomous_then_driver_scored_as_entered():
     module = load_plugin(SAMPLE_PLUGIN, GAME_PLUGIN_KIND).module
     assert module.skills_types() == [
-        {"key": "autonomous", "label": "Autonomous"},
-        {"key": "driver", "label": "Driver"},
+        {"key": "autonomous", "label": "Autonomous", "run_seconds": 60},
+        {"key": "driver", "label": "Driver", "run_seconds": 60},
     ]
     for key in ("autonomous", "driver"):
         assert [f["name"] for f in module.skills_scoresheet_schema(key)] == ["score"]

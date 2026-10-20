@@ -101,10 +101,10 @@ def rank_teams(team_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{**r, "rank": i + 1} for i, r in enumerate(ordered)]
 
 
-def skills_types() -> list[dict[str, str]]:
+def skills_types() -> list[dict[str, Any]]:
     return [
-        {"key": "autonomous", "label": "Autonomous"},
-        {"key": "driver", "label": "Driver"},
+        {"key": "autonomous", "label": "Autonomous", "run_seconds": 60},
+        {"key": "driver", "label": "Driver", "run_seconds": 60},
     ]
 
 

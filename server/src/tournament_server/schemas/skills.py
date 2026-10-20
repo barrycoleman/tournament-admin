@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 class SkillsTypeRead(BaseModel):
     key: str
     label: str
+    # The run's timer length; null for a plugin that doesn't declare one.
+    run_seconds: int | None = None
 
 
 class SkillsSettingsRead(BaseModel):

@@ -84,10 +84,11 @@ def rank_teams(team_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # so its best breaks Overall ties before Driver's (see the skills spec, 2.3).
 
 
-def skills_types() -> list[dict[str, str]]:
+def skills_types() -> list[dict[str, Any]]:
+    # run_seconds is each run's timer length on a skills field.
     return [
-        {"key": "autonomous", "label": "Autonomous"},
-        {"key": "driver", "label": "Driver"},
+        {"key": "autonomous", "label": "Autonomous", "run_seconds": 60},
+        {"key": "driver", "label": "Driver", "run_seconds": 60},
     ]
 
 

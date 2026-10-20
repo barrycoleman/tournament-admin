@@ -5,7 +5,10 @@ from auth_helpers import bearer, login_as
 from plugin_helpers import zip_fixture_plugin
 from skills_helpers import SECOND_GAME, admin_token, create_event, create_session, enable_skills, next_event
 
-TYPES = [{"key": "autonomous", "label": "Autonomous"}, {"key": "driver", "label": "Driver"}]
+TYPES = [
+    {"key": "autonomous", "label": "Autonomous", "run_seconds": 60},
+    {"key": "driver", "label": "Driver", "run_seconds": 60},
+]
 
 
 def test_settings_read_the_defaults_before_anything_is_saved(client):
@@ -139,3 +142,37 @@ def test_scoresheet_schema_per_type(client):
     assert [f["name"] for f in autonomous.json()] == ["objects_scored", "parked"]
     assert [f["name"] for f in client.get("/api/skills/types/driver/schema").json()] == ["objects_scored"]
     assert client.get("/api/skills/types/teleop/schema").status_code == 404
+
+
+def _plugin_with_types(types):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(module=SimpleNamespace(skills_types=lambda: types))
+
+
+def test_run_seconds_reads_the_plugin_and_gives_none_for_anything_unusable():
+    from tournament_server.services import skills
+
+    plugin = _plugin_with_types(
+        [
+            {"key": "driver", "label": "Driver", "run_seconds": 60},
+            {"key": "autonomous", "label": "Autonomous"},
+            {"key": "flag", "label": "Flag", "run_seconds": True},
+            {"key": "zero", "label": "Zero", "run_seconds": 0},
+        ]
+    )
+    assert skills.run_seconds(plugin, "driver") == 60
+    assert skills.run_seconds(plugin, "autonomous") is None
+    assert skills.run_seconds(plugin, "flag") is None
+    assert skills.run_seconds(plugin, "zero") is None
+    assert skills.run_seconds(plugin, "unknown") is None
+    assert skills.run_seconds(None, "driver") is None
+    assert skills.NO_RUN_SECONDS_DETAIL == "This skills type has no run length."
+    assert [t["run_seconds"] for t in skills.plugin_types(plugin)] == [60, None, None, None]
+
+
+def test_the_session_skills_read_carries_each_types_run_length(client):
+    create_event(client)
+    session_id = create_session(client)
+    types = client.get(f"/api/sessions/{session_id}/skills").json()["types"]
+    assert [(t["key"], t["run_seconds"], t["allowed"]) for t in types] == [("autonomous", 60, 3), ("driver", 60, 3)]

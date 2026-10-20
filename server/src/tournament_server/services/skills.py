@@ -4,7 +4,7 @@ the ranking in skills_ranking.py."""
 from __future__ import annotations
 
 from collections import Counter
-from typing import Iterable
+from typing import Any, Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,13 +20,34 @@ SKILLS_OFF_DETAIL = "Skills challenges are turned off for this event."
 NO_PLUGIN_DETAIL = "Choose a game plugin before setting up skills challenges."
 NO_TYPES_DETAIL = "This game has no skills challenges."
 ADMIN_ONLY_DETAIL = "Only an admin can change a submitted skills attempt."
+NO_RUN_SECONDS_DETAIL = "This skills type has no run length."
 
 
-def plugin_types(plugin: LoadedPlugin | None) -> list[dict[str, str]]:
-    """The game's skills types in priority order; [] without a plugin."""
+def _usable_run_seconds(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
+def plugin_types(plugin: LoadedPlugin | None) -> list[dict[str, Any]]:
+    """The game's skills types in priority order, each with its run length
+    (None when the plugin doesn't give a usable one); [] without a plugin."""
     if plugin is None:
         return []
-    return [{"key": item["key"], "label": item["label"]} for item in plugin.module.skills_types()]
+    return [
+        {"key": item["key"], "label": item["label"], "run_seconds": _usable_run_seconds(item.get("run_seconds"))}
+        for item in plugin.module.skills_types()
+    ]
+
+
+def run_seconds(plugin: LoadedPlugin | None, skills_type: str) -> int | None:
+    """One skills type's run length in seconds, or None when there is no
+    plugin, no such type, or no usable length; a caller that needs it
+    refuses with 409 NO_RUN_SECONDS_DETAIL rather than guessing."""
+    for item in plugin_types(plugin):
+        if item["key"] == skills_type:
+            return item["run_seconds"]
+    return None
 
 
 def find_settings(db: Session, event_id: int) -> SkillsSettings | None:

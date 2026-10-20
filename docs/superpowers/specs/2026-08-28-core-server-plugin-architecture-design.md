@@ -225,7 +225,9 @@ Interface (documented as a `typing.Protocol`/ABC):
 - `skills_scoresheet_schema()` / `calculate_skills_score()` — same shape
   as above, for the separate skills-challenge track.
   *As built: both take the skills type key, and a required
-  `skills_types()` lists the types in tie-break priority order.*
+  `skills_types()` lists the types in tie-break priority order, each as
+  `{key, label, run_seconds}` (`run_seconds`, a positive integer, is a
+  skills run's timer length on a skills field).*
 
 Plugin authors are told to keep field `name`s stable across versions:
 because scoresheets are stored as plain JSON using those names, old data

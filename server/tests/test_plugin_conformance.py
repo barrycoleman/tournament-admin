@@ -483,9 +483,14 @@ def rank_teams(team_results):
     return [{**r, "rank": i + 1} for i, r in enumerate(ordered)]
 '''
 
-_GOOD_SKILLS = '''
+_GOOD_TYPES = (
+    '[{"key": "autonomous", "label": "Autonomous", "run_seconds": 60},'
+    ' {"key": "driver", "label": "Driver", "run_seconds": 45}]'
+)
+
+_GOOD_SKILLS = f'''
 def skills_types():
-    return [{"key": "autonomous", "label": "Autonomous"}, {"key": "driver", "label": "Driver"}]
+    return {_GOOD_TYPES}
 
 
 def skills_scoresheet_schema(skills_type):
@@ -522,10 +527,7 @@ def test_valid_skills_types_pass_with_a_check_per_type(tmp_path):
 
 
 def test_an_empty_type_list_passes_and_skips_per_type_checks(tmp_path):
-    code = _GOOD_SKILLS.replace(
-        'return [{"key": "autonomous", "label": "Autonomous"}, {"key": "driver", "label": "Driver"}]',
-        "return []",
-    ).replace('return [_field("x", "team")]', "return []")
+    code = _GOOD_SKILLS.replace(_GOOD_TYPES, "[]").replace('return [_field("x", "team")]', "return []")
     report = run_conformance_checks(_write_skills_plugin(tmp_path, code))
     assert report.passed, [c for c in report.checks if not c.passed]
     assert not any(c.name.startswith("skills_scoresheet_schema(") for c in report.checks)
@@ -535,23 +537,33 @@ def test_an_empty_type_list_passes_and_skips_per_type_checks(tmp_path):
 @pytest.mark.parametrize(
     ("types_literal", "message"),
     [
-        ('[{"key": "driver", "label": "Driver"}, {"key": "driver", "label": "Again"}]', "duplicate"),
-        ('[{"key": "Driver", "label": "Driver"}]', "must match"),
-        ('[{"key": "driver-1", "label": "Driver"}]', "must match"),
-        ('[{"key": 5, "label": "Driver"}]', "must match"),
-        ('[{"key": "overall", "label": "Overall"}]', "reserved"),
-        ('[{"key": "driver", "label": "  "}]', "non-empty label"),
-        ('[{"key": "driver", "label": 7}]', "non-empty label"),
+        (
+            '[{"key": "driver", "label": "Driver", "run_seconds": 60},'
+            ' {"key": "driver", "label": "Again", "run_seconds": 60}]',
+            "duplicate",
+        ),
+        ('[{"key": "Driver", "label": "Driver", "run_seconds": 60}]', "must match"),
+        ('[{"key": "driver-1", "label": "Driver", "run_seconds": 60}]', "must match"),
+        ('[{"key": 5, "label": "Driver", "run_seconds": 60}]', "must match"),
+        ('[{"key": "overall", "label": "Overall", "run_seconds": 60}]', "reserved"),
+        ('[{"key": "driver", "label": "  ", "run_seconds": 60}]', "non-empty label"),
+        ('[{"key": "driver", "label": 7, "run_seconds": 60}]', "non-empty label"),
         ('[{"key": "driver"}]', "exactly"),
-        ('[{"key": "driver", "label": "Driver", "icon": None}]', "exactly"),
+        ('[{"key": "driver", "label": "Driver", "run_seconds": 60, "icon": None}]', "exactly"),
         ('["driver"]', "exactly"),
-        ('{"key": "driver", "label": "Driver"}', "must return a list"),
+        ('{"key": "driver", "label": "Driver", "run_seconds": 60}', "must return a list"),
+        # run_seconds: required, a positive whole number of seconds.
+        ('[{"key": "driver", "label": "Driver"}]', "run_seconds"),
+        ('[{"key": "driver", "label": "Driver", "run_seconds": 0}]', "positive whole number"),
+        ('[{"key": "driver", "label": "Driver", "run_seconds": -5}]', "positive whole number"),
+        ('[{"key": "driver", "label": "Driver", "run_seconds": 60.0}]', "positive whole number"),
+        ('[{"key": "driver", "label": "Driver", "run_seconds": True}]', "positive whole number"),
+        ('[{"key": "driver", "label": "Driver", "run_seconds": "60"}]', "positive whole number"),
+        ('[{"key": "driver", "label": "Driver", "run_seconds": None}]', "positive whole number"),
     ],
 )
 def test_bad_skills_types_fail(tmp_path, types_literal, message):
-    code = _GOOD_SKILLS.replace(
-        '[{"key": "autonomous", "label": "Autonomous"}, {"key": "driver", "label": "Driver"}]', types_literal
-    )
+    code = _GOOD_SKILLS.replace(_GOOD_TYPES, types_literal)
     report = run_conformance_checks(_write_skills_plugin(tmp_path, code))
     check = _named(report, "skills_types() shape")
     assert not check.passed

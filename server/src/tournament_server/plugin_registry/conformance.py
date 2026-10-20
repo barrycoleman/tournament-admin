@@ -27,6 +27,7 @@ VALID_FINALS_FORMATS = {"single_elimination", "score_chase"}
 _SKILLS_KEY_PATTERN = re.compile(r"[a-z0-9_]+")
 # "overall" names the rankings tab that sums every type, so no type may use it.
 RESERVED_SKILLS_KEYS = {"overall"}
+_SKILLS_TYPE_KEYS = {"key", "label", "run_seconds"}
 _REQUIRED_FIELD_KEYS = {
     "name",
     "label",
@@ -313,9 +314,11 @@ def _check_skills_types(module: Any) -> CheckResult:
         return CheckResult(name, False, "must return a list")
     seen: set[str] = set()
     for item in types:
-        if not isinstance(item, dict) or set(item) != {"key", "label"}:
-            return CheckResult(name, False, "each type must be a dict with exactly 'key' and 'label'")
-        key, label = item["key"], item["label"]
+        if not isinstance(item, dict) or set(item) != _SKILLS_TYPE_KEYS:
+            return CheckResult(
+                name, False, "each type must be a dict with exactly 'key', 'label' and 'run_seconds'"
+            )
+        key, label, run_seconds = item["key"], item["label"], item["run_seconds"]
         if not isinstance(key, str) or not _SKILLS_KEY_PATTERN.fullmatch(key):
             return CheckResult(name, False, f"type key {key!r} must match ^[a-z0-9_]+$")
         if key in RESERVED_SKILLS_KEYS:
@@ -325,6 +328,14 @@ def _check_skills_types(module: Any) -> CheckResult:
         seen.add(key)
         if not isinstance(label, str) or not label.strip():
             return CheckResult(name, False, f"type {key!r} needs a non-empty label")
+        # The run's timer length (live scoring design §4.1); a bool is an int
+        # to Python but never a length.
+        if isinstance(run_seconds, bool) or not isinstance(run_seconds, int) or run_seconds <= 0:
+            return CheckResult(
+                name,
+                False,
+                f"type {key!r} run_seconds must be a positive whole number of seconds, got {run_seconds!r}",
+            )
     return CheckResult(name, True)
 
 

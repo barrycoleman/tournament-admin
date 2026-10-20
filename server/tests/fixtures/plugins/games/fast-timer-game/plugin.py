@@ -101,8 +101,8 @@ def rank_teams(team_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{**r, "rank": i + 1} for i, r in enumerate(ordered)]
 
 
-def skills_types() -> list[dict[str, str]]:
-    return [{"key": "driver", "label": "Driver"}]
+def skills_types() -> list[dict[str, Any]]:
+    return [{"key": "driver", "label": "Driver", "run_seconds": 60}]
 
 
 def skills_scoresheet_schema(skills_type: str) -> list[dict[str, Any]]:
