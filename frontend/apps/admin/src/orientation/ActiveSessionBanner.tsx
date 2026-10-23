@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
+import { formatMatchTime } from "../matchTime";
 import { useMakeActive } from "./MakeActiveDialog";
 import { cutoverOffer } from "./sessionTime";
 import { isBannerSnoozed, snoozeBanner } from "./snooze";
@@ -10,7 +11,7 @@ const TICK_MS = 30_000;
 
 /** Offers to make the next session active once its cutover time has passed. */
 export function ActiveSessionBanner() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const now = useNow(TICK_MS);
   // Bumped by "Not yet" so the snooze takes effect without waiting for a tick.
   const [, setSnoozedAt] = useState(0);
@@ -44,11 +45,12 @@ export function ActiveSessionBanner() {
               i18nKey="orientation.banner.message"
               values={{
                 label: session.label,
-                time: new Intl.DateTimeFormat(undefined, {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  timeZone: session.timezone || fallbackZone,
-                }).format(offer.startsAt),
+                time: formatMatchTime(
+                  offer.startsAt.toISOString(),
+                  session.timezone || fallbackZone,
+                  false,
+                  i18n.language
+                ),
               }}
               components={{ strong: <strong /> }}
             />

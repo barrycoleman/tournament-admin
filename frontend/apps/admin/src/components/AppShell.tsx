@@ -12,7 +12,8 @@ import { useRestartPoll } from "../useRestartPoll";
 import { noteExplicitLogout } from "../routeGuards";
 import { ActiveSessionBanner } from "../orientation/ActiveSessionBanner";
 import { useActiveSessionLiveUpdates } from "../orientation/useActiveSessionLiveUpdates";
-import { useEvent, useSessions } from "../orientation/useOrientationData";
+import { browserZone, useEvent, useSessions } from "../orientation/useOrientationData";
+import { formatMatchTime } from "../matchTime";
 import { useNow } from "../orientation/useNow";
 import { SessionNavList } from "./SessionNavList";
 
@@ -27,21 +28,23 @@ function AdminLiveUpdates() {
 }
 
 function AdminEventName() {
+  const { t } = useTranslation();
   const event = useEvent();
-  return <h1 className="app-header__title">{event.data?.name ?? ""}</h1>;
+  return <h1 className="app-header__title">{event.data?.name || t("app.title")}</h1>;
 }
 
 function AdminHeaderStatus() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const now = useNow(30_000);
   const event = useEvent();
   const sessions = useSessions();
+  const loaded = event.data !== undefined && sessions.data !== undefined;
   const activeId = event.data?.active_session_id ?? null;
   // An id missing from the list (deleted elsewhere) reads as no active session.
   const active = sessions.data?.find((s) => s.id === activeId);
   return (
     <>
-      {active ? (
+      {!loaded ? null : active ? (
         <Link to={`/sessions/${active.id}/today`} className="badge badge-success app-header__session">
           <span className="live-dot" aria-hidden="true" />
           {t("shell.activeSessionPill", { label: active.label })}
@@ -50,7 +53,7 @@ function AdminHeaderStatus() {
         <span className="badge badge-neutral app-header__session">{t("shell.noActiveSession")}</span>
       )}
       <time className="app-header__clock" dateTime={now.toISOString()}>
-        {now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+        {formatMatchTime(now.toISOString(), browserZone(), false, i18n.language)}
       </time>
     </>
   );

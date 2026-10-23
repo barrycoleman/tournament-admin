@@ -188,7 +188,8 @@ describe("AppShell admin menu and header", () => {
     const pill = await within(header).findByRole("link", { name: /Active: Friday/ });
     expect(pill).toHaveAttribute("href", "/sessions/3/today");
     expect(pill).toHaveClass("badge", "badge-success");
-    expect(within(header).getByText(/^\d{2}:\d{2}/)).toBeInTheDocument();
+    const clock = header.querySelector("time");
+    expect(clock?.textContent).toMatch(/^\d{2}:\d{2}$/);
   });
 
   it("with no active session shows neither control and a neutral pill", async () => {
@@ -211,6 +212,40 @@ describe("AppShell admin menu and header", () => {
     expect(await within(screen.getByRole("banner")).findByText("No active session")).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "Friday" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Match Control" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Skills Control" })).not.toBeInTheDocument();
+  });
+
+  it("shows no pill until the event and sessions have loaded", async () => {
+    asRole("admin");
+    let releaseSessions!: () => void;
+    const sessionsHeld = new Promise<void>((resolve) => {
+      releaseSessions = resolve;
+    });
+    stubAdmin({ activeId: null });
+    const stubbed = vi.mocked(apiRequest).getMockImplementation()!;
+    vi.mocked(apiRequest).mockImplementation(async (path: string, ...rest: unknown[]) => {
+      if (path === "/api/sessions") await sessionsHeld;
+      return (stubbed as (p: string, ...r: unknown[]) => Promise<never>)(path, ...rest);
+    });
+    renderShell();
+
+    const header = screen.getByRole("banner");
+    expect(await within(header).findByText("Autumn Open")).toBeInTheDocument();
+    expect(within(header).queryByText("No active session")).not.toBeInTheDocument();
+    await act(async () => {
+      releaseSessions();
+    });
+    expect(await within(header).findByText("No active session")).toBeInTheDocument();
+  });
+
+  it("falls back to the app title while the event name is unavailable", () => {
+    asRole("admin");
+    vi.mocked(apiRequest).mockImplementation(() => new Promise(() => {}));
+    renderShell();
+
+    expect(within(screen.getByRole("banner")).getByRole("heading", { level: 1 })).toHaveTextContent(
+      enAdmin.app.title
+    );
   });
 
   it("drops the pill and the controls when the active session is cleared live", async () => {

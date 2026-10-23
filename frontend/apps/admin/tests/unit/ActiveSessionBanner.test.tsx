@@ -85,12 +85,23 @@ describe("ActiveSessionBanner", () => {
     vi.setSystemTime(CUTOVER - 20_000);
     renderBanner();
     await settle();
+    // Every query the offer depends on has answered, so the absence is real.
+    const requested = vi.mocked(apiRequest).mock.calls.map((c) => c[0]);
+    expect(requested).toEqual(
+      expect.arrayContaining([
+        "/api/event",
+        "/api/sessions",
+        "/api/sessions/1/playing-windows",
+        "/api/sessions/2/playing-windows",
+        "/api/sessions/500/playing-windows",
+      ])
+    );
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     await tick(30_000);
     const banner = await screen.findByRole("status");
     expect(banner).toHaveClass("alert", "alert-warning", "active-session-banner");
-    expect(banner).toHaveTextContent(/Sunday is scheduled to start at 09:00/);
+    expect(banner).toHaveTextContent("Sunday is scheduled to start at 09:00.");
     expect(banner).toHaveTextContent("Make it the active session? The TVs and Match Control will switch to it.");
   });
 
