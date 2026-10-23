@@ -1,6 +1,7 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import { buildCooperativeGamePluginZip } from "./fixtures/buildPluginZip";
 import { startIsolatedServer, type IsolatedServer } from "./fixtures/isolatedServer";
+import { ADMIN_LANDING } from "./fixtures/landing";
 
 // The shared E2E event is locked to the head-to-head example game, so the
 // cooperative flows run against their own backend and Vite server.
@@ -22,7 +23,7 @@ test.describe.serial("cooperative rankings and ranking settings", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL(`${server.baseUrl}/`);
+    await expect(page).toHaveURL(ADMIN_LANDING);
   }
 
   async function playMatch(request: APIRequestContext, sessionId: number, number: number, objects: number) {

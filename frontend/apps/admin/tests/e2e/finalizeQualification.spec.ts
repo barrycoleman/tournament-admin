@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import { buildCooperativeGamePluginZip } from "./fixtures/buildPluginZip";
 import { startIsolatedServer, type IsolatedServer } from "./fixtures/isolatedServer";
+import { ADMIN_LANDING } from "./fixtures/landing";
 
 const PASSWORD = "finalize-e2e-pw";
 
@@ -21,7 +22,7 @@ test.describe.serial("finalizing cooperative qualification", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL(`${server.baseUrl}/`);
+    await expect(page).toHaveURL(ADMIN_LANDING);
   }
 
   async function createMatch(request: APIRequestContext, number: number, red: string, blue: string) {

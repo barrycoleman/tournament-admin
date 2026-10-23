@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { E2E_EVENT_NAME, E2E_EVENT_PASSWORD } from "./fixtures/testEvent";
+import { ADMIN_LANDING } from "./fixtures/landing";
 
 test.describe.serial("role password management", () => {
   test.beforeAll(async ({ request }) => {
@@ -16,7 +17,7 @@ test.describe.serial("role password management", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL(ADMIN_LANDING);
 
     await page.getByRole("link", { name: "Role passwords" }).click();
     await expect(page).toHaveURL(/\/settings\/roles$/);
@@ -36,7 +37,7 @@ test.describe.serial("role password management", () => {
 
     await page.getByLabel("Password").fill("scorer-new-pw");
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL(ADMIN_LANDING);
   });
 
   test("revealing a role's current password via the eye icon toggle", async ({ page }) => {
@@ -44,7 +45,7 @@ test.describe.serial("role password management", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL(ADMIN_LANDING);
 
     await page.getByRole("link", { name: "Role passwords" }).click();
     await expect(page).toHaveURL(/\/settings\/roles$/);
@@ -66,7 +67,7 @@ test.describe.serial("role password management", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL(ADMIN_LANDING);
 
     await page.getByRole("link", { name: "Role passwords" }).click();
     await page.getByLabel("Role").selectOption("attendee");

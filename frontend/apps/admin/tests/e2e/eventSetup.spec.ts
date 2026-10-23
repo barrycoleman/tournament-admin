@@ -12,7 +12,7 @@ test.describe.serial("event setup: plugin install and selection", () => {
     expect([201, 409]).toContain(createResponse.status());
   });
 
-  test("installing and selecting a game plugin reflects on the dashboard", async ({
+  test("installing and selecting a game plugin marks it selected", async ({
     page,
   }) => {
     await page.goto("/login");
@@ -21,7 +21,7 @@ test.describe.serial("event setup: plugin install and selection", () => {
     await page.getByRole("button", { name: "Log in" }).click();
     await expect(page).toHaveURL("/");
 
-    await page.getByRole("link", { name: "Event & plugins" }).click();
+    await page.getByRole("link", { name: "Event & game" }).click();
     await expect(page).toHaveURL(/\/events\/setup$/);
 
     const zipPath = await buildExampleGamePluginZip();

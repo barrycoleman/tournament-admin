@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { E2E_EVENT_NAME, E2E_EVENT_PASSWORD } from "./fixtures/testEvent";
+import { ADMIN_LANDING } from "./fixtures/landing";
 
 test.describe.serial("team roster grid", () => {
   test.beforeAll(async ({ request }) => {
@@ -14,11 +15,11 @@ test.describe.serial("team roster grid", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL(ADMIN_LANDING);
 
-    await page.getByRole("link", { name: "Teams" }).click();
+    await page.getByRole("link", { name: "Teams & divisions" }).click();
     await expect(page).toHaveURL(/\/teams$/);
-    await expect(page.getByRole("heading", { name: "Teams" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Teams", exact: true })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "Number" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
 
