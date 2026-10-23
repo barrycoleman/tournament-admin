@@ -37,7 +37,9 @@ test.describe.serial("role password management", () => {
 
     await page.getByLabel("Password").fill("scorer-new-pw");
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL(ADMIN_LANDING);
+    // A scorer has no setup checklist or session pages: "/" just names the event.
+    await expect(page).toHaveURL("/");
+    await expect(page.getByRole("main").getByRole("heading", { level: 1 })).toBeVisible();
   });
 
   test("revealing a role's current password via the eye icon toggle", async ({ page }) => {

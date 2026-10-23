@@ -85,8 +85,10 @@ test.describe.serial("admin orientation", () => {
     await expect(name).toHaveValue("");
 
     // Back to the single seeded division before any teams exist.
-    await page.getByRole("button", { name: "Delete" }).last().click();
-    await page.getByRole("button", { name: "Delete", exact: true }).last().click();
+    await page.getByRole("listitem").filter({ hasText: "Spare Division" }).getByRole("button", { name: "Delete", exact: true }).click();
+    const confirm = page.getByRole("alertdialog", { name: "Delete this division?" });
+    await confirm.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(confirm).toHaveCount(0);
     await expect(page.getByText("Spare Division", { exact: true })).toHaveCount(0);
     await page.getByRole("link", { name: "Teams", exact: true }).click();
     await expect(page).toHaveURL(/\/teams$/);
@@ -124,7 +126,9 @@ test.describe.serial("admin orientation", () => {
     await page.keyboard.press("Enter");
     const card = page.getByRole("region", { name: "Main Fields" });
     const next = card.getByLabel("New field name for Main Fields");
+    await expect(card.getByText("Field 1", { exact: true })).toBeVisible();
     await expect(next).toBeFocused();
+    await expect(next).toHaveValue("");
     await page.keyboard.type("Field 2");
     await page.keyboard.press("Enter");
     await expect(card.getByText("Field 2")).toBeVisible();
@@ -203,12 +207,10 @@ test.describe.serial("admin orientation", () => {
     await page.getByRole("button", { name: "Pair", exact: true }).click();
     await expect(page.getByText(`Paired ${TV}.`)).toBeVisible();
 
-    // The device signs in and opens its socket only after the pair call, and the
-    // server broadcasts nothing when a socket connects, so the page reads the
-    // connection again on a reload rather than live (reported as a concern).
+    // The device signs in and opens its socket after the pair call; the server
+    // tells admins when it connects, so the row turns Connected without a reload.
     await expect(shown).toHaveCount(0, { timeout: 15_000 });
     await expect(device.locator(".display")).toBeVisible({ timeout: 15_000 });
-    await page.reload();
     const row = page.getByRole("row").filter({ hasText: TV });
     await expect(row.getByText("● Connected")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByLabel(`What ${TV} shows`).locator("option:checked")).toHaveText(AUDIENCE);
@@ -218,7 +220,16 @@ test.describe.serial("admin orientation", () => {
     const identify = page.getByRole("region", { name: "TVs and displays" }).getByRole("button", { name: `Identify ${TV}` });
     await expect(identify).toBeEnabled();
     await identify.click();
-    await expect(device.getByTestId("identify")).toHaveText(TV, { timeout: 10_000 });
+    const overlay = device.getByTestId("identify");
+    await expect(overlay).toBeVisible({ timeout: 10_000 });
+    await expect(overlay).toHaveText(TV);
+    // Full-screen: the overlay covers the whole viewport.
+    const box = (await overlay.boundingBox())!;
+    const viewport = device.viewportSize()!;
+    expect(box.x).toBeLessThanOrEqual(0);
+    expect(box.y).toBeLessThanOrEqual(0);
+    expect(box.width).toBeGreaterThanOrEqual(viewport.width);
+    expect(box.height).toBeGreaterThanOrEqual(viewport.height);
   });
 
   test("the old URLs land on their new homes", async () => {
@@ -244,7 +255,12 @@ test.describe.serial("admin orientation", () => {
 
       // Saturday ends at 12:00 and Saturday PM starts at 13:00, so the cutover is 12:30.
       await page.clock.setFixedTime(new Date("2026-11-07T12:20:00-08:00"));
+      // The banner needs the PM session's playing times; wait for them so "no banner" means something.
+      const pmWindows = page.waitForResponse(
+        (response) => response.url().endsWith(`/api/sessions/${pm.id}/playing-windows`) && response.ok()
+      );
       await page.goto(url(`/sessions/${saturday}/today`));
+      await pmWindows;
       await expect(page.getByRole("link", { name: "Active: Saturday", exact: true })).toBeVisible();
       await expect(page.getByRole("link", { name: "Saturday PM" })).toBeVisible();
       await expect(page.getByRole("button", { name: "Make it active" })).toHaveCount(0);
@@ -259,7 +275,7 @@ test.describe.serial("admin orientation", () => {
       await expect(copy).toBeEnabled();
       await copy.click();
       await expect(dialog).toHaveCount(0);
-      await expect(page.getByRole("link", { name: "Active: Saturday PM" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Active: Saturday PM", exact: true })).toBeVisible();
       await expect(banner).toHaveCount(0);
 
       await page.getByRole("link", { name: "Devices & displays" }).click();

@@ -14,7 +14,7 @@ test.describe.serial("device pairing", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page.getByRole("heading", { name: "Devices & displays", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Devices & displays", exact: true, level: 1 })).toBeVisible();
     return page;
   }
 
@@ -99,6 +99,6 @@ test.describe.serial("device pairing", () => {
     // A paired display runs display mode, which shows its name until it is given a group.
     await expect(sameBrowser.getByRole("heading", { name: "Admin Laptop Display" })).toBeVisible({ timeout: 10_000 });
     await admin.reload();
-    await expect(admin.getByRole("heading", { name: "Devices & displays", level: 1 })).toBeVisible();
+    await expect(admin.getByRole("heading", { name: "Devices & displays", exact: true, level: 1 })).toBeVisible();
   });
 });

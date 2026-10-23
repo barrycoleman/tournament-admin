@@ -3,7 +3,6 @@ import fs from "node:fs";
 import { test, expect } from "@playwright/test";
 import { E2E_EVENT_NAME, E2E_EVENT_PASSWORD } from "./fixtures/testEvent";
 import { buildExampleGamePluginZip } from "./fixtures/buildPluginZip";
-import { ADMIN_LANDING } from "./fixtures/landing";
 
 test("head-to-head finalize asks only for confirmation", async ({ page, request }) => {
   // Create-or-tolerate-409 so the spec can also run standalone.
@@ -52,7 +51,7 @@ test("head-to-head finalize asks only for confirmation", async ({ page, request 
   await page.getByLabel("Role").fill("admin");
   await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL(ADMIN_LANDING);
+  await expect(page).toHaveURL(/\/sessions\/\d+\/today$/);
   await page.goto(`/sessions/${session}/matches`);
   await page.getByRole("button", { name: "Finalize qualification" }).click();
   const dialog = page.getByRole("alertdialog", { name: "Finalize qualification" });

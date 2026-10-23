@@ -4,4 +4,4 @@
  * session's Today tab. Which one a spec sees depends on what earlier specs
  * (or its own setup) created, so login helpers accept either.
  */
-export const ADMIN_LANDING = /\/(sessions\/\d+\/today)?$/;
+export const ADMIN_LANDING = /^https?:\/\/[^/]+\/(sessions\/\d+\/today)?$/;

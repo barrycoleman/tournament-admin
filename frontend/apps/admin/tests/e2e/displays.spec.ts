@@ -220,6 +220,7 @@ test.describe.serial("display groups", () => {
     const sunday = (await call(request, "post", "/api/sessions", { label: "Sunday" })).id;
     await call(request, "post", `/api/sessions/${sunday}/copy-fields`, { source_session_id: saturday });
     const admin = await adminPage(browser, "/devices");
+    await expect(admin.getByRole("heading", { name: "Devices & displays", exact: true, level: 1 })).toBeVisible();
     await admin.getByLabel("Spots for").selectOption({ label: "Sunday" });
     const copy = admin.getByRole("region", { name: "Copy spots from another session" });
     await copy.getByLabel("Copy from").selectOption({ label: "Saturday" });

@@ -2,7 +2,6 @@ import fs from "node:fs";
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import { E2E_EVENT_NAME, E2E_EVENT_PASSWORD } from "./fixtures/testEvent";
 import { buildExampleGamePluginZip } from "./fixtures/buildPluginZip";
-import { ADMIN_LANDING } from "./fixtures/landing";
 
 // "zz_" runs this after every other spec: it adds teams to the shared event
 // (the team-grid specs assume a small roster) and must not disturb
@@ -62,7 +61,7 @@ async function loginAsAdmin(page: Page) {
   await page.getByLabel("Role").fill("admin");
   await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL(ADMIN_LANDING);
+  await expect(page).toHaveURL(/\/sessions\/\d+\/today$/);
 }
 
 test.describe.serial("head-to-head session and season rankings", () => {
