@@ -42,6 +42,11 @@ export function MakeActiveDialog({ targetSession, onClose, onActivated }: MakeAc
     targetDisplays.data?.has_setup === false &&
     sourceDisplays.data?.has_setup === true;
 
+  // Hold the actions until everything that shapes them has settled, so a
+  // click can't skip the copy offer or the running-match warning.
+  const settling =
+    event.isLoading || sessions.isLoading || matches.isLoading || targetDisplays.isLoading || sourceDisplays.isLoading;
+
   const activate = useMutation({
     mutationFn: async (copyFrom: number | null) => {
       if (copyFrom !== null) {
@@ -66,6 +71,8 @@ export function MakeActiveDialog({ targetSession, onClose, onActivated }: MakeAc
     onError: (err) => setError(apiErrorMessage(err, t("errors.generic"))),
   });
 
+  const busy = activate.isPending || settling;
+
   const run = (copyFrom: number | null) => {
     setError(null);
     activate.mutate(copyFrom);
@@ -80,6 +87,7 @@ export function MakeActiveDialog({ targetSession, onClose, onActivated }: MakeAc
           {t("orientation.makeActive.runningMatch", { match: running.label, activeLabel })}
         </p>
       )}
+      {settling && <p>{t("orientation.makeActive.loading")}</p>}
       {error && (
         <p className="alert alert-danger" role="alert">
           {error}
@@ -91,12 +99,12 @@ export function MakeActiveDialog({ targetSession, onClose, onActivated }: MakeAc
             <button
               type="button"
               className="btn btn-primary"
-              disabled={activate.isPending}
+              disabled={busy}
               onClick={() => run(activeId)}
             >
               {t("orientation.makeActive.copyAndActivateAction")}
             </button>
-            <button type="button" className="btn" disabled={activate.isPending} onClick={() => run(null)}>
+            <button type="button" className="btn" disabled={busy} onClick={() => run(null)}>
               {t("orientation.makeActive.activateWithoutCopyingAction")}
             </button>
           </>
@@ -104,7 +112,7 @@ export function MakeActiveDialog({ targetSession, onClose, onActivated }: MakeAc
           <button
             type="button"
             className="btn btn-primary"
-            disabled={activate.isPending}
+            disabled={busy}
             onClick={() => run(null)}
           >
             {t("orientation.makeActive.activateAction")}
@@ -129,6 +137,12 @@ export function useMakeActive(): { open: (session: SessionRead) => void; dialog:
   const [target, setTarget] = useState<SessionRead | null>(null);
   return {
     open: setTarget,
-    dialog: target ? <MakeActiveDialog targetSession={target} onClose={() => setTarget(null)} onActivated={() => setTarget(null)} /> : null,
+    dialog: target ? (
+      <MakeActiveDialog
+        targetSession={target}
+        onClose={() => setTarget(null)}
+        onActivated={() => setTarget(null)}
+      />
+    ) : null,
   };
 }

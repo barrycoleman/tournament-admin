@@ -1067,7 +1067,8 @@
       "activateAction": "Make active",
       "copyAndActivateAction": "Copy TV spots and make active",
       "activateWithoutCopyingAction": "Make active without copying",
-      "cancelAction": "Cancel"
+      "cancelAction": "Cancel",
+      "loading": "Checking the current session…"
     }
   }
 }

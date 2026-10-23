@@ -1058,13 +1058,14 @@
   },
   "orientation": {
     "makeActive": {
-      "heading": "将{{label}}设为当前场次?",
-      "body": "将{{label}}设为当前场次?电视屏幕、比赛控制和技能赛控制都会切换到该场次。",
+      "heading": "将{{label}}设为当前场次？",
+      "body": "将{{label}}设为当前场次？电视屏幕、比赛控制和技能赛控制都会切换到该场次。",
       "runningMatch": "{{activeLabel}}上的{{match}}正在进行。",
       "activateAction": "设为当前场次",
       "copyAndActivateAction": "复制电视位置并设为当前场次",
-      "activateWithoutCopyingAction": "不复制,直接设为当前场次",
-      "cancelAction": "取消"
+      "activateWithoutCopyingAction": "不复制，直接设为当前场次",
+      "cancelAction": "取消",
+      "loading": "正在检查当前场次…"
     }
   }
 }
