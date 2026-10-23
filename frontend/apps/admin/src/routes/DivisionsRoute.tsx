@@ -150,7 +150,7 @@ export function DivisionsRoute() {
 
   return (
     <div>
-      <h1>{t("divisions.heading")}</h1>
+      <h2>{t("divisions.heading")}</h2>
       <ul className="list-plain">
         {divisions?.map((division) => {
           const count = counts[division.id] ?? 0;

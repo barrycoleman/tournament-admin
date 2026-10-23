@@ -1,4 +1,4 @@
-import { createBrowserRouter, redirect } from "react-router-dom";
+import { createBrowserRouter, redirect, type RouteObject } from "react-router-dom";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { indexLoader } from "./routeGuards";
 import type { EventRead } from "./types";
@@ -7,12 +7,14 @@ import { EventsNewRoute } from "./routes/EventsNewRoute";
 import { LoginRoute } from "./routes/LoginRoute";
 import { PickerRoute } from "./routes/PickerRoute";
 import { AuthenticatedLayout } from "./routes/AuthenticatedLayout";
-import { DashboardRoute } from "./routes/DashboardRoute";
+import { HomeRoute } from "./routes/HomeRoute";
+import { SessionNewRoute } from "./routes/SessionNewRoute";
+import { TeamsLayout } from "./routes/TeamsLayout";
+import { SessionPlaceholder } from "./routes/SessionPlaceholder";
 import { EventSetupRoute } from "./routes/EventSetupRoute";
 import { SettingsRolesRoute } from "./routes/SettingsRolesRoute";
 import { BackupsRoute } from "./routes/BackupsRoute";
 import { DevicesRoute } from "./routes/DevicesRoute";
-import { DisplaysRoute } from "./routes/DisplaysRoute";
 import { MatchControlRoute } from "./routes/MatchControlRoute";
 import { SkillsControlRoute } from "./routes/SkillsControlRoute";
 import { DivisionsRoute } from "./routes/DivisionsRoute";
@@ -21,7 +23,6 @@ import { SessionsRoute } from "./routes/SessionsRoute";
 import { SeasonRankingsRoute } from "./routes/SeasonRankingsRoute";
 import { SessionDetailLayout } from "./routes/SessionDetailLayout";
 import { SessionCheckinRoute } from "./routes/SessionCheckinRoute";
-import { SessionFieldsRoute } from "./routes/SessionFieldsRoute";
 import { SessionScheduleRoute } from "./routes/SessionScheduleRoute";
 import { SessionMatchesRoute } from "./routes/SessionMatchesRoute";
 import { MatchScoringRoute } from "./routes/MatchScoringRoute";
@@ -103,7 +104,7 @@ async function pickerLoader() {
   return null;
 }
 
-export const router = createBrowserRouter([
+export const routes: RouteObject[] = [
   {
     path: "/picker",
     loader: pickerLoader,
@@ -124,17 +125,25 @@ export const router = createBrowserRouter([
     loader: rootLoader,
     element: <AuthenticatedLayout />,
     children: [
-      { index: true, loader: indexLoader, element: <DashboardRoute /> },
+      { index: true, loader: indexLoader, element: <HomeRoute /> },
       { path: "events/setup", element: <EventSetupRoute /> },
       { path: "settings/roles", element: <SettingsRolesRoute /> },
       { path: "backups", element: <BackupsRoute /> },
       { path: "devices", element: <DevicesRoute /> },
       { path: "match-control", element: <MatchControlRoute /> },
       { path: "skills-control", element: <RequiresGamePlugin><SkillsControlRoute /></RequiresGamePlugin> },
-      { path: "displays", element: <DisplaysRoute /> },
-      { path: "divisions", element: <DivisionsRoute /> },
-      { path: "teams", element: <TeamsRoute /> },
+      { path: "displays", loader: () => redirect("/devices") },
+      { path: "divisions", loader: () => redirect("/teams/divisions") },
+      {
+        path: "teams",
+        element: <TeamsLayout />,
+        children: [
+          { index: true, element: <TeamsRoute /> },
+          { path: "divisions", element: <DivisionsRoute /> },
+        ],
+      },
       { path: "sessions", element: <SessionsRoute /> },
+      { path: "sessions/new", element: <SessionNewRoute /> },
       { path: "rankings", element: <RequiresGamePlugin><SeasonRankingsRoute /></RequiresGamePlugin> },
       { path: "checkin", element: <FrontDeskCheckinRoute /> },
       {
@@ -152,10 +161,12 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            loader: ({ params }) => redirect(`/sessions/${params.sessionId}/checkin`),
+            loader: ({ params }) => redirect(`/sessions/${params.sessionId}/today`),
           },
+          { path: "today", element: <SessionPlaceholder /> },
+          { path: "setup", element: <SessionPlaceholder /> },
           { path: "checkin", element: <SessionCheckinRoute /> },
-          { path: "fields", element: <SessionFieldsRoute /> },
+          { path: "fields", loader: ({ params }) => redirect(`/sessions/${params.sessionId}/setup`) },
           { path: "schedule", element: <SessionScheduleRoute /> },
           { path: "matches", element: <RequiresGamePlugin><SessionMatchesRoute /></RequiresGamePlugin> },
           { path: "matches/:matchId/score", element: <RequiresGamePlugin><MatchScoringRoute /></RequiresGamePlugin> },
@@ -166,4 +177,6 @@ export const router = createBrowserRouter([
       },
     ],
   },
-]);
+];
+
+export const router = createBrowserRouter(routes);

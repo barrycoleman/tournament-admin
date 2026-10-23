@@ -154,7 +154,7 @@
     "empty": "还没有场次。添加一个场次后即可开始签到和生成赛程。",
     "labelLabel": "场次名称",
     "dateLabel": "日期(可选)",
-    "timezoneLabel": "时区(可选)",
+    "timezoneLabel": "时区",
     "noTimezoneOption": "未设置时区",
     "editAction": "编辑",
     "saveAction": "保存",
@@ -391,14 +391,11 @@
     "checkInAction": "签到",
     "checkedInState": "已签到"
   },
-  "dashboard": {
-    "heading": "仪表盘",
+  "eventSetup": {
     "eventNameLabel": "赛事",
     "editEventNameAction": "编辑赛事名称",
     "saveAction": "保存",
-    "cancelAction": "取消"
-  },
-  "eventSetup": {
+    "cancelAction": "取消",
     "heading": "赛事与插件",
     "gamePluginsHeading": "比赛插件",
     "schedulerPluginsHeading": "排程插件",
@@ -1057,6 +1054,25 @@
       "resetConfirm": "重置计时"
     },
     "cancel": "取消"
+  },
+  "home": {
+    "loading": "加载中…",
+    "heading": "准备好你的赛事",
+    "doneLabel": "已完成",
+    "todoLabel": "未完成",
+    "items": {
+      "gamePlugin": "选择比赛项目",
+      "teams": "添加队伍",
+      "session": "创建第一个场次"
+    }
+  },
+  "sessionNew": {
+    "heading": "新建场次"
+  },
+  "teamsLayout": {
+    "heading": "队伍与分组",
+    "teamsTab": "队伍",
+    "divisionsTab": "分组"
   },
   "orientation": {
     "banner": {

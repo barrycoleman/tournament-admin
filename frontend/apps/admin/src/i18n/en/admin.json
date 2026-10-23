@@ -154,7 +154,7 @@
     "empty": "No sessions yet. Add one to start checking teams in and building a schedule.",
     "labelLabel": "Session name",
     "dateLabel": "Date (optional)",
-    "timezoneLabel": "Timezone (optional)",
+    "timezoneLabel": "Timezone",
     "noTimezoneOption": "No timezone set",
     "editAction": "Edit",
     "saveAction": "Save",
@@ -393,14 +393,11 @@
     "checkInAction": "Check In",
     "checkedInState": "Checked In"
   },
-  "dashboard": {
-    "heading": "Dashboard",
+  "eventSetup": {
     "eventNameLabel": "Event",
     "editEventNameAction": "Edit event name",
     "saveAction": "Save",
-    "cancelAction": "Cancel"
-  },
-  "eventSetup": {
+    "cancelAction": "Cancel",
     "heading": "Event & plugins",
     "gamePluginsHeading": "Game plugins",
     "schedulerPluginsHeading": "Scheduler plugins",
@@ -1060,6 +1057,25 @@
       "resetConfirm": "Reset timer"
     },
     "cancel": "Cancel"
+  },
+  "home": {
+    "loading": "Loading…",
+    "heading": "Get your event ready",
+    "doneLabel": "Done",
+    "todoLabel": "Not done",
+    "items": {
+      "gamePlugin": "Choose the game",
+      "teams": "Add teams",
+      "session": "Create the first session"
+    }
+  },
+  "sessionNew": {
+    "heading": "New session"
+  },
+  "teamsLayout": {
+    "heading": "Teams & divisions",
+    "teamsTab": "Teams",
+    "divisionsTab": "Divisions"
   },
   "orientation": {
     "banner": {

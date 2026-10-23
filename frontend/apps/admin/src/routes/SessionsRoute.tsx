@@ -5,12 +5,10 @@ import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { apiErrorMessage } from "../apiErrorMessage";
+import { browserZone } from "../orientation/useOrientationData";
+import { listTimezones } from "../orientation/timezones";
 import type { EventRead, SessionRead } from "../types";
 
-function listTimezones(): string[] {
-  const intlWithZones = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] };
-  return intlWithZones.supportedValuesOf?.("timeZone") ?? [];
-}
 
 interface SessionFormValues {
   label: string;
@@ -51,7 +49,7 @@ function SessionForm({
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState(initial);
-  const timezones = listTimezones();
+  const timezones = listTimezones(initial.timezone || undefined);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -338,7 +336,7 @@ export function SessionsRoute() {
       )}
       {creating && (
         <SessionForm
-          initial={EMPTY_FORM}
+          initial={{ ...EMPTY_FORM, timezone: browserZone() }}
           onSubmit={(values) => createMutation.mutate(values)}
           onCancel={() => {
             setCreating(false);

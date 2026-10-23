@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import QRCode from "qrcode";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { apiErrorMessage } from "../apiErrorMessage";
+import { InlineEditableText } from "../components/InlineEditableText";
 import { GamePluginChangeDialog } from "../gamePlugin/GamePluginChangeDialog";
 import { useGamePlugin } from "../gamePlugin/useGamePlugin";
 import { RankingSettingsPanel } from "../rankings/RankingSettingsPanel";
@@ -289,11 +290,57 @@ function ServerInfoPanel() {
   );
 }
 
+function EventNamePanel() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["event"],
+    queryFn: () => apiRequest<EventRead>("/api/event"),
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: (name: string) =>
+      apiRequest<EventRead>("/api/event", { method: "PATCH", body: { name } }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["event"], updated);
+    },
+  });
+
+  if (!data) return null;
+
+  return (
+    <div className="panel panel--form">
+      <div className="field">
+        <span className="field__label">{t("eventSetup.eventNameLabel")}</span>
+        <InlineEditableText
+          value={data.name}
+          onSave={(name) => renameMutation.mutate(name)}
+          onCancel={() => renameMutation.reset()}
+          isSaving={renameMutation.isPending}
+          error={
+            renameMutation.isError
+              ? renameMutation.error instanceof ApiError
+                ? renameMutation.error.detail
+                : t("errors.generic")
+              : null
+          }
+          editLabel={t("eventSetup.editEventNameAction")}
+          saveLabel={t("eventSetup.saveAction")}
+          cancelLabel={t("eventSetup.cancelAction")}
+          inputLabel={t("eventSetup.eventNameLabel")}
+          inputId="event-name"
+        />
+      </div>
+    </div>
+  );
+}
+
 export function EventSetupRoute() {
   const { t } = useTranslation();
   return (
     <div>
       <h1>{t("eventSetup.heading")}</h1>
+      <EventNamePanel />
       <GamePluginSection />
       <PluginList
         headingKey="eventSetup.schedulerPluginsHeading"

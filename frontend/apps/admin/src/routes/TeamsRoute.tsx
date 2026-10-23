@@ -652,7 +652,7 @@ export function TeamsRoute() {
 
   return (
     <div>
-      <h1>{t("teams.heading")}</h1>
+      <h2>{t("teams.heading")}</h2>
       {showDivisionColumn && (
         <div className="field" style={{ maxWidth: 280 }}>
           <label className="field__label" htmlFor="division-filter">

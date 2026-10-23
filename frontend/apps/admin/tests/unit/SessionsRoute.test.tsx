@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -13,6 +13,10 @@ vi.mock("@tournament-admin/shared", async (importOriginal) => {
 });
 
 import { apiRequest, ApiError } from "@tournament-admin/shared";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function renderRoute() {
   const i18n = initI18n({ en: { translation: enAdmin } });
@@ -83,15 +87,19 @@ describe("SessionsRoute", () => {
       }
       throw new Error(`unexpected request: ${path}`);
     });
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(
+      () => ({ resolvedOptions: () => ({ timeZone: "Asia/Tokyo" }) }) as never
+    );
     renderRoute();
 
     await screen.findByRole("button", { name: "Add session..." });
     fireEvent.click(screen.getByRole("button", { name: "Add session..." }));
+    expect((screen.getByLabelText("Timezone") as HTMLSelectElement).value).toBe("Asia/Tokyo");
     fireEvent.change(screen.getByLabelText("Session name"), { target: { value: "Sunday" } });
     fireEvent.click(screen.getByRole("button", { name: "Add session" }));
 
     await waitFor(() =>
-      expect(createBody).toEqual({ label: "Sunday", session_date: null, timezone: null })
+      expect(createBody).toEqual({ label: "Sunday", session_date: null, timezone: "Asia/Tokyo" })
     );
   });
 

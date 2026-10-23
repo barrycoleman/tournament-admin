@@ -224,4 +224,26 @@ describe("EventSetupRoute", () => {
     expect(screen.queryByRole("button", { name: "Switch to this" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Clear selection" })).not.toBeInTheDocument();
   });
+
+  it("renames the event from the first panel", async () => {
+    const state = { selected: null as string | null, locked: false };
+    mockServer(state);
+    const base = vi.mocked(apiRequest).getMockImplementation()!;
+    let renameBody: unknown = null;
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
+      if (path === "/api/event" && (options as { method?: string } | undefined)?.method === "PATCH") {
+        renameBody = (options as { body: unknown }).body;
+        return { id: 1, name: "State Championship", active_session_id: null, game_plugin_name: null, game_plugin_locked: false, created_at: "" } as never;
+      }
+      return base(path, options as never);
+    });
+    renderSetup();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit event name" }));
+    fireEvent.change(screen.getByLabelText("Event", { exact: true }), { target: { value: "State Championship" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(renameBody).toEqual({ name: "State Championship" }));
+    expect(await screen.findByText("State Championship")).toBeInTheDocument();
+  });
 });
