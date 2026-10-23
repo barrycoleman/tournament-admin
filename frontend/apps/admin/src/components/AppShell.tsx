@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, useAuth } from "@tournament-admin/shared";
@@ -10,9 +10,50 @@ import { GamePluginBanner } from "../gamePlugin/GamePluginBanner";
 import { useGamePluginLiveUpdates } from "../gamePlugin/liveUpdates";
 import { useRestartPoll } from "../useRestartPoll";
 import { noteExplicitLogout } from "../routeGuards";
+import { ActiveSessionBanner } from "../orientation/ActiveSessionBanner";
+import { useActiveSessionLiveUpdates } from "../orientation/useActiveSessionLiveUpdates";
+import { useEvent, useSessions } from "../orientation/useOrientationData";
+import { useNow } from "../orientation/useNow";
+import { SessionNavList } from "./SessionNavList";
 
 function navLinkClassName({ isActive }: { isActive: boolean }): string | undefined {
   return isActive ? "active" : undefined;
+}
+
+/** Mounted for admins only, so other roles never open the admin's channel. */
+function AdminLiveUpdates() {
+  useActiveSessionLiveUpdates();
+  return null;
+}
+
+function AdminEventName() {
+  const event = useEvent();
+  return <h1 className="app-header__title">{event.data?.name ?? ""}</h1>;
+}
+
+function AdminHeaderStatus() {
+  const { t } = useTranslation();
+  const now = useNow(30_000);
+  const event = useEvent();
+  const sessions = useSessions();
+  const activeId = event.data?.active_session_id ?? null;
+  // An id missing from the list (deleted elsewhere) reads as no active session.
+  const active = sessions.data?.find((s) => s.id === activeId);
+  return (
+    <>
+      {active ? (
+        <Link to={`/sessions/${active.id}/today`} className="badge badge-success app-header__session">
+          <span className="live-dot" aria-hidden="true" />
+          {t("shell.activeSessionPill", { label: active.label })}
+        </Link>
+      ) : (
+        <span className="badge badge-neutral app-header__session">{t("shell.noActiveSession")}</span>
+      )}
+      <time className="app-header__clock" dateTime={now.toISOString()}>
+        {now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+      </time>
+    </>
+  );
 }
 
 export function AppShell() {
@@ -49,18 +90,11 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
+      {role === "admin" && <AdminLiveUpdates />}
       <header className="app-header">
-        <h1 className="app-header__title">{t("app.title")}</h1>
+        {role === "admin" ? <AdminEventName /> : <h1 className="app-header__title">{t("app.title")}</h1>}
         <div className="app-header__actions">
-          {role === "admin" && (
-            <button
-              className="btn btn-small"
-              onClick={() => switchMutation.mutate()}
-              disabled={switchMutation.isPending}
-            >
-              {t("picker.switchAction")}
-            </button>
-          )}
+          {role === "admin" && <AdminHeaderStatus />}
           <ThemeToggle />
           <button className="btn btn-small" onClick={() => {
               noteExplicitLogout();
@@ -72,6 +106,7 @@ export function AppShell() {
       </header>
       <TransientErrorBanner />
       <GamePluginBanner />
+      {role === "admin" && <ActiveSessionBanner />}
       {switchMutation.isError && (
         <p className="alert alert-danger" role="alert">
           {t("errors.generic")}
@@ -85,42 +120,36 @@ export function AppShell() {
       <div className="app-body">
         {role === "admin" && (
           <nav className="app-nav" ref={navRef}>
-            <NavLink to="/" className={navLinkClassName}>
-              {t("shell.dashboardLink")}
-            </NavLink>
+            <h2 className="app-nav__group">{t("shell.groups.event")}</h2>
             <NavLink to="/events/setup" className={navLinkClassName}>
-              {t("shell.eventSetupLink")}
+              {t("shell.eventGameLink")}
             </NavLink>
+            <NavLink to="/teams" className={navLinkClassName}>
+              {t("shell.teamsDivisionsLink")}
+            </NavLink>
+            <NavLink to="/devices" className={navLinkClassName}>
+              {t("shell.devicesDisplaysLink")}
+            </NavLink>
+            <NavLink to="/rankings" className={navLinkClassName}>
+              {t("shell.seasonRankingsLink")}
+            </NavLink>
+            <h2 className="app-nav__group">{t("shell.groups.sessions")}</h2>
+            <SessionNavList />
+            <h2 className="app-nav__group">{t("shell.groups.settings")}</h2>
             <NavLink to="/settings/roles" className={navLinkClassName}>
               {t("shell.rolesLink")}
             </NavLink>
             <NavLink to="/backups" className={navLinkClassName}>
               {t("shell.backupsLink")}
             </NavLink>
-            <NavLink to="/devices" className={navLinkClassName}>
-              {t("shell.devicesLink")}
-            </NavLink>
-            <NavLink to="/match-control" className={navLinkClassName}>
-              {t("shell.matchControlLink")}
-            </NavLink>
-            <NavLink to="/skills-control" className={navLinkClassName}>
-              {t("shell.skillsControlLink")}
-            </NavLink>
-            <NavLink to="/displays" className={navLinkClassName}>
-              {t("shell.displaysLink")}
-            </NavLink>
-            <NavLink to="/divisions" className={navLinkClassName}>
-              {t("shell.divisionsLink")}
-            </NavLink>
-            <NavLink to="/teams" className={navLinkClassName}>
-              {t("shell.teamsLink")}
-            </NavLink>
-            <NavLink to="/sessions" className={navLinkClassName}>
-              {t("shell.sessionsLink")}
-            </NavLink>
-            <NavLink to="/rankings" className={navLinkClassName}>
-              {t("shell.seasonRankingsLink")}
-            </NavLink>
+            <button
+              type="button"
+              className="app-nav__action"
+              onClick={() => switchMutation.mutate()}
+              disabled={switchMutation.isPending}
+            >
+              {t("picker.switchAction")}
+            </button>
           </nav>
         )}
         {role === "front_desk" && (

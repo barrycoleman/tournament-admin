@@ -20,22 +20,24 @@
     "skillsControlLink": "技能赛控制",
     "backupsLink": "备份",
     "logout": "登出",
-    "dashboardLink": "仪表盘",
-    "eventSetupLink": "赛事与插件",
     "rolesLink": "角色密码",
     "dismiss": "关闭",
     "seasonRankingsLink": "赛季排名",
     "judgeAwardsLink": "奖项",
     "judgeSessionRankingsLink": "场次排名",
-    "divisionsLink": "分组",
-    "teamsLink": "队伍",
-    "sessionsLink": "场次",
     "checkinLink": "签到",
     "switchToLight": "切换到浅色模式",
     "switchToDark": "切换到深色模式",
-    "devicesLink": "设备",
     "matchControlLink": "比赛控制",
-    "displaysLink": "显示屏"
+    "groups": { "event": "赛事", "sessions": "场次", "settings": "设置" },
+    "eventGameLink": "赛事与比赛",
+    "teamsDivisionsLink": "队伍与分组",
+    "devicesDisplaysLink": "设备与显示屏",
+    "newSessionLink": "+ 新建场次",
+    "manageSessionsLink": "管理场次",
+    "activeSessionLink": "{{label}}（当前）",
+    "activeSessionPill": "当前：{{label}}",
+    "noActiveSession": "没有当前场次"
   },
   "picker": {
     "damagedHeading": "此比赛文件已损坏",
@@ -1057,6 +1059,11 @@
     "cancel": "取消"
   },
   "orientation": {
+    "banner": {
+      "message": "<strong>{{label}}</strong>计划于{{time}}开始。要将它设为当前场次吗？电视屏幕和比赛控制会切换到该场次。",
+      "makeActiveAction": "设为当前场次",
+      "notYetAction": "暂不"
+    },
     "makeActive": {
       "heading": "将{{label}}设为当前场次？",
       "body": "将{{label}}设为当前场次？电视屏幕、比赛控制和技能赛控制都会切换到该场次。",

@@ -20,22 +20,24 @@
     "skillsControlLink": "Skills Control",
     "backupsLink": "Backups",
     "logout": "Log out",
-    "dashboardLink": "Dashboard",
-    "eventSetupLink": "Event & plugins",
     "rolesLink": "Role passwords",
     "dismiss": "Dismiss",
     "seasonRankingsLink": "Season rankings",
     "judgeAwardsLink": "Awards",
     "judgeSessionRankingsLink": "Session rankings",
-    "divisionsLink": "Divisions",
-    "teamsLink": "Teams",
-    "sessionsLink": "Sessions",
     "checkinLink": "Check-In",
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode",
-    "devicesLink": "Devices",
     "matchControlLink": "Match Control",
-    "displaysLink": "Displays"
+    "groups": { "event": "Event", "sessions": "Sessions", "settings": "Settings" },
+    "eventGameLink": "Event & game",
+    "teamsDivisionsLink": "Teams & divisions",
+    "devicesDisplaysLink": "Devices & displays",
+    "newSessionLink": "+ New session",
+    "manageSessionsLink": "Manage sessions",
+    "activeSessionLink": "{{label}} (active)",
+    "activeSessionPill": "Active: {{label}}",
+    "noActiveSession": "No active session"
   },
   "picker": {
     "damagedHeading": "This tournament file is damaged",
@@ -1060,6 +1062,11 @@
     "cancel": "Cancel"
   },
   "orientation": {
+    "banner": {
+      "message": "<strong>{{label}}</strong> is scheduled to start at {{time}}. Make it the active session? The TVs and Match Control will switch to it.",
+      "makeActiveAction": "Make it active",
+      "notYetAction": "Not yet"
+    },
     "makeActive": {
       "heading": "Make {{label}} active?",
       "body": "Make {{label}} the active session? The TVs, Match Control and Skills Control will switch to it.",
