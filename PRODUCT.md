@@ -59,6 +59,17 @@ subscription/hosted competition-management products.
   machine; other devices (scorer tablets, Pi displays) connect over the
   venue's local WiFi/LAN, which must not depend on internet access to
   function during an event.
+- **Admin navigation**: the admin is organized around sessions. The menu
+  has three groups: Event (Event & game, Teams & divisions, Devices &
+  displays, Season rankings), Sessions (each session, opening on its Today
+  tab, with Match Control and Skills Control under the active session, plus
+  New session) and Settings (role passwords, backups, switch tournament).
+  The header shows the event name and the active session. A new event opens
+  on a short setup checklist (choose the game, add teams, create a session);
+  after that the admin opens on today's session, whose Today tab shows
+  check-in progress and a readiness checklist with a single next step. The
+  admin offers to make the next session active when it is due but never
+  changes the active session without a person confirming it.
 - **Real-time updates**: two WebSocket channel kinds — `active-session`
   (followed by Pi displays, scoring devices, and the admin UI by
   default: match start/pause/resume/end, score saved, new match created,
@@ -68,8 +79,9 @@ subscription/hosted competition-management products.
   just missed deltas.
 - **Device pairing**: a tablet, phone or TV opens the server address
   followed by `/pair`, shows a short code (and a QR link), and an admin
-  enters that code on the Devices page with a role (scorer, referee,
-  judge, front desk or display) and a name. The device then stays signed
+  enters that code on the Devices & displays page with a role (scorer,
+  referee, judge, front desk or display) and a name; for a TV the same
+  step chooses what it shows. The device then stays signed
   in as that role; an admin can rename it, change its role, disable,
   enable or delete it, and an operator device goes idle after a
   configurable timeout. Scores can only be submitted from a paired device
@@ -88,9 +100,10 @@ subscription/hosted competition-management products.
   the TV's own. **Match Control** is the operator page: start, pause,
   resume, end early and reset a match (tablets and the admin can run a
   match's clock), choose the next match, pick the
-  audience screen, run a time-out and switch sounds on. The **Displays**
-  page places each display in a group, identifies a TV by flashing its
-  name, and copies a setup from another session. A display never goes
+  audience screen, run a time-out and switch sounds on. The **Devices &
+  displays** page places each TV in a group, shows whether it is connected,
+  identifies a TV by flashing its name, and copies a setup from another
+  session. A display never goes
   blank: it keeps its last picture when the connection drops and says so.
 - **Live scoring**: every change a scorer or admin makes is saved on the
   server as a draft that never counts until Submit. Several tablets can

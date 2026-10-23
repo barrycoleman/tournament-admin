@@ -1,6 +1,6 @@
 # Admin orientation: sessions-first navigation, readiness and merged devices
 
-Status: draft for review, 2026-10-22.
+Status: implemented 2026-10-22 on branch admin-orientation. See "As built" at the end for what differs from the text above.
 
 ## Why
 
@@ -307,3 +307,12 @@ Empty states link to their fix:
   - "A match is running" means any active-session match that has started and not ended. Skills timers don't count.
   - "Make it active" asks first if a match is running.
   - Picking a session to view in the menu is not remembered across reloads. `/` always applies the rules in section 3.
+
+## As built
+
+Small differences from the text above:
+- "Copy spots from another session" on Devices & displays appears only while the viewed session has no spots, because the server refuses a copy into a session that already has spots.
+- "Connected" is shown for TVs only, not for scorers, referees and other devices.
+- The server now sends `devices_changed` to admin sockets when a device's first socket opens and when its last closes, so the connection state updates without a reload. (Section 6 had expected no server change.)
+- Roles other than admin that reach `/` (scorer, referee) see a minimal page with the event name. Front desk and judges are still redirected to `/checkin` and `/judge/awards`.
+- The make-active copy offer appears only when the active session has TV spots and the target has none; with no spots on either side it is a plain confirm.
