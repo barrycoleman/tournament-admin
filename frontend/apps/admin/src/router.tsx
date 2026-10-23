@@ -10,6 +10,7 @@ import { AuthenticatedLayout } from "./routes/AuthenticatedLayout";
 import { HomeRoute } from "./routes/HomeRoute";
 import { SessionNewRoute } from "./routes/SessionNewRoute";
 import { TeamsLayout } from "./routes/TeamsLayout";
+import { SessionTodayRoute } from "./routes/SessionTodayRoute";
 import { SessionPlaceholder } from "./routes/SessionPlaceholder";
 import { EventSetupRoute } from "./routes/EventSetupRoute";
 import { SettingsRolesRoute } from "./routes/SettingsRolesRoute";
@@ -163,7 +164,7 @@ export const routes: RouteObject[] = [
             index: true,
             loader: ({ params }) => redirect(`/sessions/${params.sessionId}/today`),
           },
-          { path: "today", element: <SessionPlaceholder /> },
+          { path: "today", element: <SessionTodayRoute /> },
           { path: "setup", element: <SessionPlaceholder /> },
           { path: "checkin", element: <SessionCheckinRoute /> },
           { path: "fields", loader: ({ params }) => redirect(`/sessions/${params.sessionId}/setup`) },

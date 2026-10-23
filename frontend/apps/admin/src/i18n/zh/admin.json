@@ -29,7 +29,11 @@
     "switchToLight": "切换到浅色模式",
     "switchToDark": "切换到深色模式",
     "matchControlLink": "比赛控制",
-    "groups": { "event": "赛事", "sessions": "场次", "settings": "设置" },
+    "groups": {
+      "event": "赛事",
+      "sessions": "场次",
+      "settings": "设置"
+    },
     "eventGameLink": "赛事与比赛",
     "teamsDivisionsLink": "队伍与分组",
     "devicesDisplaysLink": "设备与显示屏",
@@ -364,7 +368,10 @@
       "copyFromPlaceholder": "选择场次…",
       "copyAction": "复制场地",
       "purposeLabel": "用途",
-      "purpose": { "teamwork": "团队赛", "skills": "技能赛" },
+      "purpose": {
+        "teamwork": "团队赛",
+        "skills": "技能赛"
+      },
       "teamworkHeading": "团队赛场地组",
       "skillsHeading": "技能赛场地组"
     },
@@ -382,7 +389,45 @@
     "awardsTab": "奖项",
     "liveScoresLegend": "显示屏上的实时比分",
     "liveQualificationLabel": "在练习赛和资格赛期间在显示屏上显示实时比分",
-    "liveFinalsLabel": "在决赛期间在显示屏上显示实时比分"
+    "liveFinalsLabel": "在决赛期间在显示屏上显示实时比分",
+    "todayTab": "今日",
+    "setupTab": "设置",
+    "today": {
+      "eventSetupHeading": "请先完成赛事设置：",
+      "eventSetup": {
+        "gamePlugin": "尚未选择比赛插件。",
+        "gamePluginFix": "选择比赛插件",
+        "teams": "尚未添加队伍。",
+        "teamsFix": "添加队伍",
+        "session": "尚无场次。",
+        "sessionFix": "添加场次"
+      },
+      "checkin": {
+        "heading": "签到",
+        "count": "已签到 {{checked}} / {{total}}",
+        "action": "为队伍签到"
+      },
+      "inspection": {
+        "heading": "检录",
+        "placeholder": "检录功能上线后，检录状态将显示在这里。"
+      },
+      "matches": {
+        "heading": "比赛",
+        "done": "已完成",
+        "notDone": "未完成",
+        "timezone": "已设置场次时区",
+        "fields": "每个分组都有场地",
+        "playingTimes": "已添加比赛时段",
+        "teams": "已有足够的队伍签到",
+        "schedule": "已安排比赛",
+        "active": "这是当前场次",
+        "displays": "已分配显示屏",
+        "setupAction": "设置场次",
+        "planMatchesAction": "安排比赛",
+        "makeActiveAction": "设为当前场次",
+        "matchControlAction": "前往比赛控制"
+      }
+    }
   },
   "frontDeskCheckin": {
     "heading": "队伍签到",
@@ -1020,13 +1065,38 @@
     "setTimer": "场地组计时",
     "fieldTimer": "{{name}} 的计时",
     "fieldTimerHint": "使用某个场地自己的计时按钮后，该场地将脱离场地组计时，直到本轮提交或放弃。",
-    "columns": { "field": "场地", "team": "队伍", "type": "类型", "timer": "计时", "state": "状态", "actions": "操作" },
+    "columns": {
+      "field": "场地",
+      "team": "队伍",
+      "type": "类型",
+      "timer": "计时",
+      "state": "状态",
+      "actions": "操作"
+    },
     "followsSet": "场地组计时",
     "alone": "单独 · {{clock}}",
     "last": "上一轮：{{number}} · {{score}}",
-    "state": { "none": "无轮次", "ready": "就绪", "running": "进行中", "paused": "已暂停", "ended": "已结束", "submitted": "已提交" },
-    "phase": { "ready": "就绪", "running": "进行中", "paused": "已暂停", "ended": "时间到" },
-    "action": { "start": "开始", "pause": "暂停", "resume": "继续", "reset": "重置", "end": "结束" },
+    "state": {
+      "none": "无轮次",
+      "ready": "就绪",
+      "running": "进行中",
+      "paused": "已暂停",
+      "ended": "已结束",
+      "submitted": "已提交"
+    },
+    "phase": {
+      "ready": "就绪",
+      "running": "进行中",
+      "paused": "已暂停",
+      "ended": "时间到"
+    },
+    "action": {
+      "start": "开始",
+      "pause": "暂停",
+      "resume": "继续",
+      "reset": "重置",
+      "end": "结束"
+    },
     "startRun": "开始一轮",
     "startHeading": "在 {{name}} 开始一轮",
     "teamLabel": "队伍",

@@ -29,7 +29,11 @@
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode",
     "matchControlLink": "Match Control",
-    "groups": { "event": "Event", "sessions": "Sessions", "settings": "Settings" },
+    "groups": {
+      "event": "Event",
+      "sessions": "Sessions",
+      "settings": "Settings"
+    },
     "eventGameLink": "Event & game",
     "teamsDivisionsLink": "Teams & divisions",
     "devicesDisplaysLink": "Devices & displays",
@@ -366,7 +370,10 @@
       "copyFromPlaceholder": "Choose a session…",
       "copyAction": "Copy fields",
       "purposeLabel": "Purpose",
-      "purpose": { "teamwork": "Teamwork", "skills": "Skills" },
+      "purpose": {
+        "teamwork": "Teamwork",
+        "skills": "Skills"
+      },
       "teamworkHeading": "Teamwork field sets",
       "skillsHeading": "Skills field sets"
     },
@@ -384,7 +391,45 @@
     "awardsTab": "Awards",
     "liveScoresLegend": "Live scores on displays",
     "liveQualificationLabel": "Show live scores on displays in practice and qualification",
-    "liveFinalsLabel": "Show live scores on displays in finals"
+    "liveFinalsLabel": "Show live scores on displays in finals",
+    "todayTab": "Today",
+    "setupTab": "Setup",
+    "today": {
+      "eventSetupHeading": "Finish setting up the event first:",
+      "eventSetup": {
+        "gamePlugin": "No game plugin is selected.",
+        "gamePluginFix": "Select a game plugin",
+        "teams": "No teams have been added.",
+        "teamsFix": "Add teams",
+        "session": "No sessions exist.",
+        "sessionFix": "Add a session"
+      },
+      "checkin": {
+        "heading": "Check-in",
+        "count": "{{checked}} / {{total}} checked in",
+        "action": "Check teams in"
+      },
+      "inspection": {
+        "heading": "Inspection",
+        "placeholder": "Inspection status will appear here once inspections are available."
+      },
+      "matches": {
+        "heading": "Matches",
+        "done": "Done",
+        "notDone": "Not done",
+        "timezone": "Session timezone is set",
+        "fields": "Every division has fields",
+        "playingTimes": "Playing times are added",
+        "teams": "Enough teams are checked in",
+        "schedule": "Matches are scheduled",
+        "active": "This is the active session",
+        "displays": "Displays are assigned",
+        "setupAction": "Set up the session",
+        "planMatchesAction": "Plan matches",
+        "makeActiveAction": "Make active",
+        "matchControlAction": "Go to Match Control"
+      }
+    }
   },
   "frontDeskCheckin": {
     "heading": "Team Check-In",
@@ -1023,13 +1068,38 @@
     "setTimer": "Set timer",
     "fieldTimer": "Timer for {{name}}",
     "fieldTimerHint": "A field's own timer buttons take that field off the set timer until its run is submitted or discarded.",
-    "columns": { "field": "Field", "team": "Team", "type": "Type", "timer": "Timer", "state": "State", "actions": "Actions" },
+    "columns": {
+      "field": "Field",
+      "team": "Team",
+      "type": "Type",
+      "timer": "Timer",
+      "state": "State",
+      "actions": "Actions"
+    },
     "followsSet": "Set timer",
     "alone": "Alone · {{clock}}",
     "last": "Last: {{number}} · {{score}}",
-    "state": { "none": "No run", "ready": "Ready", "running": "Running", "paused": "Paused", "ended": "Ended", "submitted": "Submitted" },
-    "phase": { "ready": "Ready", "running": "Running", "paused": "Paused", "ended": "Time's up" },
-    "action": { "start": "Start", "pause": "Pause", "resume": "Resume", "reset": "Reset", "end": "End" },
+    "state": {
+      "none": "No run",
+      "ready": "Ready",
+      "running": "Running",
+      "paused": "Paused",
+      "ended": "Ended",
+      "submitted": "Submitted"
+    },
+    "phase": {
+      "ready": "Ready",
+      "running": "Running",
+      "paused": "Paused",
+      "ended": "Time's up"
+    },
+    "action": {
+      "start": "Start",
+      "pause": "Pause",
+      "resume": "Resume",
+      "reset": "Reset",
+      "end": "End"
+    },
     "startRun": "Start run",
     "startHeading": "Start a run on {{name}}",
     "teamLabel": "Team",

@@ -1379,3 +1379,32 @@
 .skills-set__timer { min-width: 240px; }
 .skills-set__row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1); }
 .skills-set__row-actions .form-actions { margin: 0; }
+
+.session-today {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.session-today progress {
+  width: 100%;
+}
+
+.today-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+}
+
+.today-checklist li {
+  padding: var(--space-1) 0;
+}
+
+.today-checklist__ok [role="img"] {
+  color: var(--color-success);
+}
+
+.today-checklist__todo [role="img"] {
+  color: var(--color-danger);
+}
