@@ -101,7 +101,7 @@ export function DevicesDisplaysRoute() {
         {devices.data && (
           <DisplaysTable devices={tvs} displays={displays.data} sessionId={sessionId} onEdit={setEditing} onDelete={setDeleting} />
         )}
-        {sessionId !== null && otherSessions.length > 0 && (
+        {sessionId !== null && displays.data && !displays.data.has_setup && otherSessions.length > 0 && (
           <CopySpotsPanel key={sessionId} sessionId={sessionId} otherSessions={otherSessions} onCopied={setUnplaced} />
         )}
       </section>

@@ -301,7 +301,7 @@ describe("Devices & displays page: pairing", () => {
 });
 
 describe("Devices & displays page: device actions", () => {
-  it("shows each display's group in the other devices table only for non-display roles", async () => {
+  it("leaves TVs out of the other devices table", async () => {
     renderRoute();
     const others = await screen.findByRole("region", { name: "Scorers, referees and other devices" });
     expect(within(others).queryByText("Big TV")).not.toBeInTheDocument();
@@ -558,14 +558,18 @@ describe("Devices & displays page: spots", () => {
     await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/displays/groups/52", { method: "DELETE" }));
   });
 
-  it("offers to copy spots whenever another session exists, even one already set up", async () => {
+  it("offers to copy spots only while the viewed session has none", async () => {
     renderRoute();
+    await screen.findByRole("region", { name: "Main Fields" });
+    expect(screen.queryByRole("region", { name: "Copy spots from another session" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Spots for"), { target: { value: "2" } });
     const copy = await screen.findByRole("region", { name: "Copy spots from another session" });
-    expect(within(copy).getByRole("option", { name: "Sunday" })).toBeInTheDocument();
+    expect(within(copy).getByRole("option", { name: "Saturday" })).toBeInTheDocument();
   });
 
   it("offers no copy when there is only one session", async () => {
     sessions = [SESSIONS[0]];
+    displays = { ...displays, has_setup: false };
     renderRoute();
     await screen.findByRole("region", { name: "Main Fields" });
     expect(screen.queryByRole("region", { name: "Copy spots from another session" })).not.toBeInTheDocument();
@@ -573,7 +577,7 @@ describe("Devices & displays page: spots", () => {
 
   it("clears the chosen copy source when the page switches sessions, leaving Copy disabled", async () => {
     renderRoute();
-    await screen.findByRole("option", { name: "Saturday (active)" });
+    await screen.findByRole("option", { name: "Sunday" });
     fireEvent.change(screen.getByLabelText("Spots for"), { target: { value: "2" } });
     const copy = await screen.findByRole("region", { name: "Copy spots from another session" });
     fireEvent.change(within(copy).getByLabelText("Copy from"), { target: { value: "1" } });
@@ -592,7 +596,7 @@ describe("Devices & displays page: spots", () => {
       },
     });
     renderRoute();
-    await screen.findByRole("option", { name: "Saturday (active)" });
+    await screen.findByRole("option", { name: "Sunday" });
     fireEvent.change(screen.getByLabelText("Spots for"), { target: { value: "2" } });
     const copy = await screen.findByRole("region", { name: "Copy spots from another session" });
     fireEvent.change(within(copy).getByLabelText("Copy from"), { target: { value: "1" } });
