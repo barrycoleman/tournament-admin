@@ -9,13 +9,13 @@ function fixLink(key: ReadinessKey, sessionId: number): string {
     case "gamePlugin":
       return GAME_PLUGIN_SECTION_PATH;
     case "timezone":
-      return "/sessions";
+      return `/sessions/${sessionId}/setup#session-timezone`;
     case "playingTimes":
       return "#playing-times";
     case "teams":
       return `/sessions/${sessionId}/checkin`;
     case "fields":
-      return `/sessions/${sessionId}/fields`;
+      return `/sessions/${sessionId}/setup#fields`;
   }
 }
 

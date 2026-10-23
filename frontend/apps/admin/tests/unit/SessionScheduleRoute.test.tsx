@@ -523,7 +523,7 @@ describe("SessionScheduleRoute — readiness and divisions", () => {
     stub({ fields: [] });
     renderSchedule();
     const blockers = await screen.findByRole("region", { name: "Can't schedule yet" });
-    expect(within(blockers).getByRole("link", { name: "Add fields" })).toHaveAttribute("href", "/sessions/1/fields");
+    expect(within(blockers).getByRole("link", { name: "Add fields" })).toHaveAttribute("href", "/sessions/1/setup#fields");
   });
 
   it("shows a tab per division with its team count, and scopes requests to the selected one", async () => {

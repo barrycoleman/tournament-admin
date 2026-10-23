@@ -11,7 +11,7 @@ import { HomeRoute } from "./routes/HomeRoute";
 import { SessionNewRoute } from "./routes/SessionNewRoute";
 import { TeamsLayout } from "./routes/TeamsLayout";
 import { SessionTodayRoute } from "./routes/SessionTodayRoute";
-import { SessionPlaceholder } from "./routes/SessionPlaceholder";
+import { SessionSetupRoute } from "./routes/SessionSetupRoute";
 import { EventSetupRoute } from "./routes/EventSetupRoute";
 import { SettingsRolesRoute } from "./routes/SettingsRolesRoute";
 import { BackupsRoute } from "./routes/BackupsRoute";
@@ -165,7 +165,7 @@ export const routes: RouteObject[] = [
             loader: ({ params }) => redirect(`/sessions/${params.sessionId}/today`),
           },
           { path: "today", element: <SessionTodayRoute /> },
-          { path: "setup", element: <SessionPlaceholder /> },
+          { path: "setup", element: <SessionSetupRoute /> },
           { path: "checkin", element: <SessionCheckinRoute /> },
           { path: "fields", loader: ({ params }) => redirect(`/sessions/${params.sessionId}/setup`) },
           { path: "schedule", element: <SessionScheduleRoute /> },

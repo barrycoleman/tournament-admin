@@ -18,7 +18,8 @@ function cardIdOf(target: PendingDelete): number {
   return target.kind === "field" ? target.fieldSetId : target.id;
 }
 
-export function SessionFieldsRoute() {
+/** The session's field sets and fields, anchored as #fields so other pages can link straight to it. */
+export function SessionFieldsPanel() {
   const { t } = useTranslation();
   const { session } = useOutletContext<{ session: SessionRead }>();
   const queryClient = useQueryClient();
@@ -178,7 +179,7 @@ export function SessionFieldsRoute() {
   const multiDivision = (divisions?.length ?? 0) > 1;
 
   return (
-    <div className="session-fields">
+    <section id="fields" className="session-fields">
       {fieldSets.length === 0 ? (
         <div className="panel">
           <p>{t("sessions.fields.empty")}</p>
@@ -459,6 +460,6 @@ export function SessionFieldsRoute() {
           onCancel={() => setPendingDelete(null)}
         />
       )}
-    </div>
+    </section>
   );
 }

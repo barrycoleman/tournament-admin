@@ -276,7 +276,8 @@
           "incomplete": "每个比赛时段都需要日期、开始和结束时间。",
           "endBeforeStart": "每个比赛时段的结束时间必须晚于开始时间。",
           "overlap": "同一天的两个比赛时段重叠。"
-        }
+        },
+        "notSaved": "尚未保存"
       },
       "fit": {
         "checking": "正在检查方案…",
@@ -426,6 +427,12 @@
         "makeActiveAction": "设为当前场次",
         "matchControlAction": "前往比赛控制"
       }
+    },
+    "setup": {
+      "heading": "设置",
+      "fieldsHeading": "场地",
+      "timezoneSuggested": "尚未保存:已建议使用您电脑的时区。",
+      "saved": "已保存。"
     }
   },
   "frontDeskCheckin": {

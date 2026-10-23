@@ -113,6 +113,9 @@ export function PlayingTimesPanel({ session, windows, timeline, outsideRounds }:
                 value={draft.endTime}
                 onChange={(event) => updateDraft(index, { endTime: event.target.value })}
               />
+              {!windows.some(
+                (w) => w.date === draft.date && w.start_time === draft.startTime && w.end_time === draft.endTime
+              ) && <span className="badge badge-warning">{t("sessions.schedule.playingTimes.notSaved")}</span>}
               <button
                 type="button"
                 className="btn btn-small"

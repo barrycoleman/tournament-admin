@@ -6,17 +6,9 @@ import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { apiErrorMessage } from "../apiErrorMessage";
 import { browserZone } from "../orientation/useOrientationData";
-import { listTimezones } from "../orientation/timezones";
+import { SessionFormFields, type SessionFormValues } from "../sessions/SessionFormFields";
 import type { EventRead, SessionRead } from "../types";
 
-
-interface SessionFormValues {
-  label: string;
-  sessionDate: string;
-  timezone: string;
-  liveQualification: boolean;
-  liveFinals: boolean;
-}
 
 const EMPTY_FORM: SessionFormValues = {
   label: "",
@@ -49,7 +41,6 @@ function SessionForm({
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState(initial);
-  const timezones = listTimezones(initial.timezone || undefined);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,69 +49,7 @@ function SessionForm({
 
   return (
     <form className={inline ? "panel--form" : "panel panel--form"} onSubmit={handleSubmit}>
-      <div className="field">
-        <label className="field__label" htmlFor="session-label">
-          {t("sessions.labelLabel")}
-        </label>
-        <input
-          className="input"
-          id="session-label"
-          value={values.label}
-          onChange={(event) => setValues({ ...values, label: event.target.value })}
-          autoFocus
-        />
-      </div>
-      <div className="field">
-        <label className="field__label" htmlFor="session-date">
-          {t("sessions.dateLabel")}
-        </label>
-        <input
-          className="input"
-          id="session-date"
-          type="date"
-          value={values.sessionDate}
-          onChange={(event) => setValues({ ...values, sessionDate: event.target.value })}
-        />
-      </div>
-      <div className="field">
-        <label className="field__label" htmlFor="session-timezone">
-          {t("sessions.timezoneLabel")}
-        </label>
-        <select
-          className="select"
-          id="session-timezone"
-          value={values.timezone}
-          onChange={(event) => setValues({ ...values, timezone: event.target.value })}
-        >
-          <option value="">{t("sessions.noTimezoneOption")}</option>
-          {timezones.map((zone) => (
-            <option key={zone} value={zone}>
-              {zone}
-            </option>
-          ))}
-        </select>
-      </div>
-      {showLiveSwitches && (
-        <fieldset className="field">
-          <legend className="field__label">{t("sessions.liveScoresLegend")}</legend>
-          <label className="choice">
-            <input
-              type="checkbox"
-              checked={values.liveQualification}
-              onChange={(event) => setValues({ ...values, liveQualification: event.target.checked })}
-            />{" "}
-            {t("sessions.liveQualificationLabel")}
-          </label>
-          <label className="choice">
-            <input
-              type="checkbox"
-              checked={values.liveFinals}
-              onChange={(event) => setValues({ ...values, liveFinals: event.target.checked })}
-            />{" "}
-            {t("sessions.liveFinalsLabel")}
-          </label>
-        </fieldset>
-      )}
+      <SessionFormFields values={values} onChange={setValues} showLiveSwitches={showLiveSwitches} autoFocus />
       {error && (
         <p className="alert alert-danger" role="alert">
           {error}

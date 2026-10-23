@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
 import { ApiError, initI18n } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
-import { SessionFieldsRoute } from "../../src/routes/SessionFieldsRoute";
+import { SessionFieldsPanel } from "../../src/routes/SessionFieldsRoute";
 import type { Division, FieldRead, FieldSetRead, SessionRead } from "../../src/types";
 
 vi.mock("@tournament-admin/shared", async (importOriginal) => {
@@ -72,7 +72,7 @@ function renderFields() {
   const i18n = initI18n({ en: { translation: enAdmin } });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter([
-    { path: "/", element: <SessionOutlet />, children: [{ index: true, element: <SessionFieldsRoute /> }] },
+    { path: "/", element: <SessionOutlet />, children: [{ index: true, element: <SessionFieldsPanel /> }] },
   ]);
   return render(
     <QueryClientProvider client={queryClient}>
@@ -87,7 +87,7 @@ beforeEach(() => {
   vi.mocked(apiRequest).mockReset();
 });
 
-describe("SessionFieldsRoute", () => {
+describe("SessionFieldsPanel", () => {
   it("renders a card per field set and hides the division control for a single division", async () => {
     stubServer({ divisions: ONE_DIVISION, fieldSets: [MAIN_SET], fields: [FIELD_A] });
     renderFields();

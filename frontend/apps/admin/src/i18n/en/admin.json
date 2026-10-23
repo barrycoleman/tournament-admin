@@ -278,7 +278,8 @@
           "incomplete": "Every playing time needs a date, a start and an end.",
           "endBeforeStart": "Each playing time must end after it starts.",
           "overlap": "Two playing times on the same day overlap."
-        }
+        },
+        "notSaved": "Not saved yet"
       },
       "fit": {
         "checking": "Checking the plan…",
@@ -428,6 +429,12 @@
         "makeActiveAction": "Make active",
         "matchControlAction": "Go to Match Control"
       }
+    },
+    "setup": {
+      "heading": "Setup",
+      "fieldsHeading": "Fields",
+      "timezoneSuggested": "Not saved yet: we suggested your computer's timezone.",
+      "saved": "Saved."
     }
   },
   "frontDeskCheckin": {

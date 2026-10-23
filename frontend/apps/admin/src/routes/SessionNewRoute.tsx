@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { apiRequest } from "@tournament-admin/shared";
 import { apiErrorMessage } from "../apiErrorMessage";
-import { listTimezones } from "../orientation/timezones";
+import { SessionFormFields, type SessionFormValues } from "../sessions/SessionFormFields";
 import { browserZone } from "../orientation/useOrientationData";
 import type { SessionRead } from "../types";
 
@@ -13,19 +13,22 @@ export function SessionNewRoute() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [zoneDefault] = useState(browserZone);
-  const [label, setLabel] = useState("");
-  const [sessionDate, setSessionDate] = useState("");
-  const [timezone, setTimezone] = useState(zoneDefault);
-  const timezones = listTimezones(zoneDefault);
+  const [values, setValues] = useState<SessionFormValues>({
+    label: "",
+    sessionDate: "",
+    timezone: zoneDefault,
+    liveQualification: true,
+    liveFinals: false,
+  });
 
   const createMutation = useMutation({
     mutationFn: () =>
       apiRequest<SessionRead>("/api/sessions", {
         method: "POST",
         body: {
-          label,
-          session_date: sessionDate || null,
-          timezone: timezone || null,
+          label: values.label,
+          session_date: values.sessionDate || null,
+          timezone: values.timezone || null,
         },
       }),
     onSuccess: (created) => {
@@ -43,48 +46,7 @@ export function SessionNewRoute() {
     <div>
       <h1>{t("sessionNew.heading")}</h1>
       <form className="panel panel--form" onSubmit={handleSubmit}>
-        <div className="field">
-          <label className="field__label" htmlFor="session-label">
-            {t("sessions.labelLabel")}
-          </label>
-          <input
-            className="input"
-            id="session-label"
-            value={label}
-            onChange={(event) => setLabel(event.target.value)}
-            autoFocus
-          />
-        </div>
-        <div className="field">
-          <label className="field__label" htmlFor="session-date">
-            {t("sessions.dateLabel")}
-          </label>
-          <input
-            className="input"
-            id="session-date"
-            type="date"
-            value={sessionDate}
-            onChange={(event) => setSessionDate(event.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label className="field__label" htmlFor="session-timezone">
-            {t("sessions.timezoneLabel")}
-          </label>
-          <select
-            className="select"
-            id="session-timezone"
-            value={timezone}
-            onChange={(event) => setTimezone(event.target.value)}
-          >
-            <option value="">{t("sessions.noTimezoneOption")}</option>
-            {timezones.map((zone) => (
-              <option key={zone} value={zone}>
-                {zone}
-              </option>
-            ))}
-          </select>
-        </div>
+        <SessionFormFields values={values} onChange={setValues} autoFocus />
         {createMutation.isError && (
           <p className="alert alert-danger" role="alert">
             {apiErrorMessage(createMutation.error, t("errors.generic"))}

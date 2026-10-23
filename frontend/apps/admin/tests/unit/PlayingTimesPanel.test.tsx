@@ -97,3 +97,18 @@ describe("PlayingTimesPanel", () => {
     expect(screen.getByText(/Practice has matches outside the playing times but can't be rebuilt/)).toBeInTheDocument();
   });
 });
+
+describe("PlayingTimesPanel unsaved rows", () => {
+  it("marks a prefilled row as not saved yet, but not rows that match a saved window", () => {
+    renderPanel([]);
+    expect(screen.getByText("Not saved yet")).toBeInTheDocument();
+  });
+
+  it("marks only the added row when editing saved windows", () => {
+    renderPanel(WINDOWS);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.queryByText("Not saved yet")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add playing time" }));
+    expect(screen.getAllByText("Not saved yet")).toHaveLength(1);
+  });
+});
