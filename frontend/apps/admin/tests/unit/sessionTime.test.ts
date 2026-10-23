@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cutoverOffer,
+  isSessionToday,
   orderSessions,
   pickLandingSession,
   sessionSpan,
@@ -56,6 +57,32 @@ describe("sessionSpan", () => {
   });
 });
 
+describe("isSessionToday", () => {
+  const s = session(1, "2026-11-07");
+
+  it("computes today in the session zone, not UTC", () => {
+    // 19:00 on 11-07 in Los Angeles, already 11-08 in UTC
+    const now = new Date("2026-11-08T03:00:00Z");
+    expect(isSessionToday(s, [], now, "UTC")).toBe(true);
+    // 17:00 on 11-08 in Los Angeles
+    expect(isSessionToday(s, [], new Date("2026-11-09T01:00:00Z"), "UTC")).toBe(false);
+  });
+
+  it("uses the fallback zone when the session has no timezone", () => {
+    const noZone = session(1, "2026-11-07", { timezone: null });
+    const now = new Date("2026-11-08T03:00:00Z");
+    expect(isSessionToday(noZone, [], now, ZONE)).toBe(true);
+    expect(isSessionToday(noZone, [], now, "UTC")).toBe(false);
+  });
+
+  it("is today when a window date matches even if session_date differs", () => {
+    const w = [win("2026-11-09", "2026-11-09T17:00:00Z", "2026-11-09T20:00:00Z")];
+    const now = new Date("2026-11-09T18:00:00Z");
+    expect(isSessionToday(s, w, now, ZONE)).toBe(true);
+    expect(isSessionToday(s, [], now, ZONE)).toBe(false);
+  });
+});
+
 describe("orderSessions", () => {
   it("puts null dates last and breaks ties by id", () => {
     const out = orderSessions([
@@ -107,6 +134,16 @@ describe("pickLandingSession", () => {
     expect(pickLandingSession({ ...base, sessions: [dateless, a, b], activeId: null, now })).toBe(2);
     const early = new Date("2026-10-01T12:00:00Z");
     expect(pickLandingSession({ ...base, sessions: [dateless, a, b], activeId: null, now: early })).toBe(1);
+  });
+
+  it("decides today by the session zone date", () => {
+    const x = session(1, "2026-11-07");
+    const y = session(2, "2026-11-08");
+    // 19:00 on 11-07 in Los Angeles, 11-08 in UTC: x is today, not y
+    const now = new Date("2026-11-08T03:00:00Z");
+    expect(pickLandingSession({ sessions: [y, x], windowsById: {}, activeId: null, now, fallbackZone: "UTC" })).toBe(1);
+    // an active session on another day does not beat today's
+    expect(pickLandingSession({ sessions: [x, y], windowsById: {}, activeId: 2, now, fallbackZone: "UTC" })).toBe(1);
   });
 
   it("picks the dateless session only when it is the only one", () => {
@@ -207,6 +244,20 @@ describe("cutoverOffer", () => {
         fallbackZone: ZONE,
       }),
     ).toBeNull();
+  });
+
+  it("offers the real upcoming session, skipping a dateless one", () => {
+    const dateless = session(7, null);
+    const sessions = [a, dateless, b];
+    const windowsById = { 1: sameDay[1], 2: sameDay[2] };
+    expect(
+      cutoverOffer({ sessions, windowsById, activeId: 1, now: new Date("2026-11-07T20:30:00Z"), fallbackZone: ZONE })
+        ?.sessionId,
+    ).toBe(2);
+    expect(
+      cutoverOffer({ sessions, windowsById, activeId: null, now: new Date("2026-11-07T22:00:00Z"), fallbackZone: ZONE })
+        ?.sessionId,
+    ).toBe(2);
   });
 
   it("handles two sessions on the same date for landing and offer", () => {
