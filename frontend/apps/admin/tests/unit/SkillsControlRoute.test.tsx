@@ -145,7 +145,7 @@ describe("Skills Control", () => {
     fieldSets = [MAIN];
     stub();
     renderRoute();
-    expect(await screen.findByRole("link", { name: "Fields page." })).toHaveAttribute("href", "/sessions/1/fields");
+    expect(await screen.findByRole("link", { name: "Fields page." })).toHaveAttribute("href", "/sessions/1/setup#fields");
   });
 
   it("shows each skills set with its type, its timer and a row per field", async () => {

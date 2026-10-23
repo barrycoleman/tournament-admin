@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useIsFetching } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useLocation, useOutletContext } from "react-router-dom";
@@ -12,11 +12,13 @@ export function SessionSetupRoute() {
   const { session } = useOutletContext<{ session: SessionRead }>();
   const { hash } = useLocation();
   const loading = useIsFetching() > 0;
+  const handledHash = useRef<string | null>(null);
 
   useEffect(() => {
-    if (loading || !hash) return;
+    if (loading || !hash || handledHash.current === hash) return;
     const target = document.getElementById(decodeURIComponent(hash.slice(1)));
     if (!target) return;
+    handledHash.current = hash;
     target.scrollIntoView();
     const control = target.matches("input, select, button, textarea")
       ? target
@@ -27,8 +29,7 @@ export function SessionSetupRoute() {
   return (
     <div>
       <h1>{t("sessions.setup.heading")}</h1>
-      <SessionSettingsForm session={session} />
-      <h2>{t("sessions.setup.fieldsHeading")}</h2>
+      <SessionSettingsForm key={session.id} session={session} />
       <SessionFieldsPanel />
     </div>
   );

@@ -104,6 +104,14 @@ describe("PlayingTimesPanel unsaved rows", () => {
     expect(screen.getByText("Not saved yet")).toBeInTheDocument();
   });
 
+  it("shows no badge on a row matching a saved window until it is edited", () => {
+    renderPanel(WINDOWS);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.queryByText("Not saved yet")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Playing time 1 end"), { target: { value: "11:00" } });
+    expect(screen.getAllByText("Not saved yet")).toHaveLength(1);
+  });
+
   it("marks only the added row when editing saved windows", () => {
     renderPanel(WINDOWS);
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));

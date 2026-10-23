@@ -103,6 +103,24 @@ describe("SessionSetupRoute", () => {
     expect(container.querySelector("section#fields")).not.toBeNull();
   });
 
+  it("does not pull focus back to the hash target after a save refetch", async () => {
+    renderSetup(SESSION, "/setup#session-timezone");
+    const select = await screen.findByLabelText("Timezone");
+    await waitFor(() => expect(select).toHaveFocus());
+    const label = screen.getByLabelText("Session name");
+    label.focus();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.getByText("Saved.")).toBeInTheDocument());
+    await waitFor(() => expect(mock.mock.calls.filter((c) => c[0] === "/api/sessions").length).toBeGreaterThan(0));
+    expect(select).not.toHaveFocus();
+  });
+
+  it("hides the suggestion hint once the timezone is changed", async () => {
+    renderSetup({ ...SESSION, timezone: null });
+    fireEvent.change(await screen.findByLabelText("Timezone"), { target: { value: "Europe/Paris" } });
+    expect(screen.queryByText(/we suggested/)).not.toBeInTheDocument();
+  });
+
   it("scrolls to and focuses the timezone select for #session-timezone", async () => {
     renderSetup(SESSION, "/setup#session-timezone");
     const select = await screen.findByLabelText("Timezone");

@@ -180,6 +180,7 @@ export function SessionFieldsPanel() {
 
   return (
     <section id="fields" className="session-fields">
+      <h2>{t("sessions.setup.fieldsHeading")}</h2>
       {fieldSets.length === 0 ? (
         <div className="panel">
           <p>{t("sessions.fields.empty")}</p>

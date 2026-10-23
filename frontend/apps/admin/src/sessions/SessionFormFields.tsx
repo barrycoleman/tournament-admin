@@ -16,6 +16,7 @@ export function SessionFormFields({
   showLiveSwitches = false,
   autoFocus = false,
   timezoneHint,
+  extraZone,
 }: {
   values: SessionFormValues;
   onChange: (values: SessionFormValues) => void;
@@ -23,9 +24,11 @@ export function SessionFormFields({
   showLiveSwitches?: boolean;
   autoFocus?: boolean;
   timezoneHint?: string;
+  /** A zone to keep in the list even if the browser omits it; keep it stable while editing. */
+  extraZone?: string;
 }) {
   const { t } = useTranslation();
-  const timezones = listTimezones(values.timezone || undefined);
+  const timezones = listTimezones(extraZone || undefined);
 
   return (
     <>

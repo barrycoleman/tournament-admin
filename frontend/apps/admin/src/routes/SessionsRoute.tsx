@@ -49,7 +49,7 @@ function SessionForm({
 
   return (
     <form className={inline ? "panel--form" : "panel panel--form"} onSubmit={handleSubmit}>
-      <SessionFormFields values={values} onChange={setValues} showLiveSwitches={showLiveSwitches} autoFocus />
+      <SessionFormFields values={values} onChange={setValues} showLiveSwitches={showLiveSwitches} autoFocus extraZone={initial.timezone} />
       {error && (
         <p className="alert alert-danger" role="alert">
           {error}

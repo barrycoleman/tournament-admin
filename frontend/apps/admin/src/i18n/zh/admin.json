@@ -431,7 +431,7 @@
     "setup": {
       "heading": "设置",
       "fieldsHeading": "场地",
-      "timezoneSuggested": "尚未保存:已建议使用您电脑的时区。",
+      "timezoneSuggested": "尚未保存：已建议使用您电脑的时区。",
       "saved": "已保存。"
     }
   },

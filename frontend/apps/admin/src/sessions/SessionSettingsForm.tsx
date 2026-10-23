@@ -12,10 +12,11 @@ export function SessionSettingsForm({ session }: { session: SessionRead }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const suggested = session.timezone === null;
+  const [initialZone] = useState(() => session.timezone ?? browserZone());
   const [values, setValues] = useState<SessionFormValues>(() => ({
     label: session.label,
     sessionDate: session.session_date ?? "",
-    timezone: session.timezone ?? browserZone(),
+    timezone: initialZone,
     liveQualification: session.live_scores_qualification ?? true,
     liveFinals: session.live_scores_finals ?? false,
   }));
@@ -53,7 +54,8 @@ export function SessionSettingsForm({ session }: { session: SessionRead }) {
           setValues(next);
         }}
         showLiveSwitches
-        timezoneHint={suggested && !saved ? t("sessions.setup.timezoneSuggested") : undefined}
+        extraZone={initialZone}
+        timezoneHint={suggested && !saved && values.timezone === initialZone ? t("sessions.setup.timezoneSuggested") : undefined}
       />
       {save.isError && (
         <p className="alert alert-danger" role="alert">

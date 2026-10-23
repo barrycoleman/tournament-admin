@@ -46,7 +46,7 @@ export function SessionNewRoute() {
     <div>
       <h1>{t("sessionNew.heading")}</h1>
       <form className="panel panel--form" onSubmit={handleSubmit}>
-        <SessionFormFields values={values} onChange={setValues} autoFocus />
+        <SessionFormFields values={values} onChange={setValues} autoFocus extraZone={zoneDefault} />
         {createMutation.isError && (
           <p className="alert alert-danger" role="alert">
             {apiErrorMessage(createMutation.error, t("errors.generic"))}
