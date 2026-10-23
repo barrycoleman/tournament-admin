@@ -60,15 +60,24 @@ def unregister_session(app: "FastAPI", session_id: int, websocket: WebSocket) ->
 
 
 def register_device_socket(app: "FastAPI", device_id: int, websocket: WebSocket) -> None:
-    app.state.realtime.by_device.setdefault(device_id, set()).add(websocket)
+    """Records a device's socket. Its first socket makes it connected, which
+    the admin's TV list shows, so admins are told."""
+    sockets = app.state.realtime.by_device.setdefault(device_id, set())
+    connected_before = bool(sockets)
+    sockets.add(websocket)
+    if not connected_before:
+        broadcast_active_session(app, "devices_changed", {}, roles=("admin",))
 
 
 def unregister_device_socket(app: "FastAPI", device_id: int, websocket: WebSocket) -> None:
+    """Forgets a device's socket; once its last one is gone it is no longer
+    connected, and admins are told."""
     sockets = app.state.realtime.by_device.get(device_id)
     if sockets is not None:
         sockets.discard(websocket)
         if not sockets:
             del app.state.realtime.by_device[device_id]
+            broadcast_active_session(app, "devices_changed", {}, roles=("admin",))
 
 
 def close_device_sockets(app: "FastAPI", device_id: int) -> None:

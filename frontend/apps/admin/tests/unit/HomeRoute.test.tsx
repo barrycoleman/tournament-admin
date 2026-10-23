@@ -9,14 +9,19 @@ import { HomeRoute } from "../../src/routes/HomeRoute";
 
 vi.mock("@tournament-admin/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tournament-admin/shared")>();
-  return { ...actual, apiRequest: vi.fn() };
+  return { ...actual, apiRequest: vi.fn(), useAuth: vi.fn() };
 });
 
-import { apiRequest } from "@tournament-admin/shared";
+import { apiRequest, useAuth } from "@tournament-admin/shared";
 const mock = vi.mocked(apiRequest);
+
+function asRole(role: string) {
+  vi.mocked(useAuth).mockReturnValue({ role, isAuthenticated: true, login: vi.fn(), logout: vi.fn() });
+}
 
 beforeEach(() => {
   mock.mockReset();
+  asRole("admin");
 });
 
 function Where() {
@@ -81,5 +86,20 @@ describe("HomeRoute", () => {
       activeId: 5,
     });
     expect(await screen.findByTestId("where")).toHaveTextContent("/sessions/5/today");
+  });
+
+  it("gives any other role only the event name at /, with no checklist and no redirect", async () => {
+    asRole("scorer");
+    setup({
+      plugin: "g",
+      teams: [{ id: 1 }],
+      sessions: [{ id: 5, label: "B", session_date: "2020-01-02", timezone: "UTC" }],
+      activeId: 5,
+    });
+    expect(await screen.findByRole("heading", { level: 1, name: "E" })).toBeInTheDocument();
+    expect(screen.queryByTestId("where")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    // Only the event is read: the admin-only lists are never requested.
+    expect(mock.mock.calls.map(([path]) => path)).toEqual(["/api/event"]);
   });
 });

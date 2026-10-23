@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate } from "react-router-dom";
-import { apiRequest } from "@tournament-admin/shared";
+import { apiRequest, useAuth } from "@tournament-admin/shared";
 import { checkEventSetup, type EventSetupKey } from "../orientation/readiness";
 import { pickLandingSession } from "../orientation/sessionTime";
 import {
@@ -18,7 +18,23 @@ const ITEM_TARGETS: Record<EventSetupKey, string> = {
   session: "/sessions/new",
 };
 
+/**
+ * `/`: an admin gets the setup checklist, then today's session. Any other
+ * role that lands here (front desk and judges are redirected earlier) sees
+ * just the event's name.
+ */
 export function HomeRoute() {
+  const { role } = useAuth();
+  return role === "admin" ? <AdminHome /> : <RoleHome />;
+}
+
+function RoleHome() {
+  const { t } = useTranslation();
+  const { data: event } = useEvent();
+  return <h1>{event?.name || t("app.title")}</h1>;
+}
+
+function AdminHome() {
   const { t } = useTranslation();
   const { data: event } = useEvent();
   const { data: sessions } = useSessions();
