@@ -28,36 +28,69 @@ export function SessionTodayRoute() {
   const { session } = useOutletContext<{ session: SessionRead }>();
   const makeActive = useMakeActive();
 
-  const { data: event } = useEvent();
-  const { data: sessions } = useSessions();
-  const { data: divisions } = useQuery({
+  const eventQuery = useEvent();
+  const event = eventQuery.data;
+  const sessionsQuery = useSessions();
+  const sessions = sessionsQuery.data;
+  const divisionsQuery = useQuery({
     queryKey: ["divisions"],
     queryFn: () => apiRequest<Division[]>("/api/divisions"),
   });
-  const { data: teams } = useQuery({ queryKey: ["teams"], queryFn: () => apiRequest<TeamSummary[]>("/api/teams") });
-  const { data: participants } = useQuery({
+  const divisions = divisionsQuery.data;
+  const teamsQuery = useQuery({
+    queryKey: ["teams"],
+    queryFn: () => apiRequest<TeamSummary[]>("/api/teams"),
+  });
+  const participantsQuery = useQuery({
     queryKey: ["participants", session.id],
-    queryFn: () => apiRequest<ParticipationRead[]>(`/api/sessions/${session.id}/participants`),
+    queryFn: () =>
+      apiRequest<ParticipationRead[]>(
+        `/api/sessions/${session.id}/participants`,
+      ),
   });
-  const { data: fieldSets } = useQuery({
+  const participants = participantsQuery.data;
+  const teams = teamsQuery.data;
+  const fieldSetsQuery = useQuery({
     queryKey: ["fieldSets", session.id],
-    queryFn: () => apiRequest<FieldSetRead[]>(`/api/field-sets?session_id=${session.id}`),
+    queryFn: () =>
+      apiRequest<FieldSetRead[]>(`/api/field-sets?session_id=${session.id}`),
   });
-  const { data: fields } = useQuery({
+  const fieldSets = fieldSetsQuery.data;
+  const fieldsQuery = useQuery({
     queryKey: ["fields", session.id],
-    queryFn: () => apiRequest<FieldRead[]>(`/api/fields?session_id=${session.id}`),
+    queryFn: () =>
+      apiRequest<FieldRead[]>(`/api/fields?session_id=${session.id}`),
   });
-  const { data: windows } = useQuery({
+  const fields = fieldsQuery.data;
+  const windowsQuery = useQuery({
     queryKey: ["playingWindows", session.id],
-    queryFn: () => apiRequest<unknown[]>(`/api/sessions/${session.id}/playing-windows`),
+    queryFn: () =>
+      apiRequest<unknown[]>(`/api/sessions/${session.id}/playing-windows`),
   });
-  const { data: matchFormat } = useQuery({
+  const windows = windowsQuery.data;
+  const matchFormatQuery = useQuery({
     queryKey: ["matchFormat"],
     queryFn: () => apiRequest<MatchFormat>("/api/event/match-format"),
     enabled: Boolean(event?.game_plugin_name),
   });
-  const { data: matches } = useSessionMatches(session.id);
-  const { data: displays } = useDisplays(session.id);
+  const matchFormat = matchFormatQuery.data;
+  const matchesQuery = useSessionMatches(session.id);
+  const matches = matchesQuery.data;
+  const displaysQuery = useDisplays(session.id);
+  const displays = displaysQuery.data;
+  const failed = [
+    eventQuery,
+    sessionsQuery,
+    divisionsQuery,
+    teamsQuery,
+    participantsQuery,
+    fieldSetsQuery,
+    fieldsQuery,
+    windowsQuery,
+    matchFormatQuery,
+    matchesQuery,
+    displaysQuery,
+  ].some((query) => query.isError);
 
   const loaded =
     event !== undefined &&
@@ -71,14 +104,25 @@ export function SessionTodayRoute() {
     matches !== undefined &&
     displays !== undefined &&
     (!event.game_plugin_name || matchFormat !== undefined);
-  if (!loaded) return null;
+  if (failed) {
+    return (
+      <p className="alert alert-danger" role="alert">
+        {t("errors.generic")}
+      </p>
+    );
+  }
+  if (!loaded) return <p>{t("sessions.loading")}</p>;
 
   const eventSetup = checkEventSetup({
     gamePluginSelected: Boolean(event.game_plugin_name),
     teamCount: teams.length,
     sessionCount: sessions.length,
   }).filter((item) => !item.ok);
-  const eventSetupLinks = { gamePlugin: "/events/setup", teams: "/teams", session: "/sessions/new" } as const;
+  const eventSetupLinks = {
+    gamePlugin: "/events/setup",
+    teams: "/teams",
+    session: "/sessions/new",
+  } as const;
 
   const items = checkSessionReadiness({
     session,
@@ -91,7 +135,10 @@ export function SessionTodayRoute() {
     windowCount: windows.length,
     matches,
     matchFormat: matchFormat ?? null,
-    displayCount: displays.groups.reduce((sum, group) => sum + group.displays.length, 0),
+    displayCount: displays.groups.reduce(
+      (sum, group) => sum + group.displays.length,
+      0,
+    ),
   });
   const step = nextSessionStep(items);
   const teamsOk = items.find((item) => item.key === "teams")?.ok ?? false;
@@ -116,7 +163,9 @@ export function SessionTodayRoute() {
             {eventSetup.map((item) => (
               <li key={item.key}>
                 {t(`sessions.today.eventSetup.${item.key}`)}{" "}
-                <Link to={eventSetupLinks[item.key]}>{t(`sessions.today.eventSetup.${item.key}Fix`)}</Link>
+                <Link to={eventSetupLinks[item.key]}>
+                  {t(`sessions.today.eventSetup.${item.key}Fix`)}
+                </Link>
               </li>
             ))}
           </ul>
@@ -125,39 +174,70 @@ export function SessionTodayRoute() {
       <div className="session-today">
         <section className="panel" aria-labelledby="today-checkin">
           <h2 id="today-checkin">{t("sessions.today.checkin.heading")}</h2>
-          <p>{t("sessions.today.checkin.count", { checked: checkedIn, total: teams.length })}</p>
+          <p>
+            {t("sessions.today.checkin.count", {
+              checked: checkedIn,
+              total: teams.length,
+            })}
+          </p>
           <progress
             max={teams.length}
             value={checkedIn}
             aria-label={t("sessions.today.checkin.heading")}
           />
           <p>
-            <Link to={`${base}/checkin`} className={teamsOk ? "btn" : "btn btn-primary"}>
+            <Link
+              to={`${base}/checkin`}
+              className={teamsOk ? "btn" : "btn btn-primary"}
+            >
               {t("sessions.today.checkin.action")}
             </Link>
           </p>
         </section>
         <section className="panel" aria-labelledby="today-inspection">
-          <h2 id="today-inspection">{t("sessions.today.inspection.heading")}</h2>
-          <p className="field__hint">{t("sessions.today.inspection.placeholder")}</p>
+          <h2 id="today-inspection">
+            {t("sessions.today.inspection.heading")}
+          </h2>
+          <p className="field__hint">
+            {t("sessions.today.inspection.placeholder")}
+          </p>
         </section>
         <section className="panel" aria-labelledby="today-matches">
           <h2 id="today-matches">{t("sessions.today.matches.heading")}</h2>
           <ul className="today-checklist">
             {items.map((item) => (
-              <li key={item.key} className={item.ok ? "today-checklist__ok" : "today-checklist__todo"}>
+              <li
+                key={item.key}
+                className={
+                  item.ok ? "today-checklist__ok" : "today-checklist__todo"
+                }
+              >
                 <span
                   role="img"
-                  aria-label={item.ok ? t("sessions.today.matches.done") : t("sessions.today.matches.notDone")}
+                  aria-label={
+                    item.ok
+                      ? t("sessions.today.matches.done")
+                      : t("sessions.today.matches.notDone")
+                  }
                 >
                   {item.ok ? "✓" : "✗"}
                 </span>{" "}
                 {item.key === "active" ? (
-                  <button type="button" className="btn btn-small" onClick={() => makeActive.open(session)}>
-                    {t("sessions.today.matches.active")}
-                  </button>
+                  item.ok ? (
+                    t("sessions.today.matches.active")
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-small"
+                      onClick={() => makeActive.open(session)}
+                    >
+                      {t("sessions.today.matches.active")}
+                    </button>
+                  )
                 ) : (
-                  <Link to={rowLinks[item.key]}>{t(`sessions.today.matches.${item.key}`)}</Link>
+                  <Link to={rowLinks[item.key]}>
+                    {t(`sessions.today.matches.${item.key}`)}
+                  </Link>
                 )}
               </li>
             ))}
@@ -173,7 +253,11 @@ export function SessionTodayRoute() {
             </Link>
           )}
           {step === "makeActive" && (
-            <button type="button" className="btn btn-primary" onClick={() => makeActive.open(session)}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => makeActive.open(session)}
+            >
               {t("sessions.today.matches.makeActiveAction")}
             </button>
           )}

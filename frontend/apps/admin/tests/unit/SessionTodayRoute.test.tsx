@@ -112,12 +112,46 @@ describe("SessionTodayRoute", () => {
     expect(link).toHaveClass("btn-primary");
   });
 
-  it("renders the check-in count, progress bar and a primary button while teams are short", async () => {
+  it("renders the check-in count and progress bar", async () => {
     stub({ teamCount: 24, checkedIn: 18 });
     renderAt("/sessions/1/today");
     expect(await screen.findByText("18 / 24 checked in")).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("value", "18");
-    expect(screen.getByRole("link", { name: "Check teams in" })).toHaveAttribute("href", "/sessions/1/checkin");
+  });
+
+  it("makes the check-in button primary while too few teams are in", async () => {
+    stub({ teamCount: 24, checkedIn: 2 });
+    renderAt("/sessions/1/today");
+    await screen.findByText("2 / 24 checked in");
+    const checkin = screen.getByRole("link", { name: "Check teams in" });
+    expect(checkin).toHaveAttribute("href", "/sessions/1/checkin");
+    expect(checkin).toHaveClass("btn-primary");
+  });
+
+  it("points 'Plan matches' at the Schedule tab when playing times are missing", async () => {
+    stub({ fieldSets: readyFieldSet, fields: readyField });
+    renderAt("/sessions/1/today");
+    const link = await screen.findByRole("link", { name: "Plan matches" });
+    expect(link).toHaveAttribute("href", "/sessions/1/schedule");
+    expect(link).toHaveClass("btn-primary");
+  });
+
+  it("offers no make-active button on the active row once the session is active", async () => {
+    stub({ activeId: 1 });
+    renderAt("/sessions/1/today");
+    await screen.findByText("This is the active session");
+    expect(screen.queryByRole("button", { name: "This is the active session" })).not.toBeInTheDocument();
+  });
+
+  it("shows an error alert instead of a blank tab when a query fails", async () => {
+    stub();
+    const base = mock.getMockImplementation()!;
+    mock.mockImplementation(async (path: string) => {
+      if (path === "/api/event/match-format") throw new Error("boom");
+      return base(path);
+    });
+    renderAt("/sessions/1/today");
+    expect(await screen.findByText("Something went wrong.")).toBeInTheDocument();
   });
 
   it("offers Make active when everything but active is ready, and the click opens the dialog", async () => {
