@@ -1058,5 +1058,16 @@
       "resetConfirm": "Reset timer"
     },
     "cancel": "Cancel"
+  },
+  "orientation": {
+    "makeActive": {
+      "heading": "Make {{label}} active?",
+      "body": "Make {{label}} the active session? The TVs, Match Control and Skills Control will switch to it.",
+      "runningMatch": "{{match}} is running on {{activeLabel}}.",
+      "activateAction": "Make active",
+      "copyAndActivateAction": "Copy TV spots and make active",
+      "activateWithoutCopyingAction": "Make active without copying",
+      "cancelAction": "Cancel"
+    }
   }
 }
