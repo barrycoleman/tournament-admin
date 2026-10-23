@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { formatMatchTime } from "../matchTime";
 import { useMakeActive } from "./MakeActiveDialog";
-import { cutoverOffer } from "./sessionTime";
+import { cutoverOffer, dateInZone, sessionZone } from "./sessionTime";
 import { isBannerSnoozed, snoozeBanner } from "./snooze";
 import { useNow } from "./useNow";
 import { browserZone, useEvent, useSessions, useSessionWindows } from "./useOrientationData";
@@ -34,6 +34,9 @@ export function ActiveSessionBanner() {
       : null;
   const session = offer ? sessionList.find((s) => s.id === offer.sessionId) : undefined;
   const visible = offer && session && !isBannerSnoozed(session.id, now);
+  const zone = session ? sessionZone(session, fallbackZone) : fallbackZone;
+  // Name the day too when the session doesn't start today in its own zone.
+  const startsToday = offer ? dateInZone(offer.startsAt, zone) === dateInZone(now, zone) : true;
 
   return (
     <>
@@ -45,12 +48,7 @@ export function ActiveSessionBanner() {
               i18nKey="orientation.banner.message"
               values={{
                 label: session.label,
-                time: formatMatchTime(
-                  offer.startsAt.toISOString(),
-                  session.timezone || fallbackZone,
-                  false,
-                  i18n.language
-                ),
+                time: formatMatchTime(offer.startsAt.toISOString(), zone, !startsToday, i18n.language),
               }}
               components={{ strong: <strong /> }}
             />

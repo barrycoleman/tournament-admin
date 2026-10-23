@@ -5,6 +5,7 @@ import {
   orderSessions,
   pickLandingSession,
   sessionSpan,
+  sessionZone,
 } from "../../src/orientation/sessionTime";
 import type { PlayingWindowRead, SessionRead } from "../../src/types";
 
@@ -270,5 +271,49 @@ describe("cutoverOffer", () => {
     ).toBe(2);
     expect(run("2026-11-07T22:00:00Z", { activeId: 1 })?.sessionId).toBe(2);
     expect(run("2026-11-07T22:00:00Z", { activeId: 2 })).toBeNull();
+  });
+});
+
+describe("cutoverOffer past sessions", () => {
+  it("skips a session that has already ended and offers the one running now", () => {
+    const lastWeek = session(1, "2026-10-31");
+    const yesterday = session(2, "2026-11-06");
+    const today = session(3, "2026-11-07");
+    const windowsById = {
+      1: [win("2026-10-31", "2026-10-31T16:00:00Z", "2026-11-01T00:00:00Z")],
+      2: [win("2026-11-06", "2026-11-06T17:00:00Z", "2026-11-07T01:00:00Z")],
+      3: [win("2026-11-07", "2026-11-07T17:00:00Z", "2026-11-08T01:00:00Z")],
+    };
+    const offer = cutoverOffer({
+      sessions: [lastWeek, yesterday, today],
+      windowsById,
+      activeId: 1,
+      now: new Date("2026-11-07T18:00:00Z"),
+      fallbackZone: ZONE,
+    });
+    expect(offer?.sessionId).toBe(3);
+    expect(iso(offer?.startsAt)).toBe("2026-11-07T17:00:00.000Z");
+  });
+});
+
+describe("invalid timezones", () => {
+  const broken = session(1, "2026-11-07", { timezone: "Not/AZone" });
+
+  it("falls back to the fallback zone instead of throwing", () => {
+    const span = sessionSpan(broken, [], ZONE);
+    expect(iso(span?.start)).toBe("2026-11-07T08:00:00.000Z");
+    expect(isSessionToday(broken, [], new Date("2026-11-08T03:00:00Z"), ZONE)).toBe(true);
+    expect(() =>
+      cutoverOffer({ sessions: [broken], windowsById: {}, activeId: null, now: new Date("2026-11-07T20:00:00Z"), fallbackZone: ZONE }),
+    ).not.toThrow();
+    expect(
+      pickLandingSession({ sessions: [broken], windowsById: {}, activeId: null, now: new Date("2026-11-07T20:00:00Z"), fallbackZone: ZONE }),
+    ).toBe(1);
+  });
+
+  it("resolves a session's zone, falling back when it is missing or invalid", () => {
+    expect(sessionZone(broken, ZONE)).toBe(ZONE);
+    expect(sessionZone(session(2, null, { timezone: null }), "UTC")).toBe("UTC");
+    expect(sessionZone(session(3, null, { timezone: "Europe/London" }), "UTC")).toBe("Europe/London");
   });
 });

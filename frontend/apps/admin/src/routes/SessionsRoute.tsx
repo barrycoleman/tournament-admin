@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { apiErrorMessage } from "../apiErrorMessage";
+import { useMakeActive } from "../orientation/MakeActiveDialog";
 import { browserZone } from "../orientation/useOrientationData";
 import { SessionFormFields, type SessionFormValues } from "../sessions/SessionFormFields";
 import type { EventRead, SessionRead } from "../types";
@@ -118,16 +119,7 @@ export function SessionsRoute() {
     },
   });
 
-  const activateMutation = useMutation({
-    mutationFn: (id: number) =>
-      apiRequest<EventRead>("/api/event/active-session", {
-        method: "POST",
-        body: { session_id: id },
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event"] });
-    },
-  });
+  const makeActive = useMakeActive();
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest<void>(`/api/sessions/${id}`, { method: "DELETE" }),
@@ -141,11 +133,6 @@ export function SessionsRoute() {
   return (
     <div>
       <h1>{t("sessions.heading")}</h1>
-      {activateMutation.isError && (
-        <p className="alert alert-danger" role="alert">
-          {apiErrorMessage(activateMutation.error, t("errors.generic"))}
-        </p>
-      )}
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -215,8 +202,7 @@ export function SessionsRoute() {
                     {event && event.active_session_id !== session.id && (
                       <button
                         className="btn btn-small"
-                        onClick={() => activateMutation.mutate(session.id)}
-                        disabled={activateMutation.isPending}
+                        onClick={() => makeActive.open(session)}
                         aria-label={t("sessions.setActiveAriaLabel", { name: session.label })}
                       >
                         {t("sessions.setActiveShortAction")}
@@ -302,6 +288,7 @@ export function SessionsRoute() {
           onCancel={() => setPendingDelete(null)}
         />
       )}
+      {makeActive.dialog}
     </div>
   );
 }

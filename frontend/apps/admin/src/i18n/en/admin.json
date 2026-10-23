@@ -1190,7 +1190,11 @@
       "copyAndActivateAction": "Copy TV spots and make active",
       "activateWithoutCopyingAction": "Make active without copying",
       "cancelAction": "Cancel",
-      "loading": "Checking the current session…"
+      "loading": "Checking the current session…",
+      "matchCheckFailed": "Couldn't check whether a match is running on {{label}}.",
+      "unplacedHeading": "{{label}} is now active. These TVs had no matching spot and show nothing yet:",
+      "unplacedLink": "Set their spots on Devices & displays",
+      "closeAction": "Close"
     },
     "nextStep": {
       "label": "Next:"

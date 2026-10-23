@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import { Outlet, RouterProvider, createMemoryRouter } from "react-router-dom";
 import { initI18n } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
@@ -150,5 +151,39 @@ describe("readiness links", () => {
     render(<RouterProvider router={router} />);
     const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
     expect(hrefs).toEqual(["/sessions/1/setup#session-timezone", "/sessions/1/setup#fields"]);
+  });
+});
+
+describe("SessionSetupRoute session switch", () => {
+  it("starts the fields panel fresh when the session changes", async () => {
+    const SUNDAY = { ...SESSION, id: 2, label: "Sunday" } as SessionRead;
+    function Host() {
+      const [session, setSession] = useState(SESSION);
+      return (
+        <>
+          <button type="button" onClick={() => setSession(SUNDAY)}>
+            switch
+          </button>
+          <Outlet context={{ session }} />
+        </>
+      );
+    }
+    const i18n = initI18n({ en: { translation: enAdmin } });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const router = createMemoryRouter(
+      [{ path: "/", element: <Host />, children: [{ path: "setup", element: <SessionSetupRoute /> }] }],
+      { initialEntries: ["/setup"], future: { v7_relativeSplatPath: true } }
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <RouterProvider router={router} future={{ v7_startTransition: true }} />
+        </I18nextProvider>
+      </QueryClientProvider>
+    );
+    const box = await screen.findByLabelText("Add your first field");
+    fireEvent.change(box, { target: { value: "Half-typed" } });
+    fireEvent.click(screen.getByRole("button", { name: "switch" }));
+    await waitFor(() => expect(screen.getByLabelText("Add your first field")).toHaveValue(""));
   });
 });

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { apiErrorMessage } from "../apiErrorMessage";
+import { IdentifyButton } from "./IdentifyButton";
 import type { DisplayGroupRead, DisplayRef } from "./types";
 import { useDisplayMutations } from "./useDisplays";
 
@@ -61,18 +62,11 @@ export function DisplayRows({
             <span className={`badge ${display.online ? "badge-success" : "badge-neutral"}`}>
               {display.online ? t("displays.online") : t("displays.offline")}
             </span>
-            <button
-              className="btn btn-small"
-              type="button"
-              aria-label={t("displays.identifyNamed", { name: display.name })}
-              disabled={!display.online}
-              title={display.online ? undefined : t("displays.identifyOffline")}
-              onClick={() => {
-                if (display.online) identify.mutate(display.device_id);
-              }}
-            >
-              {t("displays.identify")}
-            </button>
+            <IdentifyButton
+              name={display.name}
+              online={display.online}
+              onIdentify={() => identify.mutate(display.device_id)}
+            />
             <select
               className="select"
               aria-label={

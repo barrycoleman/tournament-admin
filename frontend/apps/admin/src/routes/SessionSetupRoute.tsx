@@ -30,7 +30,7 @@ export function SessionSetupRoute() {
     <div>
       <h1>{t("sessions.setup.heading")}</h1>
       <SessionSettingsForm key={session.id} session={session} />
-      <SessionFieldsPanel />
+      <SessionFieldsPanel key={session.id} />
     </div>
   );
 }

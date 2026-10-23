@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { apiErrorMessage } from "../apiErrorMessage";
 import { fieldSetNameOf, groupOptionLabel } from "../displays/DisplayRows";
+import { IdentifyButton } from "../displays/IdentifyButton";
 import type { DisplaysRead } from "../displays/types";
 import { useDisplayMutations } from "../displays/useDisplays";
 import { useNow } from "../orientation/useNow";
@@ -119,18 +120,7 @@ export function DisplaysTable({
                   </td>
                   <td className="table__nowrap">{relativeTime(device.last_seen_at, now, i18n.language) ?? t("devices.justNow")}</td>
                   <td className="table__actions">
-                    <button
-                      className="btn btn-small"
-                      type="button"
-                      aria-label={t("displays.identifyNamed", { name: device.name })}
-                      disabled={!online}
-                      title={online ? undefined : t("displays.identifyOffline")}
-                      onClick={() => {
-                        if (online) identify.mutate(device.id);
-                      }}
-                    >
-                      {t("displays.identify")}
-                    </button>
+                    <IdentifyButton name={device.name} online={online} onIdentify={() => identify.mutate(device.id)} />
                     <DeviceActionButtons
                       device={device}
                       toggling={setEnabled.isPending}

@@ -387,6 +387,14 @@ test.describe.serial("session fields, schedule, and matches", () => {
     await loginAsAdmin(page);
     await page.goto("/sessions");
     await page.getByRole("button", { name: "Set Activate E2E as the active session" }).click();
+    // Nothing changes until the dialog is confirmed.
+    const dialog = page.getByRole("alertdialog", { name: "Make Activate E2E active?" });
+    const confirm = dialog.getByRole("button", { name: /^Make active( without copying)?$/ });
+    await expect(confirm).toBeEnabled();
+    const before = await (await request.get("/api/event", { headers: headers() })).json();
+    expect(before.active_session_id).not.toBe(session.id);
+    await confirm.click();
+    await expect(dialog).toHaveCount(0);
     const row = page.getByRole("row", { name: /Activate E2E/ });
     await expect(row.getByText("Active session")).toBeVisible();
     await expect(page.getByRole("button", { name: "Set Activate E2E as the active session" })).toHaveCount(0);

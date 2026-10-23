@@ -240,16 +240,18 @@ describe("Devices & displays page: TVs and displays", () => {
     );
   });
 
-  it("identifies a connected TV and disables Identify for one that isn't", async () => {
+  it("identifies a connected TV and says so, without calling the API, for one that isn't", async () => {
     renderRoute();
     const big = await rowFor("Big TV");
     await waitFor(() => expect(within(big).getByRole("button", { name: "Identify Big TV" })).toBeEnabled());
     fireEvent.click(within(big).getByRole("button", { name: "Identify Big TV" }));
     await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/displays/7/identify", { method: "POST" }));
-    const spare = within(await rowFor("Spare TV")).getByRole("button", { name: "Identify Spare TV" });
-    expect(spare).toBeDisabled();
-    expect(spare).toHaveAttribute("title", "This TV isn't connected");
+    const spareRow = await rowFor("Spare TV");
+    const spare = within(spareRow).getByRole("button", { name: "Identify Spare TV" });
+    expect(spare).toBeEnabled();
+    expect(within(spareRow).queryByText("This TV isn't connected")).not.toBeInTheDocument();
     fireEvent.click(spare);
+    expect(within(spareRow).getByRole("status")).toHaveTextContent("This TV isn't connected");
     expect(apiRequest).not.toHaveBeenCalledWith("/api/displays/8/identify", { method: "POST" });
   });
 
@@ -540,13 +542,13 @@ describe("Devices & displays page: spots", () => {
     );
   });
 
-  it("disables Identify for an offline display and says why", async () => {
+  it("says an offline display isn't connected when Identify is pressed, without calling the API", async () => {
     renderRoute();
     const unassigned = await screen.findByRole("region", { name: "Unassigned displays" });
     const identify = within(unassigned).getByRole("button", { name: "Identify Spare TV" });
-    expect(identify).toBeDisabled();
-    expect(identify).toHaveAttribute("title", "This TV isn't connected");
+    expect(identify).toBeEnabled();
     fireEvent.click(identify);
+    expect(within(unassigned).getByRole("status")).toHaveTextContent("This TV isn't connected");
     expect(apiRequest).not.toHaveBeenCalledWith("/api/displays/8/identify", { method: "POST" });
   });
 

@@ -20,13 +20,13 @@ const SUNDAY_WINDOW = { date: "2026-10-25", start_utc: "2026-10-25T09:00:00Z", e
 const CUTOVER = new Date("2026-10-25T01:00:00Z").getTime();
 
 // Each test offers a different session id, since a snooze lives for the page.
-function stub(nextId: number) {
+function stub(nextId: number, nextTimezone = "UTC") {
   vi.mocked(apiRequest).mockImplementation(async (path: string) => {
     const routes: Record<string, unknown> = {
       "/api/event": { id: 1, name: "E", active_session_id: 1, game_plugin_name: "demo", game_plugin_locked: false },
       "/api/sessions": [
         { id: 1, label: "Saturday", session_date: "2026-10-24", timezone: "UTC" },
-        { id: nextId, label: "Sunday", session_date: "2026-10-25", timezone: "UTC" },
+        { id: nextId, label: "Sunday", session_date: "2026-10-25", timezone: nextTimezone },
         { id: 500, label: "Undated", session_date: null, timezone: null },
       ],
       "/api/sessions/1/playing-windows": [SATURDAY_WINDOW],
@@ -138,5 +138,28 @@ describe("ActiveSessionBanner", () => {
     renderBanner();
     fireEvent.click(await screen.findByRole("button", { name: "Make it active" }));
     expect(await screen.findByRole("heading", { name: "Make Sunday active?" })).toBeInTheDocument();
+  });
+
+  it("includes the date when the session doesn't start today in its zone", async () => {
+    // 09:00 UTC on the 25th is 02:00 on Sunday in Los Angeles; the cutover,
+    // 01:00 UTC on the 25th, is still Saturday evening there.
+    stub(6, "America/Los_Angeles");
+    vi.setSystemTime(CUTOVER);
+    renderBanner();
+    expect(await screen.findByRole("status")).toHaveTextContent("Sunday is scheduled to start at Sun, Oct 25, 02:00.");
+  });
+
+  it("shows only the time when the session starts today", async () => {
+    stub(7);
+    vi.setSystemTime(CUTOVER);
+    renderBanner();
+    expect(await screen.findByRole("status")).toHaveTextContent("Sunday is scheduled to start at 09:00.");
+  });
+
+  it("still renders when a session's timezone is not a valid zone", async () => {
+    stub(8, "Not/AZone");
+    vi.setSystemTime(CUTOVER);
+    renderBanner();
+    expect(await screen.findByRole("status")).toHaveTextContent("Sunday is scheduled to start at");
   });
 });

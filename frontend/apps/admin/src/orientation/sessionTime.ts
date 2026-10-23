@@ -18,9 +18,20 @@ interface LandingInput {
   fallbackZone: string;
 }
 
-function zoneOf(session: SessionRead, fallbackZone: string): string {
-  return session.timezone || fallbackZone;
+function isValidZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
 }
+
+/** The session's own timezone, or `fallbackZone` when it has none or it isn't a zone `Intl` knows. */
+export function sessionZone(session: SessionRead, fallbackZone: string): string {
+  return session.timezone && isValidZone(session.timezone) ? session.timezone : fallbackZone;
+}
+
 
 /** Offset in ms of `zone` from UTC at the given instant. */
 function zoneOffsetMs(instant: number, zone: string): number {
@@ -53,7 +64,7 @@ function nextDay(date: string): string {
   return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
 }
 
-function dateInZone(now: Date, zone: string): string {
+export function dateInZone(now: Date, zone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(now);
 }
 
@@ -74,7 +85,7 @@ export function sessionSpan(
   }
   if (start !== null && end !== null) return { start: new Date(start), end: new Date(end) };
   if (session.session_date) {
-    const zone = zoneOf(session, fallbackZone);
+    const zone = sessionZone(session, fallbackZone);
     return {
       start: startOfDayUtc(session.session_date, zone),
       end: startOfDayUtc(nextDay(session.session_date), zone),
@@ -102,7 +113,7 @@ export function isSessionToday(
   now: Date,
   fallbackZone: string,
 ): boolean {
-  const today = dateInZone(now, zoneOf(session, fallbackZone));
+  const today = dateInZone(now, sessionZone(session, fallbackZone));
   return session.session_date === today || windows.some((w) => w.date === today);
 }
 
@@ -165,6 +176,8 @@ export function cutoverOffer(input: LandingInput): CutoverOffer | null {
     let next: { s: SessionRead; span: SessionSpan } | null = null;
     for (const x of others) {
       if (x.span.start.getTime() < activeSpan.end.getTime()) continue;
+      // A session that has already ended is past, not next.
+      if (x.span.end.getTime() <= nowMs) continue;
       if (!next || x.span.start < next.span.start) next = x;
     }
     if (!next) return null;

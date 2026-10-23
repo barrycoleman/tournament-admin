@@ -1187,7 +1187,11 @@
       "copyAndActivateAction": "复制电视位置并设为当前场次",
       "activateWithoutCopyingAction": "不复制，直接设为当前场次",
       "cancelAction": "取消",
-      "loading": "正在检查当前场次…"
+      "loading": "正在检查当前场次…",
+      "matchCheckFailed": "无法检查{{label}}上是否有比赛正在进行。",
+      "unplacedHeading": "{{label}}已设为当前场次。以下电视没有对应的位置，暂时不显示任何内容：",
+      "unplacedLink": "前往“设备与显示屏”设置它们的位置",
+      "closeAction": "关闭"
     },
     "nextStep": {
       "label": "下一步："
