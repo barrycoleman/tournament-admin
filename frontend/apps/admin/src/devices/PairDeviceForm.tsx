@@ -4,6 +4,8 @@ import { ApiError } from "@tournament-admin/shared";
 import { apiErrorMessage } from "../apiErrorMessage";
 import { fieldSetNameOf, groupOptionLabel } from "../displays/DisplayRows";
 import { useDisplayMutations, useDisplays } from "../displays/useDisplays";
+import { NextStep } from "../orientation/NextStep";
+import { showsSelectId } from "./DisplaysTable";
 import { normalizeCode } from "./format";
 import { PAIRABLE_ROLES, checkPairingCode, useDeviceMutations, type PairingCodeCheck } from "./useDevices";
 
@@ -27,6 +29,8 @@ export function PairDeviceForm({ initialCode = "", sessionId }: { initialCode?: 
   const [checking, setChecking] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [pairedName, setPairedName] = useState<string | null>(null);
+  // A TV that was paired with "Nothing yet": its Shows select is the next stop.
+  const [needsShowsId, setNeedsShowsId] = useState<number | null>(null);
   // The last name the server suggested: replaced by the next suggestion,
   // unlike a name the admin typed themselves.
   const lastSuggestion = useRef("");
@@ -71,6 +75,7 @@ export function PairDeviceForm({ initialCode = "", sessionId }: { initialCode?: 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPairedName(null);
+    setNeedsShowsId(null);
     assign.reset();
     const device = await pair.mutateAsync({ code: normalized, role, name }).catch(() => null);
     if (!device) return;
@@ -79,6 +84,8 @@ export function PairDeviceForm({ initialCode = "", sessionId }: { initialCode?: 
     const groupId = role === "display_device" && groups.some((g) => String(g.id) === shows) ? Number(shows) : null;
     if (groupId !== null) {
       await assign.mutateAsync({ deviceId: device.id, groupId }).catch(() => null);
+    } else if (role === "display_device") {
+      setNeedsShowsId(device.id);
     }
     setShows("");
     setCode("");
@@ -165,6 +172,11 @@ export function PairDeviceForm({ initialCode = "", sessionId }: { initialCode?: 
         <p className="alert alert-success" role="status">
           {t("devices.paired", { name: pairedName })}
         </p>
+      )}
+      {needsShowsId !== null && (
+        <NextStep onClick={() => document.getElementById(showsSelectId(needsShowsId))?.focus()}>
+          {t("devicesDisplays.chooseWhatItShows")}
+        </NextStep>
       )}
       <div className="form-actions">
         <button className="btn btn-primary" type="submit" disabled={!checked || !name.trim() || pair.isPending || assign.isPending}>

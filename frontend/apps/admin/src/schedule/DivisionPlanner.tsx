@@ -5,6 +5,9 @@ import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { apiErrorMessage } from "../apiErrorMessage";
 import { showTransientError } from "../errorBanner";
+import { useMakeActive } from "../orientation/MakeActiveDialog";
+import { NextStep } from "../orientation/NextStep";
+import { useEvent } from "../orientation/useOrientationData";
 import { roundTypeLabel } from "../roundTypeLabel";
 import { ClearRoundDialog } from "./ClearRoundDialog";
 import { FitStatus } from "./FitStatus";
@@ -58,6 +61,8 @@ export function DivisionPlanner({
   const { t } = useTranslation();
   const headingId = useId();
   const queryClient = useQueryClient();
+  const event = useEvent();
+  const makeActive = useMakeActive();
   const [clearTargets, setClearTargets] = useState<ScheduledRound[] | null>(null);
   const [applied, setApplied] = useState<PlanResponse | null>(null);
   const [schedulerChoice, setSchedulerChoice] = useState("");
@@ -273,6 +278,10 @@ export function DivisionPlanner({
             <Link to={`/sessions/${session.id}/matches`}>{t("sessions.schedule.actions.viewMatches")}</Link>
           </p>
         )}
+        {applied && event.data && event.data.active_session_id !== session.id && (
+          <NextStep onClick={() => makeActive.open(session)}>{t("sessions.schedule.actions.nextMakeActive")}</NextStep>
+        )}
+        {makeActive.dialog}
         <details className="schedule-form__more">
           <summary>{t("sessions.schedule.actions.moreOptions")}</summary>
           <label className="field">

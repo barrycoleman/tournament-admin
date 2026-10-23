@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nextProvider } from "react-i18next";
+import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initI18n } from "@tournament-admin/shared";
 import type { TeamGridRow } from "../../src/teamCsv";
@@ -64,7 +65,9 @@ function renderRoute() {
   return render(
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
-        <TeamsRoute />
+        <MemoryRouter>
+          <TeamsRoute />
+        </MemoryRouter>
       </I18nextProvider>
     </QueryClientProvider>
   );
@@ -402,6 +405,69 @@ describe("TeamsRoute", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("0 saved, 1 need fixing");
     // The rejected row survives the post-save refetch with its error attached.
     expect(await screen.findByText("number and name are required")).toBeInTheDocument();
+  });
+
+  it("moves focus into the first cell of a newly added row", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
+    renderRoute();
+
+    await screen.findByText("Alpha");
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+
+    await waitFor(() => {
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows).toHaveLength(2);
+      expect(rows[1].contains(document.activeElement)).toBe(true);
+    });
+    expect(document.activeElement).toBe(within(screen.getAllByRole("row")[2]).getAllByRole("gridcell")[0]);
+  });
+
+  describe("after a save", () => {
+    function stubSave(sessions: unknown[], activeSessionId: number | null) {
+      vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+        if (path === "/api/divisions") return DIVISIONS as never;
+        if (path === "/api/teams") return [serverTeam(1, "101", "Alpha", 1)] as never;
+        if (path === "/api/sessions") return sessions as never;
+        if (path === "/api/event") return { id: 1, name: "E", active_session_id: activeSessionId } as never;
+        if (path.startsWith("/api/sessions/") && path.endsWith("/playing-windows")) return [] as never;
+        if (path === "/api/teams/bulk") {
+          return {
+            results: [{ row_index: 0, status: "created", team: serverTeam(2, "202", "Bravo", 1), error: null }],
+          } as never;
+        }
+        throw new Error(`unexpected request: ${path}`);
+      });
+    }
+
+    async function addAndSave() {
+      renderRoute();
+      await screen.findByText("Alpha");
+      fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+      const cells = within(screen.getAllByRole("row")[2]).getAllByRole("gridcell");
+      fireEvent.doubleClick(cells[0]);
+      fireEvent.change(screen.getByRole("textbox"), { target: { value: "202" } });
+      fireEvent.blur(screen.getByRole("textbox"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      await screen.findByRole("status");
+    }
+
+    it("offers to create a session when there are none", async () => {
+      stubSave([], null);
+      await addAndSave();
+      const link = await screen.findByRole("link", { name: "create a session" });
+      expect(link).toHaveAttribute("href", "/sessions/new");
+    });
+
+    it("offers to go to the session the admin would land on when sessions exist", async () => {
+      const session = (id: number, label: string) => ({
+        id, event_id: 1, label, session_date: null, timezone: null, has_scored_matches: false,
+        qualification_finalized_at: null, qualification_drops: null,
+      });
+      stubSave([session(7, "Saturday"), session(8, "Sunday")], 8);
+      await addAndSave();
+      const link = await screen.findByRole("link", { name: "go to Sunday" });
+      expect(link).toHaveAttribute("href", "/sessions/8/today");
+    });
   });
 
   it("leaves no duplicate row when a new row's number turns out to belong to an existing team", async () => {

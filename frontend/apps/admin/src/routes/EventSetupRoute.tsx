@@ -9,6 +9,7 @@ import { useGamePlugin } from "../gamePlugin/useGamePlugin";
 import { RankingSettingsPanel } from "../rankings/RankingSettingsPanel";
 import { RANKING_SETTINGS_KEY } from "../rankings/useRankingSettings";
 import { SkillsSettingsPanel } from "../skills/SkillsSettingsPanel";
+import { NextStep } from "../orientation/NextStep";
 import { SKILLS_SETTINGS_KEY } from "../skills/useSkillsSettings";
 import type { EventRead, GamePluginChangePreview, PluginSummary } from "../types";
 
@@ -225,6 +226,7 @@ function GamePluginSection() {
         </button>
       )}
       {selected && locked && <p className="field__hint">{t("eventSetup.lockedNote")}</p>}
+      {selected && <NextStep to="/teams">{t("eventSetup.nextAddTeams")}</NextStep>}
       {sectionError && (
         <p className="alert alert-danger" role="alert">
           {sectionError}

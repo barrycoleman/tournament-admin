@@ -256,7 +256,14 @@ describe("Devices & displays page: TVs and displays", () => {
   it("says when no TVs are paired", async () => {
     devices = devices.filter((d) => d.role !== "display_device");
     renderRoute();
-    expect(await screen.findByText("No TVs are paired yet.")).toBeInTheDocument();
+    expect(await screen.findByText(/No TVs paired yet\./)).toBeInTheDocument();
+  });
+
+  it("focuses the pair code box from the empty TVs table", async () => {
+    devices = devices.filter((d) => d.role !== "display_device");
+    renderRoute();
+    fireEvent.click(await screen.findByRole("button", { name: "Pair one with its code" }));
+    expect(document.activeElement).toBe(screen.getByLabelText("Pairing code"));
   });
 });
 
@@ -293,6 +300,33 @@ describe("Devices & displays page: pairing", () => {
     expect(await within(form).findByRole("status")).toHaveTextContent("Paired Tablet 3.");
   });
 
+  it("offers to choose what a TV shows when it was paired with Nothing yet, and focuses that TV's Shows select", async () => {
+    // The refetch after pairing lists the new TV.
+    devices = [...devices, device({ id: 9, name: "Tablet 3", role: "display_device" })];
+    renderRoute("/devices?pair=KX49TM");
+    const form = screen.getByRole("form", { name: "Pair a device" });
+    await waitFor(() => expect(within(form).getByLabelText("Device name")).toHaveValue("Tablet 3"));
+    await waitFor(() => expect(within(form).getByRole("button", { name: "Pair" })).toBeEnabled());
+    fireEvent.click(within(form).getByRole("button", { name: "Pair" }));
+
+    const next = await within(form).findByRole("button", { name: "Choose what it shows" });
+    expect(next.closest("p")).toHaveTextContent("Next: Choose what it shows");
+    fireEvent.click(next);
+    expect(document.activeElement).toBe(screen.getByLabelText("What Tablet 3 shows"));
+  });
+
+  it("offers no choose-what-it-shows step when the TV was given a spot", async () => {
+    renderRoute("/devices?pair=KX49TM");
+    const form = screen.getByRole("form", { name: "Pair a device" });
+    await waitFor(() => expect(within(form).getByLabelText("Device name")).toHaveValue("Tablet 3"));
+    const shows = within(form).getByLabelText("Shows");
+    await within(shows).findByRole("option", { name: "Pit TVs (pit)" });
+    fireEvent.change(shows, { target: { value: "52" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Pair" }));
+    await within(form).findByRole("status");
+    expect(within(form).queryByRole("button", { name: "Choose what it shows" })).not.toBeInTheDocument();
+  });
+
   it("passes a ?pair= code to the pair form", async () => {
     renderRoute("/devices?pair=KX49TM");
     await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/pairing/codes/KX49TM"));
@@ -324,7 +358,7 @@ describe("Devices & displays page: device actions", () => {
   it("says when no devices are paired", async () => {
     devices = [];
     renderRoute();
-    expect(await screen.findByText("No TVs are paired yet.")).toBeInTheDocument();
+    expect(await screen.findByText(/No TVs paired yet\./)).toBeInTheDocument();
     expect(screen.getByText("No other devices are paired yet.")).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });

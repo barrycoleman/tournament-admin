@@ -95,7 +95,9 @@
     "downloadCsvLabel": "Download CSV",
     "downloadTemplateLabel": "Download blank template",
     "randomDivisionOption": "(random)",
-    "randomizeUnassignedAction": "Randomly assign unassigned teams"
+    "randomizeUnassignedAction": "Randomly assign unassigned teams",
+    "nextCreateSession": "create a session",
+    "nextGoTo": "go to {{label}}"
   },
   "divisions": {
     "heading": "Divisions",
@@ -300,7 +302,8 @@
         "schedulerLabel": "Scheduler",
         "applied_one": "{{count}} match scheduled.",
         "applied_other": "{{count}} matches scheduled.",
-        "viewMatches": "View matches"
+        "viewMatches": "View matches",
+        "nextMakeActive": "make this session active"
       }
     },
     "loading": "Loading…",
@@ -375,7 +378,8 @@
         "skills": "Skills"
       },
       "teamworkHeading": "Teamwork field sets",
-      "skillsHeading": "Skills field sets"
+      "skillsHeading": "Skills field sets",
+      "nextPlayingTimes": "playing times and rounds"
     },
     "setActiveShortAction": "Set active",
     "setActiveAriaLabel": "Set {{name}} as the active session",
@@ -473,7 +477,8 @@
     "awardItem": "{{session}}: {{name}}",
     "switchConfirm": "Switch plugin",
     "clearConfirm": "Clear plugin",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "nextAddTeams": "add teams"
   },
   "settingsRoles": {
     "heading": "Role passwords",
@@ -799,7 +804,7 @@
     "serverInfoHeading": "Connect a device on this network",
     "serverInfoAddressLabel": "Address",
     "tvsHeading": "TVs and displays",
-    "tvsEmpty": "No TVs are paired yet.",
+    "tvsEmpty": "No TVs paired yet.",
     "columns": {
       "shows": "Shows",
       "connection": "Connection"
@@ -811,7 +816,9 @@
     "copyHeading": "Copy spots from another session",
     "spotsHeading": "Spots",
     "otherHeading": "Scorers, referees and other devices",
-    "otherEmpty": "No other devices are paired yet."
+    "otherEmpty": "No other devices are paired yet.",
+    "chooseWhatItShows": "Choose what it shows",
+    "tvsEmptyLink": "Pair one with its code"
   },
   "devices": {
     "pairHeading": "Pair a device",
@@ -1184,6 +1191,9 @@
       "activateWithoutCopyingAction": "Make active without copying",
       "cancelAction": "Cancel",
       "loading": "Checking the current session…"
+    },
+    "nextStep": {
+      "label": "Next:"
     }
   }
 }

@@ -551,6 +551,17 @@
   color: var(--color-text-secondary);
 }
 
+/* The line that points at the step after the one just finished. Quiet on
+   purpose: the accent stays with primary actions. */
+.next-step {
+  margin: var(--space-3) 0;
+  color: var(--color-text-secondary);
+}
+
+.next-step__label {
+  font-weight: 700;
+}
+
 /* ---------- Alerts / status ---------- */
 
 .alert {

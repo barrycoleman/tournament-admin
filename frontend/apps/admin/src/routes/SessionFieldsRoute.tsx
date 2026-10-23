@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
+import { NextStep } from "../orientation/NextStep";
 import { apiRequest } from "@tournament-admin/shared";
 import { InlineEditableText } from "../components/InlineEditableText";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -30,6 +31,12 @@ export function SessionFieldsPanel() {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [cardErrors, setCardErrors] = useState<Record<number, string>>({});
   const generic = t("errors.generic");
+  const firstFieldRef = useRef<HTMLInputElement>(null);
+  const newSetRef = useRef<HTMLInputElement>(null);
+  const newFieldRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  // Set when the first field is added: the form unmounts, so focus moves to the new set's add-field input.
+  const focusNewSetField = useRef(false);
+  const [addedFirstField, setAddedFirstField] = useState(false);
 
   const fieldSetsQuery = useQuery({
     queryKey: ["fieldSets", session.id],
@@ -86,9 +93,13 @@ export function SessionFieldsPanel() {
     onSuccess: (_field, { fieldSetId }) => {
       if (fieldSetId === null) {
         setFirstFieldName("");
+        focusNewSetField.current = true;
+        setAddedFirstField(true);
+        firstFieldRef.current?.focus();
       } else {
         setNewFieldNames((previous) => ({ ...previous, [fieldSetId]: "" }));
         setCardError(fieldSetId, null);
+        newFieldRefs.current[fieldSetId]?.focus();
       }
       refresh();
     },
@@ -117,6 +128,7 @@ export function SessionFieldsPanel() {
       }),
     onSuccess: () => {
       setNewSetName("");
+      newSetRef.current?.focus();
       refresh();
     },
   });
@@ -170,6 +182,16 @@ export function SessionFieldsPanel() {
     onSettled: () => setPendingDelete(null),
   });
 
+  const firstSetId = fieldSetsQuery.data?.[0]?.id;
+  useEffect(() => {
+    if (!focusNewSetField.current || firstSetId === undefined) return;
+    const input = newFieldRefs.current[firstSetId];
+    if (input) {
+      focusNewSetField.current = false;
+      input.focus();
+    }
+  }, [firstSetId]);
+
   if (fieldSetsQuery.isLoading || fieldsQuery.isLoading) {
     return <p>{t("sessions.loading")}</p>;
   }
@@ -181,6 +203,11 @@ export function SessionFieldsPanel() {
   return (
     <section id="fields" className="session-fields">
       <h2>{t("sessions.setup.fieldsHeading")}</h2>
+      {addedFirstField && (
+        <NextStep to={`/sessions/${session.id}/schedule#playing-times`}>
+          {t("sessions.fields.nextPlayingTimes")}
+        </NextStep>
+      )}
       {fieldSets.length === 0 ? (
         <div className="panel">
           <p>{t("sessions.fields.empty")}</p>
@@ -194,6 +221,7 @@ export function SessionFieldsPanel() {
           >
             <input
               className="input"
+              ref={firstFieldRef}
               aria-label={t("sessions.fields.firstFieldLabel")}
               placeholder={t("sessions.fields.firstFieldLabel")}
               value={firstFieldName}
@@ -388,6 +416,9 @@ export function SessionFieldsPanel() {
               >
                 <input
                   className="input"
+                  ref={(element) => {
+                    newFieldRefs.current[fieldSet.id] = element;
+                  }}
                   aria-label={t("sessions.fields.newFieldLabel", { name: fieldSet.name })}
                   placeholder={t("sessions.fields.newFieldPlaceholder")}
                   value={newFieldName}
@@ -424,6 +455,7 @@ export function SessionFieldsPanel() {
       >
         <input
           className="input"
+          ref={newSetRef}
           aria-label={t("sessions.fields.newSetLabel")}
           placeholder={t("sessions.fields.newSetLabel")}
           value={newSetName}

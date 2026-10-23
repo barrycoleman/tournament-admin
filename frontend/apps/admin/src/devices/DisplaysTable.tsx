@@ -8,6 +8,11 @@ import { DeviceActionButtons, DeviceStatusBadge } from "./deviceCells";
 import { relativeTime } from "./format";
 import { useDeviceMutations, type DeviceRead } from "./useDevices";
 
+/** The "Shows" select of one TV, so the pair form can send focus to it. */
+export function showsSelectId(deviceId: number): string {
+  return `tv-shows-${deviceId}`;
+}
+
 interface Placement {
   online: boolean;
   groupId: number | null;
@@ -50,7 +55,16 @@ export function DisplaysTable({
   const byDevice = placements(displays);
   const failed = [setEnabled, assign, identify].find((m) => m.isError);
 
-  if (devices.length === 0) return <p>{t("devicesDisplays.tvsEmpty")}</p>;
+  if (devices.length === 0) {
+    return (
+      <p>
+        {t("devicesDisplays.tvsEmpty")}{" "}
+        <button type="button" className="btn-link" onClick={() => document.getElementById("pair-code")?.focus()}>
+          {t("devicesDisplays.tvsEmptyLink")}
+        </button>
+      </p>
+    );
+  }
 
   return (
     <>
@@ -78,6 +92,7 @@ export function DisplaysTable({
                   <td>
                     <select
                       className="select"
+                      id={showsSelectId(device.id)}
                       aria-label={t("devicesDisplays.showsNamed", { name: device.name })}
                       value={placement?.groupId == null ? "" : String(placement.groupId)}
                       disabled={sessionId === null || assign.isPending}

@@ -132,6 +132,8 @@ interface StubOptions {
   matches?: MatchRead[];
   plan?: (body: PlanRequest) => PlanResponse | Error;
   onWrite?: (path: string, options: { method?: string; body?: unknown }) => unknown;
+  /** The event's active session; defaults to this session. */
+  activeSessionId?: number | null;
 }
 
 function stub({
@@ -142,6 +144,7 @@ function stub({
   matches = [],
   plan = () => FITS,
   onWrite = () => undefined,
+  activeSessionId = 1,
 }: StubOptions = {}) {
   vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
     const opts = (options ?? {}) as { method?: string; body?: unknown };
@@ -162,7 +165,7 @@ function stub({
       return result as never;
     }
     if (path === "/api/divisions") return divisions as never;
-    if (path === "/api/event") return EVENT as never;
+    if (path === "/api/event") return { ...EVENT, active_session_id: activeSessionId } as never;
     if (path === "/api/event/match-format") return MATCH_FORMAT as never;
     if (path === "/api/teams") return TEAMS as never;
     if (path === "/api/sessions/1/participants") return PARTICIPANTS as never;
@@ -245,6 +248,26 @@ describe("SessionScheduleRoute — planning", () => {
     expect(writes[0].dry_run).toBe(false);
     expect(await screen.findByText(/14 matches scheduled\./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View matches" })).toHaveAttribute("href", "/sessions/1/matches");
+  });
+
+  it("offers to make the session active after generating, and opens the confirmation", async () => {
+    stub({ activeSessionId: null });
+    renderSchedule();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    await screen.findByRole("link", { name: "View matches" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "make this session active" }));
+    expect(await screen.findByRole("alertdialog", { name: /Saturday/ })).toBeInTheDocument();
+  });
+
+  it("offers no make-active step when the session is already active", async () => {
+    stub();
+    renderSchedule();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    await screen.findByRole("link", { name: "View matches" });
+    expect(screen.queryByRole("button", { name: "make this session active" })).not.toBeInTheDocument();
   });
 
   it("marks an edited round as changed and sends it with every round after it", async () => {

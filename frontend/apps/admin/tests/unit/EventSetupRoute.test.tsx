@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
+import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initI18n, ApiError } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
@@ -87,13 +88,32 @@ function renderSetup() {
   render(
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
-        <EventSetupRoute />
+        <MemoryRouter>
+          <EventSetupRoute />
+        </MemoryRouter>
       </I18nextProvider>
     </QueryClientProvider>
   );
 }
 
 describe("EventSetupRoute", () => {
+  it("offers a next step to add teams only once a game is selected", async () => {
+    mockServer({ selected: null, locked: false });
+    renderSetup();
+
+    fireEvent.click((await screen.findAllByRole("button", { name: "Select for this event" }))[0]);
+    const link = await screen.findByRole("link", { name: "add teams" });
+    expect(link).toHaveAttribute("href", "/teams");
+    expect(link.closest("p")).toHaveTextContent("Next: add teams");
+  });
+
+  it("shows no next step while no game is selected", async () => {
+    mockServer({ selected: null, locked: false });
+    renderSetup();
+    await screen.findAllByRole("button", { name: "Select for this event" });
+    expect(screen.queryByRole("link", { name: "add teams" })).not.toBeInTheDocument();
+  });
+
   it("enables the skills panel as soon as a game plugin is selected, without a reload", async () => {
     let selected: string | null = null;
     vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
@@ -133,7 +153,9 @@ describe("EventSetupRoute", () => {
     render(
       <QueryClientProvider client={queryClient}>
         <I18nextProvider i18n={i18n}>
-          <EventSetupRoute />
+          <MemoryRouter>
+            <EventSetupRoute />
+          </MemoryRouter>
         </I18nextProvider>
       </QueryClientProvider>
     );

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
@@ -74,6 +74,7 @@ export function DivisionsRoute() {
   const [redistributeError, setRedistributeError] = useState<string | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<Division | null>(null);
   const [addingDivision, setAddingDivision] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const { data: divisions } = useQuery({
     queryKey: ["divisions"],
@@ -95,7 +96,8 @@ export function DivisionsRoute() {
     onSuccess: () => {
       setName("");
       setTarget("");
-      setAddingDivision(false);
+      // Stay in the form so the next division can be typed straight away.
+      nameInputRef.current?.focus();
       invalidateAll();
       if (totalTeams > 0) {
         setRedistributeError(null);
@@ -213,6 +215,7 @@ export function DivisionsRoute() {
             <input
               className="input"
               id="new-division-name"
+              ref={nameInputRef}
               value={name}
               onChange={(event) => setName(event.target.value)}
               autoFocus

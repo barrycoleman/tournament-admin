@@ -13,6 +13,9 @@ import {
 import "react-data-grid/lib/styles.css";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { Modal } from "../components/Modal";
+import { NextStep } from "../orientation/NextStep";
+import { pickLandingSession } from "../orientation/sessionTime";
+import { browserZone, useEvent, useSessionWindows, useSessions } from "../orientation/useOrientationData";
 import { showTransientError } from "../errorBanner";
 import {
   allocateColumnWidths,
@@ -256,6 +259,29 @@ function DivisionEditor(
   );
 }
 
+/** After a clean save: on to the first session, or to the one the admin would land on. */
+function TeamsNextStep() {
+  const { t } = useTranslation();
+  const sessions = useSessions();
+  const event = useEvent();
+  const list = sessions.data ?? [];
+  const { windowsById } = useSessionWindows(list.map((session) => session.id));
+  if (!sessions.data) return null;
+  if (list.length === 0) return <NextStep to="/sessions/new">{t("teams.nextCreateSession")}</NextStep>;
+  const landing = pickLandingSession({
+    sessions: list,
+    windowsById,
+    activeId: event.data?.active_session_id ?? null,
+    now: new Date(),
+    fallbackZone: browserZone(),
+  });
+  const target = list.find((session) => session.id === landing);
+  if (!target) return null;
+  return (
+    <NextStep to={`/sessions/${target.id}/today`}>{t("teams.nextGoTo", { label: target.label })}</NextStep>
+  );
+}
+
 export function TeamsRoute() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -272,6 +298,8 @@ export function TeamsRoute() {
   // same closure, which still sees the pre-click `saving === false`.
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+  // Set by "Add row"; the effect below focuses the new row once it is rendered.
+  const pendingFocusRef = useRef(false);
 
   const { data: divisions } = useQuery({
     queryKey: ["divisions"],
@@ -449,11 +477,18 @@ export function TeamsRoute() {
     setAllRows((previous) => mergeRows(previous, touched));
   }
 
+  useEffect(() => {
+    if (!pendingFocusRef.current) return;
+    pendingFocusRef.current = false;
+    gridRef.current?.setActivePosition({ idx: 0, rowIdx: visibleRows.length - 1 }, { shouldFocus: true });
+  }, [visibleRows]);
+
   function handleAddRow() {
     const blank = makeBlankTeamRow();
     if (divisionFilter) {
       blank.division = divisionFilter;
     }
+    pendingFocusRef.current = true;
     setAllRows((previous) => [...previous, blank]);
   }
 
@@ -727,6 +762,7 @@ export function TeamsRoute() {
             : t("teams.saveSummaryAllOk", { saved: saveSummary.saved })}
         </p>
       )}
+      {saveSummary && saveSummary.failed === 0 && saveSummary.saved > 0 && <TeamsNextStep />}
 
       <DataGrid
         ref={gridRef}

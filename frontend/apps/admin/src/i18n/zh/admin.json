@@ -95,7 +95,9 @@
     "downloadCsvLabel": "下载 CSV",
     "downloadTemplateLabel": "下载空白模板",
     "randomDivisionOption": "(随机)",
-    "randomizeUnassignedAction": "随机分配未分组队伍"
+    "randomizeUnassignedAction": "随机分配未分组队伍",
+    "nextCreateSession": "创建场次",
+    "nextGoTo": "前往{{label}}"
   },
   "divisions": {
     "heading": "分组",
@@ -298,7 +300,8 @@
         "schedulerLabel": "赛程插件",
         "applied_one": "已安排 {{count}} 场比赛。",
         "applied_other": "已安排 {{count}} 场比赛。",
-        "viewMatches": "查看比赛"
+        "viewMatches": "查看比赛",
+        "nextMakeActive": "将此场次设为当前场次"
       }
     },
     "loading": "加载中…",
@@ -373,7 +376,8 @@
         "skills": "技能赛"
       },
       "teamworkHeading": "团队赛场地组",
-      "skillsHeading": "技能赛场地组"
+      "skillsHeading": "技能赛场地组",
+      "nextPlayingTimes": "比赛时段和轮次"
     },
     "setActiveShortAction": "设为当前",
     "setActiveAriaLabel": "将 {{name}} 设为当前场次",
@@ -471,7 +475,8 @@
     "awardItem": "{{session}}：{{name}}",
     "switchConfirm": "切换插件",
     "clearConfirm": "清除插件",
-    "cancel": "取消"
+    "cancel": "取消",
+    "nextAddTeams": "添加队伍"
   },
   "settingsRoles": {
     "heading": "角色密码",
@@ -808,7 +813,9 @@
     "copyHeading": "从另一个场次复制位置",
     "spotsHeading": "位置",
     "otherHeading": "记分员、裁判和其他设备",
-    "otherEmpty": "尚未配对其他设备。"
+    "otherEmpty": "尚未配对其他设备。",
+    "chooseWhatItShows": "选择它显示的内容",
+    "tvsEmptyLink": "用配对码配对一台"
   },
   "devices": {
     "pairHeading": "配对设备",
@@ -1181,6 +1188,9 @@
       "activateWithoutCopyingAction": "不复制，直接设为当前场次",
       "cancelAction": "取消",
       "loading": "正在检查当前场次…"
+    },
+    "nextStep": {
+      "label": "下一步："
     }
   }
 }
