@@ -2,16 +2,26 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError } from "@tournament-admin/shared";
 import { apiErrorMessage } from "../apiErrorMessage";
+import { fieldSetNameOf, groupOptionLabel } from "../displays/DisplayRows";
+import { useDisplayMutations, useDisplays } from "../displays/useDisplays";
 import { normalizeCode } from "./format";
 import { PAIRABLE_ROLES, checkPairingCode, useDeviceMutations, type PairingCodeCheck } from "./useDevices";
 
 const CODE_LENGTH = 6;
 
-export function PairDeviceForm({ initialCode = "" }: { initialCode?: string }) {
+/**
+ * Pairs a device by its code. A TV can be given a spot in `sessionId` in the
+ * same step; with no session, or "Nothing yet", it is only paired.
+ */
+export function PairDeviceForm({ initialCode = "", sessionId }: { initialCode?: string; sessionId: number | null }) {
   const { t } = useTranslation();
   const { pair } = useDeviceMutations();
+  const displays = useDisplays(sessionId);
+  const { assign } = useDisplayMutations(sessionId);
+  const groups = displays.data?.groups ?? [];
   const [code, setCode] = useState(initialCode);
-  const [role, setRole] = useState<string>("scorer");
+  const [role, setRole] = useState<string>("display_device");
+  const [shows, setShows] = useState("");
   const [name, setName] = useState("");
   const [checked, setChecked] = useState<PairingCodeCheck | null>(null);
   const [checking, setChecking] = useState(false);
@@ -61,9 +71,16 @@ export function PairDeviceForm({ initialCode = "" }: { initialCode?: string }) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPairedName(null);
+    assign.reset();
     const device = await pair.mutateAsync({ code: normalized, role, name }).catch(() => null);
     if (!device) return;
     setPairedName(device.name);
+    // Only a spot that still exists in the session being viewed.
+    const groupId = role === "display_device" && groups.some((g) => String(g.id) === shows) ? Number(shows) : null;
+    if (groupId !== null) {
+      await assign.mutateAsync({ deviceId: device.id, groupId }).catch(() => null);
+    }
+    setShows("");
     setCode("");
     setName("");
     lastSuggestion.current = "";
@@ -119,9 +136,29 @@ export function PairDeviceForm({ initialCode = "" }: { initialCode?: string }) {
           onChange={(event) => setName(event.target.value)}
         />
       </div>
+      {role === "display_device" && (
+        <div className="field">
+          <label className="field__label" htmlFor="pair-shows">
+            {t("devices.showsLabel")}
+          </label>
+          <select className="input" id="pair-shows" value={shows} onChange={(event) => setShows(event.target.value)}>
+            <option value="">{t("devicesDisplays.nothingYet")}</option>
+            {groups.map((group) => (
+              <option key={group.id} value={group.id}>
+                {groupOptionLabel(t, group, fieldSetNameOf(groups))}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       {pair.isError && (
         <p className="alert alert-danger" role="alert">
           {pairErrorMessage(pair.error)}
+        </p>
+      )}
+      {assign.isError && (
+        <p className="alert alert-danger" role="alert">
+          {apiErrorMessage(assign.error, t("errors.generic"))}
         </p>
       )}
       {pairedName && (
@@ -130,7 +167,7 @@ export function PairDeviceForm({ initialCode = "" }: { initialCode?: string }) {
         </p>
       )}
       <div className="form-actions">
-        <button className="btn btn-primary" type="submit" disabled={!checked || !name.trim() || pair.isPending}>
+        <button className="btn btn-primary" type="submit" disabled={!checked || !name.trim() || pair.isPending || assign.isPending}>
           {t("devices.pair")}
         </button>
       </div>

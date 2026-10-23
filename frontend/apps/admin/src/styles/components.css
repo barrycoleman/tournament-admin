@@ -756,6 +756,16 @@
   }
 }
 
+/* A TV's live connection on the Devices & displays page: green dot when
+   connected, muted otherwise. */
+.connection {
+  color: var(--color-text-secondary);
+}
+
+.connection--on {
+  color: var(--color-success);
+}
+
 /* ---------- Toolbars (buttons above a grid/table) ---------- */
 
 .toolbar {

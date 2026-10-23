@@ -473,9 +473,7 @@
     "awardItem": "{{session}}: {{name}}",
     "switchConfirm": "Switch plugin",
     "clearConfirm": "Clear plugin",
-    "cancel": "Cancel",
-    "serverInfoHeading": "Connect a device on this network",
-    "serverInfoAddressLabel": "Address"
+    "cancel": "Cancel"
   },
   "settingsRoles": {
     "heading": "Role passwords",
@@ -792,21 +790,41 @@
     "needsAdminLink": "Choose one in Event Setup",
     "needsOther": "The organizer hasn't chosen a game plugin yet."
   },
+  "devicesDisplays": {
+    "heading": "Devices & displays",
+    "spotsFor": "Spots for",
+    "noActiveWarning": "TVs show nothing until a session is active.",
+    "noActiveLink": "Choose the active session",
+    "noSessionsLink": "Create a session",
+    "serverInfoHeading": "Connect a device on this network",
+    "serverInfoAddressLabel": "Address",
+    "tvsHeading": "TVs and displays",
+    "tvsEmpty": "No TVs are paired yet.",
+    "columns": {
+      "shows": "Shows",
+      "connection": "Connection"
+    },
+    "connected": "● Connected",
+    "notConnected": "● Not connected",
+    "showsNamed": "What {{name}} shows",
+    "nothingYet": "Nothing yet",
+    "copyHeading": "Copy spots from another session",
+    "spotsHeading": "Spots",
+    "otherHeading": "Scorers, referees and other devices",
+    "otherEmpty": "No other devices are paired yet."
+  },
   "devices": {
-    "heading": "Devices",
-    "noGroup": "Not set up",
     "pairHeading": "Pair a device",
     "pairHelp": "Open the server address followed by /pair on the device, then enter the code it shows.",
     "codeLabel": "Pairing code",
     "roleLabel": "Role",
     "nameLabel": "Device name",
+    "showsLabel": "Shows",
     "pair": "Pair",
     "paired": "Paired {{name}}.",
     "checking": "Checking code…",
     "unknownCode": "That code isn't valid or has expired.",
     "duplicateName": "A device with that name already exists.",
-    "listHeading": "Paired devices",
-    "empty": "No devices are paired yet.",
     "columns": {
       "name": "Name",
       "role": "Role",
@@ -825,7 +843,7 @@
       "referee": "Referee",
       "judge": "Judge",
       "front_desk": "Check-in",
-      "display_device": "Display"
+      "display_device": "TV / display"
     },
     "edit": "Edit",
     "editHeading": "Edit {{name}}",
@@ -916,10 +934,7 @@
     "scoreSaved": "Score saved."
   },
   "displays": {
-    "heading": "Displays",
-    "session": "Session",
     "activeSession": "{{label}} (active)",
-    "copyHeading": "Copy displays",
     "copyHelp": "Copy the screens, pit groups and display places from another session.",
     "copyFrom": "Copy from",
     "chooseSession": "Choose a session…",
@@ -955,6 +970,7 @@
     "offline": "Offline",
     "identify": "Identify",
     "identifyNamed": "Identify {{name}}",
+    "identifyOffline": "This TV isn't connected",
     "putInGroup": "Put {{name}} in a group",
     "moveNamed": "Move {{name}}",
     "chooseGroup": "Choose a group…",

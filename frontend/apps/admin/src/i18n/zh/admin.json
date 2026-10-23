@@ -471,9 +471,7 @@
     "awardItem": "{{session}}：{{name}}",
     "switchConfirm": "切换插件",
     "clearConfirm": "清除插件",
-    "cancel": "取消",
-    "serverInfoHeading": "在此网络上连接设备",
-    "serverInfoAddressLabel": "地址"
+    "cancel": "取消"
   },
   "settingsRoles": {
     "heading": "角色密码",
@@ -789,21 +787,41 @@
     "needsAdminLink": "在赛事设置中选择",
     "needsOther": "组织者尚未选择比赛插件。"
   },
+  "devicesDisplays": {
+    "heading": "设备与显示屏",
+    "spotsFor": "查看场次",
+    "noActiveWarning": "在有场次进行之前，电视不会显示任何内容。",
+    "noActiveLink": "选择进行中的场次",
+    "noSessionsLink": "创建场次",
+    "serverInfoHeading": "在此网络上连接设备",
+    "serverInfoAddressLabel": "地址",
+    "tvsHeading": "电视和显示屏",
+    "tvsEmpty": "尚未配对任何电视。",
+    "columns": {
+      "shows": "显示内容",
+      "connection": "连接"
+    },
+    "connected": "● 已连接",
+    "notConnected": "● 未连接",
+    "showsNamed": "{{name}} 显示的内容",
+    "nothingYet": "暂无",
+    "copyHeading": "从另一个场次复制位置",
+    "spotsHeading": "位置",
+    "otherHeading": "记分员、裁判和其他设备",
+    "otherEmpty": "尚未配对其他设备。"
+  },
   "devices": {
-    "heading": "设备",
-    "noGroup": "未设置",
     "pairHeading": "配对设备",
     "pairHelp": "在设备上打开服务器地址并加上 /pair，然后输入设备显示的代码。",
     "codeLabel": "配对代码",
     "roleLabel": "角色",
     "nameLabel": "设备名称",
+    "showsLabel": "显示内容",
     "pair": "配对",
     "paired": "已配对 {{name}}。",
     "checking": "正在检查代码…",
     "unknownCode": "该代码无效或已过期。",
     "duplicateName": "已有同名设备。",
-    "listHeading": "已配对的设备",
-    "empty": "尚未配对任何设备。",
     "columns": {
       "name": "名称",
       "role": "角色",
@@ -822,7 +840,7 @@
       "referee": "裁判",
       "judge": "评委",
       "front_desk": "签到",
-      "display_device": "显示屏"
+      "display_device": "电视 / 显示屏"
     },
     "edit": "编辑",
     "editHeading": "编辑 {{name}}",
@@ -913,10 +931,7 @@
     "scoreSaved": "分数已保存。"
   },
   "displays": {
-    "heading": "显示屏",
-    "session": "场次",
     "activeSession": "{{label}}（进行中）",
-    "copyHeading": "复制显示屏设置",
     "copyHelp": "从另一个场次复制屏幕、观赛区分组和显示屏位置。",
     "copyFrom": "复制自",
     "chooseSession": "选择场次…",
@@ -952,6 +967,7 @@
     "offline": "离线",
     "identify": "识别",
     "identifyNamed": "识别 {{name}}",
+    "identifyOffline": "这台电视未连接",
     "putInGroup": "将 {{name}} 放入分组",
     "moveNamed": "移动 {{name}}",
     "chooseGroup": "选择分组…",

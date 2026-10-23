@@ -15,7 +15,7 @@ import { SessionSetupRoute } from "./routes/SessionSetupRoute";
 import { EventSetupRoute } from "./routes/EventSetupRoute";
 import { SettingsRolesRoute } from "./routes/SettingsRolesRoute";
 import { BackupsRoute } from "./routes/BackupsRoute";
-import { DevicesRoute } from "./routes/DevicesRoute";
+import { DevicesDisplaysRoute } from "./routes/DevicesDisplaysRoute";
 import { MatchControlRoute } from "./routes/MatchControlRoute";
 import { SkillsControlRoute } from "./routes/SkillsControlRoute";
 import { DivisionsRoute } from "./routes/DivisionsRoute";
@@ -130,7 +130,7 @@ export const routes: RouteObject[] = [
       { path: "events/setup", element: <EventSetupRoute /> },
       { path: "settings/roles", element: <SettingsRolesRoute /> },
       { path: "backups", element: <BackupsRoute /> },
-      { path: "devices", element: <DevicesRoute /> },
+      { path: "devices", element: <DevicesDisplaysRoute /> },
       { path: "match-control", element: <MatchControlRoute /> },
       { path: "skills-control", element: <RequiresGamePlugin><SkillsControlRoute /></RequiresGamePlugin> },
       { path: "displays", loader: () => redirect("/devices") },

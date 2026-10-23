@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import QRCode from "qrcode";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { apiErrorMessage } from "../apiErrorMessage";
 import { InlineEditableText } from "../components/InlineEditableText";
@@ -11,7 +10,7 @@ import { RankingSettingsPanel } from "../rankings/RankingSettingsPanel";
 import { RANKING_SETTINGS_KEY } from "../rankings/useRankingSettings";
 import { SkillsSettingsPanel } from "../skills/SkillsSettingsPanel";
 import { SKILLS_SETTINGS_KEY } from "../skills/useSkillsSettings";
-import type { EventRead, GamePluginChangePreview, PluginSummary, ServerInfo } from "../types";
+import type { EventRead, GamePluginChangePreview, PluginSummary } from "../types";
 
 function InstallPluginField({
   kind,
@@ -253,43 +252,6 @@ function GamePluginSection() {
   );
 }
 
-function ServerInfoPanel() {
-  const { t } = useTranslation();
-  const { data } = useQuery({
-    queryKey: ["server-info"],
-    queryFn: () => apiRequest<ServerInfo>("/api/server-info"),
-  });
-  const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
-
-  useEffect(() => {
-    if (!data) return;
-    for (const address of data.addresses) {
-      const canvas = canvasRefs.current[address];
-      if (canvas) {
-        void QRCode.toCanvas(canvas, `http://${address}:${data.port}`);
-      }
-    }
-  }, [data]);
-
-  if (!data) return null;
-
-  return (
-    <section className="panel">
-      <h2>{t("eventSetup.serverInfoHeading")}</h2>
-      <div className="server-info-grid">
-        {data.addresses.map((address) => (
-          <div className="server-info-card" key={address}>
-            <canvas ref={(node) => { canvasRefs.current[address] = node; }} />
-            <p>
-              {t("eventSetup.serverInfoAddressLabel")}: {address}:{data.port}
-            </p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function EventNamePanel() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -349,7 +311,6 @@ export function EventSetupRoute() {
       />
       <RankingSettingsPanel />
       <SkillsSettingsPanel />
-      <ServerInfoPanel />
     </div>
   );
 }
