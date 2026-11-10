@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cutoverOffer,
+  hasPlayingTimes,
   isSessionToday,
   orderSessions,
   pickLandingSession,
@@ -315,5 +316,16 @@ describe("invalid timezones", () => {
     expect(sessionZone(broken, ZONE)).toBe(ZONE);
     expect(sessionZone(session(2, null, { timezone: null }), "UTC")).toBe("UTC");
     expect(sessionZone(session(3, null, { timezone: "Europe/London" }), "UTC")).toBe("Europe/London");
+  });
+});
+
+describe("hasPlayingTimes", () => {
+  it("is true only when a window has a usable start and end", () => {
+    expect(hasPlayingTimes([])).toBe(false);
+    expect(hasPlayingTimes([{ date: "2026-10-25", start_utc: null, end_utc: null }] as never)).toBe(false);
+    expect(hasPlayingTimes([{ date: "2026-10-25", start_utc: "bad", end_utc: "bad" }] as never)).toBe(false);
+    expect(
+      hasPlayingTimes([{ date: "2026-10-25", start_utc: "2026-10-25T09:00:00Z", end_utc: "2026-10-25T17:00:00Z" }] as never)
+    ).toBe(true);
   });
 });

@@ -1179,6 +1179,8 @@
   "orientation": {
     "banner": {
       "message": "<strong>{{label}}</strong> is scheduled to start at {{time}}. Make it the active session? The TVs and Match Control will switch to it.",
+      "messageToday": "<strong>{{label}}</strong> is scheduled for today. Make it the active session? The TVs and Match Control will switch to it.",
+      "messageDate": "<strong>{{label}}</strong> is scheduled for {{date}}. Make it the active session? The TVs and Match Control will switch to it.",
       "makeActiveAction": "Make it active",
       "notYetAction": "Not yet"
     },

@@ -1176,6 +1176,8 @@
   "orientation": {
     "banner": {
       "message": "<strong>{{label}}</strong>计划于{{time}}开始。要将它设为当前场次吗？电视屏幕和比赛控制会切换到该场次。",
+      "messageToday": "<strong>{{label}}</strong>安排在今天进行。要将它设为当前场次吗？电视屏幕和比赛控制会切换到该场次。",
+      "messageDate": "<strong>{{label}}</strong>安排在{{date}}进行。要将它设为当前场次吗？电视屏幕和比赛控制会切换到该场次。",
       "makeActiveAction": "设为当前场次",
       "notYetAction": "暂不"
     },

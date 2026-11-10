@@ -20,7 +20,7 @@ const SUNDAY_WINDOW = { date: "2026-10-25", start_utc: "2026-10-25T09:00:00Z", e
 const CUTOVER = new Date("2026-10-25T01:00:00Z").getTime();
 
 // Each test offers a different session id, since a snooze lives for the page.
-function stub(nextId: number, nextTimezone = "UTC") {
+function stub(nextId: number, nextTimezone = "UTC", nextWindows: unknown[] = [SUNDAY_WINDOW]) {
   vi.mocked(apiRequest).mockImplementation(async (path: string) => {
     const routes: Record<string, unknown> = {
       "/api/event": { id: 1, name: "E", active_session_id: 1, game_plugin_name: "demo", game_plugin_locked: false },
@@ -30,7 +30,7 @@ function stub(nextId: number, nextTimezone = "UTC") {
         { id: 500, label: "Undated", session_date: null, timezone: null },
       ],
       "/api/sessions/1/playing-windows": [SATURDAY_WINDOW],
-      [`/api/sessions/${nextId}/playing-windows`]: [SUNDAY_WINDOW],
+      [`/api/sessions/${nextId}/playing-windows`]: nextWindows,
       "/api/sessions/500/playing-windows": [],
       "/api/matches?session_id=1": [],
       "/api/displays?session_id=1": { session_id: 1, groups: [], unassigned: [], has_setup: false },
@@ -161,5 +161,27 @@ describe("ActiveSessionBanner", () => {
     vi.setSystemTime(CUTOVER);
     renderBanner();
     expect(await screen.findByRole("status")).toHaveTextContent("Sunday is scheduled to start at");
+  });
+
+  it("names no time, only today, for a session without playing times", async () => {
+    // Saturday ends 17:00 UTC on the 24th and Sunday spans its whole day, so
+    // the cutover is 20:30 UTC on the 24th; at 00:30 on the 25th it's today.
+    stub(9, "UTC", []);
+    vi.setSystemTime(new Date("2026-10-25T00:30:00Z"));
+    renderBanner();
+    const banner = await screen.findByRole("status");
+    expect(banner).toHaveTextContent("Sunday is scheduled for today.");
+    expect(banner).toHaveTextContent("Make it the active session?");
+    expect(banner).not.toHaveTextContent("00:00");
+    expect(banner).not.toHaveTextContent("scheduled to start");
+  });
+
+  it("names the date, and no time, for a session without playing times on a later day", async () => {
+    stub(10, "UTC", []);
+    vi.setSystemTime(new Date("2026-10-24T21:00:00Z"));
+    renderBanner();
+    const banner = await screen.findByRole("status");
+    expect(banner).toHaveTextContent("Sunday is scheduled for Sun, Oct 25.");
+    expect(banner).not.toHaveTextContent("00:00");
   });
 });

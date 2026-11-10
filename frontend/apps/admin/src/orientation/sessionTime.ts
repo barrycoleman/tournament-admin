@@ -68,6 +68,13 @@ export function dateInZone(now: Date, zone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(now);
 }
 
+/** Whether any of the windows has a usable start and end time. */
+export function hasPlayingTimes(windows: PlayingWindowRead[]): boolean {
+  return windows.some(
+    (w) => !!w.start_utc && !!w.end_utc && !Number.isNaN(Date.parse(w.start_utc)) && !Number.isNaN(Date.parse(w.end_utc)),
+  );
+}
+
 export function sessionSpan(
   session: SessionRead,
   windows: PlayingWindowRead[],

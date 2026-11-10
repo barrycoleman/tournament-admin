@@ -2,12 +2,23 @@ import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { formatMatchTime } from "../matchTime";
 import { useMakeActive } from "./MakeActiveDialog";
-import { cutoverOffer, dateInZone, sessionZone } from "./sessionTime";
+import { cutoverOffer, dateInZone, hasPlayingTimes, sessionZone } from "./sessionTime";
 import { isBannerSnoozed, snoozeBanner } from "./snooze";
 import { useNow } from "./useNow";
 import { browserZone, useEvent, useSessions, useSessionWindows } from "./useOrientationData";
 
 const TICK_MS = 30_000;
+
+/** A YYYY-MM-DD as a short weekday and date, e.g. "Sun, Oct 25". */
+function formatDay(date: string, locale: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: "UTC",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(Date.UTC(y, m - 1, d)));
+}
 
 /** Offers to make the next session active once its cutover time has passed. */
 export function ActiveSessionBanner() {
@@ -37,6 +48,14 @@ export function ActiveSessionBanner() {
   const zone = session ? sessionZone(session, fallbackZone) : fallbackZone;
   // Name the day too when the session doesn't start today in its own zone.
   const startsToday = offer ? dateInZone(offer.startsAt, zone) === dateInZone(now, zone) : true;
+  // Without playing times the span is the whole day, so its "start" is a misleading 00:00.
+  const timed = session ? hasPlayingTimes(windows.windowsById[session.id] ?? []) : true;
+  const messageKey = timed
+    ? "orientation.banner.message"
+    : startsToday
+      ? "orientation.banner.messageToday"
+      : "orientation.banner.messageDate";
+  const day = offer ? dateInZone(offer.startsAt, zone) : "";
 
   return (
     <>
@@ -45,10 +64,11 @@ export function ActiveSessionBanner() {
           <p>
             <Trans
               t={t}
-              i18nKey="orientation.banner.message"
+              i18nKey={messageKey}
               values={{
                 label: session.label,
-                time: formatMatchTime(offer.startsAt.toISOString(), zone, !startsToday, i18n.language),
+                time: timed ? formatMatchTime(offer.startsAt.toISOString(), zone, !startsToday, i18n.language) : "",
+                date: timed ? "" : formatDay(day, i18n.language),
               }}
               components={{ strong: <strong /> }}
             />
