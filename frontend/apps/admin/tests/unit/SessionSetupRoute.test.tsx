@@ -98,6 +98,18 @@ describe("SessionSetupRoute", () => {
     expect(await screen.findByText("Saved.")).toBeInTheDocument();
   });
 
+  it("renders without a duplicate-key warning", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      renderSetup(SESSION);
+      await screen.findByLabelText("Session name");
+      const duplicateKey = error.mock.calls.filter((c) => c.some((a) => String(a).includes("same key")));
+      expect(duplicateKey).toEqual([]);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
   it("renders the fields panel under #fields", async () => {
     const { container } = renderSetup(SESSION);
     await screen.findByLabelText("Session name");
