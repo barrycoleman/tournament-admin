@@ -68,6 +68,7 @@
     "switchAction": "Switch Tournament"
   },
   "teams": {
+    "emptyHint": "No teams yet. Add a row, then type or paste rows from a spreadsheet into it, or upload a CSV.",
     "heading": "Teams",
     "gridLabel": "Team roster",
     "columnNumber": "Number",

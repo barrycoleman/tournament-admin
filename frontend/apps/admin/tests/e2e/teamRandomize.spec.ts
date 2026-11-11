@@ -183,6 +183,15 @@ test.describe.serial("randomize unassigned teams", () => {
       }
       expect(await width(cells.nth(2))).toBeLessThan(await width(cells.nth(1)));
 
+      // Team numbers stay in a narrow column; Name takes the room left over.
+      const numberWidth = await width(cells.nth(0));
+      expect(numberWidth).toBeGreaterThanOrEqual(90);
+      expect(numberWidth).toBeLessThanOrEqual(110);
+      const nameWidth = await width(cells.nth(1));
+      for (const index of [0, 2, 3, 4, 5, 6, 7]) {
+        expect(await width(cells.nth(index))).toBeLessThan(nameWidth);
+      }
+
       // Everything fits, so the grid doesn't scroll sideways.
       const grid = page.getByRole("grid");
       expect(await grid.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);

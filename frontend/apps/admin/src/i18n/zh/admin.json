@@ -68,6 +68,7 @@
     "switchAction": "切换赛事"
   },
   "teams": {
+    "emptyHint": "还没有队伍。请添加一行，然后输入或从电子表格粘贴多行，或上传 CSV 文件。",
     "heading": "队伍",
     "gridLabel": "队伍名单",
     "columnNumber": "编号",

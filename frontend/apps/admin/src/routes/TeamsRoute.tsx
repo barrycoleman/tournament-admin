@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import {
   DataGrid,
   renderTextEditor,
+  type CellKeyboardEvent,
+  type CellKeyDownArgs,
   type CellPasteArgs,
   type Column,
   type DataGridHandle,
@@ -46,6 +48,10 @@ const RANDOM_DIVISION_SENTINEL = "__random__";
  * sub-pixel never lands a fraction short and draws the ellipsis anyway.
  */
 const CELL_PADDING = 18;
+
+/** The Number column's width range: team numbers are short, so it stays narrow. */
+const NUMBER_COLUMN_MIN = 90;
+const NUMBER_COLUMN_MAX = 110;
 
 type TeamFieldKeyWithText =
   | "number"
@@ -337,8 +343,10 @@ export function TeamsRoute() {
   // How narrow each column may get and how wide its content wants to be,
   // from every row rather than just the filtered ones on screen, so a
   // column keeps its width as the filter changes. Team numbers identify a
-  // row and stay whole; division names keep enough to tell them apart;
-  // everything else keeps its header readable and cuts long values short.
+  // row and stay whole, in a narrow fixed column (wider only for a number
+  // that wouldn't fit); Name takes whatever room is left; division names
+  // keep enough to tell them apart; everything else keeps its header
+  // readable and cuts long values short.
   const columnSizing = useMemo(() => {
     const measure = measureGridText();
     const textSizing = (key: TeamFieldKeyWithText, keep?: SizeColumnOptions["keep"]) =>
@@ -349,9 +357,12 @@ export function TeamsRoute() {
         keep,
         measure,
       });
+    const numberWidth = textSizing("number", "content").ideal;
     const sizing: Record<string, ColumnSizing> = {
-      number: textSizing("number", "content"),
-      name: textSizing("name"),
+      number: fixedColumn(
+        numberWidth > NUMBER_COLUMN_MAX ? numberWidth : Math.max(NUMBER_COLUMN_MIN, numberWidth)
+      ),
+      name: { ...textSizing("name"), fill: true },
       robot_name: textSizing("robot_name"),
       organization: textSizing("organization"),
       city: textSizing("city"),
@@ -482,6 +493,16 @@ export function TeamsRoute() {
     pendingFocusRef.current = false;
     gridRef.current?.setActivePosition({ idx: 0, rowIdx: visibleRows.length - 1 }, { shouldFocus: true });
   }, [visibleRows]);
+
+  // Enter while editing the last row commits the edit, then starts the next
+  // team's row, so a roster can be typed without reaching for "Add row".
+  function handleCellKeyDown(args: CellKeyDownArgs<TeamGridRow>, event: CellKeyboardEvent) {
+    if (args.mode !== "EDIT" || event.key !== "Enter") return;
+    if (args.rowIdx !== visibleRows.length - 1) return;
+    event.preventGridDefault();
+    args.onClose(true, false);
+    handleAddRow();
+  }
 
   function handleAddRow() {
     const blank = makeBlankTeamRow();
@@ -764,6 +785,7 @@ export function TeamsRoute() {
       )}
       {saveSummary && saveSummary.failed === 0 && saveSummary.saved > 0 && <TeamsNextStep />}
 
+      {teams && allRows.length === 0 && <p className="field__hint">{t("teams.emptyHint")}</p>}
       <DataGrid
         ref={gridRef}
         aria-label={t("teams.gridLabel")}
@@ -772,6 +794,7 @@ export function TeamsRoute() {
         rowKeyGetter={(row) => row.clientId}
         onRowsChange={handleRowsChange}
         onCellPaste={handleCellPaste}
+        onCellKeyDown={handleCellKeyDown}
       />
 
       {deleteCandidate && (

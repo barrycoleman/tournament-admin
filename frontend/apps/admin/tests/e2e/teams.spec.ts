@@ -60,4 +60,31 @@ test.describe.serial("team roster grid", () => {
     await expect(page.getByRole("status")).toHaveText("0 saved, 1 need fixing");
     await expect(page.getByText("number and name are required")).toBeVisible();
   });
+
+  test("Enter in the last row starts the next team's row", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByLabel("Role").fill("admin");
+    await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
+    await page.getByRole("button", { name: "Log in" }).click();
+    await expect(page).toHaveURL(ADMIN_LANDING);
+    await page.goto("/teams");
+    await expect(page.getByRole("columnheader", { name: "Number" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Add row" }).click();
+    const rowCount = await page.getByRole("row").count();
+    const added = page.getByRole("row").last();
+    await added.getByRole("gridcell").nth(1).dblclick();
+    await page.getByRole("textbox").fill("Enter Key Team");
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByRole("gridcell", { name: "Enter Key Team", exact: true })).toBeVisible();
+    await expect(page.getByRole("row")).toHaveCount(rowCount + 1);
+    const next = page.getByRole("row").last();
+    await expect(next.getByRole("gridcell").nth(0)).toBeFocused();
+
+    // Typing goes straight into the new row's Number cell.
+    await page.keyboard.type("9100");
+    await page.keyboard.press("Tab");
+    await expect(next.getByRole("gridcell").nth(0)).toHaveText("9100");
+  });
 });

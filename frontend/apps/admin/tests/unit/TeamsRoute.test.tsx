@@ -407,6 +407,73 @@ describe("TeamsRoute", () => {
     expect(await screen.findByText("number and name are required")).toBeInTheDocument();
   });
 
+  it("shows a hint when there are no teams yet, and drops it once a row exists", async () => {
+    stubReads(DIVISIONS, []);
+    renderRoute();
+    expect(
+      await screen.findByText("No teams yet. Add a row, then type or paste rows from a spreadsheet into it, or upload a CSV.")
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    expect(screen.queryByText(/No teams yet/)).not.toBeInTheDocument();
+  });
+
+  it("shows no empty hint when teams exist", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
+    renderRoute();
+    await screen.findByText("Alpha");
+    expect(screen.queryByText(/No teams yet/)).not.toBeInTheDocument();
+  });
+
+  it("commits Enter in the last row and starts a new row at its Number cell", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1), serverTeam(2, "202", "Bravo", 2)]);
+    renderRoute();
+
+    fireEvent.doubleClick(await screen.findByText("Bravo"));
+    const editor = await screen.findByRole("textbox");
+    fireEvent.change(editor, { target: { value: "Bravo Two" } });
+    fireEvent.keyDown(editor, { key: "Enter" });
+
+    expect(await screen.findByText("Bravo Two")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByRole("row").slice(1)).toHaveLength(3));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(within(screen.getAllByRole("row")[3]).getAllByRole("gridcell")[0])
+    );
+    expect(screen.getAllByText("unsaved")).toHaveLength(2);
+  });
+
+  it("keeps Enter in an earlier row to committing the edit, with no new row", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1), serverTeam(2, "202", "Bravo", 2)]);
+    renderRoute();
+
+    fireEvent.doubleClick(await screen.findByText("Alpha"));
+    const editor = await screen.findByRole("textbox");
+    fireEvent.change(editor, { target: { value: "Alpha Two" } });
+    fireEvent.keyDown(editor, { key: "Enter" });
+
+    expect(await screen.findByText("Alpha Two")).toBeInTheDocument();
+    expect(screen.getAllByRole("row").slice(1)).toHaveLength(2);
+  });
+
+  it("keeps the Number column narrow and gives the slack to Name", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1), serverTeam(2, "202", "Bravo", 2)]);
+    renderRoute();
+    await screen.findByText("Alpha");
+    const grid = screen.getByRole("grid");
+    const widths = await waitFor(() => {
+      const template = grid.style.gridTemplateColumns;
+      const parsed = template.split(" ").map((w) => parseFloat(w));
+      expect(parsed.every((w) => w > 0)).toBe(true);
+      return parsed;
+    });
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    const number = widths[headers.indexOf("Number")];
+    const name = widths[headers.indexOf("Name")];
+    expect(number).toBeGreaterThanOrEqual(90);
+    expect(number).toBeLessThanOrEqual(110);
+    expect(name).toBe(Math.max(...widths));
+    expect(name).toBeGreaterThan(widths.reduce((a, b) => a + b, 0) / 3);
+  });
+
   it("moves focus into the first cell of a newly added row", async () => {
     stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
     renderRoute();

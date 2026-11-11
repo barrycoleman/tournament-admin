@@ -22,6 +22,11 @@ export interface ColumnSizing {
   ideal: number;
   /** Whether any row has a value here; only these columns grow. */
   hasData: boolean;
+  /**
+   * Takes all the room left once every column fits its content, data or
+   * not, so the other columns stop at their ideal width.
+   */
+  fill?: boolean;
 }
 
 export const ELLIPSIS = "…";
@@ -99,7 +104,8 @@ export function fixedColumn(width: number): ColumnSizing {
  * Shares `available` pixels across the columns. Every column gets its
  * minimum; if that already overflows, the grid scrolls. Otherwise columns
  * with data grow toward their ideal, each by the same fraction of what it
- * still lacks. Once they all fit, the rest is split equally between them.
+ * still lacks. Once they all fit, the rest goes to the `fill` columns if
+ * there are any, and is otherwise split equally between the data columns.
  * Widths are whole pixels and never add up to more than `available`, so
  * the grid only scrolls sideways when the minimums alone don't fit.
  */
@@ -111,12 +117,12 @@ export function allocateColumnWidths(columns: ColumnSizing[], available: number)
   const growing = columns
     .map((column, index) => ({ column, index }))
     .filter(({ column }) => column.hasData);
-  if (growing.length === 0) return widths;
+  if (growing.length === 0 && !columns.some((column) => column.fill)) return widths;
 
   const shortfall = (column: ColumnSizing) => Math.max(0, column.ideal - column.min);
   const totalShortfall = sum(growing.map(({ column }) => shortfall(column)));
 
-  if (leftover < totalShortfall) {
+  if (leftover < totalShortfall && totalShortfall > 0) {
     const fraction = leftover / totalShortfall;
     for (const { column, index } of growing) {
       widths[index] = column.min + Math.floor(shortfall(column) * fraction);
@@ -126,8 +132,10 @@ export function allocateColumnWidths(columns: ColumnSizing[], available: number)
 
   for (const { column, index } of growing) widths[index] = column.min + shortfall(column);
   leftover -= totalShortfall;
-  const share = Math.floor(leftover / growing.length);
-  for (const { index } of growing) widths[index] += share;
+  const fillers = columns.map((column, index) => ({ column, index })).filter(({ column }) => column.fill);
+  const takers = fillers.length > 0 ? fillers : growing;
+  const share = Math.floor(leftover / takers.length);
+  for (const { index } of takers) widths[index] += share;
   return widths;
 }
 
