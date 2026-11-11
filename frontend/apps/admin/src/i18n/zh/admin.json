@@ -318,6 +318,8 @@
     "setActiveAction": "设为当前场次",
     "setActiveHint": "前台签到终端和现场显示屏会跟随当前场次。",
     "checkin": {
+      "progress": "已签到 {{checked}} / {{total}} 支队伍",
+      "nextPlanMatches": "安排比赛",
       "columnNumber": "编号",
       "columnName": "名称",
       "columnDivision": "分组",

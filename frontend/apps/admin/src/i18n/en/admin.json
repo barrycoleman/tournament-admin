@@ -320,6 +320,8 @@
     "setActiveAction": "Set as active session",
     "setActiveHint": "The front-desk kiosk and live displays follow the active session.",
     "checkin": {
+      "progress": "{{checked}} of {{total}} checked in",
+      "nextPlanMatches": "plan matches",
       "columnNumber": "Number",
       "columnName": "Name",
       "columnDivision": "Division",

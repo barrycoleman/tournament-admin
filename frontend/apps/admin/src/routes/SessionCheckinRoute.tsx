@@ -5,7 +5,10 @@ import { useOutletContext } from "react-router-dom";
 import { DataGrid, type Column } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
-import type { Division, SessionRead } from "../types";
+import { NextStep } from "../orientation/NextStep";
+import { useEvent } from "../orientation/useOrientationData";
+import { countCheckedInTeams } from "../schedule/readiness";
+import type { Division, MatchFormat, SessionRead } from "../types";
 
 interface TeamApiRow {
   id: number;
@@ -47,6 +50,13 @@ export function SessionCheckinRoute() {
     queryKey: ["participants", session.id],
     queryFn: () =>
       apiRequest<ParticipationApiRow[]>(`/api/sessions/${session.id}/participants`),
+  });
+
+  const event = useEvent();
+  const { data: matchFormat } = useQuery({
+    queryKey: ["matchFormat"],
+    queryFn: () => apiRequest<MatchFormat>("/api/event/match-format"),
+    enabled: Boolean(event.data?.game_plugin_name),
   });
 
   const divisionNameById = useMemo(() => {
@@ -134,6 +144,20 @@ export function SessionCheckinRoute() {
 
   const showDivisionColumn = (divisions?.length ?? 0) > 1;
 
+  const checkedCount = allRows.filter((row) => row.checkedIn).length;
+  // The same rule as the readiness check: every division can fill one match.
+  const teamsNeeded = matchFormat ? matchFormat.teams_per_alliance * matchFormat.alliance_count : 0;
+  const divisionIds: (number | null)[] =
+    divisions && divisions.length > 1 ? divisions.map((division) => division.id) : [null];
+  const enoughCheckedIn =
+    teams !== undefined &&
+    participants !== undefined &&
+    divisions !== undefined &&
+    teamsNeeded > 0 &&
+    divisionIds.every(
+      (id) => countCheckedInTeams(teams, participants, id) >= teamsNeeded
+    );
+
   const columns: Column<CheckinGridRow>[] = useMemo(() => {
     const base: Column<CheckinGridRow>[] = [
       { key: "number", name: t("sessions.checkin.columnNumber") },
@@ -189,6 +213,14 @@ export function SessionCheckinRoute() {
         <p className="alert alert-danger" role="alert">
           {toggleMutation.error instanceof ApiError ? toggleMutation.error.detail : t("errors.generic")}
         </p>
+      )}
+      {teams && participants && (
+        <p>
+          {t("sessions.checkin.progress", { checked: checkedCount, total: allRows.length })}
+        </p>
+      )}
+      {enoughCheckedIn && (
+        <NextStep to={`/sessions/${session.id}/schedule`}>{t("sessions.checkin.nextPlanMatches")}</NextStep>
       )}
       <DataGrid columns={columns} rows={sortedRows} rowKeyGetter={(row) => row.id} />
     </div>

@@ -160,8 +160,10 @@ test.describe.serial("admin orientation", () => {
     for (const name of ["Alpha", "Bravo", "Charlie", "Delta"]) {
       await expect(page.getByLabel(`Toggle check-in for ${name}`)).toBeChecked();
     }
+    await expect(page.getByText("4 of 4 checked in")).toBeVisible();
 
-    await page.getByRole("link", { name: "Schedule", exact: true }).click();
+    await page.getByRole("link", { name: "plan matches" }).click();
+    await expect(page).toHaveURL(new RegExp(`/sessions/${saturday}/schedule$`));
     await page.getByRole("button", { name: "Generate" }).click();
     await expect(page.getByText(/^\d+ matches scheduled\./)).toBeVisible();
 
