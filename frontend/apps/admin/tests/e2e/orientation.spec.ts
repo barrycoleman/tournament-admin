@@ -111,7 +111,10 @@ test.describe.serial("admin orientation", () => {
 
   test("a new session with a prefilled timezone lands on its Setup tab", async () => {
     await page.getByLabel("Session name").fill("Saturday");
-    await page.getByLabel("Date (optional)").fill("2026-11-07");
+    // The date starts as today in the prefilled timezone.
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: ZONE }).format(new Date());
+    await expect(page.getByLabel("Date", { exact: true })).toHaveValue(today);
+    await page.getByLabel("Date", { exact: true }).fill("2026-11-07");
     await expect(page.getByLabel("Timezone")).not.toHaveValue("");
     await expect(page.getByLabel("Timezone")).toHaveValue(ZONE);
     await page.getByRole("button", { name: "Add session", exact: true }).click();

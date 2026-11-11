@@ -17,6 +17,7 @@ export function SessionFormFields({
   autoFocus = false,
   timezoneHint,
   extraZone,
+  dateLabel,
 }: {
   values: SessionFormValues;
   onChange: (values: SessionFormValues) => void;
@@ -26,6 +27,8 @@ export function SessionFormFields({
   timezoneHint?: string;
   /** A zone to keep in the list even if the browser omits it; keep it stable while editing. */
   extraZone?: string;
+  /** Overrides the date field's label (editing keeps "Date (optional)"). */
+  dateLabel?: string;
 }) {
   const { t } = useTranslation();
   const timezones = listTimezones(extraZone || undefined);
@@ -46,7 +49,7 @@ export function SessionFormFields({
       </div>
       <div className="field">
         <label className="field__label" htmlFor="session-date">
-          {t("sessions.dateLabel")}
+          {dateLabel ?? t("sessions.dateLabel")}
         </label>
         <input
           className="input"

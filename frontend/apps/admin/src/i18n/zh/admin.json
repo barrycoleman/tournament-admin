@@ -1167,6 +1167,7 @@
     }
   },
   "sessionNew": {
+    "dateLabel": "日期",
     "heading": "新建场次"
   },
   "teamsLayout": {

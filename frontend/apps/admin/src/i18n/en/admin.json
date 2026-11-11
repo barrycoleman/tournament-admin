@@ -1170,6 +1170,7 @@
     }
   },
   "sessionNew": {
+    "dateLabel": "Date",
     "heading": "New session"
   },
   "teamsLayout": {

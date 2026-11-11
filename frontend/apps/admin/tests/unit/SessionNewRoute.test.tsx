@@ -15,11 +15,16 @@ vi.mock("@tournament-admin/shared", async (importOriginal) => {
 import { apiRequest } from "@tournament-admin/shared";
 const mock = vi.mocked(apiRequest);
 
+const RealDateTimeFormat = Intl.DateTimeFormat;
+
 beforeEach(() => {
   mock.mockReset();
-  vi.spyOn(Intl, "DateTimeFormat").mockImplementation(
-    () => ({ resolvedOptions: () => ({ timeZone: "Asia/Tokyo" }) }) as never
-  );
+  // Only the browser-zone lookup (no arguments) is faked; formatting a date
+  // in a named zone still uses the real implementation.
+  vi.spyOn(Intl, "DateTimeFormat").mockImplementation(((...args: ConstructorParameters<typeof Intl.DateTimeFormat>) =>
+    args.length === 0
+      ? { resolvedOptions: () => ({ timeZone: "Asia/Tokyo" }) }
+      : new RealDateTimeFormat(...args)) as never);
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -66,5 +71,29 @@ describe("SessionNewRoute", () => {
 
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/sessions/7/setup"));
     expect(body).toEqual({ label: "Sat", session_date: "2026-11-01", timezone: "Asia/Tokyo" });
+  });
+
+  it("defaults the date to today in the selected timezone and labels it without (optional)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 20:00 UTC on Nov 9 is already Nov 10 in Tokyo, but still Nov 9 in Los Angeles.
+    vi.setSystemTime(new Date("2026-11-09T20:00:00Z"));
+    try {
+      renderRoute();
+      const date = screen.getByLabelText("Date");
+      expect(date).toHaveValue("2026-11-10");
+      expect(screen.queryByText(/optional/)).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText("Timezone"), { target: { value: "America/Los_Angeles" } });
+      expect(date).toHaveValue("2026-11-09");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a date the admin chose when the timezone changes", () => {
+    renderRoute();
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-12-05" } });
+    fireEvent.change(screen.getByLabelText("Timezone"), { target: { value: "America/Los_Angeles" } });
+    expect(screen.getByLabelText("Date")).toHaveValue("2026-12-05");
   });
 });
