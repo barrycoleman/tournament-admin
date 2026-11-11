@@ -452,6 +452,8 @@
   padding: var(--space-2) var(--space-4);
   min-height: 40px;
   line-height: 1;
+  /* A link styled as a button (a router Link) is still a button: no underline. */
+  text-decoration: none;
   transition: background-color 150ms ease-out, border-color 150ms ease-out,
     color 150ms ease-out;
 }
@@ -560,6 +562,18 @@
 
 .next-step__label {
   font-weight: 700;
+}
+
+/* The step itself reads the same whether it is a link or a button: the
+   line's own size and color, underlined. A bare <button> wouldn't inherit
+   the font, which made the button form render smaller. */
+.next-step a,
+.next-step .btn-link {
+  font: inherit;
+  color: var(--color-text);
+  padding: 0;
+  text-decoration: underline;
+  vertical-align: baseline;
 }
 
 /* ---------- Alerts / status ---------- */
@@ -1408,8 +1422,29 @@
   align-items: start;
 }
 
+/* The check-in progress bar: the amber accent on a sunken track, flat. */
 .session-today progress {
   width: 100%;
+  height: 0.75rem;
+  appearance: none;
+  -webkit-appearance: none;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-sunken);
+  color: var(--color-accent);
+  overflow: hidden;
+}
+
+.session-today progress::-webkit-progress-bar {
+  background: var(--color-bg-sunken);
+}
+
+.session-today progress::-webkit-progress-value {
+  background: var(--color-accent);
+}
+
+.session-today progress::-moz-progress-bar {
+  background: var(--color-accent);
 }
 
 .today-checklist {

@@ -60,6 +60,9 @@ test.describe.serial("admin orientation", () => {
     await expect(page.getByRole("img", { name: "Not done", exact: true })).toHaveCount(3);
     await expect(page.getByRole("img", { name: "Done", exact: true })).toHaveCount(0);
     await expect(page.getByText("No active session")).toBeVisible();
+    // The checklist's first item already says to choose the game; the global banner doesn't repeat it.
+    await expect(page.getByRole("link", { name: "Choose the game" })).toBeVisible();
+    await expect(page.getByText(/Choose a game plugin to set up/)).toHaveCount(0);
   });
 
   test("choose the game, then follow the next step to the teams", async () => {
@@ -167,8 +170,42 @@ test.describe.serial("admin orientation", () => {
     await page.getByRole("button", { name: "Generate" }).click();
     await expect(page.getByText(/^\d+ matches scheduled\./)).toBeVisible();
 
+    // A Next line reads the same whether its step is a button or a link.
+    const nextButton = page.getByRole("button", { name: "make this session active" });
+    await expect(nextButton).toBeVisible();
+    const fontOf = (el: Element) => {
+      const style = getComputedStyle(el);
+      return [style.fontSize, style.fontWeight, style.fontFamily, style.textDecorationLine].join("|");
+    };
+    const nextLine = page.locator(".next-step").filter({ has: nextButton });
+    expect(await nextButton.evaluate(fontOf)).toBe(await nextLine.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return [style.fontSize, "400", style.fontFamily, "underline"].join("|");
+    }));
+
     await page.getByRole("link", { name: "Today", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/sessions/${saturday}/today$`));
+
+    // The check-in bar is the amber accent on the sunken track, not the browser's blue.
+    const colors = await page.locator(".session-today progress").evaluate((el) => {
+      const root = getComputedStyle(document.documentElement);
+      const probe = document.createElement("div");
+      document.body.append(probe);
+      const resolve = (token: string) => {
+        probe.style.backgroundColor = root.getPropertyValue(token);
+        return getComputedStyle(probe).backgroundColor;
+      };
+      const result = {
+        value: getComputedStyle(el, "::-webkit-progress-value").backgroundColor,
+        track: getComputedStyle(el, "::-webkit-progress-bar").backgroundColor,
+        accent: resolve("--color-accent"),
+        sunken: resolve("--color-bg-sunken"),
+      };
+      probe.remove();
+      return result;
+    });
+    expect(colors.value).toBe(colors.accent);
+    expect(colors.track).toBe(colors.sunken);
     const matches = page.getByRole("region", { name: "Matches" });
     await matches.getByRole("button", { name: "Make active", exact: true }).click();
     const dialog = page.getByRole("alertdialog", { name: "Make Saturday active?" });
@@ -177,6 +214,11 @@ test.describe.serial("admin orientation", () => {
     await expect(page.getByRole("link", { name: "Active: Saturday", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Saturday (active)" })).toBeVisible();
     await expect(page.getByRole("navigation").getByRole("link", { name: "Match Control", exact: true })).toBeVisible();
+
+    // A link drawn as a button is never underlined.
+    const goTo = page.getByRole("link", { name: "Go to Match Control" });
+    await expect(goTo).toBeVisible();
+    expect(await goTo.evaluate((el) => getComputedStyle(el).textDecorationLine)).toBe("none");
   });
 
   test("the field set name box keeps the cursor after each add", async () => {
