@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider, Outlet } from "react-router-dom";
@@ -30,9 +30,8 @@ function TestLayout() {
   return <Outlet context={{ session: SESSION }} />;
 }
 
-function renderRoute() {
+function renderRoute(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   const i18n = initI18n({ en: { translation: enAdmin } });
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter([
     {
       path: "/",
@@ -201,11 +200,21 @@ describe("SessionCheckinRoute — progress and next step", () => {
     vi.mocked(apiRequest).mockReset();
   });
 
+  /** Renders, then waits until the match format has loaded and rendered, so an absent link is really absent. */
+  async function renderSettled() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderRoute(queryClient);
+    await waitFor(() => expect(queryClient.getQueryData(["matchFormat"])).toBeDefined());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
   it("shows how many teams are checked in", async () => {
     stub([team(1, null), team(2, null), team(3, null)], [1, 3]);
-    renderRoute();
+    await renderSettled();
     expect(await screen.findByText("2 of 3 checked in")).toBeInTheDocument();
-    expect(screen.queryByText("plan matches")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "plan matches" })).not.toBeInTheDocument();
   });
 
   it("offers to plan matches once enough teams fill a match", async () => {
@@ -224,9 +233,18 @@ describe("SessionCheckinRoute — progress and next step", () => {
     ];
     const teams = [1, 2, 3, 4].map((id) => team(id, 1)).concat([5, 6, 7].map((id) => team(id, 2)));
     stub(teams, [1, 2, 3, 4, 5, 6, 7], divisions);
-    renderRoute();
+    await renderSettled();
     expect(await screen.findByText("7 of 7 checked in")).toBeInTheDocument();
-    await waitFor(() => expect(vi.mocked(apiRequest).mock.calls.some((c) => c[0] === "/api/event/match-format")).toBe(true));
     expect(screen.queryByRole("link", { name: "plan matches" })).not.toBeInTheDocument();
+  });
+
+  it("ignores a division with no teams at all", async () => {
+    const divisions = [
+      { id: 1, event_id: 1, name: "Red", target_team_count: null },
+      { id: 2, event_id: 1, name: "Empty", target_team_count: null },
+    ];
+    stub([1, 2, 3, 4].map((id) => team(id, 1)), [1, 2, 3, 4], divisions);
+    renderRoute();
+    expect(await screen.findByRole("link", { name: "plan matches" })).toHaveAttribute("href", "/sessions/1/schedule");
   });
 });

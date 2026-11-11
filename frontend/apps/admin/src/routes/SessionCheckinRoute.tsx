@@ -145,15 +145,21 @@ export function SessionCheckinRoute() {
   const showDivisionColumn = (divisions?.length ?? 0) > 1;
 
   const checkedCount = allRows.filter((row) => row.checkedIn).length;
-  // The same rule as the readiness check: every division can fill one match.
+  // The readiness rule (every division can fill one match), except that a
+  // division with no teams at all can never fill one, so it doesn't count.
   const teamsNeeded = matchFormat ? matchFormat.teams_per_alliance * matchFormat.alliance_count : 0;
   const divisionIds: (number | null)[] =
-    divisions && divisions.length > 1 ? divisions.map((division) => division.id) : [null];
+    divisions && divisions.length > 1
+      ? divisions
+          .map((division) => division.id)
+          .filter((id) => (teams ?? []).some((team) => team.division_id === id))
+      : [null];
   const enoughCheckedIn =
     teams !== undefined &&
     participants !== undefined &&
     divisions !== undefined &&
     teamsNeeded > 0 &&
+    divisionIds.length > 0 &&
     divisionIds.every(
       (id) => countCheckedInTeams(teams, participants, id) >= teamsNeeded
     );

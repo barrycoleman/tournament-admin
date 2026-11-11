@@ -233,6 +233,17 @@ export function reconcileUploadedRows(
   return result;
 }
 
+/**
+ * A new row nobody has typed into yet (a division alone doesn't count). It
+ * isn't an unsaved change: Save skips it and drops it once the save succeeds.
+ */
+export function isBlankNewRow(row: TeamGridRow): boolean {
+  return (
+    row.id === null &&
+    TEAM_FIELD_KEYS.every((key) => key === "division" || row[key].trim() === "")
+  );
+}
+
 function DivisionEditor(
   props: RenderEditCellProps<TeamGridRow> & {
     divisions: Division[];
@@ -338,7 +349,7 @@ export function TeamsRoute() {
     row.division === RANDOM_DIVISION_SENTINEL ? t("teams.randomDivisionOption") : row.division;
 
   const statusLabel = (row: TeamGridRow) =>
-    row.error ?? (row.dirty ? t("teams.unsavedIndicator") : "");
+    row.error ?? (row.dirty && !isBlankNewRow(row) ? t("teams.unsavedIndicator") : "");
 
   // How narrow each column may get and how wide its content wants to be,
   // from every row rather than just the filtered ones on screen, so a
@@ -447,7 +458,9 @@ export function TeamsRoute() {
       name: t("teams.columnStatus"),
       renderCell: ({ row }) => {
         if (row.error) return <span className="badge badge-danger">{row.error}</span>;
-        if (row.dirty) return <span className="badge badge-warning">{t("teams.unsavedIndicator")}</span>;
+        if (row.dirty && !isBlankNewRow(row)) {
+          return <span className="badge badge-warning">{t("teams.unsavedIndicator")}</span>;
+        }
         return null;
       },
     });
@@ -498,6 +511,8 @@ export function TeamsRoute() {
   // team's row, so a roster can be typed without reaching for "Add row".
   function handleCellKeyDown(args: CellKeyDownArgs<TeamGridRow>, event: CellKeyboardEvent) {
     if (args.mode !== "EDIT" || event.key !== "Enter") return;
+    // Enter that confirms an IME composition (typing Chinese, say) isn't a commit.
+    if (event.nativeEvent.isComposing) return;
     if (args.rowIdx !== visibleRows.length - 1) return;
     event.preventGridDefault();
     args.onClose(true, false);
@@ -600,7 +615,7 @@ export function TeamsRoute() {
     if (savingRef.current) return;
     setSaveSummary(null);
     setSaveError(null);
-    const dirtyRows = allRows.filter((row) => row.dirty);
+    const dirtyRows = allRows.filter((row) => row.dirty && !isBlankNewRow(row));
     if (dirtyRows.length === 0) return;
     savingRef.current = true;
     setSaving(true);
@@ -664,8 +679,11 @@ export function TeamsRoute() {
       // existing team (the endpoint upserts by number), which stamps a
       // `server-<id>` already held by another row onto it -- dedupe before
       // this reaches the grid.
+      // Blank new rows (left by Add row or Enter) weren't sent; drop them now.
       setAllRows((previous) =>
-        dedupeByClientId(previous.map((row) => updatedById.get(row.clientId) ?? row))
+        dedupeByClientId(
+          previous.map((row) => updatedById.get(row.clientId) ?? row).filter((row) => !isBlankNewRow(row))
+        )
       );
       setSaveSummary({ saved, failed });
       setSaveError(null);
@@ -702,7 +720,7 @@ export function TeamsRoute() {
     }
   }
 
-  const hasUnsavedChanges = allRows.some((row) => row.dirty);
+  const hasUnsavedChanges = allRows.some((row) => row.dirty && !isBlankNewRow(row));
   const hasUnassignedTeams = allRows.some((row) => row.id !== null && row.division === "");
   const canRandomize = hasUnassignedTeams && (divisions?.length ?? 0) > 1;
 

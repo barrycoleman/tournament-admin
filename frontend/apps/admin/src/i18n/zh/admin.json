@@ -245,7 +245,7 @@
       "divisionTab_one": "{{name}} · {{count}} 支队伍",
       "divisionTab_other": "{{name}} · {{count}} 支队伍",
       "discardHeading": "放弃未应用的更改？",
-      "discardBody": "你对此组别轮次的更改尚未应用。",
+      "discardBody": "你对此组别轮次或比赛时段的更改尚未应用。",
       "discardConfirm": "放弃更改",
       "keepEditing": "继续编辑",
       "unsaved": {

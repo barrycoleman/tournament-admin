@@ -90,8 +90,9 @@ export function DivisionPlanner({
   const action = planAction(draft.rows);
   const valid = rowsValid(toSend, matchFormat.match_duration_seconds);
   const dirty = draft.dirty;
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   const [timesDirty, setTimesDirty] = useState(false);
+  // Switching division remounts this planner, so unsaved playing times count too.
+  useEffect(() => onDirtyChange(dirty || timesDirty), [dirty, timesDirty, onDirtyChange]);
   const timesCopy = {
     heading: t("sessions.schedule.playingTimes.unsaved.heading"),
     body: t(dirty ? "sessions.schedule.playingTimes.unsaved.bodyWithRounds" : "sessions.schedule.playingTimes.unsaved.body"),

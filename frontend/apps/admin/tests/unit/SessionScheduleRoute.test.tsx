@@ -569,6 +569,19 @@ describe("SessionScheduleRoute — readiness and divisions", () => {
     expect(screen.getByRole("tab", { name: "Division 1 · 4 teams" })).toHaveAttribute("aria-selected", "true");
   });
 
+  it("asks before switching division with unsaved playing times", async () => {
+    stub({ divisions: TWO_DIVISIONS });
+    renderSchedule();
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Playing time 1 end"), { target: { value: "13:00" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Blue · 0 teams" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("playing times");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep editing" }));
+    expect(screen.getByRole("tab", { name: "Division 1 · 4 teams" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("Playing time 1 end")).toHaveValue("13:00");
+  });
+
   it("shows the generic error when the divisions fetch fails", async () => {
     vi.mocked(apiRequest).mockRejectedValue(new ApiError(500, "boom"));
     renderSchedule();

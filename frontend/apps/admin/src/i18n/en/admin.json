@@ -247,7 +247,7 @@
       "divisionTab_one": "{{name}} · {{count}} team",
       "divisionTab_other": "{{name}} · {{count}} teams",
       "discardHeading": "Discard unapplied changes?",
-      "discardBody": "Your changes to this division's rounds haven't been applied.",
+      "discardBody": "Your changes to this division's rounds or to the playing times haven't been applied.",
       "discardConfirm": "Discard changes",
       "keepEditing": "Keep editing",
       "unsaved": {
