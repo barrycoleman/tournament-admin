@@ -87,6 +87,19 @@ describe("GamePluginBanner", () => {
     expect(screen.getByRole("link", { name: "Choose a game plugin" })).toHaveAttribute("href", "/events/setup#game-plugins");
   });
 
+  it("is hidden on the home page, whose setup checklist already starts with choosing the game", async () => {
+    asRole("admin");
+    vi.mocked(apiRequest).mockResolvedValue(event(null) as never);
+    const elsewhere = renderAt(<GamePluginBanner />, "/sessions");
+    // The same data shows the banner on any other page, so its absence below is real.
+    expect(await screen.findByText(/Choose a game plugin to set up/)).toBeInTheDocument();
+    elsewhere.unmount();
+    renderAt(<GamePluginBanner />, "/");
+    await vi.waitFor(() => expect(apiRequest).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByText(/Choose a game plugin to set up/)).not.toBeInTheDocument();
+  });
+
   it("is hidden on Event Setup, once a plugin is chosen, and for other roles", async () => {
     asRole("admin");
     vi.mocked(apiRequest).mockResolvedValue(event(null) as never);
