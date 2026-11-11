@@ -154,11 +154,7 @@ test.describe.serial("tournament picker: fresh server bootstrap", () => {
     await page.getByLabel("Event name").fill("Picker E2E Event");
     await page.getByLabel(/Initial password/).fill("picker-e2e-pw");
     await page.getByRole("button", { name: "Create event" }).click();
-    await expect(page).toHaveURL(/\/login$/);
-
-    await page.getByLabel("Role").fill("admin");
-    await page.getByLabel("Password").fill("picker-e2e-pw");
-    await page.getByRole("button", { name: "Log in" }).click();
+    // Creating the event signs straight in as admin.
     await expect(page).toHaveURL(BASE_URL + "/");
 
     await page.getByRole("button", { name: "Switch Tournament" }).click();
