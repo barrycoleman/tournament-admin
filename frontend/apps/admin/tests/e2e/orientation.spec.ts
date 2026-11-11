@@ -186,26 +186,41 @@ test.describe.serial("admin orientation", () => {
     await page.getByRole("link", { name: "Today", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/sessions/${saturday}/today$`));
 
-    // The check-in bar is the amber accent on the sunken track, not the browser's blue.
-    const colors = await page.locator(".session-today progress").evaluate((el) => {
-      const root = getComputedStyle(document.documentElement);
+    // The check-in bar is the amber accent, not the browser's default blue:
+    // with every team checked in it is full, so its middle pixel is the fill.
+    const progress = page.locator(".session-today progress");
+    const shot = (await progress.screenshot()).toString("base64");
+    const { pixel, accent } = await page.evaluate(async (png) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${png}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext("2d")!;
+      context.drawImage(image, 0, 0);
+      const data = context.getImageData(Math.floor(image.width / 2), Math.floor(image.height / 2), 1, 1).data;
       const probe = document.createElement("div");
+      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue("--color-accent");
       document.body.append(probe);
-      const resolve = (token: string) => {
-        probe.style.backgroundColor = root.getPropertyValue(token);
-        return getComputedStyle(probe).backgroundColor;
-      };
-      const result = {
-        value: getComputedStyle(el, "::-webkit-progress-value").backgroundColor,
-        track: getComputedStyle(el, "::-webkit-progress-bar").backgroundColor,
-        accent: resolve("--color-accent"),
-        sunken: resolve("--color-bg-sunken"),
-      };
+      const accentRgb = getComputedStyle(probe).color.match(/\d+/g)!.map(Number);
       probe.remove();
-      return result;
-    });
-    expect(colors.value).toBe(colors.accent);
-    expect(colors.track).toBe(colors.sunken);
+      return { pixel: [data[0], data[1], data[2]], accent: accentRgb.slice(0, 3) };
+    }, shot);
+    for (let channel = 0; channel < 3; channel++) {
+      expect(Math.abs(pixel[channel] - accent[channel])).toBeLessThanOrEqual(3);
+    }
+    // The track is the sunken surface (seen once the bar isn't full).
+    expect(await progress.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+      await page.evaluate(() => {
+        const probe = document.createElement("div");
+        probe.style.backgroundColor = getComputedStyle(document.documentElement).getPropertyValue("--color-bg-sunken");
+        document.body.append(probe);
+        const value = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return value;
+      })
+    );
     const matches = page.getByRole("region", { name: "Matches" });
     await matches.getByRole("button", { name: "Make active", exact: true }).click();
     const dialog = page.getByRole("alertdialog", { name: "Make Saturday active?" });

@@ -215,7 +215,15 @@ test.describe.serial("randomize unassigned teams", () => {
       // "Randomize Division One" and "...Two" differ at the "T", so the
       // cell must show at least "Randomize Division T…" -- measured in the
       // cell's own font.
-      const division = cells.nth(7);
+      // The grid only renders the columns in view, and once it scrolls to
+      // the Division column the Name cell (which the row locator matches on)
+      // is gone -- so pin the row by its index and the cell by its column.
+      const rowIndex = await row.getAttribute("aria-rowindex");
+      await grid.evaluate((el) => {
+        el.scrollLeft = el.scrollWidth;
+      });
+      const division = grid.locator(`[role="row"][aria-rowindex="${rowIndex}"] [role="gridcell"][aria-colindex="8"]`);
+      await expect(division).toHaveText("Randomize Division Two");
       await division.scrollIntoViewIfNeeded();
       const fits = await division.evaluate((el) => {
         const style = getComputedStyle(el);
