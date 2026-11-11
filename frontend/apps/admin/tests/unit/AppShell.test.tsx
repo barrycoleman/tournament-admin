@@ -98,7 +98,8 @@ describe("AppShell role-gated navigation", () => {
   it("shows an admin the game plugin banner while no plugin is chosen", async () => {
     asRole("admin");
     stubAdmin({ activeId: null, plugin: null });
-    renderShell();
+    // Not the home page: there the setup checklist already says to choose the game.
+    renderShell("/teams");
 
     expect(
       await screen.findByText("Choose a game plugin to set up scheduling, matches, rankings and skills.")
