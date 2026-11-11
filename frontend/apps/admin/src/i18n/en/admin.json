@@ -262,6 +262,11 @@
         "hoursMinutes": "{{hours}} h {{minutes}} min"
       },
       "playingTimes": {
+        "unsaved": {
+          "heading": "Unsaved playing times",
+          "body": "You have unsaved playing times. Leave without saving?",
+          "bodyWithRounds": "You have unsaved playing times, and your changes to the rounds haven't been applied. Leave without saving?"
+        },
         "heading": "Playing times",
         "none": "No playing times yet. Add the times matches can be played, for every day of this session.",
         "edit": "Edit",

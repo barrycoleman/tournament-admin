@@ -260,6 +260,11 @@
         "hoursMinutes": "{{hours}} 小时 {{minutes}} 分钟"
       },
       "playingTimes": {
+        "unsaved": {
+          "heading": "比赛时段未保存",
+          "body": "你有尚未保存的比赛时段。不保存就离开吗？",
+          "bodyWithRounds": "你有尚未保存的比赛时段，对轮次的更改也尚未应用。不保存就离开吗？"
+        },
         "heading": "比赛时段",
         "none": "尚未设置比赛时段。请为本场次的每一天添加可以进行比赛的时间。",
         "edit": "编辑",

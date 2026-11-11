@@ -91,7 +91,12 @@ export function DivisionPlanner({
   const valid = rowsValid(toSend, matchFormat.match_duration_seconds);
   const dirty = draft.dirty;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
-  const guardDialog = useUnsavedChangesGuard(dirty);
+  const [timesDirty, setTimesDirty] = useState(false);
+  const timesCopy = {
+    heading: t("sessions.schedule.playingTimes.unsaved.heading"),
+    body: t(dirty ? "sessions.schedule.playingTimes.unsaved.bodyWithRounds" : "sessions.schedule.playingTimes.unsaved.body"),
+  };
+  const guardDialog = useUnsavedChangesGuard(dirty || timesDirty, timesDirty ? timesCopy : undefined);
 
   const context = { sessionId: session.id, divisionId, schedulerPluginName };
   const previewRequest =
@@ -174,6 +179,7 @@ export function DivisionPlanner({
     <>
       <PlayingTimesPanel
         session={session}
+        onDirtyChange={setTimesDirty}
         windows={windows}
         outsideRounds={scheduledRounds
           .filter((round) => round.outside_playing_windows)
