@@ -174,6 +174,7 @@ describe("EventSetupRoute", () => {
     mockServer({ selected: null, locked: false });
     renderSetup();
     const headings = await screen.findAllByRole("heading", { level: 2 });
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Event & game");
     expect(headings[0]).toHaveTextContent("Game plugins");
     expect(headings[0].closest("section")).toHaveAttribute("id", "game-plugins");
     expect(screen.getByText("Choose the game first. Scheduling, matches, rankings and skills depend on it.")).toBeInTheDocument();

@@ -3,7 +3,7 @@
   "unreachable": "Can't reach the server. Retrying…",
   "pairing": {
     "heading": "Pair this device",
-    "instructions": "In the admin app, open Devices and enter this code.",
+    "instructions": "In the admin app, open Devices & displays and enter this code.",
     "expiresIn": "New code in {{seconds}} s",
     "qrLabel": "QR code that opens the admin app's Devices page with this code"
   },

@@ -461,7 +461,7 @@
     "editEventNameAction": "Edit event name",
     "saveAction": "Save",
     "cancelAction": "Cancel",
-    "heading": "Event & plugins",
+    "heading": "Event & game",
     "gamePluginsHeading": "Game plugins",
     "schedulerPluginsHeading": "Scheduler plugins",
     "installLabel": "Install a plugin (.zip)",

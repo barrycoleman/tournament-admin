@@ -459,7 +459,7 @@
     "editEventNameAction": "编辑赛事名称",
     "saveAction": "保存",
     "cancelAction": "取消",
-    "heading": "赛事与插件",
+    "heading": "赛事与比赛",
     "gamePluginsHeading": "比赛插件",
     "schedulerPluginsHeading": "排程插件",
     "installLabel": "安装插件 (.zip)",
