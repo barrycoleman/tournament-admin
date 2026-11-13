@@ -17,12 +17,13 @@ test.describe.serial("cooperative rankings and ranking settings", () => {
   const api = (route: string) => `${server.apiUrl}${route}`;
   const headers = () => ({ Authorization: `Bearer ${token}` });
 
-  async function login(page: Page) {
+  /** Signs in; `landing` is where "/" sends the admin given what the tests have set up so far. */
+  async function login(page: Page, landing = `/sessions/${sessionOne}/today`) {
     await page.goto(`${server.baseUrl}/login`);
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL(`${server.baseUrl}/`);
+    await expect(page).toHaveURL(`${server.baseUrl}${landing}`);
   }
 
   async function playMatch(request: APIRequestContext, sessionId: number, number: number, objects: number) {
@@ -79,7 +80,8 @@ test.describe.serial("cooperative rankings and ranking settings", () => {
   test.afterAll(() => server?.stop());
 
   test("selecting the cooperative game reveals the ranking settings", async ({ page }) => {
-    await login(page);
+    // No game is chosen yet, so "/" shows the setup checklist.
+    await login(page, "/");
     await page.goto(`${server.baseUrl}/events/setup`);
     await expect(page.getByRole("heading", { name: "Game plugins" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Ranking settings" })).toHaveCount(0);

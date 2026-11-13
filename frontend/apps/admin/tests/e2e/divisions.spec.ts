@@ -16,8 +16,9 @@ test.describe.serial("division management", () => {
     await page.getByRole("button", { name: "Log in" }).click();
     await expect(page).toHaveURL("/");
 
-    await page.getByRole("link", { name: "Divisions" }).click();
-    await expect(page).toHaveURL(/\/divisions$/);
+    await page.getByRole("link", { name: "Teams & divisions" }).click();
+    await page.getByRole("link", { name: "Divisions", exact: true }).click();
+    await expect(page).toHaveURL(/\/teams\/divisions$/);
 
     // Event creation always seeds one division ("Division 1"); as the
     // only division, its delete button must not be present at all.
@@ -66,8 +67,9 @@ test.describe.serial("division management", () => {
     await page.getByRole("button", { name: "Log in" }).click();
     await expect(page).toHaveURL("/");
 
-    await page.getByRole("link", { name: "Divisions" }).click();
-    await expect(page).toHaveURL(/\/divisions$/);
+    await page.getByRole("link", { name: "Teams & divisions" }).click();
+    await page.getByRole("link", { name: "Divisions", exact: true }).click();
+    await expect(page).toHaveURL(/\/teams\/divisions$/);
 
     await page.getByRole("button", { name: "Edit Division 1" }).click();
     const renameInput = page.getByLabel("Rename Division 1");

@@ -61,7 +61,7 @@ async function loginAsAdmin(page: Page) {
   await page.getByLabel("Role").fill("admin");
   await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL(/\/sessions\/\d+\/today$/);
 }
 
 test.describe.serial("head-to-head session and season rankings", () => {

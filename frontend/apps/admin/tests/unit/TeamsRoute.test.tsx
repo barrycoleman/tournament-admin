@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nextProvider } from "react-i18next";
+import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initI18n } from "@tournament-admin/shared";
 import type { TeamGridRow } from "../../src/teamCsv";
@@ -16,6 +17,7 @@ import { dismissTransientError, getTransientError } from "../../src/errorBanner"
 import {
   TeamsRoute,
   dedupeByClientId,
+  isBlankNewRow,
   mergeRows,
   mergeServerRows,
   reconcileUploadedRows,
@@ -64,11 +66,23 @@ function renderRoute() {
   return render(
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
-        <TeamsRoute />
+        <MemoryRouter>
+          <TeamsRoute />
+        </MemoryRouter>
       </I18nextProvider>
     </QueryClientProvider>
   );
 }
+
+describe("isBlankNewRow", () => {
+  it("is true only for a never-saved row with no text, whatever its division", () => {
+    expect(isBlankNewRow(row({ clientId: "a", dirty: true }))).toBe(true);
+    expect(isBlankNewRow(row({ clientId: "b", dirty: true, division: "Red" }))).toBe(true);
+    expect(isBlankNewRow(row({ clientId: "c", dirty: true, name: "Alpha" }))).toBe(false);
+    expect(isBlankNewRow(row({ clientId: "d", dirty: true, city: " x " }))).toBe(false);
+    expect(isBlankNewRow(row({ clientId: "e", id: 4, dirty: true }))).toBe(false);
+  });
+});
 
 describe("mergeRows", () => {
   it("replaces changed rows and keeps rows that are not in the filtered view", () => {
@@ -233,6 +247,16 @@ describe("TeamsRoute", () => {
     dismissTransientError();
   });
 
+  /** Types into a cell of the last row (Name by default) and commits it. */
+  async function typeIntoLastRow(value: string, column = 1) {
+    const rows = screen.getAllByRole("row");
+    fireEvent.doubleClick(within(rows[rows.length - 1]).getAllByRole("gridcell")[column]);
+    const editor = await screen.findByRole("textbox");
+    fireEvent.change(editor, { target: { value } });
+    fireEvent.blur(editor);
+    await screen.findByText(value);
+  }
+
   function stubReads(divisions: typeof DIVISIONS, teams: ReturnType<typeof serverTeam>[]) {
     vi.mocked(apiRequest).mockImplementation(async (path: string) => {
       if (path === "/api/divisions") return divisions as never;
@@ -378,6 +402,12 @@ describe("TeamsRoute", () => {
     fireEvent.change(screen.getByLabelText("Division"), { target: { value: "Blue" } });
     fireEvent.click(screen.getByRole("button", { name: "Add row" }));
 
+    // A row with nothing typed in it isn't an unsaved change yet.
+    expect(screen.queryByText("unsaved")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+
+    // Some text but no number: it is sent, and the server says what's missing.
+    await typeIntoLastRow("Half Typed");
     expect(screen.getByText("unsaved")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
 
@@ -402,6 +432,189 @@ describe("TeamsRoute", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("0 saved, 1 need fixing");
     // The rejected row survives the post-save refetch with its error attached.
     expect(await screen.findByText("number and name are required")).toBeInTheDocument();
+  });
+
+  it("shows a hint when there are no teams yet, and drops it once a row exists", async () => {
+    stubReads(DIVISIONS, []);
+    renderRoute();
+    expect(
+      await screen.findByText("No teams yet. Add a row, then type or paste rows from a spreadsheet into it, or upload a CSV.")
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    expect(screen.queryByText(/No teams yet/)).not.toBeInTheDocument();
+  });
+
+  it("shows no empty hint when teams exist", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
+    renderRoute();
+    await screen.findByText("Alpha");
+    expect(screen.queryByText(/No teams yet/)).not.toBeInTheDocument();
+  });
+
+  it("commits Enter in the last row and starts a new row at its Number cell", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1), serverTeam(2, "202", "Bravo", 2)]);
+    renderRoute();
+
+    fireEvent.doubleClick(await screen.findByText("Bravo"));
+    const editor = await screen.findByRole("textbox");
+    fireEvent.change(editor, { target: { value: "Bravo Two" } });
+    fireEvent.keyDown(editor, { key: "Enter" });
+
+    expect(await screen.findByText("Bravo Two")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByRole("row").slice(1)).toHaveLength(3));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(within(screen.getAllByRole("row")[3]).getAllByRole("gridcell")[0])
+    );
+    // The new row is blank, so only the edited one is unsaved.
+    expect(screen.getAllByText("unsaved")).toHaveLength(1);
+  });
+
+  it("saves after Enter on the last row without sending the blank row it added", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
+    renderRoute();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add row" }));
+    await typeIntoLastRow("303", 0);
+    const rows = screen.getAllByRole("row");
+    fireEvent.doubleClick(within(rows[rows.length - 1]).getAllByRole("gridcell")[1]);
+    const editor = await screen.findByRole("textbox");
+    fireEvent.change(editor, { target: { value: "Charlie" } });
+    fireEvent.keyDown(editor, { key: "Enter" });
+    await waitFor(() => expect(screen.getAllByRole("row").slice(1)).toHaveLength(3));
+
+    let sent: unknown[] = [];
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
+      if (path === "/api/divisions") return DIVISIONS as never;
+      if (path === "/api/teams") return [serverTeam(1, "101", "Alpha", 1), serverTeam(3, "303", "Charlie", null)] as never;
+      if (path === "/api/teams/bulk") {
+        sent = (options as { body: { rows: unknown[] } }).body.rows;
+        return {
+          results: [{ row_index: 0, status: "created", team: serverTeam(3, "303", "Charlie", null), error: null }],
+        } as never;
+      }
+      throw new Error(`unexpected request: ${path}`);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("1 saved");
+    expect(screen.getByRole("status")).not.toHaveTextContent("need fixing");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ number: "303", name: "Charlie" });
+    // The blank row is gone and nothing is left unsaved.
+    await waitFor(() => expect(screen.getAllByRole("row").slice(1)).toHaveLength(2));
+    expect(screen.queryByText("unsaved")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  });
+
+  it("doesn't add a row when Enter confirms an IME composition", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
+    renderRoute();
+
+    fireEvent.doubleClick(await screen.findByText("Alpha"));
+    const editor = await screen.findByRole("textbox");
+    fireEvent.change(editor, { target: { value: "阿尔法" } });
+    fireEvent.keyDown(editor, { key: "Enter", isComposing: true });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(screen.getAllByRole("row").slice(1)).toHaveLength(1);
+  });
+
+  it("keeps Enter in an earlier row to committing the edit, with no new row", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1), serverTeam(2, "202", "Bravo", 2)]);
+    renderRoute();
+
+    fireEvent.doubleClick(await screen.findByText("Alpha"));
+    const editor = await screen.findByRole("textbox");
+    fireEvent.change(editor, { target: { value: "Alpha Two" } });
+    fireEvent.keyDown(editor, { key: "Enter" });
+
+    expect(await screen.findByText("Alpha Two")).toBeInTheDocument();
+    expect(screen.getAllByRole("row").slice(1)).toHaveLength(2);
+  });
+
+  it("keeps the Number column narrow and gives the slack to Name", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1), serverTeam(2, "202", "Bravo", 2)]);
+    renderRoute();
+    await screen.findByText("Alpha");
+    const grid = screen.getByRole("grid");
+    const widths = await waitFor(() => {
+      const template = grid.style.gridTemplateColumns;
+      const parsed = template.split(" ").map((w) => parseFloat(w));
+      expect(parsed.every((w) => w > 0)).toBe(true);
+      return parsed;
+    });
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    const number = widths[headers.indexOf("Number")];
+    const name = widths[headers.indexOf("Name")];
+    expect(number).toBeGreaterThanOrEqual(90);
+    expect(number).toBeLessThanOrEqual(110);
+    expect(name).toBe(Math.max(...widths));
+    expect(name).toBeGreaterThan(widths.reduce((a, b) => a + b, 0) / 3);
+  });
+
+  it("moves focus into the first cell of a newly added row", async () => {
+    stubReads(DIVISIONS, [serverTeam(1, "101", "Alpha", 1)]);
+    renderRoute();
+
+    await screen.findByText("Alpha");
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+
+    await waitFor(() => {
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows).toHaveLength(2);
+      expect(rows[1].contains(document.activeElement)).toBe(true);
+    });
+    expect(document.activeElement).toBe(within(screen.getAllByRole("row")[2]).getAllByRole("gridcell")[0]);
+  });
+
+  describe("after a save", () => {
+    function stubSave(sessions: unknown[], activeSessionId: number | null) {
+      vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+        if (path === "/api/divisions") return DIVISIONS as never;
+        if (path === "/api/teams") return [serverTeam(1, "101", "Alpha", 1)] as never;
+        if (path === "/api/sessions") return sessions as never;
+        if (path === "/api/event") return { id: 1, name: "E", active_session_id: activeSessionId } as never;
+        if (path.startsWith("/api/sessions/") && path.endsWith("/playing-windows")) return [] as never;
+        if (path === "/api/teams/bulk") {
+          return {
+            results: [{ row_index: 0, status: "created", team: serverTeam(2, "202", "Bravo", 1), error: null }],
+          } as never;
+        }
+        throw new Error(`unexpected request: ${path}`);
+      });
+    }
+
+    async function addAndSave() {
+      renderRoute();
+      await screen.findByText("Alpha");
+      fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+      const cells = within(screen.getAllByRole("row")[2]).getAllByRole("gridcell");
+      fireEvent.doubleClick(cells[0]);
+      fireEvent.change(screen.getByRole("textbox"), { target: { value: "202" } });
+      fireEvent.blur(screen.getByRole("textbox"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      await screen.findByRole("status");
+    }
+
+    it("offers to create a session when there are none", async () => {
+      stubSave([], null);
+      await addAndSave();
+      const link = await screen.findByRole("link", { name: "create a session" });
+      expect(link).toHaveAttribute("href", "/sessions/new");
+    });
+
+    it("offers to go to the session the admin would land on when sessions exist", async () => {
+      const session = (id: number, label: string) => ({
+        id, event_id: 1, label, session_date: null, timezone: null, has_scored_matches: false,
+        qualification_finalized_at: null, qualification_drops: null,
+      });
+      stubSave([session(7, "Saturday"), session(8, "Sunday")], 8);
+      await addAndSave();
+      const link = await screen.findByRole("link", { name: "go to Sunday" });
+      expect(link).toHaveAttribute("href", "/sessions/8/today");
+    });
   });
 
   it("leaves no duplicate row when a new row's number turns out to belong to an existing team", async () => {
@@ -468,6 +681,7 @@ describe("TeamsRoute", () => {
 
     await screen.findByText("Alpha");
     fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    await typeIntoLastRow("Charlie");
 
     vi.mocked(apiRequest).mockImplementation(async (path: string) => {
       if (path === "/api/divisions") return DIVISIONS as never;
@@ -493,6 +707,7 @@ describe("TeamsRoute", () => {
 
     await screen.findByText("Alpha");
     fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    await typeIntoLastRow("Charlie");
 
     vi.mocked(apiRequest).mockImplementation(async (path: string) => {
       if (path === "/api/divisions") return DIVISIONS as never;
@@ -558,6 +773,7 @@ describe("TeamsRoute", () => {
 
     await screen.findByText("Alpha");
     fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    await typeIntoLastRow("New");
 
     let releaseBulk: (() => void) | null = null;
     const bulkInFlight = new Promise<void>((resolve) => {

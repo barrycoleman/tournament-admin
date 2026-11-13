@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -132,6 +132,8 @@ interface StubOptions {
   matches?: MatchRead[];
   plan?: (body: PlanRequest) => PlanResponse | Error;
   onWrite?: (path: string, options: { method?: string; body?: unknown }) => unknown;
+  /** The event's active session; defaults to this session. */
+  activeSessionId?: number | null;
 }
 
 function stub({
@@ -142,6 +144,7 @@ function stub({
   matches = [],
   plan = () => FITS,
   onWrite = () => undefined,
+  activeSessionId = 1,
 }: StubOptions = {}) {
   vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
     const opts = (options ?? {}) as { method?: string; body?: unknown };
@@ -162,7 +165,7 @@ function stub({
       return result as never;
     }
     if (path === "/api/divisions") return divisions as never;
-    if (path === "/api/event") return EVENT as never;
+    if (path === "/api/event") return { ...EVENT, active_session_id: activeSessionId } as never;
     if (path === "/api/event/match-format") return MATCH_FORMAT as never;
     if (path === "/api/teams") return TEAMS as never;
     if (path === "/api/sessions/1/participants") return PARTICIPANTS as never;
@@ -245,6 +248,26 @@ describe("SessionScheduleRoute — planning", () => {
     expect(writes[0].dry_run).toBe(false);
     expect(await screen.findByText(/14 matches scheduled\./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View matches" })).toHaveAttribute("href", "/sessions/1/matches");
+  });
+
+  it("offers to make the session active after generating, and opens the confirmation", async () => {
+    stub({ activeSessionId: null });
+    renderSchedule();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    await screen.findByRole("link", { name: "View matches" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "make this session active" }));
+    expect(await screen.findByRole("alertdialog", { name: /Saturday/ })).toBeInTheDocument();
+  });
+
+  it("offers no make-active step when the session is already active", async () => {
+    stub();
+    renderSchedule();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    await screen.findByRole("link", { name: "View matches" });
+    expect(screen.queryByRole("button", { name: "make this session active" })).not.toBeInTheDocument();
   });
 
   it("marks an edited round as changed and sends it with every round after it", async () => {
@@ -523,7 +546,7 @@ describe("SessionScheduleRoute — readiness and divisions", () => {
     stub({ fields: [] });
     renderSchedule();
     const blockers = await screen.findByRole("region", { name: "Can't schedule yet" });
-    expect(within(blockers).getByRole("link", { name: "Add fields" })).toHaveAttribute("href", "/sessions/1/fields");
+    expect(within(blockers).getByRole("link", { name: "Add fields" })).toHaveAttribute("href", "/sessions/1/setup#fields");
   });
 
   it("shows a tab per division with its team count, and scopes requests to the selected one", async () => {
@@ -544,6 +567,19 @@ describe("SessionScheduleRoute — readiness and divisions", () => {
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Keep editing" }));
     expect(screen.getByRole("tab", { name: "Division 1 · 4 teams" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("asks before switching division with unsaved playing times", async () => {
+    stub({ divisions: TWO_DIVISIONS });
+    renderSchedule();
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Playing time 1 end"), { target: { value: "13:00" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Blue · 0 teams" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("playing times");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep editing" }));
+    expect(screen.getByRole("tab", { name: "Division 1 · 4 teams" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("Playing time 1 end")).toHaveValue("13:00");
   });
 
   it("shows the generic error when the divisions fetch fails", async () => {
@@ -598,5 +634,78 @@ describe("SessionScheduleRoute — out-of-scope rounds", () => {
 
     await screen.findByLabelText("Practice matches per team");
     expect(screen.queryByRole("region", { name: "Rounds from a different division setup" })).not.toBeInTheDocument();
+  });
+});
+
+describe("SessionScheduleRoute — unsaved playing times", () => {
+  // A navigation that goes through builds a Request with jsdom's AbortSignal,
+  // which Node's Request rejects; drop the signal so leaving can complete.
+  beforeEach(() => {
+    const NodeRequest = globalThis.Request;
+    vi.stubGlobal(
+      "Request",
+      class extends NodeRequest {
+        constructor(input: RequestInfo | URL, init?: RequestInit) {
+          const { signal: _signal, ...rest } = init ?? {};
+          super(input, rest);
+        }
+      }
+    );
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("asks before leaving with the untouched pre-filled first playing time, and Stay keeps it", async () => {
+    stub({ windows: [] });
+    const { router } = renderSchedule();
+    await screen.findByLabelText("Playing time 1 date");
+    await act(() => router.navigate("/elsewhere"));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("You have unsaved playing times. Leave without saving?");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Stay" }));
+    expect(screen.queryByText("Elsewhere")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Playing time 1 date")).toBeInTheDocument();
+  });
+
+  it("leaves on Leave", async () => {
+    stub({ windows: [] });
+    const { router } = renderSchedule();
+    await screen.findByLabelText("Playing time 1 date");
+    await act(() => router.navigate("/elsewhere"));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Leave" }));
+    expect(await screen.findByText("Elsewhere")).toBeInTheDocument();
+  });
+
+  it("asks before leaving with an edited playing time", async () => {
+    stub();
+    const { router } = renderSchedule();
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Playing time 1 end"), { target: { value: "13:00" } });
+    await act(() => router.navigate("/elsewhere"));
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("You have unsaved playing times.");
+  });
+
+  it("lets the admin leave with the editor open but nothing changed", async () => {
+    stub();
+    const { router } = renderSchedule();
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    await act(() => router.navigate("/elsewhere"));
+    expect(await screen.findByText("Elsewhere")).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("warns on a full page unload only while playing times are unsaved", async () => {
+    stub();
+    renderSchedule();
+    const unload = () => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    expect(unload()).toBe(false);
+    fireEvent.change(screen.getByLabelText("Playing time 1 end"), { target: { value: "13:00" } });
+    expect(unload()).toBe(true);
   });
 });

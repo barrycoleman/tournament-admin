@@ -16,12 +16,17 @@ test.describe.serial("skills challenges", () => {
   const api = (route: string) => `${server.apiUrl}${route}`;
   const headers = () => ({ Authorization: `Bearer ${token}` });
 
-  async function login(page: Page) {
+  /**
+   * Signs in; `landing` is where "/" sends the admin given what the tests have
+   * set up so far. Neither session is active or today, so it opens the most
+   * recent one, Sunday.
+   */
+  async function login(page: Page, landing = `/sessions/${sunday}/today`) {
     await page.goto(`${server.baseUrl}/login`);
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL(`${server.baseUrl}/`);
+    await expect(page).toHaveURL(`${server.baseUrl}${landing}`);
   }
 
   async function post(request: APIRequestContext, route: string, data: unknown) {
@@ -76,7 +81,8 @@ test.describe.serial("skills challenges", () => {
   test.afterAll(() => server?.stop());
 
   test("Event Setup enables the skills panel once a game is chosen, and skills turn on", async ({ page }) => {
-    await login(page);
+    // No game is chosen yet, so "/" shows the setup checklist.
+    await login(page, "/");
     await page.goto(`${server.baseUrl}/events/setup`);
     await expect(page.getByText("Choose a game plugin above before setting up skills challenges.")).toBeVisible();
     const toggle = page.getByRole("switch", { name: "Run skills challenges" });

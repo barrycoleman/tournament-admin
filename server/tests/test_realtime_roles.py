@@ -130,7 +130,8 @@ def test_send_to_devices_and_admins_reaches_admins_and_the_listed_devices_once(a
         realtime.register_device_socket(app, device_id, ws)
     realtime.send_to_devices_and_admins(app, [7], "scorer_binding_changed", {"device_id": 7})
     _then_marker(app, {**sockets, "target": target, "other": other})
-    assert _events(sockets["admin"]) == ["scorer_binding_changed", "marker"]
+    # The two devices' first sockets told the admin they connected.
+    assert _events(sockets["admin"]) == ["devices_changed", "devices_changed", "scorer_binding_changed", "marker"]
     assert _events(target) == ["scorer_binding_changed", "marker"]
     for name in ("scorer", "referee", "display_device", "attendee"):
         assert _events(sockets[name]) == ["marker"]
@@ -179,3 +180,49 @@ def test_a_binding_change_reaches_the_device_and_admins_over_real_sockets(client
         assert next_event(admin_ws, "scorer_binding_changed")["data"] == {"device_id": bound["id"]}
         assert next_event(bound_ws, "scorer_binding_changed")["data"] == {"device_id": bound["id"]}
         assert "scorer_binding_changed" not in _events_until_marker(other_ws)
+
+
+def _clear(sockets) -> None:
+    for ws in sockets.values():
+        ws.received.clear()
+
+
+def test_a_devices_first_socket_and_its_last_socket_tell_admins_only(app):
+    """The admin's TV list shows each device's connection, so connecting and
+    disconnecting are announced to admins (not to every device)."""
+    sockets = _register_every_role(app)
+    first, second = _FakeWebSocket(), _FakeWebSocket()
+    realtime.register_device_socket(app, 7, first)
+    _then_marker(app, sockets)
+    assert _events(sockets["admin"]) == ["devices_changed", "marker"]
+    for name in ("scorer", "referee", "display_device", "attendee"):
+        assert _events(sockets[name]) == ["marker"]
+
+    # A second socket for the same device changes nothing the admin shows.
+    _clear(sockets)
+    realtime.register_device_socket(app, 7, second)
+    realtime.unregister_device_socket(app, 7, first)
+    _then_marker(app, sockets)
+    assert _events(sockets["admin"]) == ["marker"]
+
+    _clear(sockets)
+    realtime.unregister_device_socket(app, 7, second)
+    _then_marker(app, sockets)
+    assert _events(sockets["admin"]) == ["devices_changed", "marker"]
+    for name in ("scorer", "referee", "display_device", "attendee"):
+        assert _events(sockets[name]) == ["marker"]
+
+
+def test_an_admin_socket_hears_a_device_connect_and_disconnect(client):
+    setup_event(client)
+    display = paired_device(client, role="display_device")
+    with client.websocket_connect(f"/ws/active-session?token={admin_token(client)}") as admin_ws:
+        registry = client.app.state.realtime
+        assert _wait_for(lambda: len(registry.active_roles) == 1)
+        with client.websocket_connect(f"/ws/active-session?token={display['access_token']}"):
+            assert _wait_for(lambda: display["id"] in registry.by_device)
+            realtime.broadcast_active_session(client.app, "marker", {})
+            assert "devices_changed" in _events_until_marker(admin_ws)
+        assert _wait_for(lambda: display["id"] not in registry.by_device)
+        realtime.broadcast_active_session(client.app, "marker", {})
+        assert "devices_changed" in _events_until_marker(admin_ws)

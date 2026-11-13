@@ -5,6 +5,9 @@ import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { apiErrorMessage } from "../apiErrorMessage";
 import { showTransientError } from "../errorBanner";
+import { useMakeActive } from "../orientation/MakeActiveDialog";
+import { NextStep } from "../orientation/NextStep";
+import { useEvent } from "../orientation/useOrientationData";
 import { roundTypeLabel } from "../roundTypeLabel";
 import { ClearRoundDialog } from "./ClearRoundDialog";
 import { FitStatus } from "./FitStatus";
@@ -58,6 +61,8 @@ export function DivisionPlanner({
   const { t } = useTranslation();
   const headingId = useId();
   const queryClient = useQueryClient();
+  const event = useEvent();
+  const makeActive = useMakeActive();
   const [clearTargets, setClearTargets] = useState<ScheduledRound[] | null>(null);
   const [applied, setApplied] = useState<PlanResponse | null>(null);
   const [schedulerChoice, setSchedulerChoice] = useState("");
@@ -85,8 +90,14 @@ export function DivisionPlanner({
   const action = planAction(draft.rows);
   const valid = rowsValid(toSend, matchFormat.match_duration_seconds);
   const dirty = draft.dirty;
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
-  const guardDialog = useUnsavedChangesGuard(dirty);
+  const [timesDirty, setTimesDirty] = useState(false);
+  // Switching division remounts this planner, so unsaved playing times count too.
+  useEffect(() => onDirtyChange(dirty || timesDirty), [dirty, timesDirty, onDirtyChange]);
+  const timesCopy = {
+    heading: t("sessions.schedule.playingTimes.unsaved.heading"),
+    body: t(dirty ? "sessions.schedule.playingTimes.unsaved.bodyWithRounds" : "sessions.schedule.playingTimes.unsaved.body"),
+  };
+  const guardDialog = useUnsavedChangesGuard(dirty || timesDirty, timesDirty ? timesCopy : undefined);
 
   const context = { sessionId: session.id, divisionId, schedulerPluginName };
   const previewRequest =
@@ -169,6 +180,7 @@ export function DivisionPlanner({
     <>
       <PlayingTimesPanel
         session={session}
+        onDirtyChange={setTimesDirty}
         windows={windows}
         outsideRounds={scheduledRounds
           .filter((round) => round.outside_playing_windows)
@@ -273,6 +285,10 @@ export function DivisionPlanner({
             <Link to={`/sessions/${session.id}/matches`}>{t("sessions.schedule.actions.viewMatches")}</Link>
           </p>
         )}
+        {applied && event.data && event.data.active_session_id !== session.id && (
+          <NextStep onClick={() => makeActive.open(session)}>{t("sessions.schedule.actions.nextMakeActive")}</NextStep>
+        )}
+        {makeActive.dialog}
         <details className="schedule-form__more">
           <summary>{t("sessions.schedule.actions.moreOptions")}</summary>
           <label className="field">

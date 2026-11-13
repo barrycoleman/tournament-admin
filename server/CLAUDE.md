@@ -1143,7 +1143,12 @@ truth for that richer shape):
   doesn't cover them; the Awards page refetches on it.
 - `devices_changed` — `{}` (active-session channel only), after a device
   is paired, renamed, given a new role, disabled, enabled or deleted, and
-  after the idle setting changes. The admin's Devices page refetches on it.
+  after the idle setting changes. It is also sent to admin sockets only
+  (`broadcast_active_session` with `roles=("admin",)`) when a device's first
+  WebSocket opens and when its last one closes
+  (`realtime.register_device_socket` / `unregister_device_socket`), so the
+  admin's Devices & displays page shows a TV's connection live. The page
+  refetches on it.
 - `display_changed` — `{session_id, group_id}` (active-session channel only),
   after a display group is created, changed or deleted or its displays change
   (an assignment, a move, a match start switching an audience group).

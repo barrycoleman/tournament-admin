@@ -20,22 +20,28 @@
     "skillsControlLink": "技能赛控制",
     "backupsLink": "备份",
     "logout": "登出",
-    "dashboardLink": "仪表盘",
-    "eventSetupLink": "赛事与插件",
     "rolesLink": "角色密码",
     "dismiss": "关闭",
     "seasonRankingsLink": "赛季排名",
     "judgeAwardsLink": "奖项",
     "judgeSessionRankingsLink": "场次排名",
-    "divisionsLink": "分组",
-    "teamsLink": "队伍",
-    "sessionsLink": "场次",
     "checkinLink": "签到",
     "switchToLight": "切换到浅色模式",
     "switchToDark": "切换到深色模式",
-    "devicesLink": "设备",
     "matchControlLink": "比赛控制",
-    "displaysLink": "显示屏"
+    "groups": {
+      "event": "赛事",
+      "sessions": "场次",
+      "settings": "设置"
+    },
+    "eventGameLink": "赛事与比赛",
+    "teamsDivisionsLink": "队伍与分组",
+    "devicesDisplaysLink": "设备与显示屏",
+    "newSessionLink": "+ 新建场次",
+    "manageSessionsLink": "管理场次",
+    "activeSessionLink": "{{label}}（当前）",
+    "activeSessionPill": "当前：{{label}}",
+    "noActiveSession": "没有当前场次"
   },
   "picker": {
     "damagedHeading": "此比赛文件已损坏",
@@ -62,6 +68,7 @@
     "switchAction": "切换赛事"
   },
   "teams": {
+    "emptyHint": "还没有队伍。请添加一行，然后输入或从电子表格粘贴多行，或上传 CSV 文件。",
     "heading": "队伍",
     "gridLabel": "队伍名单",
     "columnNumber": "编号",
@@ -89,7 +96,9 @@
     "downloadCsvLabel": "下载 CSV",
     "downloadTemplateLabel": "下载空白模板",
     "randomDivisionOption": "(随机)",
-    "randomizeUnassignedAction": "随机分配未分组队伍"
+    "randomizeUnassignedAction": "随机分配未分组队伍",
+    "nextCreateSession": "创建场次",
+    "nextGoTo": "前往{{label}}"
   },
   "divisions": {
     "heading": "分组",
@@ -152,7 +161,7 @@
     "empty": "还没有场次。添加一个场次后即可开始签到和生成赛程。",
     "labelLabel": "场次名称",
     "dateLabel": "日期(可选)",
-    "timezoneLabel": "时区(可选)",
+    "timezoneLabel": "时区",
     "noTimezoneOption": "未设置时区",
     "editAction": "编辑",
     "saveAction": "保存",
@@ -160,7 +169,6 @@
     "addSessionAction": "添加场次...",
     "addSubmit": "添加场次",
     "checkinTab": "签到",
-    "fieldsTab": "场地",
     "matchesTab": "比赛",
     "rankingsTab": "排名",
     "scheduleTab": "赛程",
@@ -237,7 +245,7 @@
       "divisionTab_one": "{{name}} · {{count}} 支队伍",
       "divisionTab_other": "{{name}} · {{count}} 支队伍",
       "discardHeading": "放弃未应用的更改？",
-      "discardBody": "你对此组别轮次的更改尚未应用。",
+      "discardBody": "你对此组别轮次或比赛时段的更改尚未应用。",
       "discardConfirm": "放弃更改",
       "keepEditing": "继续编辑",
       "unsaved": {
@@ -252,6 +260,11 @@
         "hoursMinutes": "{{hours}} 小时 {{minutes}} 分钟"
       },
       "playingTimes": {
+        "unsaved": {
+          "heading": "比赛时段未保存",
+          "body": "你有尚未保存的比赛时段。不保存就离开吗？",
+          "bodyWithRounds": "你有尚未保存的比赛时段，对轮次的更改也尚未应用。不保存就离开吗？"
+        },
         "heading": "比赛时段",
         "none": "尚未设置比赛时段。请为本场次的每一天添加可以进行比赛的时间。",
         "edit": "编辑",
@@ -271,7 +284,8 @@
           "incomplete": "每个比赛时段都需要日期、开始和结束时间。",
           "endBeforeStart": "每个比赛时段的结束时间必须晚于开始时间。",
           "overlap": "同一天的两个比赛时段重叠。"
-        }
+        },
+        "notSaved": "尚未保存"
       },
       "fit": {
         "checking": "正在检查方案…",
@@ -292,7 +306,8 @@
         "schedulerLabel": "赛程插件",
         "applied_one": "已安排 {{count}} 场比赛。",
         "applied_other": "已安排 {{count}} 场比赛。",
-        "viewMatches": "查看比赛"
+        "viewMatches": "查看比赛",
+        "nextMakeActive": "将此场次设为当前场次"
       }
     },
     "loading": "加载中…",
@@ -303,6 +318,8 @@
     "setActiveAction": "设为当前场次",
     "setActiveHint": "前台签到终端和现场显示屏会跟随当前场次。",
     "checkin": {
+      "progress": "已签到 {{checked}} / {{total}} 支队伍",
+      "nextPlanMatches": "安排比赛",
       "columnNumber": "编号",
       "columnName": "名称",
       "columnDivision": "分组",
@@ -362,9 +379,13 @@
       "copyFromPlaceholder": "选择场次…",
       "copyAction": "复制场地",
       "purposeLabel": "用途",
-      "purpose": { "teamwork": "团队赛", "skills": "技能赛" },
+      "purpose": {
+        "teamwork": "团队赛",
+        "skills": "技能赛"
+      },
       "teamworkHeading": "团队赛场地组",
-      "skillsHeading": "技能赛场地组"
+      "skillsHeading": "技能赛场地组",
+      "nextPlayingTimes": "比赛时段和轮次"
     },
     "setActiveShortAction": "设为当前",
     "setActiveAriaLabel": "将 {{name}} 设为当前场次",
@@ -380,7 +401,51 @@
     "awardsTab": "奖项",
     "liveScoresLegend": "显示屏上的实时比分",
     "liveQualificationLabel": "在练习赛和资格赛期间在显示屏上显示实时比分",
-    "liveFinalsLabel": "在决赛期间在显示屏上显示实时比分"
+    "liveFinalsLabel": "在决赛期间在显示屏上显示实时比分",
+    "todayTab": "今日",
+    "setupTab": "设置",
+    "today": {
+      "eventSetupHeading": "请先完成赛事设置：",
+      "eventSetup": {
+        "gamePlugin": "尚未选择比赛插件。",
+        "gamePluginFix": "选择比赛插件",
+        "teams": "尚未添加队伍。",
+        "teamsFix": "添加队伍",
+        "session": "尚无场次。",
+        "sessionFix": "添加场次"
+      },
+      "checkin": {
+        "heading": "签到",
+        "count": "已签到 {{checked}} / {{total}}",
+        "action": "为队伍签到"
+      },
+      "inspection": {
+        "heading": "检录",
+        "placeholder": "检录功能上线后，检录状态将显示在这里。"
+      },
+      "matches": {
+        "heading": "比赛",
+        "done": "已完成",
+        "notDone": "未完成",
+        "timezone": "已设置场次时区",
+        "fields": "每个分组都有场地",
+        "playingTimes": "已添加比赛时段",
+        "teams": "已有足够的队伍签到",
+        "schedule": "已安排比赛",
+        "active": "这是当前场次",
+        "displays": "已分配显示屏",
+        "setupAction": "设置场次",
+        "planMatchesAction": "安排比赛",
+        "makeActiveAction": "设为当前场次",
+        "matchControlAction": "前往比赛控制"
+      }
+    },
+    "setup": {
+      "heading": "设置",
+      "fieldsHeading": "场地",
+      "timezoneSuggested": "尚未保存：已建议使用您电脑的时区。",
+      "saved": "已保存。"
+    }
   },
   "frontDeskCheckin": {
     "heading": "队伍签到",
@@ -389,15 +454,12 @@
     "checkInAction": "签到",
     "checkedInState": "已签到"
   },
-  "dashboard": {
-    "heading": "仪表盘",
+  "eventSetup": {
     "eventNameLabel": "赛事",
     "editEventNameAction": "编辑赛事名称",
     "saveAction": "保存",
-    "cancelAction": "取消"
-  },
-  "eventSetup": {
-    "heading": "赛事与插件",
+    "cancelAction": "取消",
+    "heading": "赛事与比赛",
     "gamePluginsHeading": "比赛插件",
     "schedulerPluginsHeading": "排程插件",
     "installLabel": "安装插件 (.zip)",
@@ -422,8 +484,7 @@
     "switchConfirm": "切换插件",
     "clearConfirm": "清除插件",
     "cancel": "取消",
-    "serverInfoHeading": "在此网络上连接设备",
-    "serverInfoAddressLabel": "地址"
+    "nextAddTeams": "添加队伍"
   },
   "settingsRoles": {
     "heading": "角色密码",
@@ -739,21 +800,43 @@
     "needsAdminLink": "在赛事设置中选择",
     "needsOther": "组织者尚未选择比赛插件。"
   },
+  "devicesDisplays": {
+    "heading": "设备与显示屏",
+    "spotsFor": "查看场次",
+    "noActiveWarning": "在有场次进行之前，电视不会显示任何内容。",
+    "noActiveLink": "选择进行中的场次",
+    "noSessionsLink": "创建场次",
+    "serverInfoHeading": "在此网络上连接设备",
+    "serverInfoAddressLabel": "地址",
+    "tvsHeading": "电视和显示屏",
+    "tvsEmpty": "尚未配对任何电视。",
+    "columns": {
+      "shows": "显示内容",
+      "connection": "连接"
+    },
+    "connected": "● 已连接",
+    "notConnected": "● 未连接",
+    "showsNamed": "{{name}} 显示的内容",
+    "nothingYet": "暂无",
+    "copyHeading": "从另一个场次复制位置",
+    "spotsHeading": "位置",
+    "otherHeading": "记分员、裁判和其他设备",
+    "otherEmpty": "尚未配对其他设备。",
+    "chooseWhatItShows": "选择它显示的内容",
+    "tvsEmptyLink": "用配对码配对一台"
+  },
   "devices": {
-    "heading": "设备",
-    "noGroup": "未设置",
     "pairHeading": "配对设备",
     "pairHelp": "在设备上打开服务器地址并加上 /pair，然后输入设备显示的代码。",
     "codeLabel": "配对代码",
     "roleLabel": "角色",
     "nameLabel": "设备名称",
+    "showsLabel": "显示内容",
     "pair": "配对",
     "paired": "已配对 {{name}}。",
     "checking": "正在检查代码…",
     "unknownCode": "该代码无效或已过期。",
     "duplicateName": "已有同名设备。",
-    "listHeading": "已配对的设备",
-    "empty": "尚未配对任何设备。",
     "columns": {
       "name": "名称",
       "role": "角色",
@@ -772,7 +855,7 @@
       "referee": "裁判",
       "judge": "评委",
       "front_desk": "签到",
-      "display_device": "显示屏"
+      "display_device": "电视 / 显示屏"
     },
     "edit": "编辑",
     "editHeading": "编辑 {{name}}",
@@ -863,10 +946,7 @@
     "scoreSaved": "分数已保存。"
   },
   "displays": {
-    "heading": "显示屏",
-    "session": "场次",
     "activeSession": "{{label}}（进行中）",
-    "copyHeading": "复制显示屏设置",
     "copyHelp": "从另一个场次复制屏幕、观赛区分组和显示屏位置。",
     "copyFrom": "复制自",
     "chooseSession": "选择场次…",
@@ -902,6 +982,7 @@
     "offline": "离线",
     "identify": "识别",
     "identifyNamed": "识别 {{name}}",
+    "identifyOffline": "这台电视未连接",
     "putInGroup": "将 {{name}} 放入分组",
     "moveNamed": "移动 {{name}}",
     "chooseGroup": "选择分组…",
@@ -1021,13 +1102,38 @@
     "setTimer": "场地组计时",
     "fieldTimer": "{{name}} 的计时",
     "fieldTimerHint": "使用某个场地自己的计时按钮后，该场地将脱离场地组计时，直到本轮提交或放弃。",
-    "columns": { "field": "场地", "team": "队伍", "type": "类型", "timer": "计时", "state": "状态", "actions": "操作" },
+    "columns": {
+      "field": "场地",
+      "team": "队伍",
+      "type": "类型",
+      "timer": "计时",
+      "state": "状态",
+      "actions": "操作"
+    },
     "followsSet": "场地组计时",
     "alone": "单独 · {{clock}}",
     "last": "上一轮：{{number}} · {{score}}",
-    "state": { "none": "无轮次", "ready": "就绪", "running": "进行中", "paused": "已暂停", "ended": "已结束", "submitted": "已提交" },
-    "phase": { "ready": "就绪", "running": "进行中", "paused": "已暂停", "ended": "时间到" },
-    "action": { "start": "开始", "pause": "暂停", "resume": "继续", "reset": "重置", "end": "结束" },
+    "state": {
+      "none": "无轮次",
+      "ready": "就绪",
+      "running": "进行中",
+      "paused": "已暂停",
+      "ended": "已结束",
+      "submitted": "已提交"
+    },
+    "phase": {
+      "ready": "就绪",
+      "running": "进行中",
+      "paused": "已暂停",
+      "ended": "时间到"
+    },
+    "action": {
+      "start": "开始",
+      "pause": "暂停",
+      "resume": "继续",
+      "reset": "重置",
+      "end": "结束"
+    },
     "startRun": "开始一轮",
     "startHeading": "在 {{name}} 开始一轮",
     "teamLabel": "队伍",
@@ -1055,5 +1161,51 @@
       "resetConfirm": "重置计时"
     },
     "cancel": "取消"
+  },
+  "home": {
+    "loading": "加载中…",
+    "heading": "准备好你的赛事",
+    "doneLabel": "已完成",
+    "todoLabel": "未完成",
+    "items": {
+      "gamePlugin": "选择比赛项目",
+      "teams": "添加队伍",
+      "session": "创建第一个场次"
+    }
+  },
+  "sessionNew": {
+    "dateLabel": "日期",
+    "heading": "新建场次"
+  },
+  "teamsLayout": {
+    "heading": "队伍与分组",
+    "teamsTab": "队伍",
+    "divisionsTab": "分组"
+  },
+  "orientation": {
+    "banner": {
+      "message": "<strong>{{label}}</strong>计划于{{time}}开始。要将它设为当前场次吗？电视屏幕和比赛控制会切换到该场次。",
+      "messageToday": "<strong>{{label}}</strong>安排在今天进行。要将它设为当前场次吗？电视屏幕和比赛控制会切换到该场次。",
+      "messageDate": "<strong>{{label}}</strong>安排在{{date}}进行。要将它设为当前场次吗？电视屏幕和比赛控制会切换到该场次。",
+      "makeActiveAction": "设为当前场次",
+      "notYetAction": "暂不"
+    },
+    "makeActive": {
+      "heading": "将{{label}}设为当前场次？",
+      "body": "将{{label}}设为当前场次？电视屏幕、比赛控制和技能赛控制都会切换到该场次。",
+      "runningMatch": "{{activeLabel}}上的{{match}}正在进行。",
+      "activateAction": "设为当前场次",
+      "copyAndActivateAction": "复制电视位置并设为当前场次",
+      "activateWithoutCopyingAction": "不复制，直接设为当前场次",
+      "cancelAction": "取消",
+      "loading": "正在检查当前场次…",
+      "matchCheckFailed": "无法检查{{label}}上是否有比赛正在进行。",
+      "unplacedHeading": "{{label}}已设为当前场次。以下电视没有对应的位置，暂时不显示任何内容：",
+      "unplacedLink": "前往“设备与显示屏”设置它们的位置",
+      "closeAction": "关闭"
+    },
+    "nextStep": {
+      "label": "下一步："
+    }
   }
 }

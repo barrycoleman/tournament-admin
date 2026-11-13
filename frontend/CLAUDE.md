@@ -147,19 +147,63 @@ newly-restarted picker one.
 ## Routes and role-gated nav
 
 Beyond the bootstrap/auth screens above, the authenticated app
-(`router.tsx`, under `AuthenticatedLayout`) has: `/sessions` (list +
-create/edit, plus per-row Set active and Delete; Delete is disabled with a
-`title` explaining why when `SessionRead.has_scored_matches`, and otherwise
-asks for the session's name in `ConfirmDialog`), `/sessions/:sessionId` (index-redirects to
-`/sessions/:sessionId/checkin`), `/sessions/:sessionId/{checkin,fields,schedule,matches,skills,rankings}` (the session
-tabs, all rendered through `SessionDetailLayout`'s tab-strip `Outlet`
-context — see the session-checkin and fields-schedule-ui design specs;
-the layout's header also carries the "Set as active session" control; the Fields tab's empty state offers "copy fields from" any other session that has field sets, via `POST /api/sessions/{id}/copy-fields`), and `/checkin` (a
-separate, non-nested route: the dedicated `front_desk` kiosk screen,
-scoped to `Event.active_session_id` rather than a session id in the
-URL). Admins also have `/devices` (pair and manage tablets and displays;
-see **Devices** below). `/device/` and `/pair` are not admin routes: they
-belong to the device app, and the admin dev server proxies them to it.
+(`router.tsx`, under `AuthenticatedLayout`) is organized around sessions.
+- `/` (`HomeRoute`): an admin with a missing game, no teams or no sessions
+  sees the event setup checklist; otherwise it redirects to the landing
+  session's Today tab (`pickLandingSession`). Any other role that reaches it
+  sees only the event name. Front desk and judges are redirected earlier by
+  `indexLoader`.
+- Event routes: `/events/setup` (Event & game, which also holds the event
+  name), `/teams` and `/teams/divisions` (`TeamsLayout`: Teams and Divisions
+  as two tabs), `/devices` (Devices & displays, see **Devices & displays**
+  below) and `/rankings` (Season rankings).
+- Session routes: `/sessions` (the list, reached from "Manage sessions": create/edit,
+  per-row Set active and Delete; Delete is disabled with a `title` explaining
+  why when `SessionRead.has_scored_matches`, and otherwise asks for the
+  session's name in `ConfirmDialog`), `/sessions/new` (`SessionNewRoute`: label
+  and date, timezone defaulting to the browser's, then opens the new session's
+  Setup tab) and `/sessions/:sessionId/{today,setup,checkin,schedule,matches,skills,rankings,awards}`,
+  the session tabs, all rendered through `SessionDetailLayout`'s tab-strip
+  `Outlet` context (see the session-checkin and fields-schedule-ui specs).
+  The layout's header carries a "Set as active session" button, shown only
+  while the session is not active, which opens `MakeActiveDialog`.
+  `SessionTodayRoute` has the check-in progress card, a reserved inspection
+  card and the readiness checklist, whose single primary button is the next
+  step. `SessionSetupRoute` holds the session's label, date, timezone and
+  live-score switches (`SessionSettingsForm`) above its fields and field sets.
+  "Copy fields from" another session, in the empty fields state, uses
+  `POST /api/sessions/{id}/copy-fields`.
+- Other admin routes: `/match-control`, `/skills-control`, `/settings/roles`,
+  `/backups`.
+- Old addresses redirect (`routerRedirects.test.tsx`): `/displays` to
+  `/devices`, `/divisions` to `/teams/divisions`, `/sessions/:id` to
+  `/sessions/:id/today` and `/sessions/:id/fields` to `/sessions/:id/setup`.
+- `/checkin` is a separate, non-nested route: the dedicated `front_desk`
+  kiosk screen, scoped to `Event.active_session_id` rather than a session id
+  in the URL.
+
+`/device/` and `/pair` are not admin routes: they belong to the device app,
+and the admin dev server proxies them to it.
+
+**Orientation module** (`src/orientation/`): the logic that tells an admin where to go next.
+- `sessionTime.ts`: pure rules for each session's span (first playing time start to last end; a session with no playing times spans its date in its timezone; one with no date is never offered), `pickLandingSession` (today's session in its own timezone, then the active one, then the next by date, then the most recent; with two on one date, the active one, then the one running now) and the banner's cutover point (halfway between the active session's span end and the next session's start).
+- `readiness.ts`: `checkEventSetup` (game, teams, sessions) and the per-session readiness rows for the Today card (timezone, fields, playing times, teams checked in, schedule generated, session active, and an informational TV row), each green only when every division is ready, plus the next-step rule that picks the card's primary button.
+- `useOrientationData.ts`: shared `["event"]`, `["sessions"]` and `["playingWindows", id]` queries and `browserZone()`.
+- `useActiveSessionLiveUpdates.ts`: mounted once in `AppShell`; refetches the event and sessions on `active_session_changed`, including a `null` one (the active session was deleted), so the header pill falls back to "No active session" and Match Control and Skills Control leave the menu.
+- `ActiveSessionBanner.tsx`: on every admin page from the cutover point until the end of the next session's span, offers "Make it active" or "Not yet". `snooze.ts` hides it for 15 minutes per browser and per session, with every `localStorage` access in try/catch (if storage throws, "Not yet" hides it for the page's life). `useNow.ts` supplies the clock.
+- `MakeActiveDialog.tsx`: the one way to change the active session (banner, Today tab, session header, Schedule tab). It asks first when a match is running on the active session, and offers "Copy and make active" or "Make active without copying" when the target has no TV spots while the active session has some (with no spots on either side it is a plain confirm). Nothing changes the active session without this confirmation, and the TVs follow `event.active_session_id`, never the session being viewed.
+- `NextStep.tsx`: the quiet "Next: ..." line shown after choosing the game, saving teams, adding the first field, generating a schedule and pairing a TV.
+- `timezones.ts`: the timezone list for the Setup and New session forms.
+
+The menu (`AppShell.tsx`, admin role) has three groups. Event: Event & game,
+Teams & divisions, Devices & displays, Season rankings. Sessions: every session
+by date (a session without a date last, and the active one marked with a live
+dot), "+ New session" and "Manage sessions", with Match Control and Skills
+Control nested under the active session only (Skills Control only while skills
+are on). Settings: Role passwords, Backups and Switch tournament. The header
+carries the event name, the active-session pill (linking to its Today tab, or
+"No active session"), the 24-hour clock, the theme toggle and Log out. A
+session's menu entry opens its Today tab and only changes what is viewed.
 
 The Schedule tab is a live planner. `src/schedule/planDraft.ts` (rows,
 change detection and `isDraftDirty`, what Apply sends — the first
@@ -236,8 +280,7 @@ Skills challenges live in `src/skills/`.
 **Live scoring (shared).** `packages/shared/src/scoring/` holds the draft types, `api.ts`, `mergeDraft.ts` (`mergeIncoming`: a newer version wins and still-pending local items stay on top; `changedByOthers` picks the items to flash for 2 s), `useLiveDraft` / `useSkillsRun` (one PATCH in flight, changes queued in order; 5xx, 408 and 429 are retried and never drop a change; the "Offline, changes not saved yet" banner shows while changes are queued and the socket is down; a flush then a refetch on reconnect; "Saved" after any Submit, including another device's `match_submitted`; "This match is no longer available" when the match disappears), `LiveScoringPage` (Submit on a 409 for a missing alliance asks "<alliance> has no score. Save it with zero points?"; confirming fills the defaults and submits after the queued changes flush), `ClockControls` and `SkillsRunPanel`, all taking the caller's `t` like `ScoresheetForm`. They are built for the admin app now and the scorer app later. `packages/shared/src/display/skillsClock.ts` holds the skills timer rules (`skillsClockPhase`, `skillsClockSeconds`, `skillsClockActions`) that both apps use.
 
 `AppShell.tsx`'s nav is gated per role, the same pattern repeated for
-each: `role === "admin"` renders the full admin nav (Divisions, Teams,
-Sessions, …); `role === "front_desk"` renders a separate, minimal `<nav>`
+each: `role === "admin"` renders the full admin nav (the three groups above); `role === "front_desk"` renders a separate, minimal `<nav>`
 with just a Check-In link to `/checkin`. Adding a nav item for a new role
 means adding another `role === "..."` block here, not extending an
 existing one — the two blocks are deliberately not merged, since each
@@ -249,30 +292,35 @@ child route under `/`, not the shared parent `rootLoader`) reads the
 stored JWT directly (`getStoredTokens`/`decodeAccessTokenPayload` — the
 same synchronous, context-free pattern `hasValidTokens()` already uses,
 since loaders run outside the React tree and can't call `useAuth()`) and
-redirects straight to `/checkin` if the role is `front_desk`, instead of
-landing on the admin-only Dashboard (whose "edit event name" control
-would otherwise 403 for that role). It's kept in its own module rather
+redirects straight to `/checkin` if the role is `front_desk` (and a judge to
+`/judge/awards`), instead of landing on the admin home, whose setup checklist
+and Today tab are admin-only. It's kept in its own module rather
 than inlined in `router.tsx` specifically so it can be unit-tested
 without importing `router.tsx` itself — that file's module-level
 `createBrowserRouter(...)` call kicks off a real navigation attempt as
 soon as it's imported, which isn't safe to trigger from a plain Vitest
 unit test under jsdom.
 
-**Match Control** (`src/routes/MatchControlRoute.tsx`, `src/matchControl/`, admin nav "Match Control", route `/match-control`): the operator page for the active session. One tab per field group (the choice remembered in the browser), each with a Next match card (the override from `PUT /api/field-sets/{id}/queued-match`, with Change and Clear), a Timer card (Start, Start Driver, Pause, Resume, End Early, which asks first, and Reset, which asks whether to reset the period or the whole match), a Saved Match card (the last fully scored match with its scores), one button per audience screen with the selected screen's settings below, a Time-out control (length and Cancel) and the Play sounds switch. The next-match rule is the shared one in `packages/shared/src/display/matchOrder.ts`, so the page and the displays agree. It refetches on the match, score, `display_changed` and `field_set_changed` events on `/ws/active-session`, so two admins see the same state. "Score" on the current match opens the scoring page, "Hide live scores" / "Show live scores" flips the session switch for its round, and "Match over — waiting for the score." clears on `match_submitted`.
+**Match Control** (`src/routes/MatchControlRoute.tsx`, `src/matchControl/`, menu entry "Match Control" under the active session, route `/match-control`): the operator page for the active session. One tab per field group (the choice remembered in the browser), each with a Next match card (the override from `PUT /api/field-sets/{id}/queued-match`, with Change and Clear), a Timer card (Start, Start Driver, Pause, Resume, End Early, which asks first, and Reset, which asks whether to reset the period or the whole match), a Saved Match card (the last fully scored match with its scores), one button per audience screen with the selected screen's settings below, a Time-out control (length and Cancel) and the Play sounds switch. The next-match rule is the shared one in `packages/shared/src/display/matchOrder.ts`, so the page and the displays agree. It refetches on the match, score, `display_changed` and `field_set_changed` events on `/ws/active-session`, so two admins see the same state. "Score" on the current match opens the scoring page, "Hide live scores" / "Show live scores" flips the session switch for its round, and "Match over — waiting for the score." clears on `match_submitted`.
 
 **Scoring route** (`/sessions/:sessionId/matches/:matchId/score`, `MatchScoringRoute`): `LiveScoringPage` for an unsubmitted match. A submitted match is read-only with "Correct score", which posts `POST …/score` per alliance, in any session. The Matches tab's "Score" opens it (a completed match's button reads "View score").
 
-**Skills Control** (`src/routes/SkillsControlRoute.tsx`, `src/skillsControl/`, admin nav "Skills Control", route `/skills-control`): one card per skills field set of the active session, with the type (locked while any run exists), the set timer and its Start / Pause-Resume / End / Reset, and a row per field (`aria-label` is the field name) with team, type ("Set timer" or "Alone · m:ss"), state (No run, Ready, Running, Paused, Ended, or Submitted from the field's newest attempt), Score (`SkillsRunPanel` in a modal), Discard (asks first) and the field's own timer buttons. "Start run" offers checked-in teams that are not on another skills field and have an attempt of that type left; a type other than the set's starts the run on its own timer. The page refetches a set on `skills_run_changed` (key `["skillsSet", id]`) and attempts on `skills_changed`. With no skills set it links to the Fields page.
+**Skills Control** (`src/routes/SkillsControlRoute.tsx`, `src/skillsControl/`, menu entry "Skills Control" under the active session (while skills are on), route `/skills-control`): one card per skills field set of the active session, with the type (locked while any run exists), the set timer and its Start / Pause-Resume / End / Reset, and a row per field (`aria-label` is the field name) with team, type ("Set timer" or "Alone · m:ss"), state (No run, Ready, Running, Paused, Ended, or Submitted from the field's newest attempt), Score (`SkillsRunPanel` in a modal), Discard (asks first) and the field's own timer buttons. "Start run" offers checked-in teams that are not on another skills field and have an attempt of that type left; a type other than the set's starts the run on its own timer. The page refetches a set on `skills_run_changed` (key `["skillsSet", id]`) and attempts on `skills_changed`. With no skills set it links to the Setup tab's fields.
 
-The Fields tab has a Purpose select per set and separate "Teamwork field sets" / "Skills field sets" sections; the server's 409 shows on the card, and the schedule's readiness check ignores skills sets. The Sessions edit form has the two live-score switches (not the create form; new sessions take the server defaults). On Devices, a scorer's or referee's binding shows in the Group column as "Scoring · <field>" with Clear, and the list refetches on `scorer_binding_changed`. On the Skills page an attempt scored on a skills field shows the field's name.
-
-**Displays** (`src/routes/DisplaysRoute.tsx`, `src/displays/`, admin nav "Displays", route `/displays`): for the active session, with a session picker to set up another. Field groups each show their audience group (screen and settings, Play sounds, its displays) and their fields' groups; pit groups are added with a name and division and edited in `PitGroupEditor` (one screen, or a rotation: an ordered list of screens with settings and, for screens that don't scroll, seconds; reorder, add, remove; delete asks first). Each display shows its name, online state, Identify and a Move to selector; unassigned displays have Put in group and Identify; Copy displays from another session is offered while the session has no pit groups or assignments and afterwards lists the displays it could not place. Screen labels are admin i18n keys, one per registry key. The Devices page also shows each display's group. The page refetches on `display_changed` and `devices_changed`.
+The Setup tab's fields section has a Purpose select per set and separate "Teamwork field sets" / "Skills field sets" sections; the server's 409 shows on the card, and the schedule's readiness check ignores skills sets. The Setup tab has the two live-score switches (the New session page does not; new sessions take the server defaults). On Devices & displays, a scorer's or referee's binding shows in the Group column as "Scoring · <field>" with Clear, and the list refetches on `scorer_binding_changed`. On the Skills page an attempt scored on a skills field shows the field's name.
 
 **Awards** (`src/awards/`): the session Awards tab (`/sessions/:id/awards`) lists a session's awards in ceremony order with each slot's winners and status, and lets an admin add, edit, reorder, copy, delete, override, finalize and export them. `AwardsView` takes a `mode` (`admin` or `judge`) and a realtime `channelPath`, and refetches on `awards_changed` and on anything that moves a result (`AWARD_REFRESH_EVENTS`). Judges log into the same app and see only `/judge/awards` (judged awards, choose and clear winners), `/judge/rankings` (session rankings) and `/rankings`, always for the active session; `JudgeLayout` provides the session and the `/ws/active-session` channel, because the per-session channel is admin-only. `AuthenticatedLayout` sends a judge anywhere else back to `/judge/awards`.
 
 **Game plugin gating** (`src/gamePlugin/`): until the event has a game plugin, `useGamePlugin` reports none, `GamePluginBanner` (in the admin layout, hidden from judges) links to `/events/setup#game-plugins`, and `RequiresGamePlugin` swaps a screen for `NeedsGamePlugin` (an admin gets a link to Event Setup, anyone else a plain note). `router.tsx` wraps session Matches, Rankings and Skills, season `/rankings` and `/judge/rankings` in it; award forms disable the Performance kind and any source that cannot produce a winner. `AppShell` calls `useGamePluginLiveUpdates`, which refetches everything the plugin shapes on the `game_plugin_changed` broadcast, so open pages unlock live. Event Setup's plugin section has three states: nothing selected ("Select for this event"), selected and unused ("Switch to this" and "Clear selection", each first asking the server for a `dry_run` preview and confirming what will reset in an `alertdialog`), and in use (matches or skills attempts exist: no buttons, just the locked note). The skills settings form re-seeds from server values that change under it, because a plugin change resets them.
 
-**Devices** (`src/routes/DevicesRoute.tsx`, `src/devices/`, admin nav "Devices", route `/devices`): `PairDeviceForm` takes a code typed loosely (case, spaces and dashes are normalized), checks it as soon as it has six characters and fills in the server's suggested name (replacing only an earlier suggestion, never a name the admin typed), then pairs it with a role and name. The page reads `?pair=<code>` to prefill the form, which is what the device's QR link opens. The list shows each device's role, status (active, idle, disabled) and last seen, with Edit (`EditDeviceDialog`), Disable/Enable and Delete (`ConfirmDialog`); below it is the idle-timeout setting (15 to 1440 minutes). The list refetches on the `devices_changed` broadcast on `/ws/active-session`. A signed-out admin who opens `/devices?pair=...` returns there after signing in: `returnPathAfterLogin` in `routeGuards.ts` sends an admin back to the page they came from (and a judge only to a judge page) through `safeReturnPath`, which refuses anything but a same-app path. Only a signed-out visit or an expired session records that return path: clicking Log out calls `noteExplicitLogout()` first, so `AuthenticatedLayout` redirects to `/login` with no `from` (the page belonged to the user who left), and the next sign-in clears the flag. The sign-in page links to `/pair` with a plain `<a>`, not a router `Link`, because `/pair` belongs to the device app.
+**Devices & displays** (`src/routes/DevicesDisplaysRoute.tsx`, `src/devices/`, menu entry "Devices & displays", route `/devices`; `/displays` redirects here). One page, top to bottom:
+- `ServerInfoPanel` (the address a device opens) and `PairDeviceForm`. The form takes a code typed loosely (case, spaces and dashes are normalized), checks it as soon as it has six characters and fills in the server's suggested name (replacing only an earlier suggestion, never one the admin typed), then pairs it with a role (default `display_device`) and name. For a TV a "Shows" picker lists the selected session's spots (each field set's audience screen, each field, each pit group, or "Nothing yet") and pairing assigns it in the same step; pairing a TV with nothing chosen shows a "Choose what it shows" next step. The page reads `?pair=<code>` to prefill the form, which is what the device's QR link opens.
+- A "Spots for" session picker (defaults to the active session; it changes only this page's view) and, when there is no active session, a warning with a link to fix it.
+- `DisplaysTable`: one row per paired display device with its name, a dropdown that changes what it shows in the selected session, its connection ("Connected", or "Not connected" with last seen), Identify (TVs only; on a TV that is not connected it shows a message instead of calling the API), and Edit, Disable/Enable and Delete. Connection comes from the server's live-socket tracking (`online` on `/api/displays`), is shown for TVs only and sits beside the status (active, idle, disabled), not instead of it. `CopySpotsPanel` ("Copy spots from another session") appears only while the viewed session has no spots, because the server refuses a copy into one that has any, and afterwards lists the displays it could not place.
+- `SpotsSection`: each audience group's screen, settings and sounds, and the pit groups (`PitGroupEditor`: one screen or a rotation of screens with settings and, for screens that don't scroll, seconds; reorder, add, remove; delete asks first), plus the "unplaced" warnings. Screen labels are admin i18n keys, one per registry key.
+- `OtherDevicesTable`: scorers, referees and other roles with role, status and last seen, a scorer's or referee's binding in the Group column as "Scoring · <field>" with Clear, Edit (`EditDeviceDialog`), Disable/Enable and Delete (`ConfirmDialog`). `IdleTimeoutForm` (15 to 1440 minutes) is at the bottom.
+- The page refetches on `devices_changed` and `scorer_binding_changed` on `/ws/active-session`. The server sends `devices_changed` to admin sockets when a device's first socket opens or its last closes, so a TV's connection state updates without a reload.
+A signed-out admin who opens `/devices?pair=...` returns there after signing in: `returnPathAfterLogin` in `routeGuards.ts` sends an admin back to the page they came from (and a judge only to a judge page) through `safeReturnPath`, which refuses anything but a same-app path. Only a signed-out visit or an expired session records that return path: clicking Log out calls `noteExplicitLogout()` first, so `AuthenticatedLayout` redirects to `/login` with no `from` (the page belonged to the user who left), and the next sign-in clears the flag. The sign-in page links to `/pair` with a plain `<a>`, not a router `Link`, because `/pair` belongs to the device app.
 
 **Device app** (`apps/device/`): a small React app with no router, built with Vite `base: "/device/"`, which the server serves at `/device/` with its own SPA fallback. It keeps its device token under its own `localStorage` key `tournament-admin.device.v1` and makes every request through its own fetch helper in `src/deviceApi.ts`, never the shared `apiRequest`, and never reads or writes the admin's `tournament-admin.auth.v1` — the two apps share an origin, so pairing the browser an admin is signed into must leave the admin signed in. `useDeviceSession` picks one of three screens: pairing (`PairingScreen`: the code in two groups of three, a QR link to `/devices?pair=<code>`, a countdown and automatic renewal counted from the response's `expires_in` on the device's own clock, never by comparing `expires_at` with it, because a TV's clock may be wrong), home (`HomeScreen`: "Paired as" with the name and role), and blocked (`BlockedScreen`: "This device is disabled.", rechecked every 30 s). A sign-in refused as unknown clears the token and goes back to pairing; a server it can't reach shows "Can't reach the server. Retrying…" and retries. While signed in, `useDeviceSocket` holds `/ws/active-session` open; a `4403` close (the device was disabled, deleted or changed) makes it sign in again, which lands on the right screen. A device on the blocked screen holds no socket, so it notices being enabled or deleted only at its next 30 s recheck. A `1008` close (the server refused the socket) is handled like `4403`: the device signs in again, which rechecks its state. While the server is unreachable (a failed request or a socket that cannot connect or has dropped) the pairing, loading and home screens show the "Can't reach the server. Retrying…" banner; display mode shows a small corner badge instead, so the picture stays on screen. If `localStorage` refuses the device token (a private window, a full quota) `storeDeviceToken` keeps it in a module-level in-memory variable, so the page carries on and only a reload needs pairing again; `getDeviceToken` reads storage first and falls back to that variable.
 
@@ -334,7 +382,7 @@ chosen) starts its own backend and Vite server with
 `tests/e2e/fixtures/isolatedServer.ts`, as `cooperativeRankings.spec.ts`
 does on ports 8125/5185, `finalizeQualification.spec.ts` on 8127/5187, and
 `skillsChallenges.spec.ts` (the shipped sample game, with skills on) on
-8128/5188, `awards.spec.ts` on 8129/5189, and `gamePluginGating.spec.ts` on 8130/5190, `backups.spec.ts` on 8131/5191, and `devicePairing.spec.ts` on 8132/5192 with the device app's dev server on 5193 (pass `devicePort` to `startIsolatedServer` and it also starts `apps/device` and points the admin dev server's `/device/` and `/pair` proxy at it). `displays.spec.ts` (display groups: Match Control, the Displays page and the device app's display mode) uses 8133/5194 with the device app on 5195. `liveScoring.spec.ts` (live scoring: two admin browsers and an API-paired scorer tablet on one match, live totals on displays, finals hidden by default, offline catch-up, Skills Control with a skills field TV, an earlier session's correction) uses 8143/5204 with the device app on 5205. `zz_seasonRankings.spec.ts` runs last for the same
+8128/5188, `awards.spec.ts` on 8129/5189, and `gamePluginGating.spec.ts` on 8130/5190, `backups.spec.ts` on 8131/5191, and `devicePairing.spec.ts` on 8132/5192 with the device app's dev server on 5193 (pass `devicePort` to `startIsolatedServer` and it also starts `apps/device` and points the admin dev server's `/device/` and `/pair` proxy at it). `displays.spec.ts` (display groups: Match Control, the Devices & displays page and the device app's display mode) uses 8133/5194 with the device app on 5195. `liveScoring.spec.ts` (live scoring: two admin browsers and an API-paired scorer tablet on one match, live totals on displays, finals hidden by default, offline catch-up, Skills Control with a skills field TV, an earlier session's correction) uses 8143/5204 with the device app on 5205. `orientation.spec.ts` (the sessions-first golden path from an empty event, the next-session banner under `page.clock`, and the old-URL redirects) uses 8153/5214 with the device app on 5215. `zz_seasonRankings.spec.ts` runs last for the same
 reason as `z_sessionSchedule.spec.ts`.
 
 `playwright.config.ts` uses `channel: "chrome"` — the machine's installed

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
+import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initI18n, ApiError } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
@@ -87,13 +88,32 @@ function renderSetup() {
   render(
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
-        <EventSetupRoute />
+        <MemoryRouter>
+          <EventSetupRoute />
+        </MemoryRouter>
       </I18nextProvider>
     </QueryClientProvider>
   );
 }
 
 describe("EventSetupRoute", () => {
+  it("offers a next step to add teams only once a game is selected", async () => {
+    mockServer({ selected: null, locked: false });
+    renderSetup();
+
+    fireEvent.click((await screen.findAllByRole("button", { name: "Select for this event" }))[0]);
+    const link = await screen.findByRole("link", { name: "add teams" });
+    expect(link).toHaveAttribute("href", "/teams");
+    expect(link.closest("p")).toHaveTextContent("Next: add teams");
+  });
+
+  it("shows no next step while no game is selected", async () => {
+    mockServer({ selected: null, locked: false });
+    renderSetup();
+    await screen.findAllByRole("button", { name: "Select for this event" });
+    expect(screen.queryByRole("link", { name: "add teams" })).not.toBeInTheDocument();
+  });
+
   it("enables the skills panel as soon as a game plugin is selected, without a reload", async () => {
     let selected: string | null = null;
     vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
@@ -133,7 +153,9 @@ describe("EventSetupRoute", () => {
     render(
       <QueryClientProvider client={queryClient}>
         <I18nextProvider i18n={i18n}>
-          <EventSetupRoute />
+          <MemoryRouter>
+            <EventSetupRoute />
+          </MemoryRouter>
         </I18nextProvider>
       </QueryClientProvider>
     );
@@ -152,6 +174,7 @@ describe("EventSetupRoute", () => {
     mockServer({ selected: null, locked: false });
     renderSetup();
     const headings = await screen.findAllByRole("heading", { level: 2 });
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Event & game");
     expect(headings[0]).toHaveTextContent("Game plugins");
     expect(headings[0].closest("section")).toHaveAttribute("id", "game-plugins");
     expect(screen.getByText("Choose the game first. Scheduling, matches, rankings and skills depend on it.")).toBeInTheDocument();
@@ -223,5 +246,27 @@ describe("EventSetupRoute", () => {
     expect(await screen.findByText("Locked because matches are scheduled or skills attempts are recorded.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Switch to this" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Clear selection" })).not.toBeInTheDocument();
+  });
+
+  it("renames the event from the first panel", async () => {
+    const state = { selected: null as string | null, locked: false };
+    mockServer(state);
+    const base = vi.mocked(apiRequest).getMockImplementation()!;
+    let renameBody: unknown = null;
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
+      if (path === "/api/event" && (options as { method?: string } | undefined)?.method === "PATCH") {
+        renameBody = (options as { body: unknown }).body;
+        return { id: 1, name: "State Championship", active_session_id: null, game_plugin_name: null, game_plugin_locked: false, created_at: "" } as never;
+      }
+      return base(path, options as never);
+    });
+    renderSetup();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit event name" }));
+    fireEvent.change(screen.getByLabelText("Event", { exact: true }), { target: { value: "State Championship" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(renameBody).toEqual({ name: "State Championship" }));
+    expect(await screen.findByText("State Championship")).toBeInTheDocument();
   });
 });

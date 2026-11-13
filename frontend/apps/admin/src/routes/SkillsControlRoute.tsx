@@ -39,7 +39,7 @@ function SkillsControlBody({ sessionId }: { sessionId: number }) {
   if (data.fieldSets.data && data.skillsSets.length === 0) {
     return (
       <p>
-        {t("skillsControl.noSets")} <Link to={`/sessions/${sessionId}/fields`}>{t("skillsControl.fieldsLink")}</Link>
+        {t("skillsControl.noSets")} <Link to={`/sessions/${sessionId}/setup#fields`}>{t("skillsControl.fieldsLink")}</Link>
       </p>
     );
   }

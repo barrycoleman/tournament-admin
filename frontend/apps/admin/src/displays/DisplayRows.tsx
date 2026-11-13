@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { apiErrorMessage } from "../apiErrorMessage";
+import { IdentifyButton } from "./IdentifyButton";
 import type { DisplayGroupRead, DisplayRef } from "./types";
 import { useDisplayMutations } from "./useDisplays";
 
@@ -15,6 +16,11 @@ export function groupOptionLabel(
       name: group.name,
     });
   return t("displays.groupOption.pit", { name: group.name });
+}
+
+/** Names a field set by its audience group, for `groupOptionLabel`. */
+export function fieldSetNameOf(groups: DisplayGroupRead[]): (id: number | null) => string {
+  return (id) => groups.find((g) => g.kind === "audience" && g.field_set_id === id)?.name ?? "";
 }
 
 /** A list of displays with Identify and a selector that moves each one. */
@@ -56,14 +62,11 @@ export function DisplayRows({
             <span className={`badge ${display.online ? "badge-success" : "badge-neutral"}`}>
               {display.online ? t("displays.online") : t("displays.offline")}
             </span>
-            <button
-              className="btn btn-small"
-              type="button"
-              aria-label={t("displays.identifyNamed", { name: display.name })}
-              onClick={() => identify.mutate(display.device_id)}
-            >
-              {t("displays.identify")}
-            </button>
+            <IdentifyButton
+              name={display.name}
+              online={display.online}
+              onIdentify={() => identify.mutate(display.device_id)}
+            />
             <select
               className="select"
               aria-label={

@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import QRCode from "qrcode";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { apiErrorMessage } from "../apiErrorMessage";
+import { InlineEditableText } from "../components/InlineEditableText";
 import { GamePluginChangeDialog } from "../gamePlugin/GamePluginChangeDialog";
 import { useGamePlugin } from "../gamePlugin/useGamePlugin";
 import { RankingSettingsPanel } from "../rankings/RankingSettingsPanel";
 import { RANKING_SETTINGS_KEY } from "../rankings/useRankingSettings";
 import { SkillsSettingsPanel } from "../skills/SkillsSettingsPanel";
+import { NextStep } from "../orientation/NextStep";
 import { SKILLS_SETTINGS_KEY } from "../skills/useSkillsSettings";
-import type { EventRead, GamePluginChangePreview, PluginSummary, ServerInfo } from "../types";
+import type { EventRead, GamePluginChangePreview, PluginSummary } from "../types";
 
 function InstallPluginField({
   kind,
@@ -225,6 +226,7 @@ function GamePluginSection() {
         </button>
       )}
       {selected && locked && <p className="field__hint">{t("eventSetup.lockedNote")}</p>}
+      {selected && <NextStep to="/teams">{t("eventSetup.nextAddTeams")}</NextStep>}
       {sectionError && (
         <p className="alert alert-danger" role="alert">
           {sectionError}
@@ -252,40 +254,48 @@ function GamePluginSection() {
   );
 }
 
-function ServerInfoPanel() {
+function EventNamePanel() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const { data } = useQuery({
-    queryKey: ["server-info"],
-    queryFn: () => apiRequest<ServerInfo>("/api/server-info"),
+    queryKey: ["event"],
+    queryFn: () => apiRequest<EventRead>("/api/event"),
   });
-  const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
 
-  useEffect(() => {
-    if (!data) return;
-    for (const address of data.addresses) {
-      const canvas = canvasRefs.current[address];
-      if (canvas) {
-        void QRCode.toCanvas(canvas, `http://${address}:${data.port}`);
-      }
-    }
-  }, [data]);
+  const renameMutation = useMutation({
+    mutationFn: (name: string) =>
+      apiRequest<EventRead>("/api/event", { method: "PATCH", body: { name } }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["event"], updated);
+    },
+  });
 
   if (!data) return null;
 
   return (
-    <section className="panel">
-      <h2>{t("eventSetup.serverInfoHeading")}</h2>
-      <div className="server-info-grid">
-        {data.addresses.map((address) => (
-          <div className="server-info-card" key={address}>
-            <canvas ref={(node) => { canvasRefs.current[address] = node; }} />
-            <p>
-              {t("eventSetup.serverInfoAddressLabel")}: {address}:{data.port}
-            </p>
-          </div>
-        ))}
+    <div className="panel panel--form">
+      <div className="field">
+        <span className="field__label">{t("eventSetup.eventNameLabel")}</span>
+        <InlineEditableText
+          value={data.name}
+          onSave={(name) => renameMutation.mutate(name)}
+          onCancel={() => renameMutation.reset()}
+          isSaving={renameMutation.isPending}
+          error={
+            renameMutation.isError
+              ? renameMutation.error instanceof ApiError
+                ? renameMutation.error.detail
+                : t("errors.generic")
+              : null
+          }
+          editLabel={t("eventSetup.editEventNameAction")}
+          saveLabel={t("eventSetup.saveAction")}
+          cancelLabel={t("eventSetup.cancelAction")}
+          inputLabel={t("eventSetup.eventNameLabel")}
+          inputId="event-name"
+        />
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -294,6 +304,7 @@ export function EventSetupRoute() {
   return (
     <div>
       <h1>{t("eventSetup.heading")}</h1>
+      <EventNamePanel />
       <GamePluginSection />
       <PluginList
         headingKey="eventSetup.schedulerPluginsHeading"
@@ -302,7 +313,6 @@ export function EventSetupRoute() {
       />
       <RankingSettingsPanel />
       <SkillsSettingsPanel />
-      <ServerInfoPanel />
     </div>
   );
 }

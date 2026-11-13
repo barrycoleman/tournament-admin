@@ -14,7 +14,7 @@ test.describe.serial("device pairing", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page.getByRole("heading", { name: "Devices", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Devices & displays", exact: true, level: 1 })).toBeVisible();
     return page;
   }
 
@@ -31,7 +31,7 @@ test.describe.serial("device pairing", () => {
     await expect(admin.getByLabel("Device name")).not.toHaveValue("");
     await admin.getByLabel("Role").selectOption({ label: role });
     await admin.getByLabel("Device name").fill(name);
-    await admin.getByRole("button", { name: "Pair" }).click();
+    await admin.getByRole("button", { name: "Pair", exact: true }).click();
     await expect(admin.getByText(`Paired ${name}.`)).toBeVisible();
   }
 
@@ -78,6 +78,8 @@ test.describe.serial("device pairing", () => {
     const device = await devicePage(browser);
     const admin = await adminPage(browser, `/devices?pair=${device.code}`);
     await expect(admin.getByLabel("Pairing code")).toHaveValue(device.code);
+    // A new device is most often a TV, so the form starts on that role.
+    await expect(admin.getByLabel("Role")).toHaveValue("display_device");
     await expect(admin.getByLabel("Device name")).not.toHaveValue("");
   });
 
@@ -85,7 +87,7 @@ test.describe.serial("device pairing", () => {
     const admin = await adminPage(browser);
     await admin.getByLabel("Pairing code").fill("AAA AAA");
     await expect(admin.getByText("That code isn't valid or has expired.")).toBeVisible();
-    await expect(admin.getByRole("button", { name: "Pair" })).toBeDisabled();
+    await expect(admin.getByRole("button", { name: "Pair", exact: true })).toBeDisabled();
   });
 
   test("pairing a device in the admin's own browser keeps the admin signed in", async ({ browser }) => {
@@ -93,10 +95,10 @@ test.describe.serial("device pairing", () => {
     const sameBrowser = await admin.context().newPage();
     await sameBrowser.goto(`${server.baseUrl}/pair`);
     const code = (await sameBrowser.getByTestId("pairing-code").textContent())!.replace(" ", "");
-    await pair(admin, code, "Admin Laptop Display", "Display");
+    await pair(admin, code, "Admin Laptop Display", "TV / display");
     // A paired display runs display mode, which shows its name until it is given a group.
     await expect(sameBrowser.getByRole("heading", { name: "Admin Laptop Display" })).toBeVisible({ timeout: 10_000 });
     await admin.reload();
-    await expect(admin.getByRole("heading", { name: "Devices", level: 1 })).toBeVisible();
+    await expect(admin.getByRole("heading", { name: "Devices & displays", exact: true, level: 1 })).toBeVisible();
   });
 });

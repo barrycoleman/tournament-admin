@@ -96,7 +96,7 @@ test.describe.serial("display groups", () => {
     await expect(fieldTv.getByText("Not set up for this session")).toBeVisible();
     await pairDisplay(browser, request, "Big TV");
 
-    const admin = await adminPage(browser, "/displays");
+    const admin = await adminPage(browser, "/devices");
     await expect(admin.getByRole("heading", { name: "Displays", level: 1 })).toBeVisible();
     const unassigned = admin.getByRole("region", { name: "Unassigned displays" });
     await unassigned.getByLabel("Put Field TV in a group").selectOption({ label: "Main Fields › Field 1" });
@@ -219,12 +219,14 @@ test.describe.serial("display groups", () => {
   test("copying displays into a new session keeps every display in its place", async ({ browser, request }) => {
     const sunday = (await call(request, "post", "/api/sessions", { label: "Sunday" })).id;
     await call(request, "post", `/api/sessions/${sunday}/copy-fields`, { source_session_id: saturday });
-    const admin = await adminPage(browser, "/displays");
-    await admin.getByLabel("Session").selectOption({ label: "Sunday" });
-    const copy = admin.getByRole("region", { name: "Copy displays" });
+    const admin = await adminPage(browser, "/devices");
+    await expect(admin.getByRole("heading", { name: "Devices & displays", exact: true, level: 1 })).toBeVisible();
+    await admin.getByLabel("Spots for").selectOption({ label: "Sunday" });
+    const copy = admin.getByRole("region", { name: "Copy spots from another session" });
     await copy.getByLabel("Copy from").selectOption({ label: "Saturday" });
     await copy.getByRole("button", { name: "Copy displays" }).click();
     await expect(admin.getByRole("region", { name: "Main Fields" }).getByText("Field TV")).toBeVisible();
+    await expect(admin.getByLabel("What Field TV shows").locator("option:checked")).toHaveText("Main Fields › Field 1");
 
     await call(request, "post", "/api/event/active-session", { session_id: sunday });
     await expect(screens["Field TV"].getByText("No more matches on this field")).toBeVisible({ timeout: 10_000 });

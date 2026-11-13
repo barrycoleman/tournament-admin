@@ -20,22 +20,28 @@
     "skillsControlLink": "Skills Control",
     "backupsLink": "Backups",
     "logout": "Log out",
-    "dashboardLink": "Dashboard",
-    "eventSetupLink": "Event & plugins",
     "rolesLink": "Role passwords",
     "dismiss": "Dismiss",
     "seasonRankingsLink": "Season rankings",
     "judgeAwardsLink": "Awards",
     "judgeSessionRankingsLink": "Session rankings",
-    "divisionsLink": "Divisions",
-    "teamsLink": "Teams",
-    "sessionsLink": "Sessions",
     "checkinLink": "Check-In",
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode",
-    "devicesLink": "Devices",
     "matchControlLink": "Match Control",
-    "displaysLink": "Displays"
+    "groups": {
+      "event": "Event",
+      "sessions": "Sessions",
+      "settings": "Settings"
+    },
+    "eventGameLink": "Event & game",
+    "teamsDivisionsLink": "Teams & divisions",
+    "devicesDisplaysLink": "Devices & displays",
+    "newSessionLink": "+ New session",
+    "manageSessionsLink": "Manage sessions",
+    "activeSessionLink": "{{label}} (active)",
+    "activeSessionPill": "Active: {{label}}",
+    "noActiveSession": "No active session"
   },
   "picker": {
     "damagedHeading": "This tournament file is damaged",
@@ -62,6 +68,7 @@
     "switchAction": "Switch Tournament"
   },
   "teams": {
+    "emptyHint": "No teams yet. Add a row, then type or paste rows from a spreadsheet into it, or upload a CSV.",
     "heading": "Teams",
     "gridLabel": "Team roster",
     "columnNumber": "Number",
@@ -89,7 +96,9 @@
     "downloadCsvLabel": "Download CSV",
     "downloadTemplateLabel": "Download blank template",
     "randomDivisionOption": "(random)",
-    "randomizeUnassignedAction": "Randomly assign unassigned teams"
+    "randomizeUnassignedAction": "Randomly assign unassigned teams",
+    "nextCreateSession": "create a session",
+    "nextGoTo": "go to {{label}}"
   },
   "divisions": {
     "heading": "Divisions",
@@ -152,7 +161,7 @@
     "empty": "No sessions yet. Add one to start checking teams in and building a schedule.",
     "labelLabel": "Session name",
     "dateLabel": "Date (optional)",
-    "timezoneLabel": "Timezone (optional)",
+    "timezoneLabel": "Timezone",
     "noTimezoneOption": "No timezone set",
     "editAction": "Edit",
     "saveAction": "Save",
@@ -160,7 +169,6 @@
     "addSessionAction": "Add session...",
     "addSubmit": "Add session",
     "checkinTab": "Check-In",
-    "fieldsTab": "Fields",
     "matchesTab": "Matches",
     "rankingsTab": "Rankings",
     "scheduleTab": "Schedule",
@@ -239,7 +247,7 @@
       "divisionTab_one": "{{name}} · {{count}} team",
       "divisionTab_other": "{{name}} · {{count}} teams",
       "discardHeading": "Discard unapplied changes?",
-      "discardBody": "Your changes to this division's rounds haven't been applied.",
+      "discardBody": "Your changes to this division's rounds or to the playing times haven't been applied.",
       "discardConfirm": "Discard changes",
       "keepEditing": "Keep editing",
       "unsaved": {
@@ -254,6 +262,11 @@
         "hoursMinutes": "{{hours}} h {{minutes}} min"
       },
       "playingTimes": {
+        "unsaved": {
+          "heading": "Unsaved playing times",
+          "body": "You have unsaved playing times. Leave without saving?",
+          "bodyWithRounds": "You have unsaved playing times, and your changes to the rounds haven't been applied. Leave without saving?"
+        },
         "heading": "Playing times",
         "none": "No playing times yet. Add the times matches can be played, for every day of this session.",
         "edit": "Edit",
@@ -273,7 +286,8 @@
           "incomplete": "Every playing time needs a date, a start and an end.",
           "endBeforeStart": "Each playing time must end after it starts.",
           "overlap": "Two playing times on the same day overlap."
-        }
+        },
+        "notSaved": "Not saved yet"
       },
       "fit": {
         "checking": "Checking the plan…",
@@ -294,7 +308,8 @@
         "schedulerLabel": "Scheduler",
         "applied_one": "{{count}} match scheduled.",
         "applied_other": "{{count}} matches scheduled.",
-        "viewMatches": "View matches"
+        "viewMatches": "View matches",
+        "nextMakeActive": "make this session active"
       }
     },
     "loading": "Loading…",
@@ -305,6 +320,8 @@
     "setActiveAction": "Set as active session",
     "setActiveHint": "The front-desk kiosk and live displays follow the active session.",
     "checkin": {
+      "progress": "{{checked}} of {{total}} checked in",
+      "nextPlanMatches": "plan matches",
       "columnNumber": "Number",
       "columnName": "Name",
       "columnDivision": "Division",
@@ -364,9 +381,13 @@
       "copyFromPlaceholder": "Choose a session…",
       "copyAction": "Copy fields",
       "purposeLabel": "Purpose",
-      "purpose": { "teamwork": "Teamwork", "skills": "Skills" },
+      "purpose": {
+        "teamwork": "Teamwork",
+        "skills": "Skills"
+      },
       "teamworkHeading": "Teamwork field sets",
-      "skillsHeading": "Skills field sets"
+      "skillsHeading": "Skills field sets",
+      "nextPlayingTimes": "playing times and rounds"
     },
     "setActiveShortAction": "Set active",
     "setActiveAriaLabel": "Set {{name}} as the active session",
@@ -382,7 +403,51 @@
     "awardsTab": "Awards",
     "liveScoresLegend": "Live scores on displays",
     "liveQualificationLabel": "Show live scores on displays in practice and qualification",
-    "liveFinalsLabel": "Show live scores on displays in finals"
+    "liveFinalsLabel": "Show live scores on displays in finals",
+    "todayTab": "Today",
+    "setupTab": "Setup",
+    "today": {
+      "eventSetupHeading": "Finish setting up the event first:",
+      "eventSetup": {
+        "gamePlugin": "No game plugin is selected.",
+        "gamePluginFix": "Select a game plugin",
+        "teams": "No teams have been added.",
+        "teamsFix": "Add teams",
+        "session": "No sessions exist.",
+        "sessionFix": "Add a session"
+      },
+      "checkin": {
+        "heading": "Check-in",
+        "count": "{{checked}} / {{total}} checked in",
+        "action": "Check teams in"
+      },
+      "inspection": {
+        "heading": "Inspection",
+        "placeholder": "Inspection status will appear here once inspections are available."
+      },
+      "matches": {
+        "heading": "Matches",
+        "done": "Done",
+        "notDone": "Not done",
+        "timezone": "Session timezone is set",
+        "fields": "Every division has fields",
+        "playingTimes": "Playing times are added",
+        "teams": "Enough teams are checked in",
+        "schedule": "Matches are scheduled",
+        "active": "This is the active session",
+        "displays": "Displays are assigned",
+        "setupAction": "Set up the session",
+        "planMatchesAction": "Plan matches",
+        "makeActiveAction": "Make active",
+        "matchControlAction": "Go to Match Control"
+      }
+    },
+    "setup": {
+      "heading": "Setup",
+      "fieldsHeading": "Fields",
+      "timezoneSuggested": "Not saved yet: we suggested your computer's timezone.",
+      "saved": "Saved."
+    }
   },
   "frontDeskCheckin": {
     "heading": "Team Check-In",
@@ -391,15 +456,12 @@
     "checkInAction": "Check In",
     "checkedInState": "Checked In"
   },
-  "dashboard": {
-    "heading": "Dashboard",
+  "eventSetup": {
     "eventNameLabel": "Event",
     "editEventNameAction": "Edit event name",
     "saveAction": "Save",
-    "cancelAction": "Cancel"
-  },
-  "eventSetup": {
-    "heading": "Event & plugins",
+    "cancelAction": "Cancel",
+    "heading": "Event & game",
     "gamePluginsHeading": "Game plugins",
     "schedulerPluginsHeading": "Scheduler plugins",
     "installLabel": "Install a plugin (.zip)",
@@ -424,8 +486,7 @@
     "switchConfirm": "Switch plugin",
     "clearConfirm": "Clear plugin",
     "cancel": "Cancel",
-    "serverInfoHeading": "Connect a device on this network",
-    "serverInfoAddressLabel": "Address"
+    "nextAddTeams": "add teams"
   },
   "settingsRoles": {
     "heading": "Role passwords",
@@ -742,21 +803,43 @@
     "needsAdminLink": "Choose one in Event Setup",
     "needsOther": "The organizer hasn't chosen a game plugin yet."
   },
+  "devicesDisplays": {
+    "heading": "Devices & displays",
+    "spotsFor": "Spots for",
+    "noActiveWarning": "TVs show nothing until a session is active.",
+    "noActiveLink": "Choose the active session",
+    "noSessionsLink": "Create a session",
+    "serverInfoHeading": "Connect a device on this network",
+    "serverInfoAddressLabel": "Address",
+    "tvsHeading": "TVs and displays",
+    "tvsEmpty": "No TVs paired yet.",
+    "columns": {
+      "shows": "Shows",
+      "connection": "Connection"
+    },
+    "connected": "● Connected",
+    "notConnected": "● Not connected",
+    "showsNamed": "What {{name}} shows",
+    "nothingYet": "Nothing yet",
+    "copyHeading": "Copy spots from another session",
+    "spotsHeading": "Spots",
+    "otherHeading": "Scorers, referees and other devices",
+    "otherEmpty": "No other devices are paired yet.",
+    "chooseWhatItShows": "Choose what it shows",
+    "tvsEmptyLink": "Pair one with its code"
+  },
   "devices": {
-    "heading": "Devices",
-    "noGroup": "Not set up",
     "pairHeading": "Pair a device",
     "pairHelp": "Open the server address followed by /pair on the device, then enter the code it shows.",
     "codeLabel": "Pairing code",
     "roleLabel": "Role",
     "nameLabel": "Device name",
+    "showsLabel": "Shows",
     "pair": "Pair",
     "paired": "Paired {{name}}.",
     "checking": "Checking code…",
     "unknownCode": "That code isn't valid or has expired.",
     "duplicateName": "A device with that name already exists.",
-    "listHeading": "Paired devices",
-    "empty": "No devices are paired yet.",
     "columns": {
       "name": "Name",
       "role": "Role",
@@ -775,7 +858,7 @@
       "referee": "Referee",
       "judge": "Judge",
       "front_desk": "Check-in",
-      "display_device": "Display"
+      "display_device": "TV / display"
     },
     "edit": "Edit",
     "editHeading": "Edit {{name}}",
@@ -866,10 +949,7 @@
     "scoreSaved": "Score saved."
   },
   "displays": {
-    "heading": "Displays",
-    "session": "Session",
     "activeSession": "{{label}} (active)",
-    "copyHeading": "Copy displays",
     "copyHelp": "Copy the screens, pit groups and display places from another session.",
     "copyFrom": "Copy from",
     "chooseSession": "Choose a session…",
@@ -905,6 +985,7 @@
     "offline": "Offline",
     "identify": "Identify",
     "identifyNamed": "Identify {{name}}",
+    "identifyOffline": "This TV isn't connected",
     "putInGroup": "Put {{name}} in a group",
     "moveNamed": "Move {{name}}",
     "chooseGroup": "Choose a group…",
@@ -1024,13 +1105,38 @@
     "setTimer": "Set timer",
     "fieldTimer": "Timer for {{name}}",
     "fieldTimerHint": "A field's own timer buttons take that field off the set timer until its run is submitted or discarded.",
-    "columns": { "field": "Field", "team": "Team", "type": "Type", "timer": "Timer", "state": "State", "actions": "Actions" },
+    "columns": {
+      "field": "Field",
+      "team": "Team",
+      "type": "Type",
+      "timer": "Timer",
+      "state": "State",
+      "actions": "Actions"
+    },
     "followsSet": "Set timer",
     "alone": "Alone · {{clock}}",
     "last": "Last: {{number}} · {{score}}",
-    "state": { "none": "No run", "ready": "Ready", "running": "Running", "paused": "Paused", "ended": "Ended", "submitted": "Submitted" },
-    "phase": { "ready": "Ready", "running": "Running", "paused": "Paused", "ended": "Time's up" },
-    "action": { "start": "Start", "pause": "Pause", "resume": "Resume", "reset": "Reset", "end": "End" },
+    "state": {
+      "none": "No run",
+      "ready": "Ready",
+      "running": "Running",
+      "paused": "Paused",
+      "ended": "Ended",
+      "submitted": "Submitted"
+    },
+    "phase": {
+      "ready": "Ready",
+      "running": "Running",
+      "paused": "Paused",
+      "ended": "Time's up"
+    },
+    "action": {
+      "start": "Start",
+      "pause": "Pause",
+      "resume": "Resume",
+      "reset": "Reset",
+      "end": "End"
+    },
     "startRun": "Start run",
     "startHeading": "Start a run on {{name}}",
     "teamLabel": "Team",
@@ -1058,5 +1164,51 @@
       "resetConfirm": "Reset timer"
     },
     "cancel": "Cancel"
+  },
+  "home": {
+    "loading": "Loading…",
+    "heading": "Get your event ready",
+    "doneLabel": "Done",
+    "todoLabel": "Not done",
+    "items": {
+      "gamePlugin": "Choose the game",
+      "teams": "Add teams",
+      "session": "Create the first session"
+    }
+  },
+  "sessionNew": {
+    "dateLabel": "Date",
+    "heading": "New session"
+  },
+  "teamsLayout": {
+    "heading": "Teams & divisions",
+    "teamsTab": "Teams",
+    "divisionsTab": "Divisions"
+  },
+  "orientation": {
+    "banner": {
+      "message": "<strong>{{label}}</strong> is scheduled to start at {{time}}. Make it the active session? The TVs and Match Control will switch to it.",
+      "messageToday": "<strong>{{label}}</strong> is scheduled for today. Make it the active session? The TVs and Match Control will switch to it.",
+      "messageDate": "<strong>{{label}}</strong> is scheduled for {{date}}. Make it the active session? The TVs and Match Control will switch to it.",
+      "makeActiveAction": "Make it active",
+      "notYetAction": "Not yet"
+    },
+    "makeActive": {
+      "heading": "Make {{label}} active?",
+      "body": "Make {{label}} the active session? The TVs, Match Control and Skills Control will switch to it.",
+      "runningMatch": "{{match}} is running on {{activeLabel}}.",
+      "activateAction": "Make active",
+      "copyAndActivateAction": "Copy TV spots and make active",
+      "activateWithoutCopyingAction": "Make active without copying",
+      "cancelAction": "Cancel",
+      "loading": "Checking the current session…",
+      "matchCheckFailed": "Couldn't check whether a match is running on {{label}}.",
+      "unplacedHeading": "{{label}} is now active. These TVs had no matching spot and show nothing yet:",
+      "unplacedLink": "Set their spots on Devices & displays",
+      "closeAction": "Close"
+    },
+    "nextStep": {
+      "label": "Next:"
+    }
   }
 }

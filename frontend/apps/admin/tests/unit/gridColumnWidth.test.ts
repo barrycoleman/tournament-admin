@@ -123,6 +123,26 @@ describe("allocateColumnWidths", () => {
     expect(allocateColumnWidths(columns, 330)).toEqual([110, 110, 110]);
   });
 
+  it("hands everything left over to a fill column instead of splitting it", () => {
+    const columns = [
+      { min: 60, ideal: 100, hasData: true },
+      { min: 80, ideal: 200, hasData: true, fill: true },
+      { min: 60, ideal: 90, hasData: true },
+      fixedColumn(80),
+    ];
+    // Ideals plus the fixed column take 470; the fill column takes the other 530.
+    expect(allocateColumnWidths(columns, 1000)).toEqual([100, 730, 90, 80]);
+  });
+
+  it("gives a fill column the slack even before it has data", () => {
+    const columns = [
+      { min: 60, ideal: 100, hasData: true },
+      { min: 80, ideal: 80, hasData: false, fill: true },
+      empty,
+    ];
+    expect(allocateColumnWidths(columns, 500)).toEqual([100, 350, 50]);
+  });
+
   it("leaves everything at its minimum when no column has data", () => {
     expect(allocateColumnWidths([empty, fixedColumn(80)], 1000)).toEqual([50, 80]);
   });

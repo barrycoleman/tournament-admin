@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import {
   DataGrid,
   renderTextEditor,
+  type CellKeyboardEvent,
+  type CellKeyDownArgs,
   type CellPasteArgs,
   type Column,
   type DataGridHandle,
@@ -13,6 +15,9 @@ import {
 import "react-data-grid/lib/styles.css";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { Modal } from "../components/Modal";
+import { NextStep } from "../orientation/NextStep";
+import { pickLandingSession } from "../orientation/sessionTime";
+import { browserZone, useEvent, useSessionWindows, useSessions } from "../orientation/useOrientationData";
 import { showTransientError } from "../errorBanner";
 import {
   allocateColumnWidths,
@@ -43,6 +48,10 @@ const RANDOM_DIVISION_SENTINEL = "__random__";
  * sub-pixel never lands a fraction short and draws the ellipsis anyway.
  */
 const CELL_PADDING = 18;
+
+/** The Number column's width range: team numbers are short, so it stays narrow. */
+const NUMBER_COLUMN_MIN = 90;
+const NUMBER_COLUMN_MAX = 110;
 
 type TeamFieldKeyWithText =
   | "number"
@@ -224,6 +233,17 @@ export function reconcileUploadedRows(
   return result;
 }
 
+/**
+ * A new row nobody has typed into yet (a division alone doesn't count). It
+ * isn't an unsaved change: Save skips it and drops it once the save succeeds.
+ */
+export function isBlankNewRow(row: TeamGridRow): boolean {
+  return (
+    row.id === null &&
+    TEAM_FIELD_KEYS.every((key) => key === "division" || row[key].trim() === "")
+  );
+}
+
 function DivisionEditor(
   props: RenderEditCellProps<TeamGridRow> & {
     divisions: Division[];
@@ -256,6 +276,29 @@ function DivisionEditor(
   );
 }
 
+/** After a clean save: on to the first session, or to the one the admin would land on. */
+function TeamsNextStep() {
+  const { t } = useTranslation();
+  const sessions = useSessions();
+  const event = useEvent();
+  const list = sessions.data ?? [];
+  const { windowsById } = useSessionWindows(list.map((session) => session.id));
+  if (!sessions.data) return null;
+  if (list.length === 0) return <NextStep to="/sessions/new">{t("teams.nextCreateSession")}</NextStep>;
+  const landing = pickLandingSession({
+    sessions: list,
+    windowsById,
+    activeId: event.data?.active_session_id ?? null,
+    now: new Date(),
+    fallbackZone: browserZone(),
+  });
+  const target = list.find((session) => session.id === landing);
+  if (!target) return null;
+  return (
+    <NextStep to={`/sessions/${target.id}/today`}>{t("teams.nextGoTo", { label: target.label })}</NextStep>
+  );
+}
+
 export function TeamsRoute() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -272,6 +315,8 @@ export function TeamsRoute() {
   // same closure, which still sees the pre-click `saving === false`.
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+  // Set by "Add row"; the effect below focuses the new row once it is rendered.
+  const pendingFocusRef = useRef(false);
 
   const { data: divisions } = useQuery({
     queryKey: ["divisions"],
@@ -304,13 +349,15 @@ export function TeamsRoute() {
     row.division === RANDOM_DIVISION_SENTINEL ? t("teams.randomDivisionOption") : row.division;
 
   const statusLabel = (row: TeamGridRow) =>
-    row.error ?? (row.dirty ? t("teams.unsavedIndicator") : "");
+    row.error ?? (row.dirty && !isBlankNewRow(row) ? t("teams.unsavedIndicator") : "");
 
   // How narrow each column may get and how wide its content wants to be,
   // from every row rather than just the filtered ones on screen, so a
   // column keeps its width as the filter changes. Team numbers identify a
-  // row and stay whole; division names keep enough to tell them apart;
-  // everything else keeps its header readable and cuts long values short.
+  // row and stay whole, in a narrow fixed column (wider only for a number
+  // that wouldn't fit); Name takes whatever room is left; division names
+  // keep enough to tell them apart; everything else keeps its header
+  // readable and cuts long values short.
   const columnSizing = useMemo(() => {
     const measure = measureGridText();
     const textSizing = (key: TeamFieldKeyWithText, keep?: SizeColumnOptions["keep"]) =>
@@ -321,9 +368,12 @@ export function TeamsRoute() {
         keep,
         measure,
       });
+    const numberWidth = textSizing("number", "content").ideal;
     const sizing: Record<string, ColumnSizing> = {
-      number: textSizing("number", "content"),
-      name: textSizing("name"),
+      number: fixedColumn(
+        numberWidth > NUMBER_COLUMN_MAX ? numberWidth : Math.max(NUMBER_COLUMN_MIN, numberWidth)
+      ),
+      name: { ...textSizing("name"), fill: true },
       robot_name: textSizing("robot_name"),
       organization: textSizing("organization"),
       city: textSizing("city"),
@@ -408,7 +458,9 @@ export function TeamsRoute() {
       name: t("teams.columnStatus"),
       renderCell: ({ row }) => {
         if (row.error) return <span className="badge badge-danger">{row.error}</span>;
-        if (row.dirty) return <span className="badge badge-warning">{t("teams.unsavedIndicator")}</span>;
+        if (row.dirty && !isBlankNewRow(row)) {
+          return <span className="badge badge-warning">{t("teams.unsavedIndicator")}</span>;
+        }
         return null;
       },
     });
@@ -449,11 +501,30 @@ export function TeamsRoute() {
     setAllRows((previous) => mergeRows(previous, touched));
   }
 
+  useEffect(() => {
+    if (!pendingFocusRef.current) return;
+    pendingFocusRef.current = false;
+    gridRef.current?.setActivePosition({ idx: 0, rowIdx: visibleRows.length - 1 }, { shouldFocus: true });
+  }, [visibleRows]);
+
+  // Enter while editing the last row commits the edit, then starts the next
+  // team's row, so a roster can be typed without reaching for "Add row".
+  function handleCellKeyDown(args: CellKeyDownArgs<TeamGridRow>, event: CellKeyboardEvent) {
+    if (args.mode !== "EDIT" || event.key !== "Enter") return;
+    // Enter that confirms an IME composition (typing Chinese, say) isn't a commit.
+    if (event.nativeEvent.isComposing) return;
+    if (args.rowIdx !== visibleRows.length - 1) return;
+    event.preventGridDefault();
+    args.onClose(true, false);
+    handleAddRow();
+  }
+
   function handleAddRow() {
     const blank = makeBlankTeamRow();
     if (divisionFilter) {
       blank.division = divisionFilter;
     }
+    pendingFocusRef.current = true;
     setAllRows((previous) => [...previous, blank]);
   }
 
@@ -544,7 +615,7 @@ export function TeamsRoute() {
     if (savingRef.current) return;
     setSaveSummary(null);
     setSaveError(null);
-    const dirtyRows = allRows.filter((row) => row.dirty);
+    const dirtyRows = allRows.filter((row) => row.dirty && !isBlankNewRow(row));
     if (dirtyRows.length === 0) return;
     savingRef.current = true;
     setSaving(true);
@@ -608,8 +679,11 @@ export function TeamsRoute() {
       // existing team (the endpoint upserts by number), which stamps a
       // `server-<id>` already held by another row onto it -- dedupe before
       // this reaches the grid.
+      // Blank new rows (left by Add row or Enter) weren't sent; drop them now.
       setAllRows((previous) =>
-        dedupeByClientId(previous.map((row) => updatedById.get(row.clientId) ?? row))
+        dedupeByClientId(
+          previous.map((row) => updatedById.get(row.clientId) ?? row).filter((row) => !isBlankNewRow(row))
+        )
       );
       setSaveSummary({ saved, failed });
       setSaveError(null);
@@ -646,13 +720,13 @@ export function TeamsRoute() {
     }
   }
 
-  const hasUnsavedChanges = allRows.some((row) => row.dirty);
+  const hasUnsavedChanges = allRows.some((row) => row.dirty && !isBlankNewRow(row));
   const hasUnassignedTeams = allRows.some((row) => row.id !== null && row.division === "");
   const canRandomize = hasUnassignedTeams && (divisions?.length ?? 0) > 1;
 
   return (
     <div>
-      <h1>{t("teams.heading")}</h1>
+      <h2>{t("teams.heading")}</h2>
       {showDivisionColumn && (
         <div className="field" style={{ maxWidth: 280 }}>
           <label className="field__label" htmlFor="division-filter">
@@ -727,7 +801,9 @@ export function TeamsRoute() {
             : t("teams.saveSummaryAllOk", { saved: saveSummary.saved })}
         </p>
       )}
+      {saveSummary && saveSummary.failed === 0 && saveSummary.saved > 0 && <TeamsNextStep />}
 
+      {teams && allRows.length === 0 && <p className="field__hint">{t("teams.emptyHint")}</p>}
       <DataGrid
         ref={gridRef}
         aria-label={t("teams.gridLabel")}
@@ -736,6 +812,7 @@ export function TeamsRoute() {
         rowKeyGetter={(row) => row.clientId}
         onRowsChange={handleRowsChange}
         onCellPaste={handleCellPaste}
+        onCellKeyDown={handleCellKeyDown}
       />
 
       {deleteCandidate && (

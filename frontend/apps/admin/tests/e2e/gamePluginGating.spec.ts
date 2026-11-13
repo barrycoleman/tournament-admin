@@ -93,6 +93,11 @@ test.describe.serial("game plugin gating", () => {
 
     const page = await browser.newPage();
     await login(page);
+    // Home shows the setup checklist, which already says to choose the game,
+    // so the banner is left to every other page.
+    await expect(page.getByRole("heading", { name: "Get your event ready" })).toBeVisible();
+    await expect(banner(page)).toHaveCount(0);
+    await page.goto(`${server.baseUrl}/teams`);
     await page.getByRole("link", { name: "Choose a game plugin" }).click();
     await expect(page).toHaveURL(/\/events\/setup#game-plugins/);
     await page

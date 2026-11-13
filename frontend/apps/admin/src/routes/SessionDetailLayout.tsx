@@ -1,8 +1,8 @@
 import { NavLink, Outlet, useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest } from "@tournament-admin/shared";
-import { apiErrorMessage } from "../apiErrorMessage";
+import { useMakeActive } from "../orientation/MakeActiveDialog";
 import { useSkillsLiveUpdates } from "../skills/liveUpdates";
 import { useSkillsSettings } from "../skills/useSkillsSettings";
 import type { EventRead, SessionRead } from "../types";
@@ -14,7 +14,7 @@ function tabLinkClassName({ isActive }: { isActive: boolean }): string | undefin
 export function SessionDetailLayout() {
   const { t } = useTranslation();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const queryClient = useQueryClient();
+  const makeActive = useMakeActive();
 
   const { data: sessions, isLoading, isError } = useQuery({
     queryKey: ["sessions"],
@@ -28,16 +28,6 @@ export function SessionDetailLayout() {
   // The one /ws/active-session subscription for every session tab (Skills, Rankings), so
   // the Skills tab itself appears and disappears live.
   useSkillsLiveUpdates();
-  const activateMutation = useMutation({
-    mutationFn: (id: number) =>
-      apiRequest<EventRead>("/api/event/active-session", {
-        method: "POST",
-        body: { session_id: id },
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event"] });
-    },
-  });
   const session = sessions?.find((candidate) => candidate.id === Number(sessionId));
 
   if (isLoading) {
@@ -78,26 +68,23 @@ export function SessionDetailLayout() {
               <button
                 type="button"
                 className="btn btn-small"
-                onClick={() => activateMutation.mutate(session.id)}
-                disabled={activateMutation.isPending}
+                onClick={() => makeActive.open(session)}
               >
                 {t("sessions.setActiveAction")}
               </button>
               <span className="field__hint">{t("sessions.setActiveHint")}</span>
             </div>
           ))}
-        {activateMutation.isError && (
-          <p className="alert alert-danger" role="alert">
-            {apiErrorMessage(activateMutation.error, t("errors.generic"))}
-          </p>
-        )}
       </div>
       <nav className="app-nav app-nav--sub">
+        <NavLink to={`/sessions/${session.id}/today`} className={tabLinkClassName}>
+          {t("sessions.todayTab")}
+        </NavLink>
+        <NavLink to={`/sessions/${session.id}/setup`} className={tabLinkClassName}>
+          {t("sessions.setupTab")}
+        </NavLink>
         <NavLink to={`/sessions/${session.id}/checkin`} className={tabLinkClassName}>
           {t("sessions.checkinTab")}
-        </NavLink>
-        <NavLink to={`/sessions/${session.id}/fields`} className={tabLinkClassName}>
-          {t("sessions.fieldsTab")}
         </NavLink>
         <NavLink to={`/sessions/${session.id}/schedule`} className={tabLinkClassName}>
           {t("sessions.scheduleTab")}
@@ -118,6 +105,7 @@ export function SessionDetailLayout() {
         </NavLink>
       </nav>
       <Outlet context={{ session }} />
+      {makeActive.dialog}
     </div>
   );
 }

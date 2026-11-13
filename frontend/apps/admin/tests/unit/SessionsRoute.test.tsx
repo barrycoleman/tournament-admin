@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,10 +9,14 @@ import { SessionsRoute } from "../../src/routes/SessionsRoute";
 
 vi.mock("@tournament-admin/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tournament-admin/shared")>();
-  return { ...actual, apiRequest: vi.fn() };
+  return { ...actual, apiRequest: vi.fn(), useRealtimeChannel: vi.fn() };
 });
 
 import { apiRequest, ApiError } from "@tournament-admin/shared";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function renderRoute() {
   const i18n = initI18n({ en: { translation: enAdmin } });
@@ -83,15 +87,19 @@ describe("SessionsRoute", () => {
       }
       throw new Error(`unexpected request: ${path}`);
     });
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(
+      () => ({ resolvedOptions: () => ({ timeZone: "Asia/Tokyo" }) }) as never
+    );
     renderRoute();
 
     await screen.findByRole("button", { name: "Add session..." });
     fireEvent.click(screen.getByRole("button", { name: "Add session..." }));
+    expect((screen.getByLabelText("Timezone") as HTMLSelectElement).value).toBe("Asia/Tokyo");
     fireEvent.change(screen.getByLabelText("Session name"), { target: { value: "Sunday" } });
     fireEvent.click(screen.getByRole("button", { name: "Add session" }));
 
     await waitFor(() =>
-      expect(createBody).toEqual({ label: "Sunday", session_date: null, timezone: null })
+      expect(createBody).toEqual({ label: "Sunday", session_date: null, timezone: "Asia/Tokyo" })
     );
   });
 
@@ -219,11 +227,15 @@ describe("SessionsRoute", () => {
         }
         if (path === "/api/sessions") return sessions as never;
         if (path === "/api/event") return { id: 1, name: "Event", active_session_id: activeId } as never;
+        if (path.startsWith("/api/matches?session_id=")) return [] as never;
+        if (path.startsWith("/api/displays?session_id=")) {
+          return { session_id: Number(path.split("=")[1]), groups: [], unassigned: [], has_setup: false } as never;
+        }
         throw new Error(`unexpected request: ${path}`);
       });
     }
 
-    it("sets another session active, and offers no Set active on the active one", async () => {
+    it("sets another session active only after confirming, and offers no Set active on the active one", async () => {
       let activated: unknown = null;
       stub([SATURDAY, SUNDAY], 2, (path, options) => {
         if (path === "/api/event/active-session") activated = options.body;
@@ -237,7 +249,24 @@ describe("SessionsRoute", () => {
       ).not.toBeInTheDocument();
       fireEvent.click(button);
 
+      const dialog = await screen.findByRole("alertdialog", { name: "Make Saturday active?" });
+      const confirm = within(dialog).getByRole("button", { name: "Make active" });
+      await waitFor(() => expect(confirm).toBeEnabled());
+      expect(activated).toBeNull();
+      expect(vi.mocked(apiRequest)).not.toHaveBeenCalledWith("/api/event/active-session", expect.anything());
+
+      fireEvent.click(confirm);
       await waitFor(() => expect(activated).toEqual({ session_id: 1 }));
+    });
+
+    it("leaves the active session alone when the dialog is cancelled", async () => {
+      stub([SATURDAY, SUNDAY], 2);
+      renderRoute();
+      fireEvent.click(await screen.findByRole("button", { name: "Set Saturday as the active session" }));
+      const dialog = await screen.findByRole("alertdialog", { name: "Make Saturday active?" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(vi.mocked(apiRequest)).not.toHaveBeenCalledWith("/api/event/active-session", expect.anything());
     });
 
     it("deletes a session only after its name is typed", async () => {

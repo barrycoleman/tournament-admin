@@ -8,12 +8,14 @@ test.describe.serial("bootstrap: event creation, login, and the authenticated sh
     await expect(page.getByRole("heading", { name: "Set up your event" })).toBeVisible();
   });
 
-  test("creating the event redirects to /login", async ({ page }) => {
+  test("creating the event signs in as admin and lands on the home page", async ({ page }) => {
     await page.goto("/events/new");
     await page.getByLabel("Event name").fill(E2E_EVENT_NAME);
     await page.getByLabel(/Initial password/).fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Create event" }).click();
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL("/");
+    await expect(page.getByText(E2E_EVENT_NAME)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
   });
 
   test("bad credentials show an inline error", async ({ page }) => {

@@ -3,7 +3,7 @@
   "unreachable": "无法连接服务器，正在重试…",
   "pairing": {
     "heading": "配对此设备",
-    "instructions": "在管理应用中打开“设备”，输入此代码。",
+    "instructions": "在管理应用中打开“设备与显示屏”，输入此代码。",
     "expiresIn": "{{seconds}} 秒后更换新代码",
     "qrLabel": "二维码：打开管理应用的设备页面并填入此代码"
   },

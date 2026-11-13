@@ -27,7 +27,7 @@ export interface PairingCodeCheck {
   expires_at: string;
 }
 
-export const PAIRABLE_ROLES = ["scorer", "referee", "judge", "front_desk", "display_device"] as const;
+export const PAIRABLE_ROLES = ["display_device", "scorer", "referee", "judge", "front_desk"] as const;
 export const DEVICES_KEY = ["devices"];
 export const DEVICE_SETTINGS_KEY = ["devices", "settings"];
 

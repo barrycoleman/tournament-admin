@@ -5,20 +5,11 @@ import { Link } from "react-router-dom";
 import { apiRequest, ApiError } from "@tournament-admin/shared";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { apiErrorMessage } from "../apiErrorMessage";
+import { useMakeActive } from "../orientation/MakeActiveDialog";
+import { browserZone } from "../orientation/useOrientationData";
+import { SessionFormFields, type SessionFormValues } from "../sessions/SessionFormFields";
 import type { EventRead, SessionRead } from "../types";
 
-function listTimezones(): string[] {
-  const intlWithZones = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] };
-  return intlWithZones.supportedValuesOf?.("timeZone") ?? [];
-}
-
-interface SessionFormValues {
-  label: string;
-  sessionDate: string;
-  timezone: string;
-  liveQualification: boolean;
-  liveFinals: boolean;
-}
 
 const EMPTY_FORM: SessionFormValues = {
   label: "",
@@ -51,7 +42,6 @@ function SessionForm({
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState(initial);
-  const timezones = listTimezones();
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -60,69 +50,7 @@ function SessionForm({
 
   return (
     <form className={inline ? "panel--form" : "panel panel--form"} onSubmit={handleSubmit}>
-      <div className="field">
-        <label className="field__label" htmlFor="session-label">
-          {t("sessions.labelLabel")}
-        </label>
-        <input
-          className="input"
-          id="session-label"
-          value={values.label}
-          onChange={(event) => setValues({ ...values, label: event.target.value })}
-          autoFocus
-        />
-      </div>
-      <div className="field">
-        <label className="field__label" htmlFor="session-date">
-          {t("sessions.dateLabel")}
-        </label>
-        <input
-          className="input"
-          id="session-date"
-          type="date"
-          value={values.sessionDate}
-          onChange={(event) => setValues({ ...values, sessionDate: event.target.value })}
-        />
-      </div>
-      <div className="field">
-        <label className="field__label" htmlFor="session-timezone">
-          {t("sessions.timezoneLabel")}
-        </label>
-        <select
-          className="select"
-          id="session-timezone"
-          value={values.timezone}
-          onChange={(event) => setValues({ ...values, timezone: event.target.value })}
-        >
-          <option value="">{t("sessions.noTimezoneOption")}</option>
-          {timezones.map((zone) => (
-            <option key={zone} value={zone}>
-              {zone}
-            </option>
-          ))}
-        </select>
-      </div>
-      {showLiveSwitches && (
-        <fieldset className="field">
-          <legend className="field__label">{t("sessions.liveScoresLegend")}</legend>
-          <label className="choice">
-            <input
-              type="checkbox"
-              checked={values.liveQualification}
-              onChange={(event) => setValues({ ...values, liveQualification: event.target.checked })}
-            />{" "}
-            {t("sessions.liveQualificationLabel")}
-          </label>
-          <label className="choice">
-            <input
-              type="checkbox"
-              checked={values.liveFinals}
-              onChange={(event) => setValues({ ...values, liveFinals: event.target.checked })}
-            />{" "}
-            {t("sessions.liveFinalsLabel")}
-          </label>
-        </fieldset>
-      )}
+      <SessionFormFields values={values} onChange={setValues} showLiveSwitches={showLiveSwitches} autoFocus extraZone={initial.timezone} />
       {error && (
         <p className="alert alert-danger" role="alert">
           {error}
@@ -191,16 +119,7 @@ export function SessionsRoute() {
     },
   });
 
-  const activateMutation = useMutation({
-    mutationFn: (id: number) =>
-      apiRequest<EventRead>("/api/event/active-session", {
-        method: "POST",
-        body: { session_id: id },
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event"] });
-    },
-  });
+  const makeActive = useMakeActive();
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest<void>(`/api/sessions/${id}`, { method: "DELETE" }),
@@ -214,11 +133,6 @@ export function SessionsRoute() {
   return (
     <div>
       <h1>{t("sessions.heading")}</h1>
-      {activateMutation.isError && (
-        <p className="alert alert-danger" role="alert">
-          {apiErrorMessage(activateMutation.error, t("errors.generic"))}
-        </p>
-      )}
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -288,8 +202,7 @@ export function SessionsRoute() {
                     {event && event.active_session_id !== session.id && (
                       <button
                         className="btn btn-small"
-                        onClick={() => activateMutation.mutate(session.id)}
-                        disabled={activateMutation.isPending}
+                        onClick={() => makeActive.open(session)}
                         aria-label={t("sessions.setActiveAriaLabel", { name: session.label })}
                       >
                         {t("sessions.setActiveShortAction")}
@@ -338,7 +251,7 @@ export function SessionsRoute() {
       )}
       {creating && (
         <SessionForm
-          initial={EMPTY_FORM}
+          initial={{ ...EMPTY_FORM, timezone: browserZone() }}
           onSubmit={(values) => createMutation.mutate(values)}
           onCancel={() => {
             setCreating(false);
@@ -375,6 +288,7 @@ export function SessionsRoute() {
           onCancel={() => setPendingDelete(null)}
         />
       )}
+      {makeActive.dialog}
     </div>
   );
 }

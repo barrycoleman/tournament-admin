@@ -19,13 +19,17 @@ const WINDOWS: PlayingWindowRead[] = [
   { date: "2026-11-08", start_time: "09:00", end_time: "15:00", start_utc: "2026-11-08T17:00:00Z", end_utc: "2026-11-08T23:00:00Z" },
 ];
 
-function renderPanel(windows: PlayingWindowRead[], outsideRounds: { roundType: string; locked: boolean }[] = []) {
+function renderPanel(
+  windows: PlayingWindowRead[],
+  outsideRounds: { roundType: string; locked: boolean }[] = [],
+  onDirtyChange?: (dirty: boolean) => void
+) {
   const i18n = initI18n({ en: { translation: enAdmin } });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
-        <PlayingTimesPanel session={SESSION} windows={windows} timeline={<div>timeline</div>} outsideRounds={outsideRounds} />
+        <PlayingTimesPanel session={SESSION} windows={windows} timeline={<div>timeline</div>} outsideRounds={outsideRounds} onDirtyChange={onDirtyChange} />
       </I18nextProvider>
     </QueryClientProvider>
   );
@@ -36,6 +40,24 @@ beforeEach(() => {
 });
 
 describe("PlayingTimesPanel", () => {
+  it("reports the pre-filled first playing time as unsaved", () => {
+    const onDirtyChange = vi.fn();
+    renderPanel([], [], onDirtyChange);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it("reports unsaved only once an opened editor differs from the saved times", () => {
+    const onDirtyChange = vi.fn();
+    renderPanel(WINDOWS, [], onDirtyChange);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    fireEvent.change(screen.getByLabelText("Playing time 2 end"), { target: { value: "16:00" } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
   it("summarizes saved windows and shows the timeline", () => {
     renderPanel(WINDOWS);
     expect(screen.getByText("Sat 09:00–12:00 · Sun 09:00–15:00")).toBeInTheDocument();
@@ -95,5 +117,28 @@ describe("PlayingTimesPanel", () => {
     ]);
     expect(screen.getByText(/Some matches are outside the playing times: Qualification\./)).toBeInTheDocument();
     expect(screen.getByText(/Practice has matches outside the playing times but can't be rebuilt/)).toBeInTheDocument();
+  });
+});
+
+describe("PlayingTimesPanel unsaved rows", () => {
+  it("marks a prefilled row as not saved yet, but not rows that match a saved window", () => {
+    renderPanel([]);
+    expect(screen.getByText("Not saved yet")).toBeInTheDocument();
+  });
+
+  it("shows no badge on a row matching a saved window until it is edited", () => {
+    renderPanel(WINDOWS);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.queryByText("Not saved yet")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Playing time 1 end"), { target: { value: "11:00" } });
+    expect(screen.getAllByText("Not saved yet")).toHaveLength(1);
+  });
+
+  it("marks only the added row when editing saved windows", () => {
+    renderPanel(WINDOWS);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.queryByText("Not saved yet")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add playing time" }));
+    expect(screen.getAllByText("Not saved yet")).toHaveLength(1);
   });
 });

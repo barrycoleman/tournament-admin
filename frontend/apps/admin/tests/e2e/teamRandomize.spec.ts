@@ -51,7 +51,7 @@ test.describe.serial("randomize unassigned teams", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await page.getByRole("link", { name: "Teams" }).click();
+    await page.getByRole("link", { name: "Teams & divisions" }).click();
     await expect(page).toHaveURL(/\/teams$/);
 
     await page.getByRole("button", { name: "Randomly assign unassigned teams" }).click();
@@ -76,7 +76,7 @@ test.describe.serial("randomize unassigned teams", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await page.getByRole("link", { name: "Teams" }).click();
+    await page.getByRole("link", { name: "Teams & divisions" }).click();
     await expect(page).toHaveURL(/\/teams$/);
 
     await page.getByRole("button", { name: "Add row" }).click();
@@ -140,7 +140,7 @@ test.describe.serial("randomize unassigned teams", () => {
       await page.getByLabel("Role").fill("admin");
       await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
       await page.getByRole("button", { name: "Log in" }).click();
-      await page.getByRole("link", { name: "Teams" }).click();
+      await page.getByRole("link", { name: "Teams & divisions" }).click();
       await expect(page).toHaveURL(/\/teams$/);
       const row = page.getByRole("row").filter({ hasText: "Long Division Team" });
       await expect(row).toBeVisible();
@@ -183,6 +183,15 @@ test.describe.serial("randomize unassigned teams", () => {
       }
       expect(await width(cells.nth(2))).toBeLessThan(await width(cells.nth(1)));
 
+      // Team numbers stay in a narrow column; Name takes the room left over.
+      const numberWidth = await width(cells.nth(0));
+      expect(numberWidth).toBeGreaterThanOrEqual(90);
+      expect(numberWidth).toBeLessThanOrEqual(110);
+      const nameWidth = await width(cells.nth(1));
+      for (const index of [0, 2, 3, 4, 5, 6, 7]) {
+        expect(await width(cells.nth(index))).toBeLessThan(nameWidth);
+      }
+
       // Everything fits, so the grid doesn't scroll sideways.
       const grid = page.getByRole("grid");
       expect(await grid.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
@@ -206,7 +215,15 @@ test.describe.serial("randomize unassigned teams", () => {
       // "Randomize Division One" and "...Two" differ at the "T", so the
       // cell must show at least "Randomize Division T…" -- measured in the
       // cell's own font.
-      const division = cells.nth(7);
+      // The grid only renders the columns in view, and once it scrolls to
+      // the Division column the Name cell (which the row locator matches on)
+      // is gone -- so pin the row by its index and the cell by its column.
+      const rowIndex = await row.getAttribute("aria-rowindex");
+      await grid.evaluate((el) => {
+        el.scrollLeft = el.scrollWidth;
+      });
+      const division = grid.locator(`[role="row"][aria-rowindex="${rowIndex}"] [role="gridcell"][aria-colindex="8"]`);
+      await expect(division).toHaveText("Randomize Division Two");
       await division.scrollIntoViewIfNeeded();
       const fits = await division.evaluate((el) => {
         const style = getComputedStyle(el);

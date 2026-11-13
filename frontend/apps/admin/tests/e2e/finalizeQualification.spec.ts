@@ -16,12 +16,13 @@ test.describe.serial("finalizing cooperative qualification", () => {
   const api = (route: string) => `${server.apiUrl}${route}`;
   const headers = () => ({ Authorization: `Bearer ${token}` });
 
-  async function login(page: Page) {
+  /** Signs in; `landing` is where "/" sends the admin given what the tests have set up so far. */
+  async function login(page: Page, landing = `/sessions/${session}/today`) {
     await page.goto(`${server.baseUrl}/login`);
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL(`${server.baseUrl}/`);
+    await expect(page).toHaveURL(`${server.baseUrl}${landing}`);
   }
 
   async function createMatch(request: APIRequestContext, number: number, red: string, blue: string) {

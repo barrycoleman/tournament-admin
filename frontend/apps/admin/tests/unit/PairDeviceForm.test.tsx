@@ -8,10 +8,10 @@ import { PairDeviceForm } from "../../src/devices/PairDeviceForm";
 
 vi.mock("@tournament-admin/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tournament-admin/shared")>();
-  return { ...actual, apiRequest: vi.fn() };
+  return { ...actual, apiRequest: vi.fn(), useRealtimeChannel: vi.fn() };
 });
 
-import { apiRequest } from "@tournament-admin/shared";
+import { apiRequest, useRealtimeChannel } from "@tournament-admin/shared";
 
 const CHECK = { code: "KX49TM", suggested_name: "Tablet 3", expires_at: "2026-10-13T12:05:00Z" };
 
@@ -42,17 +42,28 @@ function stub(overrides: Record<string, unknown> = {}) {
       return deviceRow(body.name, body.role) as never;
     }
     if (key === "GET /api/devices") return [] as never;
+    if (key === "GET /api/displays?session_id=1")
+      return {
+        session_id: 1,
+        has_setup: true,
+        unassigned: [],
+        groups: [
+          { id: 50, session_id: 1, kind: "audience", name: "Main Fields", field_set_id: 10, field_id: null, division_id: null, screen: "logo", screen_settings: {}, rotation: null, play_sounds: false, displays: [] },
+          { id: 51, session_id: 1, kind: "field", name: "Field 1", field_set_id: 10, field_id: 1, division_id: null, screen: null, screen_settings: {}, rotation: null, play_sounds: false, displays: [] },
+        ],
+      } as never;
+    if (key === "PUT /api/displays/assignments") return { session_id: 1, groups: [], unassigned: [], has_setup: true } as never;
     throw new Error(`unexpected request: ${key}`);
   });
 }
 
-function renderForm(initialCode?: string) {
+function renderForm(initialCode?: string, sessionId: number | null = null) {
   const i18n = initI18n({ en: { translation: enAdmin } });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
-        <PairDeviceForm initialCode={initialCode} />
+        <PairDeviceForm initialCode={initialCode} sessionId={sessionId} />
       </I18nextProvider>
     </QueryClientProvider>
   );
@@ -68,6 +79,8 @@ function typeCode(value: string) {
 describe("PairDeviceForm", () => {
   beforeEach(() => {
     vi.mocked(apiRequest).mockReset();
+    vi.mocked(useRealtimeChannel).mockReset();
+    vi.mocked(useRealtimeChannel).mockReturnValue({ connected: true });
     stub();
   });
 
@@ -96,6 +109,8 @@ describe("PairDeviceForm", () => {
     renderForm();
     typeCode("KX4 9TM");
     await waitFor(() => expect(screen.getByLabelText("Device name")).toHaveValue("Tablet 3"));
+    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "scorer" } });
+    expect(screen.queryByLabelText("Shows")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Pair" }));
     await waitFor(() =>
       expect(apiRequest).toHaveBeenCalledWith("/api/devices/pair", {
@@ -134,12 +149,13 @@ describe("PairDeviceForm", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Role isn't pairable");
   });
 
-  it("sends display_device when Display is chosen", async () => {
+  it("defaults to TV / display, listed first, and pairs it with nothing to show when no spot is chosen", async () => {
     renderForm();
     typeCode("KX49TM");
     await waitFor(() => expect(screen.getByLabelText("Device name")).toHaveValue("Tablet 3"));
-    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "display_device" } });
-    expect(screen.getByRole("option", { name: "Display" })).toHaveProperty("selected", true);
+    expect(screen.getByRole("option", { name: "TV / display" })).toHaveProperty("selected", true);
+    expect(screen.getAllByRole("option", { name: /./ })[0]).toHaveTextContent("TV / display");
+    expect(screen.getByLabelText("Shows")).toHaveValue("");
     fireEvent.click(screen.getByRole("button", { name: "Pair" }));
     await waitFor(() =>
       expect(apiRequest).toHaveBeenCalledWith("/api/devices/pair", {
@@ -147,6 +163,48 @@ describe("PairDeviceForm", () => {
         body: { code: "KX49TM", role: "display_device", name: "Tablet 3" },
       })
     );
+    expect(await screen.findByRole("status")).toHaveTextContent("Paired Tablet 3.");
+    expect(apiRequest).not.toHaveBeenCalledWith("/api/displays/assignments", expect.anything());
+  });
+
+  it("offers the session's spots and gives the new TV the chosen one", async () => {
+    renderForm("KX49TM", 1);
+    await waitFor(() => expect(screen.getByLabelText("Device name")).toHaveValue("Tablet 3"));
+    const shows = screen.getByLabelText("Shows");
+    expect(await screen.findByRole("option", { name: "Main Fields (audience)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Main Fields › Field 1" })).toBeInTheDocument();
+    fireEvent.change(shows, { target: { value: "51" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pair" }));
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith("/api/displays/assignments", {
+        method: "PUT",
+        body: { session_id: 1, device_id: 7, group_id: 51 },
+      })
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("Paired Tablet 3.");
+    expect(screen.getByLabelText("Shows")).toHaveValue("");
+  });
+
+  it("does not give a spot to a device paired as another role", async () => {
+    renderForm("KX49TM", 1);
+    await waitFor(() => expect(screen.getByLabelText("Device name")).toHaveValue("Tablet 3"));
+    await screen.findByRole("option", { name: "Main Fields (audience)" });
+    fireEvent.change(screen.getByLabelText("Shows"), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "referee" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pair" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Paired Tablet 3.");
+    expect(apiRequest).not.toHaveBeenCalledWith("/api/displays/assignments", expect.anything());
+  });
+
+  it("says so when the TV pairs but its spot can't be set", async () => {
+    stub({ "PUT /api/displays/assignments": new ApiError(409, "That spot is gone", { detail: "That spot is gone" }) });
+    renderForm("KX49TM", 1);
+    await waitFor(() => expect(screen.getByLabelText("Device name")).toHaveValue("Tablet 3"));
+    await screen.findByRole("option", { name: "Main Fields (audience)" });
+    fireEvent.change(screen.getByLabelText("Shows"), { target: { value: "50" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pair" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("That spot is gone");
+    expect(screen.getByRole("status")).toHaveTextContent("Paired Tablet 3.");
   });
 
   it("checks an initial code straight away", async () => {

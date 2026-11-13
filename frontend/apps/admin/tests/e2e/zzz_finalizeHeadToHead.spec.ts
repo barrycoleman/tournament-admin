@@ -51,7 +51,7 @@ test("head-to-head finalize asks only for confirmation", async ({ page, request 
   await page.getByLabel("Role").fill("admin");
   await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL(/\/sessions\/\d+\/today$/);
   await page.goto(`/sessions/${session}/matches`);
   await page.getByRole("button", { name: "Finalize qualification" }).click();
   const dialog = page.getByRole("alertdialog", { name: "Finalize qualification" });

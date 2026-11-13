@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
 import { ApiError, initI18n } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
-import { SessionFieldsRoute } from "../../src/routes/SessionFieldsRoute";
+import { SessionFieldsPanel } from "../../src/routes/SessionFieldsRoute";
 import type { Division, FieldRead, FieldSetRead, SessionRead } from "../../src/types";
 
 vi.mock("@tournament-admin/shared", async (importOriginal) => {
@@ -72,7 +72,7 @@ function renderFields() {
   const i18n = initI18n({ en: { translation: enAdmin } });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter([
-    { path: "/", element: <SessionOutlet />, children: [{ index: true, element: <SessionFieldsRoute /> }] },
+    { path: "/", element: <SessionOutlet />, children: [{ index: true, element: <SessionFieldsPanel /> }] },
   ]);
   return render(
     <QueryClientProvider client={queryClient}>
@@ -87,7 +87,7 @@ beforeEach(() => {
   vi.mocked(apiRequest).mockReset();
 });
 
-describe("SessionFieldsRoute", () => {
+describe("SessionFieldsPanel", () => {
   it("renders a card per field set and hides the division control for a single division", async () => {
     stubServer({ divisions: ONE_DIVISION, fieldSets: [MAIN_SET], fields: [FIELD_A] });
     renderFields();
@@ -316,5 +316,84 @@ describe("SessionFieldsRoute", () => {
     const card = await screen.findByRole("region", { name: "Main Fields" });
     fireEvent.change(within(card).getByLabelText("Purpose"), { target: { value: "skills" } });
     expect(await within(card).findByRole("alert")).toHaveTextContent("This field set has matches.");
+  });
+});
+
+/** A server that remembers what was created, so each refetch shows the new rows. */
+function stubStatefulServer(initial: { fieldSets: FieldSetRead[]; fields: FieldRead[] }) {
+  const state = { fieldSets: [...initial.fieldSets], fields: [...initial.fields], nextId: 500 };
+  vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
+    const opts = options as { method?: string; body?: { name: string; field_set_id?: number } } | undefined;
+    if (path === "/api/fields" && opts?.method === "POST") {
+      const field = { id: state.nextId++, field_set_id: opts.body?.field_set_id ?? state.fieldSets[0]?.id ?? 10, name: opts.body!.name };
+      if (state.fieldSets.length === 0) {
+        state.fieldSets.push({ ...MAIN_SET, id: 10, name: "Main Fields" });
+        field.field_set_id = 10;
+      }
+      state.fields.push(field);
+      return field as never;
+    }
+    if (path === "/api/field-sets" && opts?.method === "POST") {
+      const set = { ...MAIN_SET, id: state.nextId++, name: opts.body!.name };
+      state.fieldSets.push(set);
+      return set as never;
+    }
+    if (path === "/api/divisions") return ONE_DIVISION as never;
+    if (path === "/api/field-sets?session_id=1") return [...state.fieldSets] as never;
+    if (path === "/api/fields?session_id=1") return [...state.fields] as never;
+    if (path === "/api/sessions") return [SESSION] as never;
+    throw new Error(`unexpected request: ${opts?.method ?? "GET"} ${path}`);
+  });
+}
+
+function addByEnter(input: HTMLElement, value: string) {
+  fireEvent.change(input, { target: { value } });
+  fireEvent.submit(input.closest("form") as HTMLFormElement);
+}
+
+describe("SessionFieldsPanel: keyboard focus and next step", () => {
+  it("keeps the cursor in a set's add-field box through three adds", async () => {
+    stubStatefulServer({ fieldSets: [MAIN_SET], fields: [FIELD_A] });
+    renderFields();
+    const input = await screen.findByLabelText("New field name for Main Fields");
+    input.focus();
+    for (const name of ["Field 1", "Field 2", "Field 3"]) {
+      addByEnter(input, name);
+      expect(await screen.findByText(name)).toBeInTheDocument();
+      expect(document.activeElement).toBe(input);
+      expect(input).toHaveValue("");
+    }
+  });
+
+  it("keeps the cursor in the add-field-set box through three adds", async () => {
+    stubStatefulServer({ fieldSets: [MAIN_SET], fields: [FIELD_A] });
+    renderFields();
+    const input = await screen.findByLabelText("New field set name");
+    input.focus();
+    for (const name of ["Set 1", "Set 2", "Set 3"]) {
+      addByEnter(input, name);
+      expect(await screen.findByRole("region", { name })).toBeInTheDocument();
+      expect(document.activeElement).toBe(input);
+    }
+  });
+
+  it("moves focus to the new set's add-field box once the first field is added, and offers the playing times", async () => {
+    stubStatefulServer({ fieldSets: [], fields: [] });
+    renderFields();
+    const first = await screen.findByLabelText("Add your first field");
+    first.focus();
+    addByEnter(first, "Field 1");
+
+    const next = await screen.findByLabelText("New field name for Main Fields");
+    await waitFor(() => expect(document.activeElement).toBe(next));
+    const link = screen.getByRole("link", { name: "playing times and rounds" });
+    expect(link).toHaveAttribute("href", "/sessions/1/schedule#playing-times");
+  });
+
+  it("offers no playing-times step before any field is added", async () => {
+    stubStatefulServer({ fieldSets: [MAIN_SET], fields: [FIELD_A] });
+    renderFields();
+    await screen.findByLabelText("New field name for Main Fields");
+    expect(screen.queryByRole("link", { name: "playing times and rounds" })).not.toBeInTheDocument();
   });
 });

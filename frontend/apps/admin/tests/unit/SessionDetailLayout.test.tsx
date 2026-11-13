@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -57,7 +57,9 @@ describe("SessionDetailLayout", () => {
     expect(screen.getByText(/2026-09-05/)).toBeInTheDocument();
     expect(screen.getByText(/America\/Los_Angeles/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Check-In" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Fields" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Fields" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Today" })).toHaveAttribute("href", "/sessions/1/today");
+    expect(screen.getByRole("link", { name: "Setup" })).toHaveAttribute("href", "/sessions/1/setup");
     expect(screen.getByRole("link", { name: "Schedule" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Matches" })).toBeInTheDocument();
   });
@@ -112,11 +114,15 @@ describe("SessionDetailLayout", () => {
     expect(screen.queryByRole("button", { name: "Set as active session" })).not.toBeInTheDocument();
   });
 
-  it("offers Set as active session otherwise and makes it active", async () => {
+  it("offers Set as active session otherwise and makes it active through the dialog", async () => {
     let activeSessionId: number | null = 2;
     vi.mocked(apiRequest).mockImplementation(async (path: string, options?: unknown) => {
       if (path === "/api/sessions") return [SATURDAY] as never;
       if (path === "/api/event") return eventWithActiveSession(activeSessionId) as never;
+      if (path === "/api/matches?session_id=2") return [] as never;
+      if (path.startsWith("/api/displays?session_id=")) {
+        return { session_id: 1, groups: [], unassigned: [], has_setup: false } as never;
+      }
       if (path === "/api/event/active-session") {
         expect(options).toEqual({ method: "POST", body: { session_id: 1 } });
         activeSessionId = 1;
@@ -127,6 +133,8 @@ describe("SessionDetailLayout", () => {
     renderAt("/sessions/1/checkin");
 
     fireEvent.click(await screen.findByRole("button", { name: "Set as active session" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Make active" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Make active" }));
     expect(await screen.findByText("Active session")).toBeInTheDocument();
   });
 

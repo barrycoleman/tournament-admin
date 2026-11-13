@@ -16,7 +16,7 @@ test.describe.serial("team paste and CSV upload", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await page.getByRole("link", { name: "Teams" }).click();
+    await page.getByRole("link", { name: "Teams & divisions" }).click();
     await expect(page).toHaveURL(/\/teams$/);
 
     await page.getByRole("button", { name: "Add row" }).click();
@@ -47,7 +47,7 @@ test.describe.serial("team paste and CSV upload", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await page.getByRole("link", { name: "Teams" }).click();
+    await page.getByRole("link", { name: "Teams & divisions" }).click();
     await expect(page).toHaveURL(/\/teams$/);
 
     const csvContent =
@@ -74,7 +74,7 @@ test.describe.serial("team paste and CSV upload", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await page.getByRole("link", { name: "Teams" }).click();
+    await page.getByRole("link", { name: "Teams & divisions" }).click();
     await expect(page).toHaveURL(/\/teams$/);
 
     const csvContent =
@@ -109,7 +109,7 @@ test.describe.serial("team paste and CSV upload", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await page.getByRole("link", { name: "Teams" }).click();
+    await page.getByRole("link", { name: "Teams & divisions" }).click();
     await expect(page).toHaveURL(/\/teams$/);
 
     await page.getByLabel("Upload CSV").setInputFiles({

@@ -23,7 +23,7 @@ test.describe.serial("team delete", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await page.getByRole("link", { name: "Teams" }).click();
+    await page.getByRole("link", { name: "Teams & divisions" }).click();
     await expect(page).toHaveURL(/\/teams$/);
 
     await expect(page.getByText("Team To Delete")).toBeVisible();
@@ -56,7 +56,7 @@ test.describe.serial("team delete", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await page.getByRole("link", { name: "Teams" }).click();
+    await page.getByRole("link", { name: "Teams & divisions" }).click();
     await expect(page).toHaveURL(/\/teams$/);
 
     const row = page.getByRole("row").filter({ hasText: "Keyboard Delete Team" });

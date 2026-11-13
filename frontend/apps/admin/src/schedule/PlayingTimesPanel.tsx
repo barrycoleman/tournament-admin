@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest } from "@tournament-admin/shared";
@@ -7,6 +7,7 @@ import { roundTypeLabel } from "../roundTypeLabel";
 import {
   draftsFromWindows,
   nextWindowDraft,
+  sameWindows,
   summarizeWindows,
   todayInZone,
   validateWindowDrafts,
@@ -20,10 +21,12 @@ interface PlayingTimesPanelProps {
   windows: PlayingWindowRead[];
   timeline: ReactNode;
   outsideRounds: { roundType: string; locked: boolean }[];
+  /** Told whether the editor holds playing times that differ from the saved ones. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 /** The session's playing windows: a one-line summary and timeline, or an editor. */
-export function PlayingTimesPanel({ session, windows, timeline, outsideRounds }: PlayingTimesPanelProps) {
+export function PlayingTimesPanel({ session, windows, timeline, outsideRounds, onDirtyChange }: PlayingTimesPanelProps) {
   const { t, i18n } = useTranslation();
   const headingId = useId();
   const queryClient = useQueryClient();
@@ -32,6 +35,14 @@ export function PlayingTimesPanel({ session, windows, timeline, outsideRounds }:
     windows.length === 0 ? [nextWindowDraft([], session.session_date, today)] : null
   );
   const [problem, setProblem] = useState<string | null>(null);
+  // The pre-filled first row counts: it isn't saved until Save is pressed.
+  const dirty =
+    drafts !== null &&
+    !sameWindows(
+      windowsPayload(drafts).windows,
+      windowsPayload(draftsFromWindows(windows)).windows
+    );
+  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
 
   const save = useMutation({
     mutationFn: (body: ReturnType<typeof windowsPayload>) =>
@@ -113,6 +124,9 @@ export function PlayingTimesPanel({ session, windows, timeline, outsideRounds }:
                 value={draft.endTime}
                 onChange={(event) => updateDraft(index, { endTime: event.target.value })}
               />
+              {!windows.some(
+                (w) => w.date === draft.date && w.start_time === draft.startTime && w.end_time === draft.endTime
+              ) && <span className="badge badge-warning">{t("sessions.schedule.playingTimes.notSaved")}</span>}
               <button
                 type="button"
                 className="btn btn-small"

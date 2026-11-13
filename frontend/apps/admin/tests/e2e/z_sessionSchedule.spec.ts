@@ -96,7 +96,7 @@ async function loginAsAdmin(page: Page) {
   await page.getByLabel("Role").fill("admin");
   await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL(/\/sessions\/\d+\/today$/);
 }
 
 test.describe.serial("session fields, schedule, and matches", () => {
@@ -137,7 +137,7 @@ test.describe.serial("session fields, schedule, and matches", () => {
 
   test("set playing times, generate across a break, and see the times in Matches", async ({ page }) => {
     await loginAsAdmin(page);
-    await page.goto(`/sessions/${main.sessionId}/fields`);
+    await page.goto(`/sessions/${main.sessionId}/setup`);
     await page.getByLabel("Add your first field").fill("Field A");
     await page.getByRole("button", { name: "Add field", exact: true }).click();
     const card = page.getByRole("region", { name: "Main Fields" });
@@ -146,7 +146,7 @@ test.describe.serial("session fields, schedule, and matches", () => {
     await card.getByRole("button", { name: "Add field", exact: true }).click();
     await expect(card.getByText("Field B")).toBeVisible();
 
-    await page.getByRole("link", { name: "Schedule" }).click();
+    await page.getByRole("link", { name: "Schedule", exact: true }).click();
     const blockers = page.getByRole("region", { name: "Can't schedule yet" });
     await expect(blockers.getByRole("link", { name: "Add playing times" })).toBeVisible();
 
@@ -281,7 +281,7 @@ test.describe.serial("session fields, schedule, and matches", () => {
 
   test("deleting a field that has matches shows the server's refusal", async ({ page }) => {
     await loginAsAdmin(page);
-    await page.goto(`/sessions/${main.sessionId}/fields`);
+    await page.goto(`/sessions/${main.sessionId}/setup`);
     await page.getByRole("button", { name: "Remove field Field A" }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
     await expect(page.getByRole("region", { name: "Main Fields" }).getByRole("alert")).toHaveText(
@@ -298,6 +298,11 @@ test.describe.serial("session fields, schedule, and matches", () => {
     await expect(blockers.getByRole("listitem")).toHaveCount(1);
     await expect(blockers.getByRole("link", { name: "Add fields" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Generate" })).toBeDisabled();
+
+    // The fix link opens the fields on the session's Setup tab, with the cursor in the first box.
+    await blockers.getByRole("link", { name: "Add fields" }).click();
+    await expect(page).toHaveURL(new RegExp(`/sessions/${bare.sessionId}/setup#fields$`));
+    await expect(page.getByLabel("Add your first field")).toBeFocused();
   });
 
   test("two divisions each generate on their own field set", async ({ page, request }) => {
@@ -382,6 +387,14 @@ test.describe.serial("session fields, schedule, and matches", () => {
     await loginAsAdmin(page);
     await page.goto("/sessions");
     await page.getByRole("button", { name: "Set Activate E2E as the active session" }).click();
+    // Nothing changes until the dialog is confirmed.
+    const dialog = page.getByRole("alertdialog", { name: "Make Activate E2E active?" });
+    const confirm = dialog.getByRole("button", { name: /^Make active( without copying)?$/ });
+    await expect(confirm).toBeEnabled();
+    const before = await (await request.get("/api/event", { headers: headers() })).json();
+    expect(before.active_session_id).not.toBe(session.id);
+    await confirm.click();
+    await expect(dialog).toHaveCount(0);
     const row = page.getByRole("row", { name: /Activate E2E/ });
     await expect(row.getByText("Active session")).toBeVisible();
     await expect(page.getByRole("button", { name: "Set Activate E2E as the active session" })).toHaveCount(0);
@@ -406,7 +419,7 @@ test.describe.serial("session fields, schedule, and matches", () => {
     await setWindows(request, target.sessionId, [["2026-11-07", "09:00", "17:00"]]);
 
     await loginAsAdmin(page);
-    await page.goto(`/sessions/${target.sessionId}/fields`);
+    await page.goto(`/sessions/${target.sessionId}/setup`);
     await page.getByLabel("Or copy fields from").selectOption({ label: "Copy Source E2E" });
     await page.getByRole("button", { name: "Copy fields" }).click();
     const card = page.getByRole("region", { name: "North Hall" });
@@ -414,7 +427,7 @@ test.describe.serial("session fields, schedule, and matches", () => {
     await expect(card.getByText("North 2")).toBeVisible();
     await expect(page.getByLabel("Or copy fields from")).toHaveCount(0);
 
-    await page.getByRole("link", { name: "Schedule" }).click();
+    await page.getByRole("link", { name: "Schedule", exact: true }).click();
     await expect(page.getByText(/^✓ Fits/)).toBeVisible();
     await page.getByRole("button", { name: "Generate" }).click();
     await expect(page.getByText(/^\d+ matches scheduled\./)).toBeVisible();
@@ -442,7 +455,8 @@ test.describe.serial("session fields, schedule, and matches", () => {
     await confirm.click();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Delete Me E2E" })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Scored Keep E2E" })).toBeVisible();
+    await expect(page.getByRole("table").getByRole("link", { name: "Scored Keep E2E" })).toBeVisible();
+    await expect(page.getByRole("navigation").getByRole("link", { name: "Scored Keep E2E" })).toBeVisible();
   });
 });
 

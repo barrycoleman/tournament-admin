@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { E2E_EVENT_NAME, E2E_EVENT_PASSWORD } from "./fixtures/testEvent";
+import { ADMIN_LANDING } from "./fixtures/landing";
 
 test.describe.serial("session check-in", () => {
   test.beforeAll(async ({ request }) => {
@@ -27,17 +28,23 @@ test.describe.serial("session check-in", () => {
     await page.getByLabel("Role").fill("admin");
     await page.getByLabel("Password").fill(E2E_EVENT_PASSWORD);
     await page.getByRole("button", { name: "Log in" }).click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL(ADMIN_LANDING);
 
-    await page.getByRole("link", { name: "Sessions" }).click();
+    await page.getByRole("link", { name: "Manage sessions" }).click();
     await expect(page).toHaveURL(/\/sessions$/);
 
     await page.getByRole("button", { name: "Add session..." }).click();
     await page.getByLabel("Session name").fill("Check-In Day");
     await page.getByRole("button", { name: "Add session", exact: true }).click();
-    await expect(page.getByText("Check-In Day")).toBeVisible();
+    const sessionsTable = page.getByRole("table");
+    await expect(sessionsTable.getByText("Check-In Day")).toBeVisible();
+    // The new session is listed in the menu too.
+    await expect(page.getByRole("navigation").getByRole("link", { name: "Check-In Day" })).toBeVisible();
 
-    await page.getByRole("link", { name: "Check-In Day" }).click();
+    // A session opens on its Today tab; Check-In is one of its tabs.
+    await sessionsTable.getByRole("link", { name: "Check-In Day" }).click();
+    await expect(page).toHaveURL(/\/sessions\/\d+\/today$/);
+    await page.getByRole("link", { name: "Check-In", exact: true }).click();
     await expect(page).toHaveURL(/\/sessions\/\d+\/checkin$/);
     const sessionId = page.url().match(/\/sessions\/(\d+)\//)?.[1];
     expect(sessionId).toBeTruthy();
@@ -104,7 +111,8 @@ test.describe.serial("session check-in", () => {
     // Wait for login to actually land before navigating away by URL --
     // otherwise `page.goto` below can race the login call and fire before
     // tokens are persisted, bouncing back to /login.
-    await expect(page).toHaveURL("/");
+    // The active session is this one, so "/" opens its Today tab.
+    await expect(page).toHaveURL(new RegExp(`/sessions/${sessionId}/today$`));
     await page.goto(`/sessions/${sessionId}/checkin`);
 
     await expect(page.getByLabel(/Toggle check-in for Checkin Team 9002A/)).toBeChecked();

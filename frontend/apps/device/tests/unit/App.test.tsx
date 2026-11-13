@@ -76,6 +76,7 @@ describe("device app", () => {
     serve((url) => (url === "/api/pairing" ? { status: 201, body: CODE } : { status: 200, body: { status: "waiting" } }));
     render(<App />);
     expect(await screen.findByTestId("pairing-code")).toHaveTextContent("KX4 9TM");
+    expect(screen.getByText("In the admin app, open Devices & displays and enter this code.")).toBeInTheDocument();
     expect(QRCode.toCanvas).toHaveBeenCalledWith(
       expect.anything(),
       `${window.location.origin}/devices?pair=KX49TM`,

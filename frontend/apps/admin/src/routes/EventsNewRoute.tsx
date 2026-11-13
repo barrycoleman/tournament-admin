@@ -2,22 +2,36 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { apiRequest, ApiError } from "@tournament-admin/shared";
+import { apiRequest, ApiError, useAuth } from "@tournament-admin/shared";
+import { clearExplicitLogout } from "../routeGuards";
 import type { EventRead } from "../types";
 
 export function EventsNewRoute() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
 
   const mutation = useMutation({
-    mutationFn: () =>
-      apiRequest<EventRead>("/api/event", {
+    // Sign straight in as admin with the password just chosen; if that fails,
+    // the event still exists and the login page takes over as before.
+    mutationFn: async () => {
+      await apiRequest<EventRead>("/api/event", {
         method: "POST",
         body: { name, password },
-      }),
-    onSuccess: () => navigate("/login", { replace: true }),
+      });
+      try {
+        await login("admin", password);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    onSuccess: (signedIn) => {
+      if (signedIn) clearExplicitLogout();
+      navigate(signedIn ? "/" : "/login", { replace: true });
+    },
   });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
