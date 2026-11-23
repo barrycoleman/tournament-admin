@@ -7,6 +7,9 @@ import { renderDisplay, serveDisplay } from "./displayHarness";
 
 const NOW = new Date("2026-11-07T16:00:00Z").getTime();
 const iso = (ms: number) => new Date(NOW + ms).toISOString();
+const ranking = (team_id: number, rank: number) => ({
+  team_id, rank, division_id: null, win_points: 0, strength_of_schedule: 0, average_score: 0, matches_played: 0,
+});
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -141,14 +144,15 @@ describe("Elimination Brackets", () => {
     expect(empty).not.toHaveClass("matchup__side--blue");
   });
 
-  it("shows score-chase finals rankings with the runs panel", async () => {
+  it("shows score-chase runs in one table, each finalist pair by side with the better ranked team red, and no side panel", async () => {
+    const solo = (id: number, team_ids: number[], extra = {}) =>
+      match({ id, label: `F${id - 60}`, is_finals: true, round_type: "finals", field_id: 1, alliances: [{ id: id * 10, station: "solo", team_ids }], ...extra });
     serveDisplay({
       ...baseRoutes(),
       "/api/displays/me": me(pitGroup({ screen: "elimination_bracket" })),
-      "/api/matches?session_id=1": [
-        match({ id: 61, label: "F1", is_finals: true, status: "completed", phase: "ended", field_id: 1 }),
-        match({ id: 62, label: "F2", is_finals: true, field_id: 1 }),
-      ],
+      "/api/matches?session_id=1": [solo(61, [3, 4], { status: "completed", phase: "ended" }), solo(62, [1, 2])],
+      // 104D is ranked above 103C; neither 101A nor 102B has a rank, so the server's order decides.
+      "/api/rankings?session_id=1": [ranking(4, 1), ranking(3, 5)],
       "/api/finals?session_id=1&division_id=4": [],
       "/api/finals?session_id=1": [
         bracket({
@@ -164,9 +168,22 @@ describe("Elimination Brackets", () => {
     });
     renderDisplay();
     const table = await screen.findByRole("table", { name: "Finals rankings" });
-    expect(within(table).getAllByRole("row")[1]).toHaveTextContent(/1.*103C.*104D.*1.*84/);
-    const runs = screen.getByRole("complementary", { name: "Match schedule & results" });
-    expect(within(runs).getByText("F2").closest("tr")).toHaveClass("is-current");
+    expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Rank", "Match", "Red", "Blue", "Score"]);
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(2);
+    // The scored run ranks first; its better ranked team (104D) is red.
+    await vi.waitFor(() => expect(rows[0].querySelector(".team-numbers--red")).toHaveTextContent("104D"));
+    expect(rows[0].querySelector(".team-numbers--blue")).toHaveTextContent("103C");
+    expect(rows[0]).toHaveTextContent(/1.*F1.*104D.*103C.*84/);
+    expect(rows[0].querySelector(".rank-table__rank")).toHaveClass("is-top");
+    // The run still to come: no rank, no score, server order for the sides, marked current.
+    expect(rows[1].querySelector(".team-numbers--red")).toHaveTextContent("101A");
+    expect(rows[1].querySelector(".team-numbers--blue")).toHaveTextContent("102B");
+    expect(rows[1]).toHaveTextContent(/–.*F2.*101A.*102B.*–/);
+    expect(rows[1]).toHaveClass("is-current");
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    expect(screen.queryByText("Match schedule & results")).not.toBeInTheDocument();
+    expect(table.querySelector(".kiosk-table__rank, .kiosk-table__number")).toBeNull();
   });
 
   it("says when there are no eliminations yet", async () => {

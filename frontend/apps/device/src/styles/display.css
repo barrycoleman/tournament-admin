@@ -6,7 +6,6 @@
   --kiosk-surface: #1d1b17;
   --kiosk-rule: #2a2723;
   --kiosk-band: #f1ece2;
-  --kiosk-band-alt: #ddd5c4;
   --kiosk-ink: #f6f3ec;
   --kiosk-ink-on-band: #1b1815;
   --kiosk-muted: #a59d8c;
@@ -153,23 +152,15 @@
 .result .bottom-bar { min-height: 7vw; padding: 0.4vw 3vw; }
 .result .bottom-bar__id { font-size: 2.8vw; }
 
-.split { flex: 1; min-height: 0; display: grid; grid-template-columns: 2fr 1fr; gap: 1.5vw; }
 .scroll-area { flex: 1; min-height: 0; overflow: hidden; }
 .kiosk-table { width: 100%; border-collapse: collapse; background: transparent; color: var(--kiosk-ink); font-size: 1.7vw; font-variant-numeric: tabular-nums; }
 .kiosk-table thead th { position: sticky; top: 0; background: var(--kiosk-bg); color: var(--kiosk-muted); text-align: left; font-size: 1.1vw; text-transform: uppercase; padding: 0.4vw 0.8vw; }
 .kiosk-table td, .kiosk-table tbody th { padding: 0.5vw 0.8vw; text-align: left; border-top: 0.15vw solid var(--kiosk-rule); }
-.kiosk-table--compact { font-size: 1.4vw; }
-.kiosk-table__rank { font-weight: 900; }
-.kiosk-table__number { font-weight: 900; }
 .kiosk-table .is-done { opacity: 0.55; }
 .team-numbers { display: inline-flex; gap: 0.8vw; margin-right: 1.2vw; font-weight: 800; }
 .team-numbers--red { color: var(--kiosk-red-text); }
 .team-numbers--blue { color: var(--kiosk-blue-text); }
-.side-panel { min-height: 0; overflow: hidden; }
-.side-panel__title { margin: 0 0 0.4vw; font-size: 1.2vw; text-transform: uppercase; color: var(--kiosk-muted); }
-.side-panel__end { text-align: right; font-weight: 800; white-space: nowrap; }
 
-.side-stack { display: flex; flex-direction: column; gap: 1vw; min-height: 0; }
 .kiosk-table .is-current { outline: 0.3vw solid var(--kiosk-soon); outline-offset: -0.3vw; }
 .kiosk-table .is-loser { opacity: 0.45; }
 .bracket__rounds { flex: 1; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2vw; }
@@ -308,7 +299,7 @@
 .results-table td.score-blue { color: var(--kiosk-blue-text); }
 .results-table td.score-combined { color: var(--kiosk-ink); }
 
-/* Finals ranking table: rank, team (wide), matches and total. */
-.finals-table thead th:nth-child(2) { width: auto; }
-.finals-table thead th:nth-child(3), .finals-table thead th:nth-child(4) { width: 11vw; text-align: right; }
-.finals-table td:nth-child(3) { text-align: right; }
+/* Score-chase finals: rank, match, the red and blue team (sharing what is left) and the score. */
+.finals-table thead th:nth-child(3), .finals-table thead th:nth-child(4) { width: auto; text-align: left; }
+.finals-table td.finals-table__side { text-align: left; }
+.finals-table__side .rank-table__name { font-weight: 600; }

@@ -12,23 +12,29 @@ export interface ScoreGroup {
   allianceIds: number[];
 }
 
+/** A finalist pair (a solo alliance) by side: the better ranked team red and
+ * the other blue; when any rank is missing, the server's order decides: first
+ * red, second blue. */
+export function pairSides(teamIds: number[], ranks?: Map<number, number>): MatchSides {
+  let ids = teamIds;
+  const ranked = ids.map((id) => ranks?.get(id));
+  if (ids.length > 1 && ranked.every((r) => r !== undefined)) {
+    ids = [...ids].sort((a, b) => ranks!.get(a)! - ranks!.get(b)!);
+  }
+  return { red: ids.slice(0, 1), blue: ids.slice(1) };
+}
+
 /** Which teams stand on which side. A red or blue alliance keeps its side
- * (both game models). A solo alliance (a score-chase run) puts the better
- * ranked team red and the other blue; when any rank is missing, the server's
- * order decides: first red, second blue. */
+ * (both game models). A solo alliance (a score-chase run) follows pairSides. */
 export function matchSides(match: LiveMatch, ranks?: Map<number, number>): MatchSides {
   const sides: MatchSides = { red: [], blue: [] };
   for (const alliance of match.alliances) {
     if (alliance.station === "red") sides.red.push(...alliance.team_ids);
     else if (alliance.station === "blue") sides.blue.push(...alliance.team_ids);
     else {
-      let ids = alliance.team_ids;
-      const ranked = ids.map((id) => ranks?.get(id));
-      if (ids.length > 1 && ranked.every((r) => r !== undefined)) {
-        ids = [...ids].sort((a, b) => ranks!.get(a)! - ranks!.get(b)!);
-      }
-      if (ids.length) sides.red.push(ids[0]);
-      sides.blue.push(...ids.slice(1));
+      const pair = pairSides(alliance.team_ids, ranks);
+      sides.red.push(...pair.red);
+      sides.blue.push(...pair.blue);
     }
   }
   return sides;

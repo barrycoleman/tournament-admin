@@ -1,17 +1,8 @@
 import { useTranslation } from "react-i18next";
-import { formatTime } from "@tournament-admin/shared";
-import {
-  useFields,
-  useMatches,
-  useNewestFinals,
-  useScores,
-  useSessionTimeZone,
-  useTeamsById,
-  type FinalsBracket,
-  type Team,
-} from "../api";
+import { useMatches, useNewestFinals, useRanks, useScores, useTeamsById, type FinalsBracket, type Team } from "../api";
 import { ScreenFrame, ScreenNotice, WaitingForData } from "../components/ScreenFrame";
 import { roundName, seriesWins } from "../logic/bracket";
+import { matchSides, pairSides } from "../logic/sides";
 import { tableScreenClass } from "../logic/tableScreen";
 import type { ScreenModule, ScreenProps } from "../screenTypes";
 
@@ -45,15 +36,15 @@ function Side({
 }
 
 function EliminationBracketScreen({ context }: ScreenProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const bracket = useNewestFinals(context.sessionId, context.divisionId);
   const matches = useMatches(context.sessionId);
   const scores = useScores(context.sessionId);
-  const fields = useFields(context.sessionId);
   const teams = useTeamsById();
-  const timeZone = useSessionTimeZone(context.sessionId);
+  // The finals were seeded from the bracket's division's qualification ranks.
+  const ranks = useRanks(context.sessionId, bracket?.division_id ?? context.divisionId);
   const title = t("display.screens.elimination_bracket");
-  if (bracket === undefined || !matches.data || !scores.data || !fields.data || !teams || timeZone === undefined) return <WaitingForData title={title} />;
+  if (bracket === undefined || !matches.data || !scores.data || !teams) return <WaitingForData title={title} />;
   if (bracket === null) return <ScreenNotice title={title} text={t("display.noEliminations")} />;
 
   if (bracket.format === "single_elimination") {
@@ -84,74 +75,53 @@ function EliminationBracketScreen({ context }: ScreenProps) {
     );
   }
 
-  const results = [...bracket.results].sort((a, b) => a.rank - b.rank);
-  const played = (allianceId: number) =>
-    bracket.runs.filter((run) => run.bracket_alliance_id === allianceId && run.status === "completed").length;
+  // One row per run: ranked runs first by rank, then the runs still to score in run order.
+  const rankOf = new Map(bracket.results.map((r) => [r.bracket_alliance_id, r]));
+  const rows = bracket.runs
+    .map((run, order) => ({ run, order, result: run.bracket_alliance_id === null ? undefined : rankOf.get(run.bracket_alliance_id) }))
+    .sort((a, b) => (a.result?.rank ?? Infinity) - (b.result?.rank ?? Infinity) || a.order - b.order);
   const currentRun = bracket.runs.find((run) => run.status !== "completed")?.match_id ?? null;
   const matchById = new Map(matches.data.map((m) => [m.id, m]));
+  const side = (ids: number[], tone: "red" | "blue") => (
+    <td className={`finals-table__side finals-table__side--${tone}`}>
+      {ids.map((id) => (
+        <div key={id}>
+          <span className={`rank-table__number team-numbers--${tone}`}>{teams.get(id)?.number ?? ""}</span>{" "}
+          <span className="rank-table__name">{teams.get(id)?.name ?? ""}</span>
+        </div>
+      ))}
+    </td>
+  );
   return (
     <ScreenFrame title={title} className={`finals ${tableScreenClass(context)}`}>
-      <div className="split">
-        <table className="kiosk-table rank-table finals-table" aria-label={t("display.finalsRankings")}>
-          <thead>
-            <tr>
-              <th scope="col">{t("display.col.rank")}</th>
-              <th scope="col">{t("display.col.team")}</th>
-              <th scope="col">{t("display.col.matches")}</th>
-              <th scope="col">{t("display.col.total")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {results.map((result) => {
-              const alliance = bracket.alliances.find((a) => a.id === result.bracket_alliance_id);
-              return (
-                <tr key={result.bracket_alliance_id}>
-                  <td className="kiosk-table__rank">{result.rank}</td>
-                  <td>
-                    {alliance?.team_ids.map((id) => (
-                      <div key={id}>
-                        <span className="kiosk-table__number">{teams.get(id)?.number ?? ""}</span> {teams.get(id)?.name ?? ""}
-                      </div>
-                    ))}
-                  </td>
-                  <td>{played(result.bracket_alliance_id)}</td>
-                  <td className="kiosk-table__number">{result.score}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <aside className="side-panel" aria-label={t("display.schedulePanel")}>
-          <h2 className="side-panel__title">{t("display.schedulePanel")}</h2>
-          <table className="kiosk-table kiosk-table--compact">
-            <tbody>
-              {bracket.runs.map((run) => {
-                const game = matchById.get(run.match_id);
-                const alliance = bracket.alliances.find((a) => a.id === run.bracket_alliance_id);
-                return (
-                  <tr key={run.match_id} className={run.match_id === currentRun ? "is-current" : undefined}>
-                    <th scope="row">{game?.label ?? ""}</th>
-                    <td>
-                      <span className="team-numbers">
-                        {(alliance?.team_ids ?? []).map((id) => (
-                          <span key={id}>{teams.get(id)?.number ?? ""}</span>
-                        ))}
-                      </span>
-                    </td>
-                    <td className="side-panel__end">
-                      {run.score !== null
-                        ? run.score
-                        : `${fields.data?.find((f) => f.id === game?.field_id)?.name ?? ""} ${
-                            game?.scheduled_time ? formatTime(game.scheduled_time, timeZone, i18n.language) : ""
-                          }`}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </aside>
-      </div>
+      <table className="kiosk-table rank-table finals-table" aria-label={t("display.finalsRankings")}>
+        <thead>
+          <tr>
+            <th scope="col">{t("display.col.rank")}</th>
+            <th scope="col">{t("display.col.match")}</th>
+            <th scope="col">{t("display.col.red")}</th>
+            <th scope="col">{t("display.col.blue")}</th>
+            <th scope="col">{t("display.col.score")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ run, result }) => {
+            const game = matchById.get(run.match_id);
+            const alliance = bracket.alliances.find((a) => a.id === run.bracket_alliance_id);
+            const sides = game ? matchSides(game, ranks) : pairSides(alliance?.team_ids ?? [], ranks);
+            const score = result?.score ?? run.score;
+            return (
+              <tr key={run.match_id} className={run.match_id === currentRun ? "is-current" : undefined}>
+                <td className={`rank-table__rank${result && result.rank <= 3 ? " is-top" : ""}`}>{result?.rank ?? "–"}</td>
+                <td className="rank-table__strong">{game?.label ?? ""}</td>
+                {side(sides.red, "red")}
+                {side(sides.blue, "blue")}
+                <td className="rank-table__strong">{score ?? "–"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </ScreenFrame>
   );
 }
