@@ -122,12 +122,12 @@ For the referees' robot check, so the numbers are the biggest thing on screen.
 
 ### 8. Schedule by team (new screen key `team_schedule`)
 
-- One row per team in the division, in team-number order. Columns: number (bold), name (muted), then the team's **next three unplayed matches**. Each is shown as "Q13 · F2 · 10:32": match label, short field name, scheduled time. A red or blue dot in front shows the team's side. A match running now shows "now" in place of the time.
+- One row per team in the division, in team-number order. Columns: number (bold), name (muted), then the team's **next three unplayed matches**. Each is shown on two lines, "Q13 · Sharks" then "10:32": match label and the field's own name (shrunk to fit, never wrapped), then the scheduled time. A red or blue dot in front shows the team's side. A match running now shows "now" in place of the time.
 - Fewer than three left: empty cells show "–". No matches left: a single muted "No more matches".
 - Heading: "SCHEDULE BY TEAM", with a muted "Next matches · teams in number order".
 - Allowed on audience and pit groups, no settings, `scrolls: true`.
 - Register it on the server (`services/display_screens.py` registry and the shared `ScreenKey` list), in the device app's screen registry, and in the admin app's screen labels (en: "Schedule by Team"; zh: a matching label).
-- **Short field name:** use the field's name if it is short. Otherwise "F" plus the field's position is acceptable. That choice is left to the builder, as long as it is consistent and unambiguous.
+- **Field name:** always the field's own name, as on every other screen. An earlier "F" plus position for long names was dropped: it showed some fields by name and others by code, which no team could match to the field.
 
 ### 9. Check-in & inspection (new screen key `checkin_status`; pit and audience)
 
@@ -143,7 +143,7 @@ This is the owner's design. The screen is built in this slice **with check-in on
   | State | Icon | Tile |
   |---|---|---|
   | Not checked in | dashed grey ring | no fill, dashed outline, dimmed text |
-  | Checked in (in this slice); later, checked in but inspection not started | white ring | dark tile |
+  | Checked in (in this slice); later, checked in but inspection not started | solid white dot (a plain ring read as empty on a TV) | dark tile |
   | Partly inspected (later) | half-filled amber circle | amber tint |
   | Fully inspected (later) | green circle with a check | green tint |
 
@@ -197,5 +197,4 @@ The test cases: four six-character numbers; one six-character number per side; s
 - The exact sizes, spacing and component structure, within the proportions above.
 - How the text fitting is done.
 - The paused indicator's exact placement (it must not overlap the clock).
-- The short field name format on Schedule by team.
 - Whether the intro's long team names shrink or are cut with an ellipsis.

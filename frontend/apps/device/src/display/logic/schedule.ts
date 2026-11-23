@@ -44,13 +44,10 @@ export function roundProgress(matches: LiveMatch[]): { round: ScheduleRound; pla
 }
 
 /** The field's name when short, else "F" and its 1-based position by id. */
-export function shortFieldName(fields: Field[], fieldId: number | null): string {
+/** The field's own name, as every other screen shows it; empty for no field. */
+export function fieldName(fields: Field[], fieldId: number | null): string {
   if (fieldId === null) return "";
-  const field = fields.find((f) => f.id === fieldId);
-  if (!field) return "";
-  if (field.name.length <= 4) return field.name;
-  const position = [...fields].sort((a, b) => a.id - b.id).findIndex((f) => f.id === fieldId) + 1;
-  return `F${position}`;
+  return fields.find((f) => f.id === fieldId)?.name ?? "";
 }
 
 export function compareTeamNumbers(a: string, b: string): number {

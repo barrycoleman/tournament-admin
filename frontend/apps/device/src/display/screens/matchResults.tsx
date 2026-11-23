@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { scoredMatches } from "@tournament-admin/shared";
 import { useDivisionFilter, useMatchFormat, useMatches, useRanks, useScores, useTeamsById } from "../api";
 import { ScreenFrame, ScreenNotice, WaitingForData } from "../components/ScreenFrame";
+import { FitLine } from "../components/FitText";
 import { ScrollingList } from "../components/ScrollingList";
 import { groupScore, matchSides, resultOutcome, scoreGroups } from "../logic/sides";
 import { tableScreenClass } from "../logic/tableScreen";
@@ -45,7 +46,9 @@ function MatchResultsScreen({ context, onDone, fitSeconds }: ScreenProps) {
                 <tr key={match.id}>
                   <th scope="row" className="results-table__match">{match.label}</th>
                   <td className={`results-teams results-teams--red${dim("red")}`}>
-                    <span className="team-numbers">{numbers(sides.red)}</span>
+                    <FitLine align="end">
+                      <span className="team-numbers">{numbers(sides.red)}</span>
+                    </FitLine>
                   </td>
                   {groups.map((group) => (
                     <td
@@ -57,7 +60,9 @@ function MatchResultsScreen({ context, onDone, fitSeconds }: ScreenProps) {
                     </td>
                   ))}
                   <td className={`results-teams results-teams--blue${dim("blue")}`}>
-                    <span className="team-numbers">{numbers(sides.blue)}</span>
+                    <FitLine>
+                      <span className="team-numbers">{numbers(sides.blue)}</span>
+                    </FitLine>
                   </td>
                 </tr>
               );

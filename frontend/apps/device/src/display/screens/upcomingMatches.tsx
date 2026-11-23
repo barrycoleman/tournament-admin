@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { UPCOMING_COUNT, formatTime, onFields, upcomingMatches } from "@tournament-admin/shared";
 import { useDivisionFilter, useFields, useMatchFormat, useMatches, useRanks, useSessionTimeZone, useTeamsById } from "../api";
 import { ScreenFrame, ScreenNotice, WaitingForData } from "../components/ScreenFrame";
+import { FitLine } from "../components/FitText";
 import { matchSides } from "../logic/sides";
 import { tableScreenClass } from "../logic/tableScreen";
 import type { ScreenModule, ScreenProps } from "../screenTypes";
@@ -43,10 +44,14 @@ function UpcomingMatchesScreen({ context }: ScreenProps) {
               <tr key={match.id}>
                 <th scope="row" className="upcoming-table__match">{match.label}</th>
                 <td>
-                  <span className="team-numbers team-numbers--red">{numbers(sides.red)}</span>
+                  <FitLine>
+                    <span className="team-numbers team-numbers--red">{numbers(sides.red)}</span>
+                  </FitLine>
                 </td>
                 <td>
-                  <span className="team-numbers team-numbers--blue">{numbers(sides.blue)}</span>
+                  <FitLine>
+                    <span className="team-numbers team-numbers--blue">{numbers(sides.blue)}</span>
+                  </FitLine>
                 </td>
                 <td className="upcoming-table__field">{fieldName(match.field_id)}</td>
                 <td className="upcoming-table__time">{match.scheduled_time ? formatTime(match.scheduled_time, timeZone, i18n.language) : t("display.upNext")}</td>

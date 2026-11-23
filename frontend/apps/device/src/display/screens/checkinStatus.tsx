@@ -10,12 +10,12 @@ const FOUR_COLUMNS_ABOVE = 30;
 
 type IconName = "out" | "in" | "total";
 
-/** Dashed ring: not checked in. White ring: checked in. Filled ring with a tick: the checked-in total. */
+/** Dashed ring: not checked in. Solid white dot: checked in. Filled circle with a tick: the checked-in total. */
 function Icon({ name }: { name: IconName }) {
   return (
     <svg className={`checkin-icon checkin-icon--${name}`} viewBox="0 0 24 24" aria-hidden="true">
       {name === "out" && <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" />}
-      {name === "in" && <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.4" />}
+      {name === "in" && <circle cx="12" cy="12" r="10" fill="currentColor" />}
       {name === "total" && (
         <>
           <circle cx="12" cy="12" r="10" fill="currentColor" />

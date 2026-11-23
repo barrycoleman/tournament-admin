@@ -6,7 +6,7 @@ import {
   onFieldMatchIds,
   roundProgress,
   scheduleRows,
-  shortFieldName,
+  fieldName,
 } from "../../src/display/logic/schedule";
 import { match } from "./displayFixtures";
 
@@ -68,16 +68,15 @@ describe("roundProgress", () => {
   });
 });
 
-describe("shortFieldName", () => {
-  const fields = [{ id: 7, field_set_id: 1, name: "Field 1" }, { id: 3, field_set_id: 1, name: "Field 2" }, { id: 9, field_set_id: 1, name: "A" }];
-  it("uses a short name as is and F plus the position (by id) otherwise", () => {
-    expect(shortFieldName(fields, 9)).toBe("A");
-    expect(shortFieldName(fields, 3)).toBe("F1");
-    expect(shortFieldName(fields, 7)).toBe("F2");
-    expect(shortFieldName([{ id: 1, field_set_id: 1, name: "Field 1" }, { id: 2, field_set_id: 1, name: "Field 2" }], 2)).toBe("F2");
+describe("fieldName", () => {
+  const fields = [{ id: 7, field_set_id: 1, name: "Sharks" }, { id: 3, field_set_id: 1, name: "Jets" }];
+  it("uses every field's own name, long or short", () => {
+    expect(fieldName(fields, 7)).toBe("Sharks");
+    expect(fieldName(fields, 3)).toBe("Jets");
   });
-  it("is empty for no field", () => {
-    expect(shortFieldName(fields, null)).toBe("");
+  it("is empty for no field or an unknown one", () => {
+    expect(fieldName(fields, null)).toBe("");
+    expect(fieldName(fields, 99)).toBe("");
   });
 });
 

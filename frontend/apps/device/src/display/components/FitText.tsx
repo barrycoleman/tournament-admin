@@ -29,3 +29,32 @@ export function FitText({ className, testId, children }: { className?: string; t
     </span>
   );
 }
+
+/** One line of text that keeps its natural size and shrinks (never grows) to its box's width instead of wrapping. */
+export function FitLine({ align = "start", className, testId, children }: { align?: "start" | "end"; className?: string; testId?: string; children: ReactNode }) {
+  const box = useRef<HTMLSpanElement>(null);
+  const inner = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    const boxEl = box.current;
+    const innerEl = inner.current;
+    if (!boxEl || !innerEl) return;
+    const measure = () => {
+      const s = fitScale(innerEl.offsetWidth, 1, boxEl.clientWidth, 1);
+      innerEl.style.transform = s < 1 ? `scale(${s})` : "";
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(boxEl);
+    observer.observe(innerEl);
+    return () => observer.disconnect();
+  }, [children]);
+
+  const classes = ["fit-line", `fit-line--${align}`, className].filter(Boolean).join(" ");
+  return (
+    <span ref={box} className={classes} data-testid={testId}>
+      <span ref={inner} className="fit-line__inner">{children}</span>
+    </span>
+  );
+}

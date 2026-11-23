@@ -432,23 +432,30 @@ describe("Schedule by Team", () => {
     expect(screen.queryByTestId("team-row-5")).not.toBeInTheDocument();
   });
 
-  it("shows three cells with label, field, time and a dot for the team's side", async () => {
+  it("shows three cells with the label and the field's own name on one line, the time below, and a dot for the team's side", async () => {
     serve();
     renderDisplay();
     const first = await screen.findByTestId("next-2-0");
-    expect(first).toHaveTextContent("Q13 · F1 · 4:05 PM");
-    expect(first.querySelector(".side-dot--red")).not.toBeNull();
+    expect(first.querySelector(".team-schedule-table__lead")).toHaveTextContent(/^Q13 · Field 1$/);
+    expect(first.querySelector(".team-schedule-table__when")).toHaveTextContent(/^4:05 PM$/);
+    expect(first.querySelector(".team-schedule-table__lead .side-dot--red")).not.toBeNull();
     expect(screen.getByTestId("next-2-1").querySelector(".side-dot--blue")).not.toBeNull();
-    expect(screen.getByTestId("next-2-1")).toHaveTextContent("Q20 · F2 · 4:10 PM");
+    expect(screen.getByTestId("next-2-1").querySelector(".team-schedule-table__lead")).toHaveTextContent(/^Q20 · Field 2$/);
+    expect(screen.getByTestId("next-2-1").querySelector(".team-schedule-table__when")).toHaveTextContent(/^4:10 PM$/);
     expect(screen.getByTestId("next-2-2")).toHaveTextContent("Q27");
+    // No cell abbreviates a field to a code.
+    expect(screen.getByRole("table", { name: "Schedule by Team" })).not.toHaveTextContent(/· F\d/);
   });
 
   it("shows now for a running match, leaves off a missing time, and dashes empty cells", async () => {
     const running = matches.map((m) => (m.id === 1 ? { ...m, phase: "driver", status: "in_progress" } : m));
     serve(running as typeof matches);
     renderDisplay();
-    expect(await screen.findByTestId("next-2-0")).toHaveTextContent("Q13 · F1 · now");
-    expect(screen.getByTestId("next-1-0")).toHaveTextContent(/^F1 · F1$/);
+    const running0 = await screen.findByTestId("next-2-0");
+    expect(running0.querySelector(".team-schedule-table__lead")).toHaveTextContent(/^Q13 · Field 1$/);
+    expect(running0.querySelector(".team-schedule-table__when")).toHaveTextContent(/^now$/);
+    expect(screen.getByTestId("next-1-0")).toHaveTextContent(/^F1 · Field 1$/);
+    expect(screen.getByTestId("next-1-0").querySelector(".team-schedule-table__when")).toBeNull();
     expect(screen.getByTestId("next-1-1")).toHaveTextContent("–");
     expect(screen.getByTestId("next-1-2")).toHaveTextContent("–");
   });
@@ -498,6 +505,12 @@ describe("Check-in Status", () => {
     const tiles = screen.getAllByTestId(/^checkin-\d+$/);
     expect(tiles.map((t) => t.getAttribute("data-testid"))).toEqual(["checkin-3", "checkin-2", "checkin-1"]);
     expect(tiles.map((t) => t.getAttribute("data-state"))).toEqual(["in", "out", "in"]);
+    // Checked in is a solid dot, not checked in a dashed ring: different shapes, not only colours.
+    const icon = (tile: HTMLElement) => tile.querySelector("svg circle")!;
+    expect(icon(tiles[0])).toHaveAttribute("fill", "currentColor");
+    expect(icon(tiles[0])).not.toHaveAttribute("stroke-dasharray");
+    expect(icon(tiles[1])).toHaveAttribute("fill", "none");
+    expect(icon(tiles[1])).toHaveAttribute("stroke-dasharray");
     expect(tiles[0]).toHaveTextContent("9AT3");
   });
 

@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { test, expect, type APIRequestContext, type Browser, type Page } from "@playwright/test";
+import { test, expect, type APIRequestContext, type Browser, type Locator, type Page } from "@playwright/test";
 import { buildExampleGamePluginZip, buildSampleCooperativePluginZip } from "./fixtures/buildPluginZip";
 import { startIsolatedServer, type IsolatedServer } from "./fixtures/isolatedServer";
 import { expectFits, shot } from "./fixtures/tvFits";
@@ -14,6 +14,53 @@ const TEAMS: [string, string][] = [
   ["55210C", "Echo"],
   ["31415P", "Foxtrot"],
 ];
+
+/** Every team-number group and match line stays on one line (shrunk if need be, never wrapped) and inside its cell. */
+async function expectSingleLines(table: Locator) {
+  const lines = await table.locator(".team-numbers, .team-schedule-table__lead").evaluateAll((els) =>
+    els.map((el) => ({ text: el.textContent, height: el.getBoundingClientRect().height, font: parseFloat(getComputedStyle(el).fontSize) }))
+  );
+  expect(lines.length).toBeGreaterThan(0);
+  for (const line of lines) expect(line.height, `"${line.text}" wraps`).toBeLessThan(line.font * 1.6);
+  const outside = await table.locator(".fit-line").evaluateAll((els) =>
+    els
+      .filter((el) => {
+        const box = el.getBoundingClientRect();
+        const inner = el.firstElementChild!.getBoundingClientRect();
+        return inner.left < box.left - 1 || inner.right > box.right + 1;
+      })
+      .map((el) => {
+        const box = el.getBoundingClientRect();
+        const inner = el.firstElementChild!.getBoundingClientRect();
+        return `${el.textContent} box ${Math.round(box.left)}-${Math.round(box.right)} text ${Math.round(inner.left)}-${Math.round(inner.right)}`;
+      })
+  );
+  expect(outside).toEqual([]);
+}
+
+/** Scrolls each row in turn under the column headings and checks the headings still paint over it
+ * (a played row is dimmed with opacity, which once painted it over the sticky headings). */
+async function expectHeadingsOnTop(page: Page, tableClass: string) {
+  const covered = await page.evaluate((cls) => {
+    const area = document.querySelector(".scroll-area")!;
+    const head = document.querySelector(`.${cls} thead`)!;
+    const failures: string[] = [];
+    let scrolled = 0;
+    for (const row of Array.from(document.querySelectorAll<HTMLTableRowElement>(`.${cls} tbody tr`))) {
+      area.scrollTop = Math.max(0, row.offsetTop - head.getBoundingClientRect().height / 2);
+      scrolled = Math.max(scrolled, area.scrollTop);
+      for (const th of Array.from(head.querySelectorAll("th"))) {
+        const r = th.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (!hit?.closest("thead")) failures.push(`${row.className || "row"} ${row.textContent?.slice(0, 12)} over ${th.textContent}`);
+      }
+    }
+    area.scrollTop = 0;
+    return { scrolled, failures };
+  }, tableClass);
+  expect(covered.scrolled).toBeGreaterThan(0);
+  expect(covered.failures).toEqual([]);
+}
 
 interface MatchInfo {
   id: number;
@@ -387,6 +434,7 @@ test.describe.serial("TV screens", () => {
     await expect(q1.locator(".schedule-table__side--blue")).toContainText("19533Z");
     const widths = await table.locator(".team-numbers").evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
     expect(Math.max(...widths)).toBeLessThanOrEqual(1);
+    await expectSingleLines(table);
     const wide = await table.boundingBox();
     expect(wide!.width).toBeGreaterThan(1920 * 0.85);
     await shot(pitTv, testInfo, "schedule-pit-1920x1080");
@@ -404,11 +452,13 @@ test.describe.serial("TV screens", () => {
     // Number order, not alphabetical: 10480B, 19533Z, 31415P, 55210C, 83897A, 94927X.
     await expect(table.getByRole("rowheader")).toHaveText(["10480B", "19533Z", "31415P", "55210C", "83897A", "94927X"]);
     // 10480B: red in Q3 (field 1), blue in Q4 (field 2); Q1 is played.
-    const labelFieldTime = /^Q\d · F\d · \d{1,2}:\d{2}\s?[AP]M( UTC)?$/;
-    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toHaveText(labelFieldTime);
-    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toContainText("Q3 · F1");
+    // The label and the field's own name on one line, the time on the next.
+    const lead = (slot: string) => pitTv.getByTestId(slot).locator(".team-schedule-table__lead");
+    const when = (slot: string) => pitTv.getByTestId(slot).locator(".team-schedule-table__when");
+    await expect(lead(`next-${teams[1]}-0`)).toHaveText("Q3 · Field 1");
+    await expect(when(`next-${teams[1]}-0`)).toHaveText(/^\d{1,2}:\d{2}\s?[AP]M( UTC)?$/);
     await expect(pitTv.getByTestId(`next-${teams[1]}-0`).locator(".side-dot--red")).toHaveCount(1);
-    await expect(pitTv.getByTestId(`next-${teams[1]}-1`)).toContainText("Q4 · F2");
+    await expect(lead(`next-${teams[1]}-1`)).toHaveText("Q4 · Field 2");
     await expect(pitTv.getByTestId(`next-${teams[1]}-1`).locator(".side-dot--blue")).toHaveCount(1);
     await expect(pitTv.getByTestId(`next-${teams[1]}-2`)).toHaveText("–");
     // 83897A has only Q2 left, on blue.
@@ -416,6 +466,8 @@ test.describe.serial("TV screens", () => {
     await expect(pitTv.getByTestId(`next-${teams[0]}-1`)).toHaveText("–");
     const numbers = await table.locator(".rank-table__number").evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
     expect(Math.max(...numbers)).toBeLessThanOrEqual(1);
+    await expectSingleLines(table);
+    await expect(table).not.toContainText(/· F\d/);
     const wide = await table.boundingBox();
     expect(wide!.width).toBeGreaterThan(1920 * 0.85);
     await shot(pitTv, testInfo, "team-schedule-pit-1920x1080");
@@ -436,6 +488,10 @@ test.describe.serial("TV screens", () => {
     await expect(pitTv.getByTestId("total-out")).toContainText("5 / 6");
     await expect(pitTv.getByTestId(`checkin-${teams[1]}`)).toHaveAttribute("data-state", "in");
     await expect(pitTv.getByTestId(`checkin-${teams[2]}`)).toHaveAttribute("data-state", "out");
+    // Checked in is a solid dot; not checked in is a dashed ring.
+    await expect(pitTv.getByTestId(`checkin-${teams[1]}`).locator("svg circle")).toHaveAttribute("fill", "currentColor");
+    await expect(pitTv.getByTestId(`checkin-${teams[2]}`).locator("svg circle")).toHaveAttribute("fill", "none");
+    await expect(pitTv.getByTestId(`checkin-${teams[2]}`).locator("svg circle")).toHaveAttribute("stroke-dasharray", "3 3");
     // The front desk checks in a team that has no participation row yet; the TV is not reloaded.
     await call(request, "post", `/api/sessions/${saturday}/participants`, { team_id: teams[2], checked_in: true });
     await expect(pitTv.getByTestId(`checkin-${teams[2]}`)).toHaveAttribute("data-state", "in", { timeout: 5_000 });
@@ -463,6 +519,7 @@ test.describe.serial("TV screens", () => {
     await expect(q1.locator(".score-blue")).not.toHaveClass(/is-loser/);
     const widths = await results.locator(".team-numbers").evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
     expect(Math.max(...widths)).toBeLessThanOrEqual(1);
+    await expectSingleLines(results);
     expect((await results.boundingBox())!.width).toBeGreaterThan(1920 * 0.85);
     await shot(pitTv, testInfo, "match-results-1920x1080");
 
@@ -475,6 +532,7 @@ test.describe.serial("TV screens", () => {
     await expect(q2.locator(".team-numbers--blue")).toContainText("83897A");
     const sizes = await upcoming.locator(".team-numbers").evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
     expect(Math.max(...sizes)).toBeLessThanOrEqual(1);
+    await expectSingleLines(upcoming);
     await shot(pitTv, testInfo, "upcoming-matches-1920x1080");
   });
 
@@ -506,13 +564,14 @@ test.describe.serial("TV screens", () => {
     await expect(pitTv.getByTestId(`team-row-${teams[0]}`)).toContainText("No more matches", { timeout: 10_000 });
     await expect(pitTv.getByTestId(`next-${teams[0]}-0`)).toHaveCount(0);
     // 10480B's next match is Q3 on field 1; once it starts, its time reads "now".
-    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toContainText("Q3 · F1");
-    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).not.toContainText("now");
+    const when = (slot: string) => pitTv.getByTestId(slot).locator(".team-schedule-table__when");
+    await expect(pitTv.getByTestId(`next-${teams[1]}-0`).locator(".team-schedule-table__lead")).toHaveText("Q3 · Field 1");
+    await expect(when(`next-${teams[1]}-0`)).not.toHaveText("now");
     await call(request, "post", `/api/matches/${matches.Q3.id}/start`, {});
-    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toHaveText(/^Q3 · F1 · now$/, { timeout: 10_000 });
+    await expect(when(`next-${teams[1]}-0`)).toHaveText("now", { timeout: 10_000 });
     await expect(pitTv.getByTestId(`next-${teams[3]}-0`)).toContainText("now");
     // A team that isn't in Q3 keeps its scheduled time: 19533Z plays Q4 next.
-    await expect(pitTv.getByTestId(`next-${teams[2]}-0`)).toContainText("Q4 · F2");
+    await expect(pitTv.getByTestId(`next-${teams[2]}-0`)).toContainText("Q4 · Field 2");
     await expect(pitTv.getByTestId(`next-${teams[2]}-0`)).not.toContainText("now");
     await shot(pitTv, testInfo, "team-schedule-now-1920x1080");
 
@@ -522,7 +581,7 @@ test.describe.serial("TV screens", () => {
       await call(request, "post", `/api/matches/${matches.Q3.id}/alliances/${alliance.id}/score`, { data: { high_balls: 5, auto_winner: "tie" } });
     }
     // 10480B moves on to Q4, and 94927X, which played only Q1 and Q3, has nothing left.
-    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toContainText("Q4 · F2", { timeout: 10_000 });
+    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toContainText("Q4 · Field 2", { timeout: 10_000 });
     await expect(pitTv.getByTestId(`team-row-${teams[3]}`)).toContainText("No more matches");
   });
 
@@ -594,6 +653,45 @@ test.describe.serial("TV screens", () => {
     await expect(page.getByTestId(`rank-row-${teams[0]}`)).toContainText("83897A");
     expect(await overflow()).toBeLessThanOrEqual(0);
     await shot(page, testInfo, "rankings-pit-1280x720");
+  });
+
+  test("a long schedule keeps its headings over the rows scrolling under them and every pair of numbers on one line, at audience and pit size, 1280×720", async ({ request }, testInfo) => {
+    // Ten more matches, two of them with seven-character numbers on each side, so the list scrolls.
+    const longA = (await call(request, "post", "/api/teams", { number: "765432Z", name: "Long Number A" })).id;
+    const longB = (await call(request, "post", "/api/teams", { number: "876543Y", name: "Long Number B" })).id;
+    const later = Date.now() + 60 * 60_000;
+    for (let i = 0; i < 10; i += 1) {
+      const red = i < 2 ? [longA, teams[1]] : [teams[i % 6], teams[(i + 1) % 6]];
+      const blue = i < 2 ? [longB, teams[4]] : [teams[(i + 2) % 6], teams[(i + 3) % 6]];
+      await call(request, "post", "/api/matches", {
+        session_id: saturday,
+        round_type: "qualification",
+        match_number: 20 + i,
+        field_id: i % 2 ? fieldTwo : fieldOne,
+        scheduled_time: new Date(later + i * 5 * 60_000).toISOString(),
+        alliances: [
+          { station: "red", team_ids: red },
+          { station: "blue", team_ids: blue },
+        ],
+      });
+    }
+    const pit = await pitGroupId(request);
+    await call(request, "patch", `/api/displays/groups/${pit}`, { screen: "schedule" });
+    await call(request, "patch", `/api/displays/groups/${audienceGroup}`, { screen: "schedule" });
+    // Big TV (audience, 1280×720) and Small Pit TV (pit, 1280×720); a reload picks up the hand-added matches.
+    for (const [name, size] of [["Big TV", "audience"], ["Small Pit TV", "pit"]] as const) {
+      const page = screens[name];
+      await page.reload();
+      const table = page.getByRole("table", { name: "Match Schedule" });
+      await expect(table.getByRole("row", { name: /Q20/ })).toContainText("765432Z", { timeout: 15_000 });
+      await expect(page.locator(`.table-screen--${size}`)).toHaveCount(1);
+      await expectSingleLines(table);
+      // Every row is the same height: no pair of numbers wrapped onto a second line.
+      const heights = await table.locator("tbody tr").evaluateAll((rows) => rows.map((r) => Math.round(r.getBoundingClientRect().height)));
+      expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(2);
+      await expectHeadingsOnTop(page, "schedule-table");
+      await shot(page, testInfo, `schedule-long-${size}-1280x720`);
+    }
   });
 });
 

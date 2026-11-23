@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { fitScale } from "../../src/display/logic/fit";
-import { FitText } from "../../src/display/components/FitText";
+import { FitLine, FitText } from "../../src/display/components/FitText";
 
 describe("fitScale", () => {
   it("shrinks to the tighter of width and height, never grows", () => {
@@ -22,5 +22,14 @@ describe("FitText", () => {
     const box = screen.getByTestId("fit");
     expect(box).toHaveClass("fit-text", "x");
     expect(box).toHaveTextContent("1234A");
+  });
+});
+
+describe("FitLine", () => {
+  it("keeps its children on one line at the chosen side without ResizeObserver", () => {
+    render(<FitLine testId="line" align="end">12345AB 67890CD</FitLine>);
+    const box = screen.getByTestId("line");
+    expect(box).toHaveClass("fit-line", "fit-line--end");
+    expect(box.querySelector(".fit-line__inner")).toHaveTextContent("12345AB 67890CD");
   });
 });

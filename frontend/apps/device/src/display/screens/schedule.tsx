@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { formatTime } from "@tournament-admin/shared";
 import { useDivisionFilter, useFields, useMatchFormat, useMatches, useRanks, useSessionTimeZone, useTeamsById } from "../api";
 import { ScreenFrame, ScreenNotice, WaitingForData } from "../components/ScreenFrame";
+import { FitLine } from "../components/FitText";
 import { ScrollingList } from "../components/ScrollingList";
 import { onFieldMatchIds, roundProgress, scheduleRows } from "../logic/schedule";
 import { matchSides } from "../logic/sides";
@@ -58,10 +59,14 @@ function ScheduleScreen({ context, onDone, fitSeconds }: ScreenProps) {
                   <td className="schedule-table__time">{match.scheduled_time ? formatTime(match.scheduled_time, timeZone, i18n.language) : "–"}</td>
                   <td className="schedule-table__field">{fieldName(match.field_id)}</td>
                   <td className="schedule-table__side schedule-table__side--red">
-                    <span className="team-numbers team-numbers--red">{numbers(sides.red)}</span>
+                    <FitLine align="end">
+                      <span className="team-numbers team-numbers--red">{numbers(sides.red)}</span>
+                    </FitLine>
                   </td>
                   <td className="schedule-table__side schedule-table__side--blue">
-                    <span className="team-numbers team-numbers--blue">{numbers(sides.blue)}</span>
+                    <FitLine align="end">
+                      <span className="team-numbers team-numbers--blue">{numbers(sides.blue)}</span>
+                    </FitLine>
                   </td>
                 </tr>
               );
