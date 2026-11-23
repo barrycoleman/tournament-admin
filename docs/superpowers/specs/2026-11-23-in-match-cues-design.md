@@ -20,7 +20,6 @@ People around a field watch the robots, not the TV. They need to hear and catch 
 - Editing or trimming audio in the app.
 - Game plugins shipping their own sound files.
 - Plugin-defined moments in skills runs (skills get only the standard cues this round).
-- Sounds on field-group TVs (see §5.4).
 - Referee violation indicators, awards reveal, inspections.
 
 ## 4. Anti-goals
@@ -89,14 +88,18 @@ A flash is two things together, on the screen showing the running timer:
 - Reset sends the TV back to its pre-match screen; the red flash shows first, at least long enough to read (builder's call how).
 - New user-facing strings (MATCH OVER, MATCH STOPPED, TIME, STOPPED) in en and zh.
 
-### 5.4 Where sound plays
+### 5.4 Where sound plays (revised 2026-11-23 with the owner)
 
-- Unchanged rule: only TVs whose audience group has **Play sounds** on, whatever screen they show; the "Click to enable sound" note stays. This now covers skills field sets' audience groups too, cueing from the set's timer.
-- Field-group TVs never play sound (a row of ten skills fields must not become ten overlapping beeps).
+Sound is chosen **per TV and per operator computer**, not per group. Two set-ups must both work: every TV playing in sync, or only the timer operator's computer playing through an amplifier with the TVs silent (TV audio can land a little off the amplified sound).
+
+- **Per TV.** Each paired TV has its own **Sound** switch (stored on the device, so it holds across sessions), on its row in the TVs table on the Devices & displays page. New TVs start with sound off. Any TV may play: audience, field, pit, skills set or skills field. A TV with sound on plays the cues of the timer it follows (its field set's match clock, its field's match, or its skills timer) whatever screen it shows; a pit TV follows no timer and stays silent. The "Click to enable sound" note stays.
+- **This replaces** the audience group's `play_sounds`. The column, its API field and its copy-spots handling go away. Match Control's quick switch becomes **TVs play sounds** for that field set: it turns every TV currently assigned to the field set's audience and field groups on or off in one go; each TV can still be changed alone. It shows on when every such TV is on.
+- **Operator computer.** Match Control and Skills Control each get a **Play sounds on this computer** switch, remembered in that browser (local storage), off by default. When on, the page plays the same cues, with the same sounds (including uploads), for the match clock or skills timers it is controlling: Match Control for its field set's running match; Skills Control for the set timer it shows. It never flashes.
+- **Sync.** TVs and operator computers measure their offset from the server clock and fire a cue when the server time crosses the moment, not when a refetch happens to land, so devices agree to within a fraction of a second. The admin app gains the same server-clock measurement the TVs have.
 
 ### 5.5 Skills runs
 
-Skills timers have no count-in and one section of the type's `run_seconds`. Cues: fanfare on start, beeps at 3/2/1, buzzer + white TIME flash when it runs out, power-down + red STOPPED flash when ended early or reset while live. A field running its own timer (off the set timer) cues on its own field TV (flash only; sound only via a Play-sounds audience group, which follows the set timer).
+Skills timers have no count-in and one section of the type's `run_seconds`. Cues: fanfare on start, beeps at 3/2/1, buzzer + white TIME flash when it runs out, power-down + red STOPPED flash when ended early or reset while live. A field running its own timer (off the set timer) cues on its own field TV (flash, and sound if that TV's switch is on).
 
 ## 6. Sound files
 
@@ -125,8 +128,9 @@ The TV must not guess from its own clock reading at the moment the phase changes
 ## 8. Testing
 
 - Server/pytest: conformance for `moments` (valid, each invalid case, missing list); sample plugin passes; whatever §7 adds.
+- Server: the per-TV switch (set, list, the field-set bulk switch, a non-display device refused) and that `play_sounds` is gone from groups.
 - Device unit: the cue rules as a pure function from (previous reading, next reading, moments) to cues and flashes — count-in beeps, starts, 3/2/1, moment open/close/instant, run-out, early end, live vs. non-live reset, pause silent, first reading silent, mid-window load shows tag but no cue; skills equivalents.
-- Playwright: the in-match screen flashes and banner text for a game moment, a run-out and an early end (sound asserted by observing which cue the player was asked to play, not by audio); timer never covered (bounding boxes); skills field-set TV run-out and early end; zh strings.
+- Playwright: the in-match screen flashes and banner text for a game moment, a run-out and an early end (sound asserted by observing which cue the player was asked to play, not by audio); timer never covered (bounding boxes); skills field-set TV run-out and early end; zh strings; a TV with sound off plays nothing while one with sound on plays; the per-TV switch and the field-set switch in the admin; Match Control's "Play sounds on this computer" plays the cues and is remembered after a reload.
 
 ## 9. Left to the builder
 

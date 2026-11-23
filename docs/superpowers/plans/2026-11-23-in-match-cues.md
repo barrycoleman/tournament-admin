@@ -4,7 +4,7 @@
 
 **Goal:** Recorded public-domain cue sounds and border-and-banner flashes on the TVs for matches and skills runs, plugin-defined game moments (the driver-change window moves into plugin data), and organiser uploads that replace any of the five sounds.
 
-**Architecture:** The server gains three things: a `moments` list in the game plugin's match format (checked by conformance, passed through `/api/event/match-format`), an `ended_early` flag on matches and skills timers so every TV agrees how a timer stopped, and a five-slot event sound store whose audio endpoint serves an upload or the bundled default. The device app replaces its tone logic with one pure cue function (readings + moments → cues), a slot-based `SoundPlayer` that plays decoded audio, and a `CueFlash` overlay mounted wherever a running timer shows. The admin app gets a Sounds panel on the Devices & displays page.
+**Architecture:** The server gains three things: a `moments` list in the game plugin's match format (checked by conformance, passed through `/api/event/match-format`), an `ended_early` flag on matches and skills timers so every TV agrees how a timer stopped, a five-slot event sound store whose audio endpoint serves an upload or the bundled default, and a per-TV sound switch (replacing the group switch). The device app replaces its tone logic with one pure cue function (readings + moments → cues), a slot-based `SoundPlayer` that plays decoded audio, and a `CueFlash` overlay mounted wherever a running timer shows. The cue function, server clock and sound player live in the shared package so the admin's Match Control and Skills Control can play the same cues on the operator's computer. The admin app gets a Sounds panel, a Sound switch per TV, and Match Control's field-set switch.
 
 **Tech Stack:** FastAPI, SQLAlchemy/SQLite, pytest; React + TypeScript, TanStack Query, react-i18next, Vitest, Playwright.
 
@@ -25,10 +25,10 @@
 
 ## Review Focus
 
-1. **Run-out vs early end on a skewed TV clock** — a match that runs out while the TV's clock is 1 s behind must buzz, not power down; one ended early with 0.4 s left must power down. Pinned in Task 4 (cue function keys only on `ended_early`, never on remaining time) and Task 2 (server flag).
-2. **Resetting a finished timer** — Skills Control resets an ended skills timer for the next team; that must be silent. Pinned in Task 4.
-3. **A TV that misses readings** (tab throttled, refetch late) jumps from 9 s left to 2 s left: it must play the moment(s) crossed and the beeps for 3 and 2 once each, not replay or skip the run-out. Pinned in Task 4.
-4. **An organiser upload that won't decode** on a TV (renamed text file that slipped past, codec the browser lacks) — that slot falls back to the default, other slots unaffected. Pinned in Task 5.
+1. **Run-out vs early end on a skewed TV clock** — a match that runs out while the TV's clock is 1 s behind must buzz, not power down; one ended early with 0.4 s left must power down. Pinned in Task 5 (cue function keys only on `ended_early`, never on remaining time) and Task 2 (server flag).
+2. **Resetting a finished timer** — Skills Control resets an ended skills timer for the next team; that must be silent. Pinned in Task 5.
+3. **A TV that misses readings** (tab throttled, refetch late) jumps from 9 s left to 2 s left: it must play the moment(s) crossed and the beeps for 3 and 2 once each, not replay or skip the run-out. Pinned in Task 5.
+4. **An organiser upload that won't decode** on a TV (renamed text file that slipped past, codec the browser lacks) — that slot falls back to the default, other slots unaffected. Pinned in Task 6.
 5. **Audit rows for uploads** — the audit hook must not dump a megabyte of `bytes` into `audit_log`. Pinned in Task 3.
 
 ---
@@ -96,18 +96,38 @@
 - [ ] **Step 3:** run → FAIL. **Step 4:** implement. **Step 5:** run → PASS; drift test; full suite; check `python -m build`-free: `importlib.resources.files("tournament_server") / "default_sounds" / "beep.mp3"` exists from an installed package (`pip install -e` already in `.venv` is enough to assert the path resolves).
 - [ ] **Step 6:** Commit.
 
-### Task 4: The cue function (device, pure)
+### Task 4: Per-TV sound switch (server)
 
 **Files:**
-- Create: `frontend/apps/device/src/display/logic/cues.ts`
-- Delete: `frontend/apps/device/src/display/logic/sounds.ts`, `frontend/apps/device/src/display/logic/driverChange.ts` (update importers in later tasks; this task may leave `InMatchView` importing `activeWindow` from `cues.ts`)
-- Modify: `frontend/apps/device/src/display/api.ts` (`MatchFormat.moments: Moment[]`), shared `LiveMatch` and skills timer types (`ended_early`)
-- Test: `frontend/apps/device/tests/unit/cues.test.ts` (replaces `sounds.test.tsx`'s logic cases; keep its player/AudienceSounds cases until Task 5 rewrites them)
+- Modify: `server/src/tournament_server/models/device.py` (`Device.play_sounds: bool`, default False), `models/display.py` (remove `DisplayGroup.play_sounds`), baseline migration
+- Modify: `server/src/tournament_server/routers/devices.py` (`PATCH /api/devices/{device_id}` accepts `play_sounds`), `schemas/device.py` (`DeviceRead.play_sounds`, the PATCH body)
+- Modify: `server/src/tournament_server/routers/displays.py`, `schemas/display.py`, `services/displays.py` (drop group `play_sounds` from reads, PATCH, allowed fields, copy-spots; `DisplayMe.device.play_sounds`; new bulk endpoint)
+- Test: the existing devices/displays router tests (update every `play_sounds` group case), plus new cases
 
 **Interfaces:**
-- Produces:
+- Produces: `PATCH /api/devices/{id}` `{play_sounds: bool}` (admin) — 422 "Only TVs play sounds." for a non-display device; sends `display_changed` to that device so its `/api/displays/me` refreshes.
+- Produces: `GET /api/displays/me` → `device: {id, name, play_sounds}`; `GET /api/devices` rows carry `play_sounds`.
+- Produces: `PUT /api/displays/field-sets/{field_set_id}/sounds` `{play_sounds: bool}` (admin) → `{device_ids: number[]}` — every device assigned, in the field set's session, to that set's audience group or one of its fields' groups, set to the value; `display_changed` to each. 404 unknown field set.
+- Removes: `play_sounds` from `DisplayGroupRead`, the group PATCH body (now 422 as an unknown field, like other disallowed fields) and copy-spots.
+
+- [ ] **Step 1: Failing tests:** PATCH a display's `play_sounds` → reflected in `/api/devices` and in that device's `/api/displays/me`; PATCH a scorer device → 422; field-set bulk on → all audience + field-group TVs of that set on, a TV in another set untouched, a pit TV untouched; bulk off; group PATCH with `play_sounds` → 422; copy-spots no longer mentions it.
+- [ ] **Step 2:** → FAIL. **Step 3:** implement. **Step 4:** → PASS; drift test; full server suite (fix every test that used group `play_sounds`).
+- [ ] **Step 5:** Commit.
+
+### Task 5: Cue engine in the shared package (pure function + server clock)
+
+**Files:**
+- Create: `frontend/packages/shared/src/cues/cues.ts`, export it from the shared package index
+- Move: `frontend/apps/device/src/display/serverClock.ts` → `frontend/packages/shared/src/cues/serverClock.ts` (unchanged API: `measureOffset`, `useServerClockOffset`, `ServerClockContext`, `useServerNow`, `RESYNC_MS`); device imports updated
+- Delete: `frontend/apps/device/src/display/logic/sounds.ts`, `frontend/apps/device/src/display/logic/driverChange.ts` (`InMatchView` uses `activeWindow`; keep its period-line behaviour otherwise)
+- Modify: `frontend/apps/device/src/display/api.ts` (`MatchFormat.moments: Moment[]`), shared `LiveMatch` and skills timer types (`ended_early: boolean`)
+- Test: `frontend/packages/shared/tests/cues.test.ts` (or the shared package's test location; if it has none, `frontend/apps/device/tests/unit/cues.test.ts` importing from `@tournament-admin/shared`); move `serverClock.test.ts` alongside
+
+**Interfaces:**
+- Produces (from `@tournament-admin/shared`):
   ```ts
   export type SoundSlot = "beep" | "start" | "buzzer" | "moment" | "stop";
+  export const SOUND_SLOTS: readonly SoundSlot[]; // ["beep","start","buzzer","moment","stop"]
   export interface Moment { key: string; label: string; period: "autonomous" | "driver"; at_remaining: number; until_remaining: number | null }
   export type FlashKind = "moment" | "over" | "stop";
   export interface Cue { sound: SoundSlot | null; flash: { kind: FlashKind; label: string | null } | null }
@@ -121,108 +141,128 @@
   ```
   `whole` = whole seconds left, ceiling (as `AudienceSounds` computes today). A changed `matchId`/`timerKey` treats `prev` as not started (as today); `prev === null` → `[]`.
 
-- [ ] **Step 1: Failing tests** (`cues.test.ts`), each asserting the exact `Cue[]`:
+- [ ] **Step 1: Failing tests**, each asserting the exact `Cue[]`:
   - count-in beat per whole second in `countdown_*` → `beep`, no flash; entering `autonomous` and `driver` → `start`.
   - `whole` crossing to 3, 2, 1 inside `autonomous`/`driver` → one `beep` each; nothing at 30.
-  - `driver` → `ended` with `endedEarly:false` → `buzzer` + `{over, null}`; with `endedEarly:true` → `stop` + `{stop, null}` and no buzzer.
+  - `driver` → `ended` with `endedEarly:false` → `buzzer` + `{over, null}`; with `endedEarly:true` → `stop` + `{stop, null}` and no buzzer (Review Focus 1: also with a reading at `whole: 1` before the run-out end, and at `whole: 0` before an early end — the result depends only on `endedEarly`).
   - any live phase (`countdown_*`, `autonomous`, `awaiting_driver`, `countdown_driver`, `driver`, paused or not) → `not_started`, and `driver`/`countdown_driver` → `awaiting_driver` (section reset) → `stop` + `{stop,null}`; `ended` → `not_started` → `[]`.
   - moment crossing `at_remaining` in its period → `moment` + `{moment, "Driver change"}`; crossing `until_remaining` → the same again; a jump 9 → 2 with the cue-game moments yields, in order, driver_change open, close, endgame, then beeps for 3 and 2 (Review Focus 3).
   - paused readings and pause/resume transitions → `[]`; first reading → `[]`.
   - skills: ready → running → `start`; 3/2/1 beeps; running → ended `endedEarly:false` → `buzzer` + `{over,null}`; `true` → `stop` + `{stop,null}`; running or paused → ready → `stop` + `{stop,null}`; ended → ready → `[]` (Review Focus 2); changed `timerKey` with first reading ended → `[]`.
-  - `activeWindow`: inside `[until, at)` exclusive of `until` for the window's period (matches today's 35 ≥ r > 25 rule), `null` for instants and outside.
-- [ ] **Step 2:** `npx vitest run --root apps/device tests/unit/cues.test.ts` → FAIL.
-- [ ] **Step 3:** Implement. Crossing rule for a threshold `t` (a moment edge, or 3/2/1) in period `p`: it fires when `next` is in `p`, unpaused, `next.whole <= t`, and either `prev` was in `p` with `prev.whole > t`, or `prev` was not yet in `p` (its count-in or an earlier phase). Emit the cues of one transition in descending threshold order (moment cues before a beep at the same second).
-- [ ] **Step 4:** → PASS; device type-check.
+  - `activeWindow`: inside the window when `until < remaining <= at` in the window's period (today's 35 ≥ r > 25 rule), `null` for instants and outside.
+- [ ] **Step 2:** run the test file → FAIL.
+- [ ] **Step 3:** Implement. Crossing rule for a threshold `t` (a moment edge, or 3/2/1) in period `p`: it fires when `next` is in `p`, unpaused, `next.whole <= t`, and either `prev` was in `p` with `prev.whole > t`, or `prev` was not yet in `p` (its count-in or an earlier phase). Emit the cues of one transition in descending threshold order (moment cues before a beep at the same second). Move `serverClock.ts` and update imports.
+- [ ] **Step 4:** → PASS; device unit suite; device and admin type-checks.
 - [ ] **Step 5:** Commit.
 
-### Task 5: Slot sound player and audience sounds
+### Task 6: Slot sound player, cue trigger hook, TVs play sound
 
 **Files:**
-- Rewrite: `frontend/apps/device/src/display/soundPlayer.ts`
-- Rewrite: `frontend/apps/device/src/display/AudienceSounds.tsx` — still the one place that turns cues into sound for an audience group, now for matches **and** skills sets
+- Create: `frontend/packages/shared/src/cues/soundPlayer.ts` (replaces `frontend/apps/device/src/display/soundPlayer.ts`), `frontend/packages/shared/src/cues/useCueTrigger.ts`
 - Create: `frontend/apps/device/src/display/useCueStream.ts`
-- Modify: `frontend/apps/device/src/display/api.ts` (`getAudio(path, token): Promise<ArrayBuffer>` beside `getJson`; `useEventSounds()` query key `["sounds"]` on `GET /api/sounds`), `useLiveRefresh.ts` (`sounds_changed: ["sounds"]`), `GroupView.tsx` (mount `AudienceSounds` for skills audience groups too)
-- Test: `frontend/apps/device/tests/unit/sounds.test.tsx` (rewrite)
+- Rewrite: `frontend/apps/device/src/display/AudienceSounds.tsx` → rename `TvSounds.tsx`
+- Modify: `frontend/apps/device/src/display/api.ts` (`getAudio(path, token): Promise<ArrayBuffer>` beside `getJson`; `useEventSounds()` key `["sounds"]` on `GET /api/sounds`; `DisplayMe.device.play_sounds`; drop group `play_sounds`), `useLiveRefresh.ts` (`sounds_changed: ["sounds"]`), `GroupView.tsx` and `FieldDisplay.tsx`/skills displays as needed to mount `TvSounds` for every TV with `me.device.play_sounds` (not pit TVs)
+- Test: `frontend/apps/device/tests/unit/sounds.test.tsx` (rewrite), shared player tests beside `cues.test.ts`
 
 **Interfaces:**
-- Consumes: Task 4 `matchCues`, `skillsCues`, `timeoutCues`, `SoundSlot`; Task 3 API.
-- Produces:
+- Consumes: Task 5; Task 3 API; Task 4 `device.play_sounds`.
+- Produces (shared):
   ```ts
   export class SoundPlayer {
-    constructor(load: (slot: SoundSlot) => Promise<ArrayBuffer>, create?: () => AudioContext);
+    constructor(load: (slot: SoundSlot, useDefault: boolean) => Promise<ArrayBuffer>, create?: () => AudioContext);
     get blocked(): boolean; unlock(): Promise<void>; close(): void;
-    reload(slot: SoundSlot): void;        // drops the cached buffer; next play/preload re-fetches
-    preload(): Promise<void>;             // all five
-    play(slot: SoundSlot): void;          // starts at once if decoded, stops at 10 s, dispatches window CustomEvent("tv-cue", {detail:{slot}})
+    reload(slot: SoundSlot): void;   // drops the cached buffer; next play/preload re-fetches
+    preload(): Promise<void>;        // all five
+    play(slot: SoundSlot): void;     // starts at once if decoded, stops at 10 s, dispatches window CustomEvent("tv-cue", {detail:{slot}})
   }
+  export function useCueTrigger<R>(reading: R | null, compute: (prev: R | null, next: R | null) => Cue[], onCues: (cues: Cue[]) => void): void;
+  // keeps the previous reading in a ref; first reading never triggers
   ```
-  `load` fetches `/api/sounds/{slot}/audio` with the device token; if fetch or `decodeAudioData` fails, `SoundPlayer` retries that slot once with `?default=1`.
-- Produces `useCueStream.ts`: `useMatchCueStream(sessionId: number, fieldIds: readonly number[]): Cue[]` and `useSkillsCueStream(timer: SkillsTimerLike | null, timerKey: string): Cue[]` — the cues of the latest reading change, keeping the previous reading in a ref (first reading → `[]`). `AudienceSounds` plays `cue.sound` for each; Task 6's flash consumes the same hooks.
-- `AudienceSounds({sessionId, fieldSetId, timeoutDeadline, skills})`: when `skills`, reads `useSkillsSet(fieldSetId)` timer and feeds `skillsCues` (timerKey = `"set"`); else `matchCues` with `useMatchFormat().data?.moments ?? []` and the match's `ended_early`.
+  `load(slot, false)` fetches `/api/sounds/{slot}/audio`; on fetch or decode failure the player retries once with `load(slot, true)` → `?default=1` (Review Focus 4).
+- Produces (device) `useCueStream.ts`: `useMatchReading(sessionId: number, fieldIds: readonly number[]): MatchReading | null`, `useSkillsReading(timer: SkillsTimerLike | null, timerKey: string): SkillsReading | null`, using `useServerNow(100)` so cues land within 0.1 s of the server-time crossing.
+- `useCueStream.ts` also exports `type Follows =` the union below and `useFollowedCues(sessionId, follows, onCues)` (reading + compute + `useCueTrigger`), shared by `TvSounds` and Task 7's `CueFlash`.
+- `TvSounds({sessionId, follows})` where `follows` is `{kind:"fieldSet", fieldSetId, timeoutDeadline}` | `{kind:"field", fieldId}` | `{kind:"skillsSet", fieldSetId}` | `{kind:"skillsField", fieldSetId, fieldId}`; plays `cue.sound` for each cue; shows the enable-sound note while blocked.
 
-- [ ] **Step 1: Failing tests:** player plays the decoded buffer for a slot through a fake `AudioContext` (source `start` called, `stop` at +10 s); dispatches `tv-cue`; `reload` re-fetches; a failing decode falls back to the default URL and other slots are unaffected (Review Focus 4); `AudienceSounds` plays `start` when a fake match goes countdown → autonomous, plays `stop` for an `ended_early` end, and for a skills set plays `buzzer` on run-out; `sounds_changed` invalidates `["sounds"]` and the player reloads that slot; the enable-sound note still shows while blocked.
-- [ ] **Step 2:** → FAIL. **Step 3:** implement. **Step 4:** → PASS, device type-check.
+- [ ] **Step 1: Failing tests:** player plays the decoded buffer through a fake `AudioContext` (source `start` called, `stop` at +10 s); dispatches `tv-cue`; `reload` re-fetches; a failing decode falls back to the default and other slots are unaffected; `TvSounds` plays `start` when a fake match goes countdown → autonomous, plays `stop` for an `ended_early` end, plays `buzzer` for a skills set run-out; a TV with `play_sounds: false` mounts no player; a pit TV never does; `sounds_changed` reloads that slot; the enable-sound note shows while blocked.
+- [ ] **Step 2:** → FAIL. **Step 3:** implement. **Step 4:** → PASS; device unit suite; type-checks.
 - [ ] **Step 5:** Commit.
 
-### Task 6: Flash overlay, window tag, wiring
+### Task 7: Flash overlay, window tag, wiring
 
 **Files:**
 - Create: `frontend/apps/device/src/display/components/CueFlash.tsx`
-- Modify: `components/InMatchView.tsx` (window tag via `activeWindow`, label from the moment), `components/DriverChangeTag.tsx` → `components/WindowTag.tsx` (`{label}`; keep `data-testid="driver-change"` → rename to `window-tag` and update `tvFits.ts`), `FieldDisplay.tsx`, `GroupView.tsx` (audience in_match screen), `SkillsSetDisplay.tsx`, `SkillsFieldDisplay.tsx`
+- Modify: `components/InMatchView.tsx` (window tag via `activeWindow`, label from the moment), `components/DriverChangeTag.tsx` → `components/WindowTag.tsx` (`{label}`, `data-testid="window-tag"`; update `frontend/apps/admin/tests/e2e/fixtures/tvFits.ts`), `FieldDisplay.tsx`, `GroupView.tsx` (audience `in_match` screen), `SkillsSetDisplay.tsx`, `SkillsFieldDisplay.tsx`
 - Modify: `frontend/apps/device/src/styles/display.css`, `frontend/apps/device/src/i18n/{en,zh}/device.json`
 - Test: `frontend/apps/device/tests/unit/cueFlash.test.tsx`; update `fieldDisplay.test.tsx` driver-change cases to come from format moments
 
 **Interfaces:**
-- Consumes: Task 4 cue functions and `activeWindow`; Task 2 `ended_early`.
-- Consumes: Task 5 `useMatchCueStream` / `useSkillsCueStream`.
-- `CueFlash({ cues, context }: { cues: Cue[]; context: "match" | "skills" })`: renders, while a flash is active, `<div class="cue-flash cue-flash--{kind}" data-testid="cue-flash" data-kind={kind}>` with a fixed full-viewport border layer and a `.cue-flash__banner` positioned over the bottom bar's box (height = the bottom bar's, `7.5vw` on the in-match screen; for skills screens the bottom `7.5vw`), text = label or `t("display.cue.matchOver" | "display.cue.time" | "display.cue.matchStopped" | "display.cue.stopped")`. A new flash replaces the current one. Mounted at GroupView/FieldDisplay level so it survives the screen changing under it after a reset.
+- Consumes: Task 5 `activeWindow`, `matchCues`, `skillsCues`; Task 6 `useCueTrigger`, `useMatchReading`, `useSkillsReading`; Task 2 `ended_early`.
+- Produces: `CueFlash({ sessionId, follows }: { sessionId: number; follows: Follows })` (the Task 6 `Follows` type; `skillsSet`/`skillsField` use the skills banner texts) rendering, while a flash is active, `<div class="cue-flash cue-flash--{kind}" data-testid="cue-flash" data-kind={kind}>` with a fixed full-viewport border layer and a `.cue-flash__banner` over the bottom bar's box (`7.5vw` high at the bottom, matching `.in-match .bottom-bar`), text = label or `t("display.cue.matchOver" | "display.cue.time" | "display.cue.matchStopped" | "display.cue.stopped")`. A new flash replaces the current one. Mounted at GroupView/FieldDisplay level so it survives the screen changing under it after a reset. Flashes do not depend on the TV's sound switch.
 - i18n (en / zh): `display.cue.matchOver` "MATCH OVER" / "比赛结束"; `display.cue.matchStopped` "MATCH STOPPED" / "比赛中止"; `display.cue.time` "TIME" / "时间到"; `display.cue.stopped` "STOPPED" / "已中止". Remove `display.driverChange` (now plugin text).
-- Where mounted: audience group whose screen is `in_match` (context match); field group via `FieldDisplay` (match); skills audience via `SkillsSetDisplay` (skills, set timer); skills field via `SkillsFieldDisplay` (skills, the run's effective timer, timerKey = run id or `"none"`).
+- Where mounted: audience group whose screen is `in_match` (match); field group via `FieldDisplay` (match); skills audience via `SkillsSetDisplay` (skills, set timer); skills field via `SkillsFieldDisplay` (skills, the run's effective timer, timerKey = run id or `"none"`).
 
-- [ ] **Step 1: Failing tests:** each flash kind renders with its class and text (en and zh); banner disappears after ~2 s and border after ~1.5 s (fake timers); a reset while live keeps the red banner visible after the in-match view unmounts; window tag shows the moment label inside the window, the period line outside, Paused over it when paused; field TV and skills field TV render the flash; no flash for count-in/start/beeps/time-out.
-- [ ] **Step 2:** → FAIL. **Step 3:** implement; CSS keyframes per the spec envelope; `.cue-flash` `pointer-events: none`, `z-index` above the screen.
+- [ ] **Step 1: Failing tests:** each flash kind renders with its class and text (en and zh); banner gone after ~2 s, border after ~1.5 s (fake timers); a reset while live keeps the red banner visible after the in-match view unmounts; window tag shows the moment label inside the window, the period line outside, Paused over it when paused; field TV and skills field TV render the flash; no flash for count-in/start/beeps/time-out.
+- [ ] **Step 2:** → FAIL. **Step 3:** implement; CSS keyframes per the spec envelope; `.cue-flash` `pointer-events: none`, above the screen.
 - [ ] **Step 4:** → PASS; device unit suite; type-check.
 - [ ] **Step 5:** Commit.
 
-### Task 7: Admin Sounds panel
+### Task 8: Operator computers play sounds
+
+**Files:**
+- Create: `frontend/apps/admin/src/cues/OperatorSounds.tsx`, `frontend/apps/admin/src/cues/useOperatorSoundSetting.ts`
+- Modify: `frontend/apps/admin/src/routes/MatchControlRoute.tsx`, `frontend/apps/admin/src/routes/SkillsControlRoute.tsx`, the admin app root (wrap in `ServerClockContext` with `useServerClockOffset`, measured once on load and on socket reconnect, as the device does), admin `en`/`zh` files
+- Test: `frontend/apps/admin/tests/unit/OperatorSounds.test.tsx`, update `MatchControlRoute.test.tsx`
+
+**Interfaces:**
+- Consumes: Task 5/6 shared `SoundPlayer`, `useCueTrigger`, `matchCues`, `skillsCues`, `timeoutCues`, `useServerNow(100)`; Task 3 audio endpoint (admin token); Task 2 `ended_early`; match format `moments`.
+- Produces: `useOperatorSoundSetting(page: "matchControl" | "skillsControl"): [boolean, (on: boolean) => void]` backed by `localStorage` key `tm.operatorSounds.<page>` (wrapped in try/catch; default false). `OperatorSounds` plays, for Match Control, the cues of the running match on the page's field set plus its time-out end; for Skills Control, the cues of the set timer shown. No flashes. Shows "Click to enable sound" if the browser blocks audio.
+- UI: a switch "Play sounds on this computer" / "在此电脑上播放声音" on both pages, near the timer controls.
+
+- [ ] **Step 1: Failing tests:** switch off by default; turning it on persists across remount; with it on, a fake match going countdown → autonomous plays `start`; an `ended_early` end plays `stop`; Skills Control plays `buzzer` on set-timer run-out; with it off nothing plays; localStorage throwing still renders.
+- [ ] **Step 2:** → FAIL. **Step 3:** implement. **Step 4:** → PASS; admin unit suite; type-check.
+- [ ] **Step 5:** Commit.
+
+### Task 9: Admin — Sounds panel, per-TV switch, field-set switch
 
 **Files:**
 - Create: `frontend/apps/admin/src/devices/SoundsSection.tsx`, `frontend/apps/admin/src/devices/useEventSounds.ts`
-- Modify: `frontend/apps/admin/src/routes/DevicesDisplaysRoute.tsx` (a `<section className="panel" aria-labelledby="sounds-heading">` after the TVs panel), admin `en`/`zh` translation files
-- Test: `frontend/apps/admin/tests/unit/SoundsSection.test.tsx`
+- Modify: `frontend/apps/admin/src/routes/DevicesDisplaysRoute.tsx` (Sounds `<section className="panel" aria-labelledby="sounds-heading">` after the TVs panel), `frontend/apps/admin/src/devices/DisplaysTable.tsx` (a Sound switch per TV row → `PATCH /api/devices/{id}`), `frontend/apps/admin/src/routes/MatchControlRoute.tsx` + `matchControl/useMatchControl.ts` (replace the group "Play sounds" switch with "TVs play sounds" → `PUT /api/displays/field-sets/{id}/sounds`; checked when every TV assigned to the set's audience and field groups has `play_sounds`), `devices/SpotsSection.tsx` and `displays/useDisplays.ts` (drop group `play_sounds`), admin `en`/`zh` files
+- Test: `frontend/apps/admin/tests/unit/SoundsSection.test.tsx`, update `DevicesDisplaysRoute.test.tsx`, `MatchControlRoute.test.tsx`, `PairDeviceForm.test.tsx` where they use group `play_sounds`
 
 **Interfaces:**
-- Consumes: Task 3 API.
-- Produces UI: heading "Sounds" / "声音"; one row per slot with name and when it plays:
+- Consumes: Task 3 and Task 4 APIs.
+- Sounds panel: heading "Sounds" / "声音"; one row per slot with name and when it plays:
   - beep "Beep" / "提示音" — "Count-in and last 3 seconds" / "倒数和最后3秒"
   - start "Start" / "开始" — "Match start and driver start" / "比赛开始和手动阶段开始"
   - buzzer "Buzzer" / "蜂鸣器" — "Time runs out" / "时间用完"
   - moment "Ding" / "叮" — "Game moments and time-out end" / "比赛时刻和暂停结束"
   - stop "Stop" / "停止" — "Ended early or reset" / "提前结束或重置"
-  
-  Each row: play button (fetches `/api/sounds/{slot}/audio`, plays in an `Audio`), current file name or "Default" / "默认", **Upload** (file input `accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav"`), **Restore default** / "恢复默认" only when replaced. Before upload, the page decodes the file (`AudioContext.decodeAudioData`) and refuses over 10 s with "This sound is longer than 10 seconds." / "此声音超过10秒。"; over 1 MB with "This file is larger than 1 MB." / "此文件超过1 MB。"; server 422 messages shown as returned. Note under the list: "Only upload sounds you have the rights to use." / "请只上传您有权使用的声音。"
-- [ ] **Step 1: Failing tests:** rows render with Default; upload calls PUT and shows the filename; >10 s and >1 MB refused without a request; restore calls DELETE; zh labels.
+
+  Each row: play button (fetches `/api/sounds/{slot}/audio`, plays it), current file name or "Default" / "默认", **Upload** (file input `accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav"`), **Restore default** / "恢复默认" only when replaced. Before upload the page decodes the file (`AudioContext.decodeAudioData`) and refuses over 10 s with "This sound is longer than 10 seconds." / "此声音超过10秒。"; over 1 MB with "This file is larger than 1 MB." / "此文件超过1 MB。"; server 422 messages shown as returned. Note under the list: "Only upload sounds you have the rights to use." / "请只上传您有权使用的声音。"
+- TV row switch label "Sound" / "声音"; Match Control switch "TVs play sounds" / "电视播放声音".
+- [ ] **Step 1: Failing tests:** Sounds rows render with Default; upload calls PUT and shows the filename; >10 s and >1 MB refused without a request; restore calls DELETE; the TV row switch PATCHes the device; Match Control's switch PUTs the field-set endpoint and reflects all-on; zh labels.
 - [ ] **Step 2:** → FAIL. **Step 3:** implement. **Step 4:** → PASS; admin unit suite; type-check.
 - [ ] **Step 5:** Commit.
 
-### Task 8: End-to-end
+### Task 10: End-to-end
 
 **Files:**
 - Modify: `frontend/apps/admin/tests/e2e/fixtures/buildPluginZip.ts` (`buildCueGamePluginZip()` for the Task 1 fixture, manifest.json + plugin.py only)
 - Create: `frontend/apps/admin/tests/e2e/tvCues.spec.ts`
-- Modify: `frontend/apps/admin/tests/e2e/displays.spec.ts` (Sounds panel), `frontend/apps/admin/tests/e2e/fixtures/tvFits.ts` (`window-tag` test id)
+- Modify: `frontend/apps/admin/tests/e2e/displays.spec.ts` (Sounds panel, TV switch), existing specs that toggled group Play sounds
 
 **Interfaces:** Consumes everything above. Sound assertions use `page.addInitScript` to collect `tv-cue` events into `window.__cues` and stub `AudioContext` to a running state (headless has no audio output); assert on `__cues`, never on audio.
 
-- [ ] **Step 1: Write `tvCues.spec.ts`** (isolated server, `cue-game` plugin, one audience TV with Play sounds on showing In Match, one field TV), tests:
-  - a full match (start, wait out autonomous, `start-driver`, wait out driver): `__cues` holds `beep`×3, `start`, `beep`×3 (end of autonomous), `beep`×3, `start`, `moment`×2 (window), `moment` (endgame), `beep`×3, `buzzer` in that order; flashes seen: amber "DRIVER CHANGE" banner and window tag, amber "ENDGAME", white "MATCH OVER"; field TV shows the same flashes and its `__cues` stays empty.
+- [ ] **Step 1: Write `tvCues.spec.ts`** (isolated server, `cue-game` plugin; an audience TV with its Sound switch on showing In Match; a field TV with sound off), tests:
+  - a full match (start, wait out autonomous, `start-driver`, wait out driver): the audience TV's `__cues` holds `beep`×3, `start`, `beep`×3, `beep`×3, `start`, `moment`×2, `moment`, `beep`×3, `buzzer` in that order; flashes seen: amber "DRIVER CHANGE" banner and window tag, amber "ENDGAME", white "MATCH OVER"; the field TV shows the same flashes and its `__cues` stays empty; turning the field TV's switch on (admin API) makes it cue on the next match.
   - end early in driver with time left → `stop`, red "MATCH STOPPED", no `buzzer`.
   - full reset during autonomous → `stop` and red flash, then the TV's pre-match view.
   - flash never overlaps the clock or team bands (bounding boxes, 1280×720 and 1920×1080).
-  - skills set (skills field set, audience TV with sounds, a field TV): start → `start`; run out → `buzzer` + white "TIME"; start then end → `stop` + red "STOPPED"; reset an ended timer → no cue.
+  - skills set (skills field set, audience TV with sound on, a field TV): start → `start`; run out → `buzzer` + white "TIME"; start then end → `stop` + red "STOPPED"; reset an ended timer → no cue.
   - zh: one red banner reads "比赛中止".
   - organiser upload: PUT a WAV to `start` via API while a TV is open; the next start fetches `/api/sounds/start/audio` again (observe the request) without a page reload.
-- [ ] **Step 2: Sounds panel in `displays.spec.ts`:** upload a WAV in the UI → filename shows; play button requests the audio; Restore default → "Default".
-- [ ] **Step 3:** `cd frontend/apps/admin && npx playwright test tvCues displays tvScreens tvScreensCooperative tvBracket liveScoring skillsChallenges` → all PASS.
+  - Match Control "Play sounds on this computer": on, start a match → the admin page's `__cues` gets `start`; reload → still on; off → nothing.
+- [ ] **Step 2: `displays.spec.ts`:** upload a WAV in the Sounds panel → filename shows; play button requests the audio; Restore default → "Default"; the TV row Sound switch persists after reload.
+- [ ] **Step 3:** `cd frontend/apps/admin && npx playwright test tvCues displays tvScreens tvScreensCooperative tvBracket liveScoring skillsChallenges` → all PASS (fix specs that used group Play sounds).
 - [ ] **Step 4:** Full suites: server, device unit, admin unit, type-checks.
 - [ ] **Step 5:** Commit.
