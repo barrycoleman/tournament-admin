@@ -23,9 +23,9 @@ function TeamworkRankingsScreen({ context, onDone, fitSeconds }: ScreenProps) {
   const records = teamRecords(kept, scores.data);
   const qualification = kept.filter((m) => m.round_type === "qualification");
   const played = qualification.filter(isFinished).length;
-  const context_ = t("display.context.rankingsProgress", { played, total: qualification.length });
+  const progress = t("display.context.rankingsProgress", { played, total: qualification.length });
   return (
-    <ScreenFrame title={t("display.rankingsTitle")} context={context_} className={tableScreenClass(context)}>
+    <ScreenFrame title={t("display.rankingsTitle")} context={progress} className={tableScreenClass(context)}>
       <ScrollingList onDone={onDone} fitSeconds={fitSeconds}>
         <table className="kiosk-table rank-table" aria-label={title}>
           <thead>

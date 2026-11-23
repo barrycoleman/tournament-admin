@@ -419,6 +419,33 @@ test.describe.serial("TV screens", () => {
     // The amber top three: exactly three rank cells are marked.
     await expect(audienceTv.locator(".rank-table__rank.is-top")).toHaveCount(3);
   });
+
+  test("the schedule on a pit TV has red and blue columns, an on-field tag per field and whole team numbers, at 1920×1080", async ({ request }) => {
+    const pitTv = screens["Pit TV"];
+    const pit = (await call(request, "get", `/api/displays?session_id=${saturday}`)).groups.find((g: { name: string }) => g.name === "Pit Rankings");
+    await call(request, "patch", `/api/displays/groups/${pit.id}`, { screen: "schedule" });
+    const table = pitTv.getByRole("table", { name: "Match Schedule" });
+    await expect(table).toBeVisible({ timeout: 15_000 });
+    await expect(pitTv.locator(".table-screen--pit")).toHaveCount(1);
+    await expect(pitTv.getByRole("heading", { name: "Match Schedule" })).toBeVisible();
+    await expect(pitTv.getByText("Qualification · 1 of 4 played")).toBeVisible();
+    await expect(table.getByRole("row").nth(0)).toContainText(/Match.*Time.*Field.*Red.*Blue/);
+    // Q1 is played; Q2 (field 2) and Q3 (field 1) are each field's next match.
+    await expect(pitTv.getByTestId("on-field")).toHaveCount(2);
+    await expect(table.getByRole("row", { name: /Q2/ }).getByTestId("on-field")).toHaveText("On field");
+    await expect(table.getByRole("row", { name: /Q3/ }).getByTestId("on-field")).toHaveText("On field");
+    await expect(table.getByRole("row", { name: /Q1/ })).toHaveClass(/is-done/);
+    await expect(table.getByRole("row", { name: /Q2/ })).toHaveClass(/is-on-field/);
+    // Q1: red 83897A and 10480B, blue 19533Z and 94927X, in their own columns.
+    const q1 = table.getByRole("row", { name: /Q1/ });
+    await expect(q1.locator(".schedule-table__side--red")).toContainText("83897A");
+    await expect(q1.locator(".schedule-table__side--blue")).toContainText("19533Z");
+    const widths = await table.locator(".team-numbers").evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
+    expect(Math.max(...widths)).toBeLessThanOrEqual(1);
+    const wide = await table.boundingBox();
+    expect(wide!.width).toBeGreaterThan(1920 * 0.85);
+    await shot(pitTv, "schedule-pit-1920x1080");
+  });
 });
 
 test.describe.serial("TV skills rankings", () => {

@@ -200,16 +200,73 @@ describe("match lists", () => {
     expect(screen.queryByRole("table", { name: "Match Schedule" })).not.toBeInTheDocument();
   });
 
-  it("Schedule lists every match in order with field and time", async () => {
+  it("Schedule lists the matches from just before now, with red and blue columns, field and time", async () => {
     serveDisplay({
       ...baseRoutes(),
       "/api/displays/me": me(pitGroup({ screen: "schedule" })),
       "/api/matches?session_id=1": matches,
     });
     renderDisplay();
-    const rows = within(await screen.findByRole("table", { name: "Match Schedule" })).getAllByRole("row").slice(1);
+    const table = await screen.findByRole("table", { name: "Match Schedule" });
+    const rows = within(table).getAllByRole("row").slice(1);
     expect(rows.map((r) => r.textContent?.slice(0, 2))).toEqual(["Q1", "Q2", "Q3", "Q4", "Q5"]);
+    expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Match", "Time", "Field", "Red", "Blue"]);
     expect(rows[0]).toHaveClass("is-done");
-    expect(rows[3]).toHaveTextContent(/Field 2.*4:10/);
+    expect(rows[2]).not.toHaveClass("is-done");
+    // Red teams then blue teams, each in their own cell.
+    const cells = within(rows[3]).getAllByRole("cell");
+    expect(cells[0]).toHaveTextContent(/4:10/);
+    expect(cells[1]).toHaveTextContent("Field 2");
+    expect(cells[2]).toHaveTextContent("101A102B");
+    expect(cells[2].querySelector(".team-numbers--red")).not.toBeNull();
+    expect(cells[3]).toHaveTextContent("103C104D");
+    expect(cells[3].querySelector(".team-numbers--blue")).not.toBeNull();
+    expect(screen.getByText("Qualification · 2 of 5 played")).toBeInTheDocument();
+  });
+
+  it("Schedule tags one match per field as on field", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/displays/me": me(pitGroup({ screen: "schedule" })),
+      "/api/matches?session_id=1": matches,
+    });
+    renderDisplay();
+    const table = await screen.findByRole("table", { name: "Match Schedule" });
+    const tags = within(table).getAllByTestId("on-field");
+    expect(tags).toHaveLength(2);
+    const rows = within(table).getAllByRole("row").slice(1);
+    // Field 1's next match is Q3 and field 2's is Q4; Q5 is on a field that is not in the session.
+    expect(rows[2]).toHaveClass("is-on-field");
+    expect(rows[3]).toHaveClass("is-on-field");
+    expect(rows[2]).toContainElement(tags[0]);
+    expect(rows[4]).not.toHaveClass("is-on-field");
+    expect(tags[0]).toHaveTextContent("On field");
+  });
+
+  it("Schedule starts two played matches before the first unplayed one and shows a dash for a finals match with no time", async () => {
+    const long = [
+      ...[1, 2, 3, 4].map((id) => match({ id, label: `Q${id}`, status: "completed", phase: "ended", scheduled_time: iso(-1_000_000 + id) })),
+      match({ id: 5, label: "Q5", scheduled_time: iso(300_000) }),
+      match({ id: 6, label: "F1", round_type: "finals", is_finals: true, scheduled_time: null }),
+    ];
+    serveDisplay({ ...baseRoutes(), "/api/displays/me": me(pitGroup({ screen: "schedule" })), "/api/matches?session_id=1": long });
+    renderDisplay();
+    const rows = within(await screen.findByRole("table", { name: "Match Schedule" })).getAllByRole("row").slice(1);
+    expect(rows.map((r) => r.textContent?.slice(0, 2))).toEqual(["Q3", "Q4", "Q5", "F1"]);
+    expect(within(rows[3]).getAllByRole("cell")[0]).toHaveTextContent("–");
+  });
+
+  it("Schedule puts a solo run's better ranked team on red", async () => {
+    const solo = [match({ id: 1, label: "Q1", scheduled_time: iso(300_000), alliances: [{ id: 11, station: "solo", team_ids: [1, 3] }] })];
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/displays/me": me(pitGroup({ screen: "schedule" })),
+      "/api/matches?session_id=1": solo,
+      "/api/rankings?session_id=1": [ranking(1, 4), ranking(3, 1)],
+    });
+    renderDisplay();
+    const row = within(await screen.findByRole("table", { name: "Match Schedule" })).getAllByRole("row")[1];
+    await vi.waitFor(() => expect(within(row).getAllByRole("cell")[2]).toHaveTextContent("103C"));
+    expect(within(row).getAllByRole("cell")[3]).toHaveTextContent("101A");
   });
 });
