@@ -156,6 +156,95 @@ describe("match lists", () => {
     expect(rows[1]).toHaveTextContent(/Q1.*5.*2/);
   });
 
+  it("Match Results is a scoreboard: red teams, red score, blue score, blue teams, with the loser dimmed", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/displays/me": me(pitGroup({ screen: "match_results" })),
+      "/api/matches?session_id=1": matches,
+      "/api/scores?session_id=1": scores,
+    });
+    renderDisplay();
+    const rows = within(await screen.findByRole("table", { name: "Match Results" })).getAllByRole("row").slice(1);
+    // Q2: red 1, blue 8 -> red lost.
+    const q2 = rows[0];
+    expect(q2.querySelector(".score-red")).toHaveTextContent("1");
+    expect(q2.querySelector(".score-blue")).toHaveTextContent("8");
+    expect(q2.querySelector(".results-teams--red")).toHaveTextContent("101A102B");
+    expect(q2.querySelector(".results-teams--blue")).toHaveTextContent("103C104D");
+    expect(q2.querySelector(".results-teams--red")).toHaveClass("is-loser");
+    expect(q2.querySelector(".score-red")).toHaveClass("is-loser");
+    expect(q2.querySelector(".results-teams--blue")).not.toHaveClass("is-loser");
+    expect(q2.querySelector(".score-blue")).not.toHaveClass("is-loser");
+    // Q1: red 5, blue 2 -> blue lost.
+    expect(rows[1].querySelector(".score-blue")).toHaveClass("is-loser");
+    expect(rows[1].querySelector(".results-teams--blue")).toHaveClass("is-loser");
+    expect(rows[1].querySelector(".score-red")).not.toHaveClass("is-loser");
+  });
+
+  it("Match Results dims neither side on a tie", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/displays/me": me(pitGroup({ screen: "match_results" })),
+      "/api/matches?session_id=1": [matches[0]],
+      "/api/scores?session_id=1": [scoreRow(1, 11, 4), scoreRow(1, 12, 4)],
+    });
+    renderDisplay();
+    const row = within(await screen.findByRole("table", { name: "Match Results" })).getAllByRole("row")[1];
+    expect(row.querySelector(".score-red")).toHaveTextContent("4");
+    expect(row.querySelector(".score-blue")).toHaveTextContent("4");
+    expect(row.querySelector(".is-loser")).toBeNull();
+  });
+
+  it("Match Results shows a cooperative match's teams in side colours and one combined score", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/event/match-format": COOPERATIVE,
+      "/api/displays/me": me(pitGroup({ screen: "match_results" })),
+      "/api/matches?session_id=1": [matches[0]],
+      "/api/scores?session_id=1": [scoreRow(1, 11, 37), scoreRow(1, 12, 37)],
+    });
+    renderDisplay();
+    const row = within(await screen.findByRole("table", { name: "Match Results" })).getAllByRole("row")[1];
+    expect(row.querySelectorAll(".score-combined")).toHaveLength(1);
+    expect(row.querySelector(".score-combined")).toHaveTextContent("37");
+    expect(row.querySelector(".score-red")).toBeNull();
+    expect(row.querySelector(".results-teams--red")).toHaveTextContent("101A102B");
+    expect(row.querySelector(".results-teams--blue")).toHaveTextContent("103C104D");
+    expect(row.querySelector(".is-loser")).toBeNull();
+  });
+
+  it("Match Results puts a solo run's better ranked team on red", async () => {
+    const solo = match({ id: 1, label: "Q1", status: "completed", phase: "ended", alliances: [{ id: 11, station: "solo", team_ids: [1, 3] }] });
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/displays/me": me(pitGroup({ screen: "match_results" })),
+      "/api/matches?session_id=1": [solo],
+      "/api/scores?session_id=1": [scoreRow(1, 11, 20)],
+      "/api/rankings?session_id=1": [ranking(1, 4), ranking(3, 1)],
+    });
+    renderDisplay();
+    const row = within(await screen.findByRole("table", { name: "Match Results" })).getAllByRole("row")[1];
+    await vi.waitFor(() => expect(row.querySelector(".results-teams--red")).toHaveTextContent("103C"));
+    expect(row.querySelector(".results-teams--blue")).toHaveTextContent("101A");
+  });
+
+  it("Upcoming Matches has red and blue team columns", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/displays/me": me(audienceGroup({ screen: "upcoming_matches", screen_settings: { count: 3, scope: "field_set" } })),
+      "/api/matches?session_id=1": matches,
+    });
+    renderDisplay();
+    const table = await screen.findByRole("table", { name: "Upcoming Matches" });
+    expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Match", "Red", "Blue", "Field", "Time"]);
+    const cells = within(within(table).getAllByRole("row")[1]).getAllByRole("cell");
+    expect(cells[0]).toHaveTextContent("101A102B");
+    expect(cells[0].querySelector(".team-numbers--red")).not.toBeNull();
+    expect(cells[1]).toHaveTextContent("103C104D");
+    expect(cells[1].querySelector(".team-numbers--blue")).not.toBeNull();
+    expect(table.closest(".table-screen")).toHaveClass("table-screen--audience");
+  });
+
   it("the Schedule shows times in the session's zone", async () => {
     serveDisplay({
       ...baseRoutes(),

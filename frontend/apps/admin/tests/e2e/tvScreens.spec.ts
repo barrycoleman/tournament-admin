@@ -504,6 +504,38 @@ test.describe.serial("TV screens", () => {
     await expect(pitTv.locator(".checkin-tile .checkin-tile__number")).toHaveText(["10480B", "19533Z", "31415P", "55210C", "83897A", "94927X"]);
     await pitTv.screenshot({ path: testInfo.outputPath("checkin-pit-1920x1080.png") });
   });
+
+  test("match results is a scoreboard and upcoming matches has red and blue columns, at 1920×1080", async ({ request }, testInfo) => {
+    const pitTv = screens["Pit TV"];
+    const pit = (await call(request, "get", `/api/displays?session_id=${saturday}`)).groups.find((g: { name: string }) => g.name === "Pit Rankings");
+    await call(request, "patch", `/api/displays/groups/${pit.id}`, { screen: "match_results" });
+    const results = pitTv.getByRole("table", { name: "Match Results" });
+    await expect(results).toBeVisible({ timeout: 15_000 });
+    // Q1 was scored 48 to 52: blue won, so red is dimmed and blue is not.
+    const q1 = results.getByRole("row", { name: /Q1/ });
+    await expect(q1.locator(".score-red")).toHaveText("48");
+    await expect(q1.locator(".score-blue")).toHaveText("52");
+    await expect(q1.locator(".results-teams--red")).toContainText("83897A");
+    await expect(q1.locator(".results-teams--blue")).toContainText("94927X");
+    await expect(q1.locator(".score-red")).toHaveClass(/is-loser/);
+    await expect(q1.locator(".results-teams--red")).toHaveClass(/is-loser/);
+    await expect(q1.locator(".score-blue")).not.toHaveClass(/is-loser/);
+    const widths = await results.locator(".team-numbers").evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
+    expect(Math.max(...widths)).toBeLessThanOrEqual(1);
+    expect((await results.boundingBox())!.width).toBeGreaterThan(1920 * 0.85);
+    await pitTv.screenshot({ path: testInfo.outputPath("match-results-1920x1080.png") });
+
+    await call(request, "patch", `/api/displays/groups/${pit.id}`, { screen: "upcoming_matches" });
+    const upcoming = pitTv.getByRole("table", { name: "Upcoming Matches" });
+    await expect(upcoming).toBeVisible({ timeout: 15_000 });
+    await expect(upcoming.getByRole("row").nth(0)).toContainText(/Match.*Red.*Blue.*Field.*Time/);
+    const q2 = upcoming.getByRole("row", { name: /Q2/ });
+    await expect(q2.locator(".team-numbers--red")).toContainText("31415P");
+    await expect(q2.locator(".team-numbers--blue")).toContainText("83897A");
+    const sizes = await upcoming.locator(".team-numbers").evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(1);
+    await pitTv.screenshot({ path: testInfo.outputPath("upcoming-matches-1920x1080.png") });
+  });
 });
 
 test.describe.serial("TV skills rankings", () => {

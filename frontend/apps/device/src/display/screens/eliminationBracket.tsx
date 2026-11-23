@@ -10,9 +10,9 @@ import {
   type FinalsBracket,
   type Team,
 } from "../api";
-import { TeamNumbers } from "../components/MatchCells";
 import { ScreenFrame, ScreenNotice, WaitingForData } from "../components/ScreenFrame";
 import { roundName, seriesWins } from "../logic/bracket";
+import { tableScreenClass } from "../logic/tableScreen";
 import type { ScreenModule, ScreenProps } from "../screenTypes";
 
 function Side({
@@ -86,9 +86,9 @@ function EliminationBracketScreen({ context }: ScreenProps) {
   const currentRun = bracket.runs.find((run) => run.status !== "completed")?.match_id ?? null;
   const matchById = new Map(matches.data.map((m) => [m.id, m]));
   return (
-    <ScreenFrame title={title} className="rankings">
+    <ScreenFrame title={title} className={`finals ${tableScreenClass(context)}`}>
       <div className="split">
-        <table className="kiosk-table" aria-label={t("display.finalsRankings")}>
+        <table className="kiosk-table rank-table finals-table" aria-label={t("display.finalsRankings")}>
           <thead>
             <tr>
               <th scope="col">{t("display.col.rank")}</th>
@@ -128,7 +128,11 @@ function EliminationBracketScreen({ context }: ScreenProps) {
                   <tr key={run.match_id} className={run.match_id === currentRun ? "is-current" : undefined}>
                     <th scope="row">{game?.label ?? ""}</th>
                     <td>
-                      <TeamNumbers teamIds={alliance?.team_ids ?? []} teams={teams} station="all" />
+                      <span className="team-numbers">
+                        {(alliance?.team_ids ?? []).map((id) => (
+                          <span key={id}>{teams.get(id)?.number ?? ""}</span>
+                        ))}
+                      </span>
                     </td>
                     <td className="side-panel__end">
                       {run.score !== null

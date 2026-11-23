@@ -19,7 +19,7 @@ function Icon({ name }: { name: IconName }) {
       {name === "total" && (
         <>
           <circle cx="12" cy="12" r="10" fill="currentColor" />
-          <path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#0e0d0b" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M7 12.5l3.2 3.2L17 9" fill="none" className="checkin-icon__tick" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
         </>
       )}
     </svg>
