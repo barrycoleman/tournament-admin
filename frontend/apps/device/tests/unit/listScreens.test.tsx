@@ -35,25 +35,43 @@ describe("teamRecords", () => {
 });
 
 describe("Teamwork Rankings", () => {
-  it("lists the head-to-head columns and the schedule and results panel", async () => {
+  it("lists the head-to-head columns, with no side panel", async () => {
     const done = match({ id: 1, label: "Q1", status: "completed", phase: "ended", scheduled_time: iso(-600_000) });
     const next = match({ id: 2, label: "Q2", field_id: 2, scheduled_time: iso(300_000) });
+    const ranks = [ranking(3, 1), ranking(1, 2), ranking(2, 3), ranking(4, 4)];
     serveDisplay({
       ...baseRoutes(),
       "/api/displays/me": me(pitGroup({ screen: "teamwork_rankings" })),
-      "/api/rankings?session_id=1": [ranking(3, 1), ranking(1, 2)],
+      "/api/rankings?session_id=1": ranks,
       "/api/matches?session_id=1": [done, next],
       "/api/scores?session_id=1": [scoreRow(1, 11, 3), scoreRow(1, 12, 9)],
     });
     renderDisplay();
     const table = await screen.findByRole("table", { name: "Teamwork Rankings" });
     const rows = within(table).getAllByRole("row");
-    expect(rows[0]).toHaveTextContent(/Rank.*Team.*WP.*SoS.*W-L-T/);
-    expect(rows[1]).toHaveTextContent(/1.*103C.*Bolts.*5.*1\.5.*1-0-0/);
-    expect(rows[2]).toHaveTextContent(/2.*101A.*Rockets.*4.*0-1-0/);
-    const panel = await screen.findByRole("complementary", { name: "Match schedule & results" });
-    expect(within(panel).getByText("Q1").closest("tr")).toHaveTextContent("3–9");
-    expect(within(panel).getByText("Q2").closest("tr")).toHaveTextContent(/Field 2.*4:05/);
+    expect(rows[0]).toHaveTextContent(/Rank.*Team.*Name.*W-L-T.*WP.*SoS/);
+    expect(rows[1]).toHaveTextContent(/1.*103C.*Bolts.*1-0-0.*5.*1\.5/);
+    expect(rows[2]).toHaveTextContent(/2.*101A.*Rockets.*0-1-0.*4/);
+    expect(screen.getByTestId("rank-row-3")).toBeInTheDocument();
+    const rankCell = (n: number) => within(rows[n]).getAllByRole("cell")[0];
+    [1, 2, 3].forEach((n) => expect(rankCell(n)).toHaveClass("is-top"));
+    expect(rankCell(4)).not.toHaveClass("is-top");
+    expect(screen.queryByText("Match schedule & results")).not.toBeInTheDocument();
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    expect(screen.getByText("After 1 of 2 qualification matches")).toBeInTheDocument();
+    expect(table.closest(".table-screen")).toHaveClass("table-screen--pit");
+  });
+
+  it("uses the audience size when shown at a field set", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/displays/me": me(audienceGroup({ screen: "teamwork_rankings" })),
+      "/api/rankings?session_id=1": [ranking(3, 1)],
+    });
+    renderDisplay();
+    const table = await screen.findByRole("table", { name: "Teamwork Rankings" });
+    expect(table.closest(".table-screen")).toHaveClass("table-screen--audience");
+    expect(table.closest(".table-screen")).not.toHaveClass("table-screen--pit");
   });
 
   it("shows matches and average score columns for a cooperative game", async () => {

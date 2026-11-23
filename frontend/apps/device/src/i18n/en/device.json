@@ -32,8 +32,8 @@
     },
     "enableSound": "Click to enable sound",
     "skillsOff": "Skills challenges aren't running",
-    "top10": "Top 10",
-    "recentScores": "Recent scores",
+    "rankingsTitle": "Rankings",
+    "context": { "rankingsProgress": "After {{played}} of {{total}} qualification matches" },
     "noEliminations": "No eliminations yet",
     "finalsRankings": "Finals rankings",
     "bracket": { "final": "Final", "semifinals": "Semifinals", "quarterfinals": "Quarterfinals", "round": "Round {{number}}" },
@@ -46,7 +46,7 @@
     "noRankings": "No rankings yet",
     "schedulePanel": "Match schedule & results",
     "col": {
-      "rank": "Rank", "team": "Team", "winPoints": "WP", "sos": "SoS", "record": "W-L-T",
+      "rank": "Rank", "name": "Name", "team": "Team", "winPoints": "WP", "sos": "SoS", "record": "W-L-T",
       "matches": "Matches", "average": "Average", "match": "Match", "teams": "Teams",
       "field": "Field", "time": "Time", "score": "Score", "total": "Total"
     },

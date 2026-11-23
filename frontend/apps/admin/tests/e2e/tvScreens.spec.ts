@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { test, expect, type APIRequestContext, type Browser, type Page } from "@playwright/test";
-import { buildExampleGamePluginZip } from "./fixtures/buildPluginZip";
+import { buildExampleGamePluginZip, buildSampleCooperativePluginZip } from "./fixtures/buildPluginZip";
 import { startIsolatedServer, type IsolatedServer } from "./fixtures/isolatedServer";
 
 const PASSWORD = "tv-screens-e2e-pw";
@@ -380,6 +380,131 @@ test.describe.serial("TV screens", () => {
       await expect(page.getByRole("table")).toHaveCount(0);
       const numbers = matches.Q1.alliances.flatMap((a) => a.team_ids).map((id) => `result-number-${id}`);
       await expectFits(page, ["result-red", "result-blue", "score-red", "score-blue", "bottom-bar", ...numbers]);
+      await shot(page, shotName);
+    }
+  });
+
+  const fontSize = (page: Page, selector: string) => page.locator(selector).first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+
+  test("teamwork rankings are one full-width table, larger at the audience TV than at a pit TV, at 1920×1080", async ({ browser, request }) => {
+    await call(request, "patch", `/api/displays/groups/${audienceGroup}`, { screen: "teamwork_rankings" });
+    const pit = await call(request, "post", "/api/displays/pit-groups", { session_id: saturday, name: "Pit Rankings" });
+    await call(request, "patch", `/api/displays/groups/${pit.id}`, { screen: "teamwork_rankings" });
+    const pitTv = await pairDisplay(browser, request, "Pit TV", { width: 1920, height: 1080 });
+    await assign(request, "Pit TV", pit.id);
+
+    const audienceTv = screens["Audience TV"];
+    for (const [page, size, shotName] of [
+      [audienceTv, "audience", "rankings-audience-1920x1080"],
+      [pitTv, "pit", "rankings-pit-1920x1080"],
+    ] as [Page, string, string][]) {
+      const table = page.getByRole("table", { name: "Teamwork Rankings" });
+      await expect(table).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator(`.table-screen--${size}`)).toHaveCount(1);
+      await expect(page.getByRole("heading", { name: "Rankings", exact: true })).toBeVisible();
+      await expect(page.getByText("After 1 of 4 qualification matches")).toBeVisible();
+      await expect(page.getByRole("complementary")).toHaveCount(0);
+      await expect(page.getByText("Match schedule & results")).toHaveCount(0);
+      await expect(table.getByRole("row").nth(0)).toContainText(/Rank.*Team.*Name.*W-L-T.*WP.*SoS/);
+      // Q1 was 48 to 52: the blue teams won.
+      await expect(page.getByTestId(`rank-row-${teams[2]}`)).toContainText(/19533Z.*Charlie.*1-0-0/);
+      await expect(page.getByTestId(`rank-row-${teams[0]}`)).toContainText(/83897A.*0-1-0/);
+      const wide = await table.boundingBox();
+      expect(wide!.width).toBeGreaterThan(1920 * 0.85);
+      await shot(page, shotName);
+    }
+    const audienceFont = await fontSize(audienceTv, ".rank-table tbody td");
+    const pitFont = await fontSize(pitTv, ".rank-table tbody td");
+    expect(audienceFont).toBeGreaterThan(pitFont);
+    // The amber top three: exactly three rank cells are marked.
+    await expect(audienceTv.locator(".rank-table__rank.is-top")).toHaveCount(3);
+  });
+});
+
+test.describe.serial("TV skills rankings", () => {
+  test.describe.configure({ timeout: 120_000 });
+
+  let server: IsolatedServer;
+  let token = "";
+  let session = 0;
+  const teams: Record<string, number> = {};
+  const api = (route: string) => `${server.apiUrl}${route}`;
+  const admin = () => ({ Authorization: `Bearer ${token}` });
+
+  async function call(request: APIRequestContext, method: "get" | "post" | "put" | "patch", route: string, data?: unknown) {
+    const response = await request[method](api(route), { headers: admin(), data });
+    const text = await response.text();
+    expect(response.ok(), `${method.toUpperCase()} ${route}: ${text}`).toBeTruthy();
+    return text ? JSON.parse(text) : null;
+  }
+
+  async function pair(browser: Browser, request: APIRequestContext, name: string, groupId: number) {
+    const page = await (await browser.newContext({ viewport: { width: 1920, height: 1080 } })).newPage();
+    await page.goto(`${server.baseUrl}/pair`);
+    const code = (await page.getByTestId("pairing-code").textContent())!.replace(" ", "");
+    const paired = await call(request, "post", "/api/devices/pair", { code, role: "display_device", name });
+    await expect(page.getByText(name)).toBeVisible({ timeout: 15_000 });
+    await call(request, "put", "/api/displays/assignments", { session_id: session, device_id: paired.id, group_id: groupId });
+    return page;
+  }
+
+  test.beforeAll(async ({ request }) => {
+    server = await startIsolatedServer({ backendPort: 8174, frontendPort: 5236, devicePort: 5237 });
+    expect((await request.post(api("/api/event"), { data: { name: "Skills TV League", password: PASSWORD } })).status()).toBe(201);
+    token = (await (await request.post(api("/api/auth/login"), { data: { role: "admin", password: PASSWORD } })).json()).access_token;
+    const uploaded = await request.post(api("/api/plugins/games"), {
+      headers: admin(),
+      multipart: {
+        file: { name: "plugin.zip", mimeType: "application/zip", buffer: fs.readFileSync(await buildSampleCooperativePluginZip()) },
+      },
+    });
+    expect(uploaded.status()).toBe(201);
+    await call(request, "post", "/api/event/game-plugin", { name: "sample_cooperative" });
+    for (const [number, name] of [["S1", "Skills One"], ["S2", "Skills Two"], ["S3", "Skills Three"], ["S4", "Skills Four"]]) {
+      teams[number] = (await call(request, "post", "/api/teams", { number, name })).id;
+    }
+    session = (await call(request, "post", "/api/sessions", { label: "Saturday" })).id;
+    await call(request, "post", "/api/event/active-session", { session_id: session });
+    await call(request, "post", "/api/field-sets", { session_id: session, name: "Main Fields" });
+    await call(request, "put", "/api/skills/settings", { enabled: true, attempts: { autonomous: 3, driver: 3 } });
+    for (const number of ["S1", "S2", "S3"]) {
+      await call(request, "post", `/api/sessions/${session}/participants`, { team_id: teams[number], checked_in: true });
+    }
+    const attempts: [string, string, number][] = [
+      ["S1", "autonomous", 40], ["S1", "autonomous", 90], ["S1", "driver", 107],
+      ["S2", "autonomous", 60], ["S2", "driver", 30], ["S2", "driver", 55],
+      ["S3", "autonomous", 20],
+    ];
+    for (const [team, type, score] of attempts) {
+      await call(request, "post", `/api/sessions/${session}/skills/attempts`, { team_id: teams[team], skills_type: type, data: { score } });
+    }
+  });
+
+  test.afterAll(() => server?.stop());
+
+  test("skills rankings show total, best and attempts used per type, with no side panels, at 1920×1080", async ({ browser, request }) => {
+    const groups = (await call(request, "get", `/api/displays?session_id=${session}`)).groups as { id: number; kind: string }[];
+    const audience = groups.find((group) => group.kind === "audience")!;
+    await call(request, "patch", `/api/displays/groups/${audience.id}`, { screen: "skills_rankings" });
+    const pit = await call(request, "post", "/api/displays/pit-groups", { session_id: session, name: "Pit Skills" });
+    await call(request, "patch", `/api/displays/groups/${pit.id}`, { screen: "skills_rankings" });
+    const audienceTv = await pair(browser, request, "Audience Skills TV", audience.id);
+    const pitTv = await pair(browser, request, "Pit Skills TV", pit.id);
+    for (const [page, size, shotName] of [
+      [audienceTv, "audience", "skills-rankings-audience-1920x1080"],
+      [pitTv, "pit", "skills-rankings-pit-1920x1080"],
+    ] as [Page, string, string][]) {
+      const table = page.getByRole("table", { name: "Skills Rankings" });
+      await expect(table).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator(`.table-screen--${size}`)).toHaveCount(1);
+      await expect(page.getByRole("complementary")).toHaveCount(0);
+      await expect(page.getByText("Top 10")).toHaveCount(0);
+      await expect(page.getByText("Recent scores")).toHaveCount(0);
+      await expect(table.getByRole("row").nth(0)).toContainText(/Rank.*Team.*Name.*Total.*Autonomous.*Driver/);
+      // S1: best autonomous 90 over 2 of 3 attempts, driver 107 over 1 of 3.
+      await expect(page.getByTestId(`rank-row-${teams.S1}`)).toContainText(/S1.*Skills One.*197.*90.*2\/3.*107.*1\/3/);
+      // S3 never drove: a dash and 0/3.
+      await expect(page.getByTestId(`rank-row-${teams.S3}`)).toContainText(/S3.*20.*20.*1\/3.*–.*0\/3/);
       await shot(page, shotName);
     }
   });

@@ -212,3 +212,22 @@
 /* FitText: fills its box, centres its content and lets the component scale it down to fit. */
 .fit-text { display: block; width: 100%; height: 100%; overflow: hidden; position: relative; }
 .fit-text__inner { position: absolute; top: 50%; left: 50%; display: inline-block; white-space: nowrap; font-variant-numeric: tabular-nums; transform-origin: center; translate: -50% -50%; }
+
+/* Rankings: one full-width dark table. The audience size reads from across a hall (about eight rows); the pit size is closer and smaller (ten or more). */
+.table-screen--audience { --rank-font: 2.6vw; --rank-pad: 0.9vw; --rank-head: 1.4vw; }
+.table-screen--pit { --rank-font: 1.8vw; --rank-pad: 0.5vw; --rank-head: 1.1vw; }
+.rank-table { background: transparent; color: var(--kiosk-ink); font-size: var(--rank-font); font-variant-numeric: tabular-nums; }
+.rank-table thead th { background: var(--kiosk-bg); color: var(--kiosk-muted); font-size: var(--rank-head); font-weight: 800; letter-spacing: 0.06em; text-align: right; padding: 0 1.5vw var(--rank-pad) 0; }
+.rank-table thead th:nth-child(-n+3) { text-align: left; }
+.rank-table thead th:first-child { text-align: right; width: 6vw; }
+.rank-table td { padding: var(--rank-pad) 1.5vw var(--rank-pad) 0; text-align: right; border-top: 0.15vw solid var(--kiosk-rule); }
+.rank-table tbody tr:nth-child(even) { background: transparent; }
+.rank-table td:nth-child(-n+3) { text-align: left; }
+.rank-table td:first-child { text-align: right; }
+.rank-table__rank { font-weight: 900; }
+.rank-table__rank.is-top { color: var(--kiosk-soon); }
+.rank-table__number { font-weight: 900; white-space: nowrap; width: 14vw; }
+.rank-table__name { font-weight: 600; max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-table__strong { font-weight: 900; }
+.rank-table__muted { color: var(--kiosk-muted); }
+.rank-table__used { font-size: 0.6em; }

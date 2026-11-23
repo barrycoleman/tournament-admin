@@ -24,7 +24,7 @@ const SKILLS = {
 };
 
 describe("Skills Rankings", () => {
-  it("lists totals and each type's best and attempts used, with top 10 and recent scores", async () => {
+  it("lists totals and each type's best and attempts used, with no side panels", async () => {
     serveDisplay({
       ...baseRoutes(),
       "/api/displays/me": me(pitGroup({ screen: "skills_rankings" })),
@@ -48,14 +48,16 @@ describe("Skills Rankings", () => {
     renderDisplay();
     const table = await screen.findByRole("table", { name: "Skills Rankings" });
     const rows = within(table).getAllByRole("row");
-    expect(rows[0]).toHaveTextContent(/Rank.*Team.*Total.*Autonomous.*Driver/);
-    expect(rows[1]).toHaveTextContent(/1.*102B.*Gears.*197.*90 \/ 2.*107 \/ 1/);
-    expect(rows[2]).toHaveTextContent(/2.*101A.*50.*50 \/ 1.*0 \/ 0/);
-    const top = screen.getByRole("complementary", { name: "Top 10" });
-    expect(within(top).getAllByRole("row")[0]).toHaveTextContent(/1.*102B.*197.*90 \/ 107/);
-    const recent = within(screen.getByRole("complementary", { name: "Recent scores" })).getAllByRole("row");
-    expect(recent[0]).toHaveTextContent(/101A.*Autonomous.*50/);
-    expect(recent[1]).toHaveTextContent(/102B.*Driver.*107/);
+    expect(rows[0]).toHaveTextContent(/Rank.*Team.*Name.*Total.*Autonomous.*Driver/);
+    expect(rows[1]).toHaveTextContent(/1.*102B.*Gears.*197.*90.*2\/3.*107.*1\/3/);
+    // A team with no attempt in a type shows a dash and 0/3.
+    expect(rows[2]).toHaveTextContent(/2.*101A.*50.*50.*1\/3.*–.*0\/3/);
+    expect(within(rows[1]).getAllByRole("cell")[0]).toHaveClass("is-top");
+    expect(screen.getByTestId("rank-row-2")).toBe(rows[1]);
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    expect(screen.queryByText("Top 10")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recent scores")).not.toBeInTheDocument();
+    expect(table.closest(".table-screen")).toHaveClass("table-screen--pit");
   });
 
   it("says so when skills challenges are off", async () => {
