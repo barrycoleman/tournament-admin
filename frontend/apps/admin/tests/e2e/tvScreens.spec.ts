@@ -435,6 +435,11 @@ test.describe.serial("TV screens", () => {
     await expect(table.getByRole("row", { name: /Q2/ }).getByTestId("on-field")).toHaveText("On field");
     await expect(table.getByRole("row", { name: /Q3/ }).getByTestId("on-field")).toHaveText("On field");
     await expect(table.getByRole("row", { name: /Q1/ })).toHaveClass(/is-done/);
+    // Q2 sits in an even row, where the zebra rule once hid the highlight: check the painted colour.
+    const background = (name: RegExp) => table.getByRole("row", { name }).evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(await background(/Q2/)).toBe("rgba(227, 178, 26, 0.14)");
+    expect(await background(/Q3/)).toBe("rgba(227, 178, 26, 0.14)");
+    expect(await background(/Q4/)).not.toBe("rgba(227, 178, 26, 0.14)");
     await expect(table.getByRole("row", { name: /Q2/ })).toHaveClass(/is-on-field/);
     // Q1: red 83897A and 10480B, blue 19533Z and 94927X, in their own columns.
     const q1 = table.getByRole("row", { name: /Q1/ });
