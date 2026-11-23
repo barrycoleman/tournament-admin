@@ -482,10 +482,32 @@ describe("Check-in Status", () => {
     expect(screen.getByTestId("total-out")).toHaveTextContent("0 / 3");
   });
 
-  it("shows a notice when no teams are taking part", async () => {
+  it("lists a team with no participation row as not checked in", async () => {
+    serve([part(1, 1, true)]);
+    renderDisplay();
+    expect(await screen.findByTestId("total-in")).toHaveTextContent("1 / 3");
+    expect(screen.getByTestId("total-out")).toHaveTextContent("2 / 3");
+    expect(screen.getByTestId("checkin-2")).toHaveAttribute("data-state", "out");
+    expect(screen.getByTestId("checkin-3")).toHaveAttribute("data-state", "out");
+    expect(screen.queryByTestId("checkin-4")).not.toBeInTheDocument();
+  });
+
+  it("lists every team as not checked in before anyone is checked in", async () => {
     serve([]);
     renderDisplay();
-    expect(await screen.findByText("No teams are taking part in this session yet")).toBeInTheDocument();
+    expect(await screen.findByTestId("total-in")).toHaveTextContent("0 / 3");
+    expect(screen.getAllByTestId(/^checkin-\d+$/).map((t) => t.getAttribute("data-state"))).toEqual(["out", "out", "out"]);
+  });
+
+  it("shows a notice when there are no teams at all", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/teams": [],
+      "/api/displays/me": me(pitGroup({ screen: "checkin_status" })),
+      "/api/sessions/1/participants": [],
+    });
+    renderDisplay();
+    expect(await screen.findByText("No teams have been added yet")).toBeInTheDocument();
   });
 
   it("is registered under checkin_status and scrolls", () => {

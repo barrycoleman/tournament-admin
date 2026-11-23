@@ -54,7 +54,7 @@
     "noSession": "当前没有进行中的场次",
     "noRankings": "暂无排名",
     "noTeams": "本分组没有队伍",
-    "checkin": { "title": "签到", "none": "本场次暂无参赛队伍", "checkedIn": "已签到", "notCheckedIn": "未签到" },
+    "checkin": { "title": "签到", "none": "尚未添加队伍", "checkedIn": "已签到", "notCheckedIn": "未签到" },
     "schedulePanel": "比赛日程与结果",
     "col": {
       "rank": "排名", "name": "队名", "team": "队伍", "winPoints": "胜点", "sos": "对手强度", "record": "胜-负-平",

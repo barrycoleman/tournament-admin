@@ -21,6 +21,7 @@ def _check_in(client, session_id, team_id, checked_in=True):
         json={"team_id": team_id, "checked_in": checked_in},
     )
     assert response.status_code == 201, response.text
+    return response.json()
 
 
 def _admin_token(client):
@@ -41,7 +42,8 @@ def test_unchecking_an_existing_participant_also_broadcasts(client, setup):
     with client.websocket_connect(f"/ws/active-session?token={_admin_token(client)}") as socket:
         _check_in(client, session_id, team_id)
         next_event(socket, "participation_changed")
-        _check_in(client, session_id, team_id, checked_in=False)
+        unchecked = _check_in(client, session_id, team_id, checked_in=False)
+        assert unchecked["checked_in"] is False
         assert next_event(socket, "participation_changed")["data"] == {"session_id": session_id}
 
 

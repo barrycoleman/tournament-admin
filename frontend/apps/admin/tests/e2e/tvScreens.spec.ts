@@ -424,7 +424,10 @@ test.describe.serial("TV screens", () => {
   test("check-in status on a pit TV updates live when a team is checked in, at 1920×1080", async ({ request }, testInfo) => {
     const pitTv = screens["Pit TV"];
     const pit = (await call(request, "get", `/api/displays?session_id=${saturday}`)).groups.find((g: { name: string }) => g.name === "Pit Rankings");
-    for (const id of teams) await call(request, "post", `/api/sessions/${saturday}/participants`, { team_id: id, checked_in: false });
+    // Only one team has a participation row; the other five have none yet and
+    // still show, not checked in, like the admin check-in grid.
+    const rows = (await call(request, "get", `/api/sessions/${saturday}/participants`)) as unknown[];
+    expect(rows).toHaveLength(0);
     await call(request, "post", `/api/sessions/${saturday}/participants`, { team_id: teams[1], checked_in: true });
     await call(request, "patch", `/api/displays/groups/${pit.id}`, { screen: "checkin_status" });
     await expect(pitTv.getByRole("heading", { name: "Check-in", exact: true })).toBeVisible({ timeout: 15_000 });
@@ -433,7 +436,7 @@ test.describe.serial("TV screens", () => {
     await expect(pitTv.getByTestId("total-out")).toContainText("5 / 6");
     await expect(pitTv.getByTestId(`checkin-${teams[1]}`)).toHaveAttribute("data-state", "in");
     await expect(pitTv.getByTestId(`checkin-${teams[2]}`)).toHaveAttribute("data-state", "out");
-    // The front desk checks a team in; the TV is not reloaded.
+    // The front desk checks in a team that has no participation row yet; the TV is not reloaded.
     await call(request, "post", `/api/sessions/${saturday}/participants`, { team_id: teams[2], checked_in: true });
     await expect(pitTv.getByTestId(`checkin-${teams[2]}`)).toHaveAttribute("data-state", "in", { timeout: 5_000 });
     await expect(pitTv.getByTestId("total-in")).toContainText("2 / 6", { timeout: 5_000 });
