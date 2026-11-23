@@ -91,6 +91,7 @@ test.describe.serial("TV screens", () => {
   let fieldTwo = 0;
   let mainFields = 0;
   let fieldGroup = 0;
+  let audienceGroup = 0;
   const teams: number[] = [];
   const matches: Record<string, MatchInfo> = {};
   const devices: Record<string, number> = {};
@@ -201,6 +202,7 @@ test.describe.serial("TV screens", () => {
       field_id: number | null;
     }[];
     const audience = groups.find((group) => group.kind === "audience" && group.field_set_id === mainFields)!;
+    audienceGroup = audience.id;
     fieldGroup = groups.find((group) => group.kind === "field" && group.field_id === fieldOne)!.id;
     await assign(request, "Big TV", audience.id);
     await assign(request, "Field TV", fieldGroup);
@@ -247,7 +249,12 @@ test.describe.serial("TV screens", () => {
 
     // Both overlays are read at once, right after they appear: the count-in lasts only 3 s.
     const pages = [fieldTv, bigTv];
-    await Promise.all(pages.map((page) => expect(page.getByTestId("count-in")).toBeVisible({ timeout: 3_000 })));
+    await Promise.all(
+      pages.map(async (page) => {
+        await expect(page.getByTestId("count-in")).toBeVisible({ timeout: 3_000 });
+        await expect(page.getByTestId("count-in")).toHaveText(/^[123]$/);
+      })
+    );
     const overlayBoxes = await Promise.all(pages.map((page) => page.getByTestId("count-in").boundingBox()));
     pages.forEach((page, i) => {
       const box = overlayBoxes[i];
@@ -326,5 +333,54 @@ test.describe.serial("TV screens", () => {
     await expect(fieldTv.getByText("Match over")).toBeVisible({ timeout: 10_000 });
     await expect(fieldTv.getByTestId("clock")).toHaveText("0:00");
     await expect(fieldTv.getByTestId("live-red")).toHaveCount(0);
+  });
+  test("the match intro lists one row per team by side and keeps a six-character number whole at 1920×1080 and 1280×720", async ({ browser, request }) => {
+    // Save Q1 as 48 to 52 so the audience screen's next match is Q2, where the long-named team is on blue.
+    const red = matches.Q1.alliances.find((a) => a.station === "red")!;
+    const blue = matches.Q1.alliances.find((a) => a.station === "blue")!;
+    await call(request, "post", `/api/matches/${matches.Q1.id}/alliances/${red.id}/score`, { data: { high_balls: 16, auto_winner: "tie" } });
+    await call(request, "post", `/api/matches/${matches.Q1.id}/alliances/${blue.id}/score`, { data: { high_balls: 17, low_balls: 1, auto_winner: "tie" } });
+    await call(request, "patch", `/api/displays/groups/${audienceGroup}`, { screen: "match_intro" });
+    const wide = await pairDisplay(browser, request, "Audience TV", { width: 1920, height: 1080 });
+    await assign(request, "Audience TV", audienceGroup);
+
+    const longTeam = teams[0];
+    for (const [page, shotName] of [[wide, "intro-1920x1080"], [screens["Big TV"], "intro-1280x720"]] as [Page, string][]) {
+      await expect(page.getByTestId("intro-red")).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId("bottom-bar")).toContainText("Up next · Qualification 2");
+      await expect(page.getByTestId("bottom-bar")).toContainText("Field 2");
+      await expect(page.getByTestId("start")).toBeVisible();
+      await expect(page.getByTestId("intro-red")).toContainText("55210C");
+      await expect(page.getByTestId("intro-red")).toContainText("31415P");
+      await expect(page.getByTestId("intro-blue")).toContainText("83897A");
+      await expect(page.getByTestId("intro-blue")).toContainText("19533Z");
+      await expect(page.getByTestId(`rank-${longTeam}`)).toBeVisible();
+      // The number is whole even though the team's name is 40 characters.
+      expect(await page.getByTestId(`intro-number-${longTeam}`).textContent()).toBe("83897A");
+      const rows = [teams[4], teams[5], teams[0], teams[2]];
+      await expectFits(page, ["intro-red", "intro-blue", "bottom-bar", ...rows.map((id) => `intro-number-${id}`)]);
+      await shot(page, shotName);
+    }
+  });
+
+  test("the last result shows red and blue scores, tags the winner and has no breakdown at 1920×1080 and 1280×720", async ({ request }) => {
+    await call(request, "patch", `/api/displays/groups/${audienceGroup}`, { screen: "last_scored_match" });
+    for (const [name, shotName] of [["Audience TV", "result-1920x1080"], ["Big TV", "result-1280x720"]]) {
+      const page = screens[name];
+      await expect(page.getByTestId("result-blue")).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId("bottom-bar")).toContainText("Result · Qualification 1");
+      await expect(page.getByTestId("score-red")).toHaveText("48");
+      await expect(page.getByTestId("score-blue")).toHaveText("52");
+      await expect(page.getByTestId("result-blue").getByTestId("winner")).toHaveText("Winner");
+      await expect(page.getByTestId("result-red").getByTestId("winner")).toHaveCount(0);
+      await expect(page.getByTestId("result-red")).toHaveClass(/is-loser/);
+      await expect(page.getByTestId("result-blue")).not.toHaveClass(/is-loser/);
+      await expect(page.getByTestId("result-red")).toContainText("83897A");
+      await expect(page.getByTestId("result-blue")).toContainText("94927X");
+      await expect(page.getByRole("table")).toHaveCount(0);
+      const numbers = matches.Q1.alliances.flatMap((a) => a.team_ids).map((id) => `result-number-${id}`);
+      await expectFits(page, ["result-red", "result-blue", "score-red", "score-blue", "bottom-bar", ...numbers]);
+      await shot(page, shotName);
+    }
   });
 });

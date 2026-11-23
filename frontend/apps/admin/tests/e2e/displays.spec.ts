@@ -135,9 +135,9 @@ test.describe.serial("display groups", () => {
     const admin = await adminPage(browser, "/match-control");
     const audience = admin.getByRole("region", { name: "Audience screen" });
     await audience.getByRole("button", { name: "Last Scored Match" }).click();
-    await expect(screens["Big TV"].getByRole("heading", { name: "Qualification 1" })).toBeVisible({ timeout: 10_000 });
-    await expect(screens["Big TV"].getByTestId("score-red")).toHaveText("42");
-    await expect(screens["Big TV"].getByTestId("score-blue")).toHaveText("42");
+    await expect(screens["Big TV"].getByTestId("bottom-bar")).toContainText("Result · Qualification 1", { timeout: 10_000 });
+    await expect(screens["Big TV"].getByTestId("score-combined")).toHaveText("42");
+    await expect(screens["Big TV"].getByTestId("winner")).toHaveCount(0);
   });
 
   test("an override changes what Start begins", async ({ browser, request }) => {

@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 describe("Match Intro", () => {
-  it("shows the group's next match with ranks, names and locations", async () => {
+  it("shows one row per team by side with rank, number, name and place, and the match in the bottom bar", async () => {
     serveDisplay({
       ...baseRoutes(),
       "/api/displays/me": me(audienceGroup({ screen: "match_intro" })),
@@ -32,15 +32,22 @@ describe("Match Intro", () => {
       "/api/rankings?session_id=1": [{ team_id: 3, division_id: null, rank: 2, win_points: 2, strength_of_schedule: 0, average_score: 0, matches_played: 1 }],
     });
     renderDisplay();
-    expect(await screen.findByRole("heading", { name: "Qualification 9" })).toBeInTheDocument();
-    expect(screen.getByText("Field 2")).toBeInTheDocument();
+    const bar = await screen.findByTestId("bottom-bar");
+    expect(bar).toHaveTextContent("Up next · Qualification 9");
+    expect(bar).toHaveTextContent("Field 2");
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
     expect(screen.getByTestId("start")).toHaveTextContent("Starts in2:00");
-    const blue = screen.getByRole("region", { name: "Blue alliance" });
-    expect(within(blue).getByText("103C")).toBeInTheDocument();
-    expect(within(blue).getByText("Bolts")).toBeInTheDocument();
-    expect(within(blue).getByText("Shelbyville")).toBeInTheDocument();
-    await waitFor(() => expect(within(blue).getByTestId("rank-3")).toHaveTextContent("2"));
-    expect(within(screen.getByRole("region", { name: "Red alliance" })).getByTestId("rank-1")).toHaveTextContent("–");
+    const blue = screen.getByTestId("intro-blue");
+    const bolts = within(blue).getByTestId("intro-team-3");
+    expect(bolts).toHaveTextContent("103C");
+    expect(bolts).toHaveTextContent("Bolts");
+    expect(bolts).toHaveTextContent("Shelbyville");
+    await waitFor(() => expect(within(bolts).getByTestId("rank-3")).toHaveTextContent("#2"));
+    const red = screen.getByTestId("intro-red");
+    expect(within(red).getByTestId("rank-1")).toHaveTextContent("–");
+    expect(within(red).getByTestId("intro-team-1")).toHaveTextContent("Springfield, IL");
+    expect(within(red).getByTestId("intro-team-2")).toHaveTextContent("102B");
+    expect(within(blue).queryByText("101A")).not.toBeInTheDocument();
   });
 
   it("shows the queued match instead when one is queued", async () => {
@@ -53,10 +60,10 @@ describe("Match Intro", () => {
       ],
     });
     renderDisplay();
-    expect(await screen.findByRole("heading", { name: "Qualification 12" })).toBeInTheDocument();
+    expect(await screen.findByTestId("bottom-bar")).toHaveTextContent("Up next · Qualification 12");
   });
 
-  it("shows a red and a blue band, one team each, for a cooperative game", async () => {
+  it("shows one team on each side for a cooperative game", async () => {
     serveDisplay({
       ...baseRoutes(),
       "/api/event/match-format": COOPERATIVE,
@@ -72,12 +79,29 @@ describe("Match Intro", () => {
       ],
     });
     renderDisplay();
-    const red = await screen.findByRole("region", { name: "Red alliance" });
-    const blue = screen.getByRole("region", { name: "Blue alliance" });
+    const red = await screen.findByTestId("intro-red");
+    const blue = screen.getByTestId("intro-blue");
     expect(within(red).getByText("101A")).toBeInTheDocument();
     expect(within(red).queryByText("104D")).not.toBeInTheDocument();
     expect(within(blue).getByText("104D")).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Alliance" })).not.toBeInTheDocument();
+  });
+
+  it("puts the better-ranked team of a score-chase run on the red side", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/event/match-format": COOPERATIVE,
+      "/api/displays/me": me(audienceGroup({ screen: "match_intro" })),
+      "/api/matches?session_id=1": [
+        match({ scheduled_time: iso(60_000), alliances: [{ id: 1001, station: "solo", team_ids: [1, 4] }] }),
+      ],
+      "/api/rankings?session_id=1": [
+        { team_id: 1, division_id: null, rank: 5, win_points: 0, strength_of_schedule: 0, average_score: 0, matches_played: 1 },
+        { team_id: 4, division_id: null, rank: 2, win_points: 0, strength_of_schedule: 0, average_score: 0, matches_played: 1 },
+      ],
+    });
+    renderDisplay();
+    await waitFor(() => expect(within(screen.getByTestId("intro-red")).getByText("104D")).toBeInTheDocument());
+    expect(within(screen.getByTestId("intro-blue")).getByText("101A")).toBeInTheDocument();
   });
 
   it("says when no match is left", async () => {
@@ -87,34 +111,88 @@ describe("Match Intro", () => {
   });
 });
 
+const scoreRow = (alliance: number, score: number) => ({ match_id: 20, alliance_id: alliance, score, data: { high_balls: 3 }, teams: [], saved_at: iso(-5_000) });
+const scored = () => match({ id: 20, label: "Q20", match_number: 20, status: "completed", phase: "ended" });
+
+function serveResult(scores: unknown[], extra: Record<string, unknown> = {}) {
+  serveDisplay({
+    ...baseRoutes(),
+    "/api/event/scoresheet-schema": SCHEMA,
+    "/api/displays/me": me(audienceGroup({ screen: "last_scored_match" })),
+    "/api/matches?session_id=1": [scored()],
+    "/api/scores?session_id=1": scores,
+    ...extra,
+  });
+}
+
 describe("Last Scored Match", () => {
-  it("shows each alliance's score and the score breakdown", async () => {
-    const scored = match({ id: 20, label: "Q20", match_number: 20, status: "completed", phase: "ended" });
+  it("shows red's and blue's scores with the winner tagged and the loser dimmed, and no breakdown", async () => {
+    serveResult([scoreRow(201, 48), scoreRow(202, 52)]);
+    renderDisplay();
+    expect(await screen.findByTestId("bottom-bar")).toHaveTextContent("Result · Qualification 20");
+    expect(screen.getByTestId("score-red")).toHaveTextContent("48");
+    expect(screen.getByTestId("score-blue")).toHaveTextContent("52");
+    const red = screen.getByTestId("result-red");
+    const blue = screen.getByTestId("result-blue");
+    expect(within(blue).getByTestId("winner")).toHaveTextContent("Winner");
+    expect(within(red).queryByTestId("winner")).not.toBeInTheDocument();
+    expect(red).toHaveClass("is-loser");
+    expect(blue).not.toHaveClass("is-loser");
+    expect(within(red).getByText("101A")).toBeInTheDocument();
+    expect(within(red).getByText("102B")).toBeInTheDocument();
+    expect(within(blue).getByText("103C")).toBeInTheDocument();
+    expect(screen.queryByText("High Balls")).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("tags the red side when it wins", async () => {
+    serveResult([scoreRow(201, 60), scoreRow(202, 10)]);
+    renderDisplay();
+    await screen.findByTestId("result-red");
+    expect(within(screen.getByTestId("result-red")).getByTestId("winner")).toBeInTheDocument();
+    expect(screen.getByTestId("result-blue")).toHaveClass("is-loser");
+  });
+
+  it("shows no winner and dims nothing for a tie", async () => {
+    serveResult([scoreRow(201, 30), scoreRow(202, 30)]);
+    renderDisplay();
+    await screen.findByTestId("result-red");
+    expect(screen.getByTestId("score-red")).toHaveTextContent("30");
+    expect(screen.getByTestId("score-blue")).toHaveTextContent("30");
+    expect(screen.queryByTestId("winner")).not.toBeInTheDocument();
+    expect(screen.getByTestId("result-red")).not.toHaveClass("is-loser");
+    expect(screen.getByTestId("result-blue")).not.toHaveClass("is-loser");
+  });
+
+  it("shows both team blocks and one combined score for a cooperative game", async () => {
     serveDisplay({
       ...baseRoutes(),
-      "/api/event/scoresheet-schema": SCHEMA,
+      "/api/event/match-format": COOPERATIVE,
       "/api/displays/me": me(audienceGroup({ screen: "last_scored_match" })),
-      "/api/matches?session_id=1": [scored],
-      "/api/scores?session_id=1": [
-        { match_id: 20, alliance_id: 201, score: 19, data: { high_balls: 3, parked: true, auto_winner: "red" }, teams: [], saved_at: iso(-5_000) },
-        { match_id: 20, alliance_id: 202, score: 4, data: { high_balls: 1, parked: false, auto_winner: "red" }, teams: [], saved_at: iso(-5_000) },
+      "/api/matches?session_id=1": [
+        match({
+          id: 20, label: "Q20", match_number: 20, status: "completed", phase: "ended",
+          alliances: [
+            { id: 201, station: "red", team_ids: [1] },
+            { id: 202, station: "blue", team_ids: [4] },
+          ],
+        }),
       ],
+      "/api/scores?session_id=1": [scoreRow(201, 42), scoreRow(202, 42)],
     });
     renderDisplay();
-    expect(await screen.findByRole("heading", { name: "Qualification 20" })).toBeInTheDocument();
-    expect(screen.getByTestId("score-red")).toHaveTextContent("19");
-    expect(screen.getByTestId("score-blue")).toHaveTextContent("4");
-    const breakdown = screen.getByRole("table", { name: "Score breakdown" });
-    const parked = within(breakdown).getByRole("row", { name: /Robot Parked/ });
-    expect(parked).toHaveTextContent("✓");
-    expect(parked).toHaveTextContent("–");
-    expect(within(breakdown).getByRole("row", { name: /High Balls/ })).toHaveTextContent("3");
+    expect(await screen.findByTestId("score-combined")).toHaveTextContent("42");
+    expect(screen.queryByTestId("score-red")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("winner")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("result-red")).getByText("101A")).toBeInTheDocument();
+    expect(within(screen.getByTestId("result-blue")).getByText("104D")).toBeInTheDocument();
+    expect(screen.getByTestId("result-red")).not.toHaveClass("is-loser");
+    expect(screen.getByTestId("result-blue")).not.toHaveClass("is-loser");
   });
 
   it("waits for data, then says when nothing is scored yet", async () => {
     serveDisplay({
       ...baseRoutes(),
-      "/api/event/scoresheet-schema": SCHEMA,
       "/api/displays/me": me(audienceGroup({ screen: "last_scored_match" })),
     });
     renderDisplay();
