@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from tournament_server.auth import require_admin_or_front_desk, require_any_role
 from tournament_server.deps import get_db
+from tournament_server.realtime import broadcast_for_session
 from tournament_server.models.participation import SessionParticipation
 from tournament_server.models.session import TournamentSession
 from tournament_server.models.team import Team
@@ -18,12 +19,19 @@ from tournament_server.schemas.participation import (
 router = APIRouter(prefix="/api/sessions", tags=["participation"])
 
 
+def _announce(request: Request, db: Session, session_id: int) -> None:
+    broadcast_for_session(
+        request.app, db, session_id, "participation_changed", {"session_id": session_id}
+    )
+
+
 @router.post(
     "/{session_id}/participants", response_model=ParticipationRead, status_code=201
 )
 def add_participant(
     session_id: int,
     payload: ParticipationCreate,
+    request: Request,
     db: Session = Depends(get_db),
     _role: str = Depends(require_admin_or_front_desk),
 ) -> SessionParticipation:
@@ -44,6 +52,7 @@ def add_participant(
         participation.checked_in = payload.checked_in
         db.commit()
         db.refresh(participation)
+        _announce(request, db, session_id)
         return participation
 
     participation = SessionParticipation(
@@ -74,6 +83,7 @@ def add_participant(
         participation.checked_in = payload.checked_in
         db.commit()
     db.refresh(participation)
+    _announce(request, db, session_id)
     return participation
 
 

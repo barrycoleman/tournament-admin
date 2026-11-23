@@ -306,6 +306,10 @@ duplicating it into the event payload):
   meaning just shifted); a client receiving this treats it as a signal
   that everything it previously fetched for "the active session" is now
   stale and should be refetched for the new one.
+- `participation_changed` — `{session_id}`. Sent after a team's check-in
+  for a session is set or cleared. Delivered on that session's own
+  channel and, when it is the active session, the `active-session`
+  channel too (so admin, front desk and display devices all hear it).
 
 ## 6. Reconnection & resync
 
