@@ -179,6 +179,7 @@
 .matchup__side { display: grid; grid-template-columns: 2.5vw 1fr 2.5vw; align-items: center; gap: 0.5vw; padding: 0.4vw 0.6vw; font-size: 1.6vw; font-weight: 700; }
 .matchup__side--red { background: var(--kiosk-red); color: #fff; }
 .matchup__side--blue { background: var(--kiosk-blue); color: #fff; }
+.matchup__side--empty { background: var(--kiosk-surface); color: var(--kiosk-muted); }
 .matchup__side.is-winner { font-weight: 900; box-shadow: inset 0.4vw 0 0 var(--kiosk-soon); }
 .matchup__seed { opacity: 0.8; }
 .matchup__wins { text-align: right; font-weight: 900; }

@@ -1,8 +1,8 @@
 import fs from "node:fs";
-import path from "node:path";
 import { test, expect, type APIRequestContext, type Browser, type Page } from "@playwright/test";
 import { buildExampleGamePluginZip, buildSampleCooperativePluginZip } from "./fixtures/buildPluginZip";
 import { startIsolatedServer, type IsolatedServer } from "./fixtures/isolatedServer";
+import { expectFits, shot } from "./fixtures/tvFits";
 
 const PASSWORD = "tv-screens-e2e-pw";
 const LONG_NAME = "The Extraordinarily Long Robotics Team Na"; // 40 characters
@@ -18,66 +18,6 @@ const TEAMS: [string, string][] = [
 interface MatchInfo {
   id: number;
   alliances: { id: number; station: string; team_ids: number[] }[];
-}
-interface Box {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-const intersects = (a: Box, b: Box) =>
-  a.x < b.x + b.width - 1 && b.x < a.x + a.width - 1 && a.y < b.y + b.height - 1 && b.y < a.y + a.height - 1;
-
-/** Each element shows all of its content, sits inside the viewport, and keeps
- * any fitted text inside its own box; the band, clock and bottom bar never overlap. */
-async function expectFits(page: Page, testIds: string[]) {
-  const viewport = page.viewportSize()!;
-  const boxes: Record<string, Box> = {};
-  for (const id of testIds) {
-    const element = page.getByTestId(id);
-    await expect(element, id).toBeVisible();
-    const size = await element.evaluate((el) => ({
-      scrollWidth: el.scrollWidth,
-      clientWidth: el.clientWidth,
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-    }));
-    expect(size.scrollWidth, `${id} width`).toBeLessThanOrEqual(size.clientWidth + 1);
-    expect(size.scrollHeight, `${id} height`).toBeLessThanOrEqual(size.clientHeight + 1);
-    const box = await element.boundingBox();
-    expect(box, `${id} box`).not.toBeNull();
-    if (!box) return;
-    expect(box.x, `${id} left`).toBeGreaterThanOrEqual(-1);
-    expect(box.y, `${id} top`).toBeGreaterThanOrEqual(-1);
-    expect(box.x + box.width, `${id} right`).toBeLessThanOrEqual(viewport.width + 1);
-    expect(box.y + box.height, `${id} bottom`).toBeLessThanOrEqual(viewport.height + 1);
-    // Fitted text (team numbers, the clock) is scaled down to stay inside its box, never clipped.
-    for (const inner of await element.locator(".fit-text__inner").all()) {
-      const fitted = await inner.boundingBox();
-      expect(fitted, `${id} text box`).not.toBeNull();
-      if (!fitted) return;
-      expect(fitted.x, `${id} text left`).toBeGreaterThanOrEqual(box.x - 1);
-      expect(fitted.y, `${id} text top`).toBeGreaterThanOrEqual(box.y - 1);
-      expect(fitted.x + fitted.width, `${id} text right`).toBeLessThanOrEqual(box.x + box.width + 1);
-      expect(fitted.y + fitted.height, `${id} text bottom`).toBeLessThanOrEqual(box.y + box.height + 1);
-    }
-    boxes[id] = box;
-  }
-  const apart = ["band-red", "band-blue", "clock", "period", "driver-change", "paused", "bottom-bar"].filter((id) => boxes[id]);
-  for (let i = 0; i < apart.length; i += 1) {
-    for (let j = i + 1; j < apart.length; j += 1) {
-      expect(intersects(boxes[apart[i]], boxes[apart[j]]), `${apart[i]} overlaps ${apart[j]}`).toBe(false);
-    }
-  }
-}
-
-/** With TV_SHOTS_DIR set, saves a screenshot there for a by-eye check against the mockups. */
-async function shot(page: Page, name: string) {
-  const dir = process.env.TV_SHOTS_DIR;
-  if (!dir) return;
-  fs.mkdirSync(dir, { recursive: true });
-  await page.screenshot({ path: path.join(dir, `${name}.png`) });
 }
 
 test.describe.serial("TV screens", () => {
@@ -214,7 +154,7 @@ test.describe.serial("TV screens", () => {
 
   const bandNumbers = (match: MatchInfo) => match.alliances.flatMap((a) => a.team_ids).map((id) => `band-number-${id}`);
 
-  test("before the match, red fills the top half and blue the bottom half at 1920×1080 and 1280×720", async () => {
+  test("before the match, red fills the top half and blue the bottom half at 1920×1080 and 1280×720", async ({}, testInfo) => {
     for (const [name, shotName] of [["Field TV", "field-next-1920x1080"], ["Small Field TV", "field-next-1280x720"]]) {
       const page = screens[name];
       await expect(page.getByTestId("start")).toBeVisible({ timeout: 10_000 });
@@ -235,7 +175,7 @@ test.describe.serial("TV screens", () => {
       expect(Math.abs(red.height - blue.height)).toBeLessThanOrEqual(2);
       expect(Math.abs(red.y + red.height - blue.y)).toBeLessThanOrEqual(2);
       expect(Math.abs(blue.y + blue.height - bar.y)).toBeLessThanOrEqual(2);
-      await shot(page, shotName);
+      await shot(page, testInfo, shotName);
     }
   });
 
@@ -284,7 +224,7 @@ test.describe.serial("TV screens", () => {
     }
   });
 
-  test("the driver-change tag shows from 35 s down to 25 s left in the driver period", async ({ request }) => {
+  test("the driver-change tag shows from 35 s down to 25 s left in the driver period", async ({ request }, testInfo) => {
     const fieldTv = screens["Field TV"];
     const clockTv = screens["Clock TV"];
     // Autonomous runs 15 s on the server's own timer; then the driver period is started.
@@ -309,11 +249,11 @@ test.describe.serial("TV screens", () => {
     await expect(clockTv.getByTestId("period")).toHaveCount(0);
     await expect(clockTv.getByTestId("clock")).toHaveText(/^0:(2[6-9]|3[0-5])$/);
     await expectFits(clockTv, ["band-red", "band-blue", "clock", "driver-change", "bottom-bar"]);
-    await shot(clockTv, "in-match-1920x1080-driver-change");
+    await shot(clockTv, testInfo, "in-match-1920x1080-driver-change");
     // The other TVs, on real time, still show the period name.
     await expect(fieldTv.getByTestId("period")).toHaveText("Driver control");
-    await shot(fieldTv, "in-match-1920x1080");
-    await shot(screens["Big TV"], "in-match-1280x720");
+    await shot(fieldTv, testInfo, "in-match-1920x1080");
+    await shot(screens["Big TV"], testInfo, "in-match-1280x720");
 
     await clockTv.clock.fastForward(6_000);
     await expect(clockTv.getByTestId("period")).toHaveText("Driver control");
@@ -334,7 +274,7 @@ test.describe.serial("TV screens", () => {
     await expect(fieldTv.getByTestId("clock")).toHaveText("0:00");
     await expect(fieldTv.getByTestId("live-red")).toHaveCount(0);
   });
-  test("the match intro lists one row per team by side and keeps a six-character number whole at 1920×1080 and 1280×720", async ({ browser, request }) => {
+  test("the match intro lists one row per team by side and keeps a six-character number whole at 1920×1080 and 1280×720", async ({ browser, request }, testInfo) => {
     // Save Q1 as 48 to 52 so the audience screen's next match is Q2, where the long-named team is on blue.
     const red = matches.Q1.alliances.find((a) => a.station === "red")!;
     const blue = matches.Q1.alliances.find((a) => a.station === "blue")!;
@@ -359,11 +299,11 @@ test.describe.serial("TV screens", () => {
       expect(await page.getByTestId(`intro-number-${longTeam}`).textContent()).toBe("83897A");
       const rows = [teams[4], teams[5], teams[0], teams[2]];
       await expectFits(page, ["intro-red", "intro-blue", "bottom-bar", ...rows.map((id) => `intro-number-${id}`)]);
-      await shot(page, shotName);
+      await shot(page, testInfo, shotName);
     }
   });
 
-  test("the last result shows red and blue scores, tags the winner and has no breakdown at 1920×1080 and 1280×720", async ({ request }) => {
+  test("the last result shows red and blue scores, tags the winner and has no breakdown at 1920×1080 and 1280×720", async ({ request }, testInfo) => {
     await call(request, "patch", `/api/displays/groups/${audienceGroup}`, { screen: "last_scored_match" });
     for (const [name, shotName] of [["Audience TV", "result-1920x1080"], ["Big TV", "result-1280x720"]]) {
       const page = screens[name];
@@ -380,13 +320,13 @@ test.describe.serial("TV screens", () => {
       await expect(page.getByRole("table")).toHaveCount(0);
       const numbers = matches.Q1.alliances.flatMap((a) => a.team_ids).map((id) => `result-number-${id}`);
       await expectFits(page, ["result-red", "result-blue", "score-red", "score-blue", "bottom-bar", ...numbers]);
-      await shot(page, shotName);
+      await shot(page, testInfo, shotName);
     }
   });
 
   const fontSize = (page: Page, selector: string) => page.locator(selector).first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
 
-  test("teamwork rankings are one full-width table, larger at the audience TV than at a pit TV, at 1920×1080", async ({ browser, request }) => {
+  test("teamwork rankings are one full-width table, larger at the audience TV than at a pit TV, at 1920×1080", async ({ browser, request }, testInfo) => {
     await call(request, "patch", `/api/displays/groups/${audienceGroup}`, { screen: "teamwork_rankings" });
     const pit = await call(request, "post", "/api/displays/pit-groups", { session_id: saturday, name: "Pit Rankings" });
     await call(request, "patch", `/api/displays/groups/${pit.id}`, { screen: "teamwork_rankings" });
@@ -411,7 +351,7 @@ test.describe.serial("TV screens", () => {
       await expect(page.getByTestId(`rank-row-${teams[0]}`)).toContainText(/83897A.*0-1-0/);
       const wide = await table.boundingBox();
       expect(wide!.width).toBeGreaterThan(1920 * 0.85);
-      await shot(page, shotName);
+      await shot(page, testInfo, shotName);
     }
     const audienceFont = await fontSize(audienceTv, ".rank-table tbody td");
     const pitFont = await fontSize(pitTv, ".rank-table tbody td");
@@ -420,7 +360,7 @@ test.describe.serial("TV screens", () => {
     await expect(audienceTv.locator(".rank-table__rank.is-top")).toHaveCount(3);
   });
 
-  test("the schedule on a pit TV has red and blue columns, an on-field tag per field and whole team numbers, at 1920×1080", async ({ request }) => {
+  test("the schedule on a pit TV has red and blue columns, an on-field tag per field and whole team numbers, at 1920×1080", async ({ request }, testInfo) => {
     const pitTv = screens["Pit TV"];
     const pit = (await call(request, "get", `/api/displays?session_id=${saturday}`)).groups.find((g: { name: string }) => g.name === "Pit Rankings");
     await call(request, "patch", `/api/displays/groups/${pit.id}`, { screen: "schedule" });
@@ -449,10 +389,10 @@ test.describe.serial("TV screens", () => {
     expect(Math.max(...widths)).toBeLessThanOrEqual(1);
     const wide = await table.boundingBox();
     expect(wide!.width).toBeGreaterThan(1920 * 0.85);
-    await shot(pitTv, "schedule-pit-1920x1080");
+    await shot(pitTv, testInfo, "schedule-pit-1920x1080");
   });
 
-  test("schedule by team on a pit TV lists each team's next matches in number order, at 1920×1080", async ({ request }) => {
+  test("schedule by team on a pit TV lists each team's next matches in number order, at 1920×1080", async ({ request }, testInfo) => {
     const pitTv = screens["Pit TV"];
     const pit = (await call(request, "get", `/api/displays?session_id=${saturday}`)).groups.find((g: { name: string }) => g.name === "Pit Rankings");
     await call(request, "patch", `/api/displays/groups/${pit.id}`, { screen: "team_schedule" });
@@ -478,9 +418,7 @@ test.describe.serial("TV screens", () => {
     expect(Math.max(...numbers)).toBeLessThanOrEqual(1);
     const wide = await table.boundingBox();
     expect(wide!.width).toBeGreaterThan(1920 * 0.85);
-    const dir = path.resolve(process.cwd(), "../../../.superpowers/sdd/2026-11-23-tv-readability/shots");
-    fs.mkdirSync(dir, { recursive: true });
-    await pitTv.screenshot({ path: path.join(dir, "team-schedule-pit-1920x1080.png") });
+    await shot(pitTv, testInfo, "team-schedule-pit-1920x1080");
   });
 
   test("check-in status on a pit TV updates live when a team is checked in, at 1920×1080", async ({ request }, testInfo) => {
@@ -502,7 +440,7 @@ test.describe.serial("TV screens", () => {
     await expect(pitTv.getByTestId("total-out")).toContainText("4 / 6");
     // Number order: 10480B, 19533Z, 31415P, 55210C, 83897A, 94927X.
     await expect(pitTv.locator(".checkin-tile .checkin-tile__number")).toHaveText(["10480B", "19533Z", "31415P", "55210C", "83897A", "94927X"]);
-    await pitTv.screenshot({ path: testInfo.outputPath("checkin-pit-1920x1080.png") });
+    await shot(pitTv, testInfo, "checkin-pit-1920x1080");
   });
 
   test("match results is a scoreboard and upcoming matches has red and blue columns, at 1920×1080", async ({ request }, testInfo) => {
@@ -523,7 +461,7 @@ test.describe.serial("TV screens", () => {
     const widths = await results.locator(".team-numbers").evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
     expect(Math.max(...widths)).toBeLessThanOrEqual(1);
     expect((await results.boundingBox())!.width).toBeGreaterThan(1920 * 0.85);
-    await pitTv.screenshot({ path: testInfo.outputPath("match-results-1920x1080.png") });
+    await shot(pitTv, testInfo, "match-results-1920x1080");
 
     await call(request, "patch", `/api/displays/groups/${pit.id}`, { screen: "upcoming_matches" });
     const upcoming = pitTv.getByRole("table", { name: "Upcoming Matches" });
@@ -534,7 +472,125 @@ test.describe.serial("TV screens", () => {
     await expect(q2.locator(".team-numbers--blue")).toContainText("83897A");
     const sizes = await upcoming.locator(".team-numbers").evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
     expect(Math.max(...sizes)).toBeLessThanOrEqual(1);
-    await pitTv.screenshot({ path: testInfo.outputPath("upcoming-matches-1920x1080.png") });
+    await shot(pitTv, testInfo, "upcoming-matches-1920x1080");
+  });
+
+  const pitGroupId = async (request: APIRequestContext) =>
+    ((await call(request, "get", `/api/displays?session_id=${saturday}`)).groups as { id: number; name: string }[]).find((g) => g.name === "Pit Rankings")!.id;
+
+  test("a tie shows both scores at full strength and no winner tag", async ({ request }, testInfo) => {
+    // Q2: 55210C and 31415P (red) against 83897A and 19533Z (blue), 30 to 30.
+    for (const alliance of matches.Q2.alliances) {
+      await call(request, "post", `/api/matches/${matches.Q2.id}/alliances/${alliance.id}/score`, { data: { high_balls: 10, auto_winner: "tie" } });
+    }
+    await call(request, "patch", `/api/displays/groups/${audienceGroup}`, { screen: "last_scored_match" });
+    const page = screens["Audience TV"];
+    await expect(page.getByTestId("bottom-bar")).toContainText("Result · Qualification 2", { timeout: 15_000 });
+    await expect(page.getByTestId("score-red")).toHaveText("30");
+    await expect(page.getByTestId("score-blue")).toHaveText("30");
+    await expect(page.getByTestId("winner")).toHaveCount(0);
+    await expect(page.getByTestId("result-red")).not.toHaveClass(/is-loser/);
+    await expect(page.getByTestId("result-blue")).not.toHaveClass(/is-loser/);
+    await expectFits(page, ["result-red", "result-blue", "score-red", "score-blue", "bottom-bar"]);
+    await shot(page, testInfo, "result-tie-1920x1080");
+  });
+
+  test("schedule by team marks the match on the field as now and says when a team has no more matches", async ({ request }, testInfo) => {
+    const pitTv = screens["Pit TV"];
+    await call(request, "patch", `/api/displays/groups/${await pitGroupId(request)}`, { screen: "team_schedule" });
+    await expect(pitTv.getByRole("table", { name: "Schedule by Team" })).toBeVisible({ timeout: 15_000 });
+    // 83897A played Q1 and Q2 and has nothing left.
+    await expect(pitTv.getByTestId(`team-row-${teams[0]}`)).toContainText("No more matches", { timeout: 10_000 });
+    await expect(pitTv.getByTestId(`next-${teams[0]}-0`)).toHaveCount(0);
+    // 10480B's next match is Q3 on field 1; once it starts, its time reads "now".
+    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toContainText("Q3 · F1");
+    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).not.toContainText("now");
+    await call(request, "post", `/api/matches/${matches.Q3.id}/start`, {});
+    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toHaveText(/^Q3 · F1 · now$/, { timeout: 10_000 });
+    await expect(pitTv.getByTestId(`next-${teams[3]}-0`)).toContainText("now");
+    // A team that isn't in Q3 keeps its scheduled time: 19533Z plays Q4 next.
+    await expect(pitTv.getByTestId(`next-${teams[2]}-0`)).toContainText("Q4 · F2");
+    await expect(pitTv.getByTestId(`next-${teams[2]}-0`)).not.toContainText("now");
+    await shot(pitTv, testInfo, "team-schedule-now-1920x1080");
+
+    // Finish Q3 so the field is free again.
+    await call(request, "post", `/api/matches/${matches.Q3.id}/end`, {});
+    for (const alliance of matches.Q3.alliances) {
+      await call(request, "post", `/api/matches/${matches.Q3.id}/alliances/${alliance.id}/score`, { data: { high_balls: 5, auto_winner: "tie" } });
+    }
+    // 10480B moves on to Q4, and 94927X, which played only Q1 and Q3, has nothing left.
+    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toContainText("Q4 · F2", { timeout: 10_000 });
+    await expect(pitTv.getByTestId(`team-row-${teams[3]}`)).toContainText("No more matches");
+  });
+
+  test("one team a side with seven-character numbers fits before and during the match at 1920×1080 and 1280×720", async ({ request }, testInfo) => {
+    const longRed = (await call(request, "post", "/api/teams", { number: "123456B", name: "Long Number Red" })).id;
+    const longBlue = (await call(request, "post", "/api/teams", { number: "654321C", name: "Long Number Blue" })).id;
+    const fieldThree = (await call(request, "post", "/api/fields", { session_id: saturday, field_set_id: mainFields, name: "Field 3" })).id;
+    matches.Q5 = await call(request, "post", "/api/matches", {
+      session_id: saturday,
+      round_type: "qualification",
+      match_number: 5,
+      field_id: fieldThree,
+      scheduled_time: new Date(Date.now() + 5 * 60_000).toISOString(),
+      alliances: [
+        { station: "red", team_ids: [longRed] },
+        { station: "blue", team_ids: [longBlue] },
+      ],
+    });
+    const groups = (await call(request, "get", `/api/displays?session_id=${saturday}`)).groups as { id: number; kind: string; field_id: number | null }[];
+    const fieldThreeGroup = groups.find((group) => group.kind === "field" && group.field_id === fieldThree)!.id;
+    await assign(request, "Field TV", fieldThreeGroup);
+    await assign(request, "Small Field TV", fieldThreeGroup);
+    const numbers = [`band-number-${longRed}`, `band-number-${longBlue}`];
+    const fieldTvs: [Page, string][] = [[screens["Field TV"], "1920x1080"], [screens["Small Field TV"], "1280x720"]];
+    // Adding a match or a field through the API sends no live event (a generated schedule is the usual
+    // path), so the field TVs and the audience TV reload to pick up Q5 and Field 3.
+    for (const page of [screens["Field TV"], screens["Small Field TV"], screens["Big TV"]]) await page.reload();
+
+    for (const [page, size] of fieldTvs) {
+      await expect(page.getByTestId("bottom-bar")).toContainText("Qualification 5", { timeout: 15_000 });
+      await expect(page.getByTestId("bottom-bar")).toContainText("Field 3");
+      await expect(page.getByTestId("start")).toBeVisible();
+      expect(await page.getByTestId(`band-number-${longRed}`).textContent()).toBe("123456B");
+      expect(await page.getByTestId(`band-number-${longBlue}`).textContent()).toBe("654321C");
+      await expectFits(page, ["band-red", "band-blue", "bottom-bar", ...numbers]);
+      await shot(page, testInfo, `field-next-one-a-side-${size}`);
+    }
+
+    await call(request, "post", `/api/matches/${matches.Q5.id}/start`, {});
+    // The audience TVs follow the running match too.
+    const inMatch: [Page, string][] = [...fieldTvs, [screens["Big TV"], "audience-1280x720"]];
+    for (const [page, size] of inMatch) {
+      await expect(page.getByTestId("period")).toHaveText("Autonomous", { timeout: 15_000 });
+      await expect(page.getByTestId("bottom-bar")).toContainText("Qualification 5");
+      expect(await page.getByTestId(`band-number-${longRed}`).textContent()).toBe("123456B");
+      expect(await page.getByTestId(`band-number-${longBlue}`).textContent()).toBe("654321C");
+      await expectFits(page, ["band-red", "band-blue", "clock", "period", "bottom-bar", ...numbers]);
+      await shot(page, testInfo, `in-match-one-a-side-${size}`);
+    }
+    await call(request, "post", `/api/matches/${matches.Q5.id}/end`, {});
+    await expect(screens["Field TV"].getByText("Match over")).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("the schedule and rankings on a pit TV at 1280×720 have no horizontal overflow", async ({ browser, request }, testInfo) => {
+    const pit = await pitGroupId(request);
+    await call(request, "patch", `/api/displays/groups/${pit}`, { screen: "schedule" });
+    const page = await pairDisplay(browser, request, "Small Pit TV", { width: 1280, height: 720 });
+    await assign(request, "Small Pit TV", pit);
+    const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+
+    await expect(page.getByRole("table", { name: "Match Schedule" })).toBeVisible({ timeout: 15_000 });
+    // Q5's seven-character numbers are in the table.
+    await expect(page.getByRole("table", { name: "Match Schedule" }).getByRole("row", { name: /Q5/ })).toContainText("123456B");
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    await shot(page, testInfo, "schedule-pit-1280x720");
+
+    await call(request, "patch", `/api/displays/groups/${pit}`, { screen: "teamwork_rankings" });
+    await expect(page.getByRole("table", { name: "Teamwork Rankings" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId(`rank-row-${teams[0]}`)).toContainText("83897A");
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    await shot(page, testInfo, "rankings-pit-1280x720");
   });
 });
 
@@ -599,7 +655,7 @@ test.describe.serial("TV skills rankings", () => {
 
   test.afterAll(() => server?.stop());
 
-  test("skills rankings show total, best and attempts used per type, with no side panels, at 1920×1080", async ({ browser, request }) => {
+  test("skills rankings show total, best and attempts used per type, with no side panels, at 1920×1080", async ({ browser, request }, testInfo) => {
     const groups = (await call(request, "get", `/api/displays?session_id=${session}`)).groups as { id: number; kind: string }[];
     const audience = groups.find((group) => group.kind === "audience")!;
     await call(request, "patch", `/api/displays/groups/${audience.id}`, { screen: "skills_rankings" });
@@ -622,7 +678,7 @@ test.describe.serial("TV skills rankings", () => {
       await expect(page.getByTestId(`rank-row-${teams.S1}`)).toContainText(/S1.*Skills One.*197.*90.*2\/3.*107.*1\/3/);
       // S3 never drove: a dash and 0/3.
       await expect(page.getByTestId(`rank-row-${teams.S3}`)).toContainText(/S3.*20.*20.*1\/3.*–.*0\/3/);
-      await shot(page, shotName);
+      await shot(page, testInfo, shotName);
     }
   });
 });

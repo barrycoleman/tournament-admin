@@ -33,8 +33,10 @@ function Side({
   side: "red" | "blue";
 }) {
   const alliance = bracket.alliances.find((a) => a.id === allianceId);
+  // A slot still waiting for its alliance (TBD) is neutral; only a filled slot takes its side colour.
+  const tone = allianceId === null ? "empty" : side;
   return (
-    <div className={`matchup__side matchup__side--${side}${winnerId !== null && winnerId === allianceId ? " is-winner" : ""}`} data-testid={testId}>
+    <div className={`matchup__side matchup__side--${tone}${winnerId !== null && winnerId === allianceId ? " is-winner" : ""}`} data-testid={testId}>
       <span className="matchup__seed">{alliance?.seed ?? ""}</span>
       <span className="matchup__teams">{alliance ? alliance.team_ids.map((id) => teams.get(id)?.number ?? "").join(" ") : "—"}</span>
       <span className="matchup__wins">{alliance ? wins : ""}</span>
