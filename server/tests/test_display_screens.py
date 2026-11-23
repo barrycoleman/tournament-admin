@@ -13,14 +13,22 @@ from tournament_server.services.display_screens import (
 def test_the_registry_holds_exactly_the_spec_screens():
     assert set(SCREENS) == {
         "match_intro", "in_match", "last_scored_match", "teamwork_rankings", "skills_rankings",
-        "upcoming_matches", "match_results", "schedule", "elimination_bracket", "logo",
+        "upcoming_matches", "match_results", "schedule", "team_schedule", "checkin_status", "elimination_bracket", "logo",
     }
     assert {k for k, s in SCREENS.items() if s.kinds == frozenset({"audience"})} == {
         "match_intro", "in_match", "last_scored_match",
     }
     assert {k for k, s in SCREENS.items() if s.scrolls} == {
-        "teamwork_rankings", "skills_rankings", "match_results", "schedule",
+        "teamwork_rankings", "skills_rankings", "match_results", "schedule", "team_schedule", "checkin_status",
     }
+
+
+def test_the_new_screens_take_no_settings_on_either_group():
+    for key in ("team_schedule", "checkin_status"):
+        assert clean_screen(key, None, "audience") == {}
+        assert clean_screen(key, {}, "pit") == {}
+        with pytest.raises(ScreenSettingsError, match="no settings"):
+            clean_screen(key, {"count": 3}, "pit")
 
 
 def test_screens_without_settings_refuse_any():

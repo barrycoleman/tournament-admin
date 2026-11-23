@@ -10,6 +10,8 @@ export const SCREEN_KEYS = [
   "upcoming_matches",
   "match_results",
   "schedule",
+  "team_schedule",
+  "checkin_status",
   "elimination_bracket",
   "logo",
 ] as const;
@@ -23,6 +25,8 @@ export const SCROLLING_SCREENS: ReadonlySet<ScreenKey> = new Set([
   "skills_rankings",
   "match_results",
   "schedule",
+  "team_schedule",
+  "checkin_status",
 ]);
 
 export const ROTATION_SECONDS = { min: 5, max: 300, default: 20 } as const;

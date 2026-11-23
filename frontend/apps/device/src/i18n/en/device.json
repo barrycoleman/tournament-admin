@@ -80,6 +80,8 @@
       "upcoming_matches": "Upcoming Matches",
       "match_results": "Match Results",
       "schedule": "Match Schedule",
+      "team_schedule": "Schedule by Team",
+      "checkin_status": "Check-in Status",
       "elimination_bracket": "Elimination Brackets",
       "logo": "Logo"
     }

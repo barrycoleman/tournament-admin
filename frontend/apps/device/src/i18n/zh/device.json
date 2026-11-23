@@ -80,6 +80,8 @@
       "upcoming_matches": "即将进行的比赛",
       "match_results": "比赛结果",
       "schedule": "比赛日程",
+      "team_schedule": "按队伍赛程",
+      "checkin_status": "签到状态",
       "elimination_bracket": "淘汰赛对阵",
       "logo": "标志"
     }
