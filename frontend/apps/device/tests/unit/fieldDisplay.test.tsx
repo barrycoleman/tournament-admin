@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { COOPERATIVE, audienceGroup, baseRoutes, fieldGroup, match, me } from "./displayFixtures";
+import { COOPERATIVE, HEAD_TO_HEAD, audienceGroup, baseRoutes, fieldGroup, match, me } from "./displayFixtures";
 import { renderDisplay, serveDisplay } from "./displayHarness";
 
 const NOW = new Date("2026-11-07T16:00:00Z").getTime();
@@ -73,29 +73,83 @@ describe("field display", () => {
     expect(screen.queryByTestId("bar-all")).not.toBeInTheDocument();
   });
 
-  it("counts in with 3-2-1 under the period's name", async () => {
+  it("counts in with 3-2-1 on a full-screen overlay that covers the bands", async () => {
     showField([match({ phase: "countdown_autonomous", phase_deadline: iso(2_500) })]);
-    expect(await screen.findByTestId("count-in")).toHaveTextContent("3");
-    expect(screen.getByText("Autonomous")).toBeInTheDocument();
+    const overlay = await screen.findByTestId("count-in");
+    expect(overlay).toHaveTextContent("3");
+    // The overlay is fixed over the whole screen, so nothing shows above it.
+    expect(overlay).toHaveClass("count-in-overlay");
+    expect(within(overlay).queryByTestId("band-red")).not.toBeInTheDocument();
+    expect(within(overlay).queryByTestId("bottom-bar")).not.toBeInTheDocument();
     await act(() => vi.advanceTimersByTimeAsync(1_000));
     expect(screen.getByTestId("count-in")).toHaveTextContent("2");
   });
 
-  it("shows the period clock, a paused banner and Driver control next", async () => {
+  it("shows the period clock under the team bands, a paused indicator and Driver control next", async () => {
     let matches = [match({ id: 3, phase: "driver", phase_deadline: iso(95_000) })];
     const { emit } = showField([], { extra: { "/api/matches?session_id=1": () => matches } });
     expect(await screen.findByTestId("clock")).toHaveTextContent("1:35");
-    expect(screen.getByText("Driver control")).toBeInTheDocument();
+    expect(screen.queryByTestId(/^chip-/)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("band-red")).toHaveTextContent("101A"));
+    expect(screen.getByTestId("band-red")).toHaveTextContent("102B");
+    expect(screen.getByTestId("band-blue")).toHaveTextContent("103C");
+    expect(screen.getByTestId("band-blue")).toHaveTextContent("104D");
+    expect(screen.getByTestId("band-red")).not.toHaveTextContent("103C");
+    expect(screen.getByTestId("bottom-bar")).toHaveTextContent("Qualification 3");
+    expect(screen.getByTestId("bottom-bar")).toHaveTextContent("Field 1");
+    expect(screen.getByTestId("period")).toHaveTextContent("Driver control");
+    expect(screen.queryByTestId("paused")).not.toBeInTheDocument();
     matches = [match({ id: 3, phase: "driver", paused: true, remaining_seconds_at_pause: 40 })];
     emit("match_paused", { match_id: 3 });
-    expect(await screen.findByText("Paused")).toBeInTheDocument();
+    expect(await screen.findByTestId("paused")).toHaveTextContent("Paused");
+    expect(screen.queryByTestId("period")).not.toBeInTheDocument();
     expect(screen.getByTestId("clock")).toHaveTextContent("0:40");
     matches = [match({ id: 3, phase: "awaiting_driver" })];
     emit("match_phase_changed", { match_id: 3 });
     expect(await screen.findByText("Driver control next")).toBeInTheDocument();
+    expect(screen.getByTestId("band-red")).toBeInTheDocument();
+    expect(screen.getByTestId("bottom-bar")).toBeInTheDocument();
     matches = [match({ id: 3, phase: "ended" })];
     emit("match_phase_changed", { match_id: 3 });
     expect(await screen.findByText("Match over")).toBeInTheDocument();
+    expect(screen.getByTestId("clock")).toHaveTextContent("0:00");
+  });
+
+  it("swaps the period name for a Driver change tag from 35 s down to 25 s left", async () => {
+    showField([match({ phase: "driver", phase_deadline: iso(30_000) })]);
+    expect(await screen.findByTestId("driver-change")).toHaveTextContent("Driver change");
+    expect(screen.queryByTestId("period")).not.toBeInTheDocument();
+  });
+
+  it("shows the period name outside the driver-change window", async () => {
+    showField([match({ phase: "driver", phase_deadline: iso(40_000) })]);
+    expect(await screen.findByTestId("period")).toHaveTextContent("Driver control");
+    expect(screen.queryByTestId("driver-change")).not.toBeInTheDocument();
+  });
+
+  it("shows the Driver change tag for a cooperative game with a 60 s driver period", async () => {
+    showField([match({ phase: "driver", phase_deadline: iso(30_000), alliances: COOP_ALLIANCES })], {
+      extra: { "/api/event/match-format": COOPERATIVE },
+    });
+    expect(await screen.findByTestId("driver-change")).toBeInTheDocument();
+    expect(screen.getByTestId("band-red")).toHaveTextContent("101A");
+    expect(screen.getByTestId("band-blue")).toHaveTextContent("104D");
+  });
+
+  it("never shows the Driver change tag when the driver period is 35 s or shorter", async () => {
+    showField([match({ phase: "driver", phase_deadline: iso(30_000) })], {
+      extra: { "/api/event/match-format": { ...HEAD_TO_HEAD, driver_seconds: 30 } },
+    });
+    expect(await screen.findByTestId("period")).toHaveTextContent("Driver control");
+    expect(screen.queryByTestId("driver-change")).not.toBeInTheDocument();
+  });
+
+  it("shows Paused, not the Driver change tag, when paused inside the window", async () => {
+    showField([match({ phase: "driver", paused: true, remaining_seconds_at_pause: 30 })]);
+    expect(await screen.findByTestId("paused")).toBeInTheDocument();
+    expect(screen.getByTestId("clock")).toHaveTextContent("0:30");
+    expect(screen.queryByTestId("driver-change")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("period")).not.toBeInTheDocument();
   });
 
   it("moves to the field's next match once the score is saved, and says when the field is done", async () => {
@@ -125,7 +179,7 @@ describe("field display", () => {
 });
 
 describe("audience In Match", () => {
-  it("shows the field group's running match with rank chips, and the last ended one after", async () => {
+  it("shows the field group's running match with team bands, and the last ended one after", async () => {
     let matches = [match({ id: 5, label: "Q5", match_number: 5, field_id: 2, phase: "driver", phase_deadline: iso(30_000) })];
     const { emit } = showField([], {
       group: audienceGroup({ screen: "in_match" }),
@@ -134,10 +188,15 @@ describe("audience In Match", () => {
         "/api/rankings?session_id=1": [{ team_id: 1, division_id: null, rank: 3, win_points: 0, strength_of_schedule: 0, average_score: 0, matches_played: 1 }],
       },
     });
-    expect(await screen.findByRole("heading", { name: "Qualification 5" })).toBeInTheDocument();
-    expect(screen.getByTestId("clock")).toHaveTextContent("0:30");
-    await waitFor(() => expect(screen.getByTestId("chip-1")).toHaveTextContent("3"));
-    expect(screen.getByTestId("chip-2")).toHaveTextContent("–");
+    expect(await screen.findByTestId("clock")).toHaveTextContent("0:30");
+    expect(screen.getByTestId("bottom-bar")).toHaveTextContent("Qualification 5");
+    expect(screen.getByTestId("bottom-bar")).toHaveTextContent("Field 2");
+    // Numbers only: no rank, even once the rankings have loaded.
+    await waitFor(() => expect(screen.getByTestId("band-red")).toHaveTextContent(/^101A102B$/));
+    await act(() => vi.advanceTimersByTimeAsync(200));
+    expect(screen.getByTestId("band-red")).toHaveTextContent(/^101A102B$/);
+    expect(screen.getByTestId("band-blue")).toHaveTextContent(/^103C104D$/);
+    expect(screen.queryByTestId(/^chip-/)).not.toBeInTheDocument();
     matches = [{ ...matches[0], phase: "ended", phase_deadline: null }];
     emit("match_phase_changed", { match_id: 5 });
     expect(await screen.findByText("Match over")).toBeInTheDocument();

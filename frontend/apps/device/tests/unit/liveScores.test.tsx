@@ -41,6 +41,11 @@ describe("live totals on In Match", () => {
     expect(await screen.findByTestId("live-red")).toHaveTextContent("12");
     expect(screen.getByTestId("live-red")).toHaveTextContent("Live");
     expect(screen.getByTestId("live-blue")).toHaveTextContent("7");
+    expect(screen.getByTestId("live-blue")).toHaveTextContent("Live");
+    expect(screen.queryByTestId("live-combined")).not.toBeInTheDocument();
+    // The totals sit in the bottom bar, either side of the match name.
+    expect(screen.getByTestId("bottom-bar")).toContainElement(screen.getByTestId("live-red"));
+    expect(screen.getByTestId("bottom-bar")).toContainElement(screen.getByTestId("live-blue"));
   });
 
   it("follows live_score events and drops the totals when they are cleared", async () => {
@@ -84,8 +89,11 @@ describe("live totals on In Match", () => {
   it("shows one total for a cooperative game", async () => {
     live = { matches: [{ match_id: 5, alliances: [{ alliance_id: 51, score: 15 }, { alliance_id: 52, score: 15 }] }], skills: [] };
     show(audienceGroup({ screen: "in_match" }), { "/api/event/match-format": COOPERATIVE });
-    expect(await screen.findByTestId("live-all")).toHaveTextContent("15");
+    expect(await screen.findByTestId("live-combined")).toHaveTextContent("15");
+    expect(screen.getByTestId("live-combined")).toHaveTextContent("Live");
     expect(screen.queryByTestId("live-red")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("live-blue")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("live-all")).not.toBeInTheDocument();
   });
 
   it("shows the totals on the field display too", async () => {

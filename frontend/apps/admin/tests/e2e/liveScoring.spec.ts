@@ -151,9 +151,9 @@ test.describe.serial("live scoring", () => {
   test("the audience sees a live total while the clock runs and loses it when time ends", async ({ request }) => {
     const bigTv = screens["Big TV"];
     await call(request, "post", `/api/matches/${matches.Q1.id}/start`, {});
-    await expect(bigTv.getByRole("heading", { name: "Qualification 1" })).toBeVisible({ timeout: 10_000 });
+    await expect(bigTv.getByTestId("bottom-bar")).toContainText("Qualification 1", { timeout: 10_000 });
     await call(request, "patch", draftPath(matches.Q1), { changes: { score: 7 } }, tablet());
-    const live = bigTv.getByTestId("live-all");
+    const live = bigTv.getByTestId("live-combined");
     await expect(live).toContainText("7", { timeout: 10_000 });
     await expect(live).toContainText("Live");
 
@@ -213,17 +213,17 @@ test.describe.serial("live scoring", () => {
 
     const bigTv = screens["Big TV"];
     await call(request, "post", `/api/matches/${matches.F1.id}/start`, {});
-    await expect(bigTv.getByRole("heading", { name: `Final ${matches.F1.label}` })).toBeVisible({ timeout: 10_000 });
+    await expect(bigTv.getByTestId("bottom-bar")).toContainText(`Final ${matches.F1.label}`, { timeout: 10_000 });
     await call(request, "patch", draftPath(matches.F1), { changes: { score: 9 } }, tablet());
     expect(await call(request, "get", `/api/displays/live-scores?field_set_id=${mainFields}`)).toEqual({ matches: [], skills: [] });
     // Nothing to wait for when nothing should arrive: give a stray live_score a moment to land.
     await bigTv.waitForTimeout(1_500);
-    await expect(bigTv.getByTestId("live-all")).toHaveCount(0);
+    await expect(bigTv.getByTestId("live-combined")).toHaveCount(0);
 
     await call(request, "patch", `/api/sessions/${saturday}`, { live_scores_finals: true });
-    await expect(bigTv.getByTestId("live-all")).toContainText("9", { timeout: 10_000 });
+    await expect(bigTv.getByTestId("live-combined")).toContainText("9", { timeout: 10_000 });
     await call(request, "patch", `/api/sessions/${saturday}`, { live_scores_finals: false });
-    await expect(bigTv.getByTestId("live-all")).toHaveCount(0, { timeout: 10_000 });
+    await expect(bigTv.getByTestId("live-combined")).toHaveCount(0, { timeout: 10_000 });
     await call(request, "post", `/api/matches/${matches.F1.id}/end`, {});
   });
 

@@ -38,4 +38,11 @@ describe("MatchFrame", () => {
     render(<BottomBar title="Q7" />);
     expect(screen.getByTestId("bottom-bar")).toHaveTextContent(/^Q7$/);
   });
+  it("splits into start, centred title and end when given a start slot", () => {
+    render(<BottomBar title="Qualification 7" field="Field 1" start={<b>left</b>} end={null} />);
+    const bar = screen.getByTestId("bottom-bar");
+    expect(bar).toHaveClass("bottom-bar--split");
+    expect(bar.firstElementChild).toHaveTextContent("left");
+    expect(bar.querySelector(".bottom-bar__end")).toBeInTheDocument();
+  });
 });

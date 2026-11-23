@@ -58,6 +58,7 @@
     "matchOver": "Match over",
     "driverNext": "Driver control next",
     "paused": "Paused",
+    "driverChange": "Driver change",
     "timeout": "Time-out",
     "fieldDone": "No more matches on this field",
     "noMatchYet": "No match has started yet",

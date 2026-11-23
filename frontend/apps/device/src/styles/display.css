@@ -12,6 +12,8 @@
   --kiosk-muted: #a59d8c;
   --kiosk-red: #c8322b;
   --kiosk-blue: #1f63c6;
+  --kiosk-red-text: #ff8e86;
+  --kiosk-blue-text: #8db8ff;
   --kiosk-early: #2f9e5a;
   --kiosk-soon: #e3b21a;
   --kiosk-late: #d23c2c;
@@ -84,20 +86,35 @@
 .team-bar--all { background: var(--kiosk-blue); flex-wrap: wrap; }
 .team-bar__number { font-size: 9vw; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
 
-.in-match__chips { position: absolute; top: 1vw; left: 1vw; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.3vw; }
-.chip { display: flex; align-items: center; gap: 0.6vw; padding: 0.2vw 1vw 0.2vw 0.3vw; font-size: 1.8vw; font-weight: 800; }
-.chip--red { background: var(--kiosk-red); }
-.chip--blue { background: var(--kiosk-blue); }
-.chip__rank { min-width: 2.2vw; padding: 0 0.3vw; background: var(--kiosk-band); color: var(--kiosk-ink-on-band); text-align: center; font-size: 1.3vw; }
-.in-match .screen__header { text-align: center; }
-.in-match__centre { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+/* In match: teams by side across the top, the clock filling the middle, one
+   line under it, and the live totals either side of the match name below. */
+.in-match__bands { flex: none; display: grid; grid-template-columns: 1fr 1fr; height: 9.5vw; }
+.in-match__bands .team-band { height: auto; border-radius: 0; }
+.in-match__bands .team-band__cell { font-size: 7vw; font-weight: 900; padding: 0.8vw 1.6vw; }
+.in-match__bands .team-band--blue { grid-column: 2; }
+.in-match__centre { flex: 1; min-height: 0; min-width: 0; padding: 0.6vw 3vw 0; font-size: 28vw; font-weight: 900; line-height: 0.9; }
+.in-match__message { font-size: 8vw; line-height: 1.1; letter-spacing: 0; }
+.in-match__under { flex: none; height: 6.5vw; display: flex; align-items: center; justify-content: center; }
+.in-match__period { margin: 0; font-size: 2.6vw; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--kiosk-muted); }
+.in-match__paused-tag { margin: 0; padding: 0.5vw 2.4vw; border-radius: 1vw; background: var(--kiosk-band); color: var(--kiosk-ink-on-band); font-size: 3.4vw; font-weight: 900; text-transform: uppercase; }
+.driver-change { display: inline-flex; align-items: center; gap: 1vw; padding: 0.5vw 2.4vw; border-radius: 1vw; background: var(--kiosk-soon); color: var(--kiosk-ink-on-band); font-size: 3.4vw; font-weight: 900; text-transform: uppercase; }
+.driver-change__icon { width: 1.1em; height: 1.1em; }
+.in-match .bottom-bar { min-height: 7.5vw; padding: 0.4vw 3vw; }
+.in-match .bottom-bar__id { font-size: 2.4vw; }
+.bottom-bar--split { display: grid; grid-template-columns: 1fr auto 1fr; }
+.bottom-bar--split .bottom-bar__id { text-align: center; }
+.bottom-bar--split .bottom-bar__end { justify-self: end; }
+.in-match-score { display: flex; align-items: center; gap: 1vw; margin: 0; font-size: 5.5vw; font-weight: 900; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.in-match-score--red { color: var(--kiosk-red-text); }
+.in-match-score--blue { color: var(--kiosk-blue-text); }
+.in-match-score--combined { color: var(--kiosk-ink); }
+.in-match-score__tag { padding: 0.1em 0.4em; border-radius: 0.2em; background: var(--kiosk-band); color: var(--kiosk-ink-on-band); font-size: 0.32em; font-weight: 800; text-transform: uppercase; }
+.count-in-overlay { position: fixed; inset: 0; z-index: 20; padding: 3vh 3vw; background: var(--kiosk-bg); font-size: 100vh; font-weight: 900; line-height: 1; }
+
+/* Shared by the skills TVs. */
 .clock { margin: 0; font-size: 22vw; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
-.clock--count-in { font-size: 28vw; }
-.clock--message { font-size: 6vw; }
 .in-match__over { margin: 0; font-size: 4vw; font-weight: 800; color: var(--kiosk-muted); }
 .in-match__paused { position: absolute; top: 40%; left: 0; right: 0; margin: 0; padding: 1vw; background: var(--kiosk-soon); color: var(--kiosk-ink-on-band); font-size: 5vw; font-weight: 900; text-align: center; }
-.in-match__banner { align-self: center; display: flex; align-items: center; gap: 1vw; margin: 0; padding: 0.6vw 4vw; background: var(--kiosk-blue); font-size: 3vw; font-weight: 800; text-transform: uppercase; }
-.period-icon { width: 3vw; height: 3vw; }
 .timeout .clock { margin: auto; }
 
 .bands { margin-top: auto; display: flex; gap: 1.5vw; }
@@ -161,11 +178,8 @@
   padding: 0.5vw 1vw; border: 0; border-radius: 0.5vw; background: var(--kiosk-surface); color: var(--kiosk-ink); font: inherit; font-size: 1.2vw;
 }
 
-/* Live totals: one coloured block per alliance under the clock, tagged as not yet official. */
-.in-match__live { display: flex; justify-content: center; gap: 4vw; margin-top: 2vw; }
+/* A skills field's live total, tagged as not yet official. */
 .live-total { display: flex; align-items: baseline; gap: 1vw; margin: 0; padding: 0.6vw 2.5vw; border-radius: 1vw; font-variant-numeric: tabular-nums; }
-.live-total--red { background: var(--kiosk-red); }
-.live-total--blue,
 .live-total--all { background: var(--kiosk-blue); }
 .live-total__score { font-size: 7vw; font-weight: 900; line-height: 1; }
 .live-total__tag { padding: 0.2vw 0.8vw; border-radius: 0.5vw; background: var(--kiosk-band); color: var(--kiosk-ink-on-band); font-size: 1.4vw; font-weight: 800; text-transform: uppercase; }

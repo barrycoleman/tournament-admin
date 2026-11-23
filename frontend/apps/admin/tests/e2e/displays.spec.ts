@@ -118,7 +118,7 @@ test.describe.serial("display groups", () => {
     await admin.getByRole("button", { name: "Start", exact: true }).click();
     await expect(screens["Big TV"].getByTestId("count-in").or(screens["Big TV"].getByTestId("clock"))).toBeVisible({ timeout: 10_000 });
     await expect(screens["Field TV"].getByTestId("count-in").or(screens["Field TV"].getByTestId("clock"))).toBeVisible();
-    await expect(screens["Big TV"].getByText("Driver control")).toBeVisible({ timeout: 10_000 });
+    await expect(screens["Big TV"].getByTestId("period")).toHaveText("Driver control", { timeout: 10_000 });
 
     const timer = admin.getByRole("region", { name: "Timer" });
     await timer.getByRole("button", { name: "End early" }).click();
@@ -148,7 +148,7 @@ test.describe.serial("display groups", () => {
     await next.getByLabel("Queue match").selectOption({ label: "Q4 · Field 2" });
     await expect(next.getByText("Q4 · Field 2")).toBeVisible();
     await admin.getByRole("button", { name: "Start", exact: true }).click();
-    await expect(screens["Big TV"].getByRole("heading", { name: "Qualification 4" })).toBeVisible({ timeout: 10_000 });
+    await expect(screens["Big TV"].getByTestId("bottom-bar")).toContainText("Qualification 4", { timeout: 10_000 });
     await call(request, "post", `/api/matches/${matches.Q4.id}/end`, {});
   });
 
