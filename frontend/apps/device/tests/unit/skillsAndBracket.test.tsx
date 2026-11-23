@@ -127,6 +127,9 @@ describe("Elimination Brackets", () => {
     const first = screen.getByTestId("matchup-1");
     expect(within(first).getByTestId("side-1")).toHaveClass("is-winner");
     expect(within(first).getByTestId("side-1")).toHaveTextContent("101A");
+    // Alliance A plays red and B plays blue.
+    expect(within(first).getByTestId("side-1")).toHaveClass("matchup__side--red");
+    expect(within(first).getByTestId("side-4")).toHaveClass("matchup__side--blue");
   });
 
   it("shows score-chase finals rankings with the runs panel", async () => {

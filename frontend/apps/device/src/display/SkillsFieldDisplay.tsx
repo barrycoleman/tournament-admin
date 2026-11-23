@@ -116,7 +116,7 @@ export function SkillsFieldDisplay({
             </p>
           )}
           {phase === "running" && typeof entry?.score === "number" && (
-            <p className="live-total live-total--all" data-testid="skills-live">
+            <p className="live-total live-total--skills" data-testid="skills-live">
               <span className="live-total__score">{entry.score}</span>
               <span className="live-total__tag">{t("display.live")}</span>
             </p>

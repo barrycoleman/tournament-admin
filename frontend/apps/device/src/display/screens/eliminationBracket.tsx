@@ -22,6 +22,7 @@ function Side({
   wins,
   winnerId,
   testId,
+  side,
 }: {
   bracket: FinalsBracket;
   allianceId: number | null;
@@ -29,10 +30,11 @@ function Side({
   wins: number;
   winnerId: number | null;
   testId: string;
+  side: "red" | "blue";
 }) {
   const alliance = bracket.alliances.find((a) => a.id === allianceId);
   return (
-    <div className={`matchup__side${winnerId !== null && winnerId === allianceId ? " is-winner" : ""}`} data-testid={testId}>
+    <div className={`matchup__side matchup__side--${side}${winnerId !== null && winnerId === allianceId ? " is-winner" : ""}`} data-testid={testId}>
       <span className="matchup__seed">{alliance?.seed ?? ""}</span>
       <span className="matchup__teams">{alliance ? alliance.team_ids.map((id) => teams.get(id)?.number ?? "").join(" ") : "—"}</span>
       <span className="matchup__wins">{alliance ? wins : ""}</span>
@@ -68,8 +70,8 @@ function EliminationBracketScreen({ context }: ScreenProps) {
                 const tally = wins.get(matchup.id) ?? { a: 0, b: 0 };
                 return (
                   <div key={matchup.id} className="matchup" data-testid={`matchup-${matchup.id}`}>
-                    <Side bracket={bracket} allianceId={matchup.alliance_a_id} teams={teams} wins={tally.a} winnerId={matchup.winner_alliance_id} testId={`side-${matchup.alliance_a_id}`} />
-                    <Side bracket={bracket} allianceId={matchup.alliance_b_id} teams={teams} wins={tally.b} winnerId={matchup.winner_alliance_id} testId={`side-${matchup.alliance_b_id}`} />
+                    <Side bracket={bracket} allianceId={matchup.alliance_a_id} teams={teams} wins={tally.a} winnerId={matchup.winner_alliance_id} testId={`side-${matchup.alliance_a_id}`} side="red" />
+                    <Side bracket={bracket} allianceId={matchup.alliance_b_id} teams={teams} wins={tally.b} winnerId={matchup.winner_alliance_id} testId={`side-${matchup.alliance_b_id}`} side="blue" />
                   </div>
                 );
               })}
