@@ -4,7 +4,7 @@ import { useFields, useMatchFormat, useMatches, useTeamsById } from "./api";
 import { InMatchView } from "./components/InMatchView";
 import { ScreenFrame, ScreenNotice, WaitingForData } from "./components/ScreenFrame";
 import { StartCountdown } from "./components/StartCountdown";
-import { allianceGroups } from "./logic/alliances";
+import { sideGroups } from "./logic/sides";
 import { matchTitle } from "./matchTitle";
 import { useServerNow } from "./serverClock";
 
@@ -26,8 +26,8 @@ export function FieldDisplay({ sessionId, fieldId }: { sessionId: number; fieldI
   return (
     <ScreenFrame title={matchTitle(t, match)} subtitle={fieldName} className="field-next">
       <div className="field-next__bars">
-        {allianceGroups(match, format.data.game_model).map((group) => (
-          <div key={group.station} className={`team-bar team-bar--${group.station}`} data-testid={`bar-${group.station}`}>
+        {sideGroups(match).map((group) => (
+          <div key={group.side} className={`team-bar team-bar--${group.side}`} data-testid={`bar-${group.side}`}>
             {group.teamIds.map((id) => (
               <span key={id} className="team-bar__number">
                 {teams.get(id)?.number ?? ""}

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { LiveMatch } from "@tournament-admin/shared";
 import type { GameModel, ScoresheetFieldInfo } from "../api";
-import { allianceGroups } from "../logic/alliances";
+import { scoreGroups } from "../logic/sides";
 
 export function formatSheetValue(value: unknown): string {
   if (value === true) return "✓";
@@ -22,8 +22,8 @@ export function ScoreBreakdown({
   sheets: Map<number, Record<string, unknown>>;
 }) {
   const { t } = useTranslation();
-  const columns = allianceGroups(match, gameModel).map((group) => ({
-    station: group.station,
+  const columns = scoreGroups(match, gameModel).map((group) => ({
+    station: group.side === "combined" ? "all" : group.side,
     sheet: group.allianceIds.map((id) => sheets.get(id)).find((s) => s !== undefined) ?? {},
   }));
   return (

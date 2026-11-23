@@ -3,7 +3,7 @@ import { UPCOMING_COUNT, formatTime, onFields, upcomingMatches } from "@tourname
 import { useDivisionFilter, useFields, useMatchFormat, useMatches, useSessionTimeZone, useTeamsById } from "../api";
 import { TeamNumbers } from "../components/MatchCells";
 import { ScreenFrame, ScreenNotice, WaitingForData } from "../components/ScreenFrame";
-import { allianceGroups } from "../logic/alliances";
+import { sideGroups } from "../logic/sides";
 import type { ScreenModule, ScreenProps } from "../screenTypes";
 import { fieldIdsOf } from "./inMatch";
 
@@ -38,8 +38,8 @@ function UpcomingMatchesScreen({ context }: ScreenProps) {
             <tr key={match.id}>
               <th scope="row">{match.label}</th>
               <td>
-                {allianceGroups(match, format.data!.game_model).map((group) => (
-                  <TeamNumbers key={group.station} teamIds={group.teamIds} teams={teams} station={group.station} />
+                {sideGroups(match).map((group) => (
+                  <TeamNumbers key={group.side} teamIds={group.teamIds} teams={teams} station={group.side} />
                 ))}
               </td>
               <td>{fieldName(match.field_id)}</td>

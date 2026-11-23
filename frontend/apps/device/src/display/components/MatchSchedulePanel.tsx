@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { formatTime, scoredMatches, upcomingMatches, type LiveMatch } from "@tournament-admin/shared";
 import { useFields, useMatchFormat, useMatches, useScores, useSessionTimeZone, useTeamsById } from "../api";
-import { allianceGroups } from "../logic/alliances";
+import { sideGroups } from "../logic/sides";
 import { TeamNumbers, scoreText } from "./MatchCells";
 
 const RECENT = 5;
@@ -24,9 +24,9 @@ export function MatchSchedulePanel({ sessionId, keep }: { sessionId: number; kee
   const row = (match: LiveMatch, done: boolean) => (
     <tr key={match.id} className={done ? "is-done" : undefined}>
       <th scope="row">{match.label}</th>
-      {allianceGroups(match, gameModel).map((group) => (
-        <td key={group.station}>
-          <TeamNumbers teamIds={group.teamIds} teams={teams} station={group.station} />
+      {sideGroups(match).map((group) => (
+        <td key={group.side}>
+          <TeamNumbers teamIds={group.teamIds} teams={teams} station={group.side} />
         </td>
       ))}
       <td className="side-panel__end">

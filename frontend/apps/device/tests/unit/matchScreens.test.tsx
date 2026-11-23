@@ -56,17 +56,28 @@ describe("Match Intro", () => {
     expect(await screen.findByRole("heading", { name: "Qualification 12" })).toBeInTheDocument();
   });
 
-  it("uses one Alliance band for a cooperative game", async () => {
+  it("shows a red and a blue band, one team each, for a cooperative game", async () => {
     serveDisplay({
       ...baseRoutes(),
       "/api/event/match-format": COOPERATIVE,
       "/api/displays/me": me(audienceGroup({ screen: "match_intro" })),
-      "/api/matches?session_id=1": [match({ scheduled_time: iso(60_000) })],
+      "/api/matches?session_id=1": [
+        match({
+          scheduled_time: iso(60_000),
+          alliances: [
+            { id: 1001, station: "red", team_ids: [1] },
+            { id: 1002, station: "blue", team_ids: [4] },
+          ],
+        }),
+      ],
     });
     renderDisplay();
-    const band = await screen.findByRole("region", { name: "Alliance" });
-    expect(within(band).getByText("101A")).toBeInTheDocument();
-    expect(within(band).getByText("104D")).toBeInTheDocument();
+    const red = await screen.findByRole("region", { name: "Red alliance" });
+    const blue = screen.getByRole("region", { name: "Blue alliance" });
+    expect(within(red).getByText("101A")).toBeInTheDocument();
+    expect(within(red).queryByText("104D")).not.toBeInTheDocument();
+    expect(within(blue).getByText("104D")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Alliance" })).not.toBeInTheDocument();
   });
 
   it("says when no match is left", async () => {

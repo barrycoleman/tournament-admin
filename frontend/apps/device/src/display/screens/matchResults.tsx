@@ -4,7 +4,7 @@ import { useDivisionFilter, useMatchFormat, useMatches, useScores, useTeamsById 
 import { TeamNumbers } from "../components/MatchCells";
 import { ScreenFrame, ScreenNotice, WaitingForData } from "../components/ScreenFrame";
 import { ScrollingList } from "../components/ScrollingList";
-import { allianceGroups, groupScore } from "../logic/alliances";
+import { groupScore, scoreGroups, sideGroups } from "../logic/sides";
 import type { ScreenModule, ScreenProps } from "../screenTypes";
 
 function MatchResultsScreen({ context, onDone, fitSeconds }: ScreenProps) {
@@ -35,14 +35,14 @@ function MatchResultsScreen({ context, onDone, fitSeconds }: ScreenProps) {
               <tr key={match.id}>
                 <th scope="row">{match.label}</th>
                 <td>
-                  {allianceGroups(match, format.data!.game_model).map((group) => (
-                    <TeamNumbers key={group.station} teamIds={group.teamIds} teams={teams} station={group.station} />
+                  {sideGroups(match).map((group) => (
+                    <TeamNumbers key={group.side} teamIds={group.teamIds} teams={teams} station={group.side} />
                   ))}
                 </td>
                 <td className="kiosk-table__scores">
-                  {allianceGroups(match, format.data!.game_model).map((group) => {
+                  {scoreGroups(match, format.data!.game_model).map((group) => {
                     return (
-                      <span key={group.station} className={`score score--${group.station}`}>
+                      <span key={group.side} className={`score score--${group.side === "combined" ? "all" : group.side}`}>
                         {groupScore(group, byAlliance) ?? "–"}
                       </span>
                     );

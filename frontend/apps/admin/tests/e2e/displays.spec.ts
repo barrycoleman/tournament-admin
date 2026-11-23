@@ -107,7 +107,7 @@ test.describe.serial("display groups", () => {
       .selectOption({ label: "Main Fields (audience)" });
 
     await expect(fieldTv.getByRole("heading", { name: "Qualification 1" })).toBeVisible({ timeout: 10_000 });
-    await expect(fieldTv.getByTestId("bar-all")).toContainText("11A");
+    await expect(fieldTv.getByTestId("bar-red")).toContainText("11A");
     await expect(fieldTv.getByTestId("start")).toHaveAttribute("data-band", "early");
     await expect(screens["Big TV"].getByRole("heading", { name: "Display League" })).toBeVisible({ timeout: 10_000 });
   });
@@ -136,7 +136,8 @@ test.describe.serial("display groups", () => {
     const audience = admin.getByRole("region", { name: "Audience screen" });
     await audience.getByRole("button", { name: "Last Scored Match" }).click();
     await expect(screens["Big TV"].getByRole("heading", { name: "Qualification 1" })).toBeVisible({ timeout: 10_000 });
-    await expect(screens["Big TV"].getByTestId("score-all")).toHaveText("42");
+    await expect(screens["Big TV"].getByTestId("score-red")).toHaveText("42");
+    await expect(screens["Big TV"].getByTestId("score-blue")).toHaveText("42");
   });
 
   test("an override changes what Start begins", async ({ browser, request }) => {

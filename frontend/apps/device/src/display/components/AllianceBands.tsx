@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { LiveMatch } from "@tournament-admin/shared";
 import type { GameModel, Team } from "../api";
-import { allianceGroups, groupScore, teamPlace } from "../logic/alliances";
+import { groupScore, scoreGroups, sideGroups, teamPlace } from "../logic/sides";
 
 export function AllianceBands({
   match,
@@ -17,14 +17,19 @@ export function AllianceBands({
   scores?: Map<number, number>;
 }) {
   const { t } = useTranslation();
+  const groups = scoreGroups(match, gameModel);
+  const sideScore = (side: string) => {
+    const group = groups.find((g) => g.side === side) ?? groups.find((g) => g.side === "combined");
+    return scores && group ? groupScore(group, scores) : null;
+  };
   return (
     <div className="bands">
-      {allianceGroups(match, gameModel).map((group) => (
-        <section key={group.station} className={`band band--${group.station}`} aria-label={t(`display.alliance.${group.station}`)}>
-          <h2 className="band__label">{t(`display.alliance.${group.station}`)}</h2>
+      {sideGroups(match, ranks).map((group) => (
+        <section key={group.side} className={`band band--${group.side}`} aria-label={t(`display.alliance.${group.side}`)}>
+          <h2 className="band__label">{t(`display.alliance.${group.side}`)}</h2>
           {scores && (
-            <p className="band__score" data-testid={`score-${group.station}`}>
-              {groupScore(group, scores) ?? "–"}
+            <p className="band__score" data-testid={`score-${group.side}`}>
+              {sideScore(group.side) ?? "–"}
             </p>
           )}
           <ul className="band__teams">

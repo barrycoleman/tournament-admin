@@ -26,6 +26,11 @@ function showField(
   return renderDisplay();
 }
 
+const COOP_ALLIANCES = [
+  { id: 1001, station: "red", team_ids: [1] },
+  { id: 1002, station: "blue", team_ids: [4] },
+];
+
 describe("field display", () => {
   it("shows the field's next match with its team numbers in alliance bars", async () => {
     showField([match({ id: 7, label: "Q7", match_number: 7, scheduled_time: iso(83_000) })]);
@@ -58,11 +63,12 @@ describe("field display", () => {
   });
 
   it("shows Up next for a match with no scheduled time, and one bar for a cooperative game", async () => {
-    showField([match({ scheduled_time: null })], { extra: { "/api/event/match-format": COOPERATIVE } });
+    showField([match({ scheduled_time: null, alliances: COOP_ALLIANCES })], { extra: { "/api/event/match-format": COOPERATIVE } });
     expect(await screen.findByTestId("start")).toHaveTextContent("Up next");
-    expect(screen.getByTestId("bar-all")).toHaveTextContent("101A");
-    expect(screen.getByTestId("bar-all")).toHaveTextContent("104D");
-    expect(screen.queryByTestId("bar-red")).not.toBeInTheDocument();
+    expect(screen.getByTestId("bar-red")).toHaveTextContent("101A");
+    expect(screen.getByTestId("bar-blue")).toHaveTextContent("104D");
+    expect(screen.getByTestId("bar-red")).not.toHaveTextContent("104D");
+    expect(screen.queryByTestId("bar-all")).not.toBeInTheDocument();
   });
 
   it("counts in with 3-2-1 under the period's name", async () => {

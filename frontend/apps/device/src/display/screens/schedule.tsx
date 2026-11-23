@@ -4,7 +4,7 @@ import { useDivisionFilter, useFields, useMatchFormat, useMatches, useSessionTim
 import { TeamNumbers } from "../components/MatchCells";
 import { ScreenFrame, ScreenNotice, WaitingForData } from "../components/ScreenFrame";
 import { ScrollingList } from "../components/ScrollingList";
-import { allianceGroups } from "../logic/alliances";
+import { sideGroups } from "../logic/sides";
 import type { ScreenModule, ScreenProps } from "../screenTypes";
 
 function ScheduleScreen({ context, onDone, fitSeconds }: ScreenProps) {
@@ -37,8 +37,8 @@ function ScheduleScreen({ context, onDone, fitSeconds }: ScreenProps) {
               <tr key={match.id} className={match.status === "completed" ? "is-done" : undefined}>
                 <th scope="row">{match.label}</th>
                 <td>
-                  {allianceGroups(match, format.data!.game_model).map((group) => (
-                    <TeamNumbers key={group.station} teamIds={group.teamIds} teams={teams} station={group.station} />
+                  {sideGroups(match).map((group) => (
+                    <TeamNumbers key={group.side} teamIds={group.teamIds} teams={teams} station={group.side} />
                   ))}
                 </td>
                 <td>{fieldName(match.field_id)}</td>

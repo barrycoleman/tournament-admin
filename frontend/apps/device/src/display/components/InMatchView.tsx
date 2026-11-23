@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { COUNT_IN_PHASES, formatClock, remainingSeconds, type LiveMatch } from "@tournament-admin/shared";
 import { useFields, useMatchFormat, useRanks, useTeamsById } from "../api";
-import { allianceGroups, groupScore } from "../logic/alliances";
+import { groupScore, scoreGroups, sideGroups } from "../logic/sides";
 import { matchTitle } from "../matchTitle";
 import { useLiveScores } from "../useLiveScores";
 import { PeriodIcon } from "./PeriodIcon";
@@ -60,9 +60,9 @@ export function InMatchView({ match, sessionId, now }: { match: LiveMatch; sessi
   return (
     <ScreenFrame title={matchTitle(t, match)} className="in-match">
       <ul className="in-match__chips">
-        {match.alliances.flatMap((alliance) =>
-          alliance.team_ids.map((teamId) => (
-            <li key={`${alliance.id}-${teamId}`} className={`chip chip--${alliance.station}`} data-testid={`chip-${teamId}`}>
+        {sideGroups(match, ranks).flatMap((group) =>
+          group.teamIds.map((teamId) => (
+            <li key={`${group.side}-${teamId}`} className={`chip chip--${group.side}`} data-testid={`chip-${teamId}`}>
               <span className="chip__rank">{ranks?.get(teamId) ?? "–"}</span>
               <span className="chip__number">{teams?.get(teamId)?.number ?? ""}</span>
             </li>
@@ -73,12 +73,15 @@ export function InMatchView({ match, sessionId, now }: { match: LiveMatch; sessi
         {centre}
         {liveScores && format.data && (
           <div className="in-match__live">
-            {allianceGroups(match, format.data.game_model).map((group) => (
-              <p key={group.station} className={`live-total live-total--${group.station}`} data-testid={`live-${group.station}`}>
+            {scoreGroups(match, format.data.game_model).map((group) => {
+              const cls = group.side === "combined" ? "all" : group.side;
+              return (
+              <p key={group.side} className={`live-total live-total--${cls}`} data-testid={`live-${cls}`}>
                 <span className="live-total__score">{groupScore(group, liveScores) ?? 0}</span>
                 <span className="live-total__tag">{t("display.live")}</span>
               </p>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
