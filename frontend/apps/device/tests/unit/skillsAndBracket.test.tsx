@@ -58,6 +58,8 @@ describe("Skills Rankings", () => {
     expect(screen.queryByText("Top 10")).not.toBeInTheDocument();
     expect(screen.queryByText("Recent scores")).not.toBeInTheDocument();
     expect(table.closest(".table-screen")).toHaveClass("table-screen--pit");
+    expect(screen.getByRole("heading", { name: "Skills rankings" })).toBeInTheDocument();
+    expect(screen.getByText("Best of each type · attempts used")).toBeInTheDocument();
   });
 
   it("says so when skills challenges are off", async () => {

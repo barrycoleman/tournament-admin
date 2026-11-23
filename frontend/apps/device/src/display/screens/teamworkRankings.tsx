@@ -21,11 +21,11 @@ function TeamworkRankingsScreen({ context, onDone, fitSeconds }: ScreenProps) {
   const cooperative = format.data.game_model === "cooperative_score";
   const kept = matches.data.filter(keep);
   const records = teamRecords(kept, scores.data);
-  const qualification = kept.filter((m) => m.round_type === "qualification");
+  const qualification = kept.filter((m) => m.round_type === "qualification" && m.status !== "not_played");
   const played = qualification.filter(isFinished).length;
   const progress = t("display.context.rankingsProgress", { played, total: qualification.length });
   return (
-    <ScreenFrame title={t("display.rankingsTitle")} context={progress} className={tableScreenClass(context)}>
+    <ScreenFrame title={t("display.rankingsTitle.teamwork")} context={progress} className={tableScreenClass(context)}>
       <ScrollingList onDone={onDone} fitSeconds={fitSeconds}>
         <table className="kiosk-table rank-table" aria-label={title}>
           <thead>

@@ -32,9 +32,10 @@
     },
     "enableSound": "Click to enable sound",
     "skillsOff": "Skills challenges aren't running",
-    "rankingsTitle": "Rankings",
+    "rankingsTitle": { "teamwork": "Teamwork rankings", "skills": "Skills rankings" },
     "context": {
       "rankingsProgress": "After {{played}} of {{total}} qualification matches",
+      "skillsRankings": "Best of each type · attempts used",
       "practice": "Practice · {{played}} of {{total}} played",
       "qualification": "Qualification · {{played}} of {{total}} played",
       "elimination": "Eliminations",

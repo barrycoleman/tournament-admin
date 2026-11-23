@@ -341,7 +341,7 @@ test.describe.serial("TV screens", () => {
       const table = page.getByRole("table", { name: "Teamwork Rankings" });
       await expect(table).toBeVisible({ timeout: 15_000 });
       await expect(page.locator(`.table-screen--${size}`)).toHaveCount(1);
-      await expect(page.getByRole("heading", { name: "Rankings", exact: true })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Teamwork rankings", exact: true })).toBeVisible();
       await expect(page.getByText("After 1 of 4 qualification matches")).toBeVisible();
       await expect(page.getByRole("complementary")).toHaveCount(0);
       await expect(page.getByText("Match schedule & results")).toHaveCount(0);
@@ -676,6 +676,8 @@ test.describe.serial("TV skills rankings", () => {
       await expect(page.getByRole("complementary")).toHaveCount(0);
       await expect(page.getByText("Top 10")).toHaveCount(0);
       await expect(page.getByText("Recent scores")).toHaveCount(0);
+      await expect(page.getByRole("heading", { name: "Skills rankings", exact: true })).toBeVisible();
+      await expect(page.getByText("Best of each type · attempts used")).toBeVisible();
       await expect(table.getByRole("row").nth(0)).toContainText(/Rank.*Team.*Name.*Total.*Autonomous.*Driver/);
       // S1: best autonomous 90 over 2 of 3 attempts, driver 107 over 1 of 3.
       await expect(page.getByTestId(`rank-row-${teams.S1}`)).toContainText(/S1.*Skills One.*197.*90.*2\/3.*107.*1\/3/);

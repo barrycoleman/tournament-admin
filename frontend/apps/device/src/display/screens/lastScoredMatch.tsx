@@ -4,7 +4,7 @@ import { useFields, useMatchFormat, useMatches, useRanks, useScores, useTeamsByI
 import { FitText } from "../components/FitText";
 import { BottomBar, MatchFrame } from "../components/MatchFrame";
 import { ScreenNotice, WaitingForData } from "../components/ScreenFrame";
-import { groupScore, resultOutcome, scoreGroups, sideGroups } from "../logic/sides";
+import { groupScore, resultOutcome, scoreGroups, sideGroups, type Side } from "../logic/sides";
 import { matchTitle } from "../matchTitle";
 import type { ScreenModule, ScreenProps } from "../screenTypes";
 import { fieldIdsOf } from "./inMatch";
@@ -31,7 +31,7 @@ function LastScoredMatchScreen({ context }: ScreenProps) {
   const combined = groups.find((group) => group.side === "combined");
   const outcome = resultOutcome(groups, byAlliance);
   const fieldName = fields.data.find((f) => f.id === match.field_id)?.name;
-  const scoreOf = (side: string) => {
+  const scoreOf = (side: Side) => {
     const group = groups.find((g) => g.side === side);
     return group ? groupScore(group, byAlliance) : null;
   };

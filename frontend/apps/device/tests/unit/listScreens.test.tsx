@@ -60,7 +60,24 @@ describe("Teamwork Rankings", () => {
     expect(screen.queryByText("Match schedule & results")).not.toBeInTheDocument();
     expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
     expect(screen.getByText("After 1 of 2 qualification matches")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Teamwork rankings" })).toBeInTheDocument();
     expect(table.closest(".table-screen")).toHaveClass("table-screen--pit");
+  });
+
+  it("leaves a not-played qualification match out of the progress count", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/displays/me": me(pitGroup({ screen: "teamwork_rankings" })),
+      "/api/rankings?session_id=1": [ranking(3, 1)],
+      "/api/matches?session_id=1": [
+        match({ id: 1, label: "Q1", status: "completed", phase: "ended" }),
+        match({ id: 2, label: "Q2", status: "not_played" }),
+        match({ id: 3, label: "Q3" }),
+      ],
+      "/api/scores?session_id=1": [scoreRow(1, 11, 3), scoreRow(1, 12, 9)],
+    });
+    renderDisplay();
+    expect(await screen.findByText("After 1 of 2 qualification matches")).toBeInTheDocument();
   });
 
   it("uses the audience size when shown at a field set", async () => {
@@ -331,6 +348,26 @@ describe("match lists", () => {
     expect(rows[2]).toContainElement(tags[0]);
     expect(rows[4]).not.toHaveClass("is-on-field");
     expect(tags[0]).toHaveTextContent("On field");
+  });
+
+  it("Schedule does not tag a division's match as on field while another division's match runs on the shared field", async () => {
+    const shared = [
+      match({ id: 1, label: "Q1", division_id: 5, phase: "running", scheduled_time: iso(-60_000) }),
+      match({ id: 2, label: "Q2", division_id: 4, scheduled_time: iso(300_000) }),
+    ];
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/divisions": [...DIVISIONS, { id: 5, name: "Division 2" }],
+      "/api/displays/me": me(pitGroup({ screen: "schedule", division_id: 4 })),
+      "/api/rankings?session_id=1&division_id=4": [],
+      "/api/matches?session_id=1": shared,
+    });
+    renderDisplay();
+    const table = await screen.findByRole("table", { name: "Match Schedule" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows.map((r) => r.textContent?.slice(0, 2))).toEqual(["Q2"]);
+    expect(rows[0]).not.toHaveClass("is-on-field");
+    expect(within(table).queryByTestId("on-field")).not.toBeInTheDocument();
   });
 
   it("Schedule starts two played matches before the first unplayed one and shows a dash for a finals match with no time", async () => {

@@ -32,9 +32,10 @@
     },
     "enableSound": "点击以启用声音",
     "skillsOff": "未开展技能挑战赛",
-    "rankingsTitle": "排名",
+    "rankingsTitle": { "teamwork": "团队赛排名", "skills": "技能赛排名" },
     "context": {
       "rankingsProgress": "已进行 {{played}} / {{total}} 场资格赛",
+      "skillsRankings": "每类取最高分 · 已用次数",
       "practice": "练习赛 · 已进行 {{played}} / {{total}} 场",
       "qualification": "资格赛 · 已进行 {{played}} / {{total}} 场",
       "elimination": "淘汰赛",

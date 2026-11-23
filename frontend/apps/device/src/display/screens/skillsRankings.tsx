@@ -40,7 +40,7 @@ function SkillsRankingsScreen({ context, onDone, fitSeconds }: ScreenProps) {
     attempts.data!.filter((a) => a.team_id === teamId && a.skills_type === typeKey).length;
   const allowed = (typeKey: string) => settings.data!.attempts[typeKey] ?? 0;
   return (
-    <ScreenFrame title={t("display.rankingsTitle")} className={tableScreenClass(context)}>
+    <ScreenFrame title={t("display.rankingsTitle.skills")} context={t("display.context.skillsRankings")} className={tableScreenClass(context)}>
       <ScrollingList onDone={onDone} fitSeconds={fitSeconds}>
         <table className="kiosk-table rank-table" aria-label={title}>
           <thead>

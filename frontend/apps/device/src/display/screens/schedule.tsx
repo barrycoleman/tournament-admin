@@ -24,7 +24,8 @@ function ScheduleScreen({ context, onDone, fitSeconds }: ScreenProps) {
   if (rows.length === 0) return <ScreenNotice title={title} text={t("display.noMoreMatches")} onDone={onDone} fitSeconds={fitSeconds} />;
   const progress = roundProgress(kept);
   const heading = progress ? t(`display.context.${progress.round}`, { played: progress.played, total: progress.total }) : undefined;
-  const onField = onFieldMatchIds(kept, fields.data.map((f) => f.id));
+  // Every division's matches: ON FIELD is what is really on a field another division may share.
+  const onField = onFieldMatchIds(matches.data, fields.data.map((f) => f.id));
   const fieldName = (id: number | null) => fields.data?.find((f) => f.id === id)?.name ?? "";
   const numbers = (ids: number[]) => ids.map((id) => <span key={id}>{teams.get(id)?.number ?? ""}</span>);
   return (
