@@ -451,6 +451,37 @@ test.describe.serial("TV screens", () => {
     expect(wide!.width).toBeGreaterThan(1920 * 0.85);
     await shot(pitTv, "schedule-pit-1920x1080");
   });
+
+  test("schedule by team on a pit TV lists each team's next matches in number order, at 1920×1080", async ({ request }) => {
+    const pitTv = screens["Pit TV"];
+    const pit = (await call(request, "get", `/api/displays?session_id=${saturday}`)).groups.find((g: { name: string }) => g.name === "Pit Rankings");
+    await call(request, "patch", `/api/displays/groups/${pit.id}`, { screen: "team_schedule" });
+    const table = pitTv.getByRole("table", { name: "Schedule by Team" });
+    await expect(table).toBeVisible({ timeout: 15_000 });
+    await expect(pitTv.locator(".table-screen--pit")).toHaveCount(1);
+    await expect(pitTv.getByText("Next matches · teams in number order")).toBeVisible();
+    await expect(table.getByRole("row").nth(0)).toContainText(/Team.*Name.*Next.*Then.*Then/);
+    // Number order, not alphabetical: 10480B, 19533Z, 31415P, 55210C, 83897A, 94927X.
+    await expect(table.getByRole("rowheader")).toHaveText(["10480B", "19533Z", "31415P", "55210C", "83897A", "94927X"]);
+    // 10480B: red in Q3 (field 1), blue in Q4 (field 2); Q1 is played.
+    const dateless = /^Q\d · F\d · \d{1,2}:\d{2}\s?[AP]M( UTC)?$/;
+    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toHaveText(dateless);
+    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toContainText("Q3 · F1");
+    await expect(pitTv.getByTestId(`next-${teams[1]}-0`).locator(".side-dot--red")).toHaveCount(1);
+    await expect(pitTv.getByTestId(`next-${teams[1]}-1`)).toContainText("Q4 · F2");
+    await expect(pitTv.getByTestId(`next-${teams[1]}-1`).locator(".side-dot--blue")).toHaveCount(1);
+    await expect(pitTv.getByTestId(`next-${teams[1]}-2`)).toHaveText("–");
+    // 83897A has only Q2 left, on blue.
+    await expect(pitTv.getByTestId(`next-${teams[0]}-0`).locator(".side-dot--blue")).toHaveCount(1);
+    await expect(pitTv.getByTestId(`next-${teams[0]}-1`)).toHaveText("–");
+    const numbers = await table.locator(".rank-table__number").evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
+    expect(Math.max(...numbers)).toBeLessThanOrEqual(1);
+    const wide = await table.boundingBox();
+    expect(wide!.width).toBeGreaterThan(1920 * 0.85);
+    const dir = path.resolve(process.cwd(), "../../../.superpowers/sdd/2026-11-23-tv-readability/shots");
+    fs.mkdirSync(dir, { recursive: true });
+    await pitTv.screenshot({ path: path.join(dir, "team-schedule-pit-1920x1080.png") });
+  });
 });
 
 test.describe.serial("TV skills rankings", () => {

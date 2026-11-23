@@ -1,7 +1,8 @@
 import { screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { teamRecords } from "../../src/display/logic/records";
-import { COOPERATIVE, audienceGroup, baseRoutes, match, me, pitGroup } from "./displayFixtures";
+import { screenModule } from "../../src/display/screens/registry";
+import { COOPERATIVE, DIVISIONS, audienceGroup, baseRoutes, match, me, pitGroup } from "./displayFixtures";
 import { renderDisplay, serveDisplay } from "./displayHarness";
 
 const NOW = new Date("2026-11-07T16:00:00Z").getTime();
@@ -268,5 +269,82 @@ describe("match lists", () => {
     const row = within(await screen.findByRole("table", { name: "Match Schedule" })).getAllByRole("row")[1];
     await vi.waitFor(() => expect(within(row).getAllByRole("cell")[2]).toHaveTextContent("103C"));
     expect(within(row).getAllByRole("cell")[3]).toHaveTextContent("101A");
+  });
+});
+
+describe("Schedule by Team", () => {
+  const team = (id: number, number: string, division_id = 4) => ({ id, number, name: `T${id}`, division_id, city: null, state: null, country: null });
+  const teams = [team(1, "83897A"), team(2, "10A"), team(3, "9A"), team(4, "7Z"), team(5, "5X", 5)];
+  const pair = (id: number, red: number[], blue: number[]) => [
+    { id: id * 10 + 1, station: "red", team_ids: red },
+    { id: id * 10 + 2, station: "blue", team_ids: blue },
+  ];
+  const matches = [
+    match({ id: 1, label: "Q13", field_id: 1, scheduled_time: iso(300_000), alliances: pair(1, [2], [3]) }),
+    match({ id: 2, label: "Q20", field_id: 2, scheduled_time: iso(600_000), alliances: pair(2, [3], [2]) }),
+    match({ id: 3, label: "Q27", field_id: 1, scheduled_time: iso(900_000), alliances: pair(3, [2], [3]) }),
+    match({ id: 4, label: "F1", field_id: 1, round_type: "finals", is_finals: true, scheduled_time: null, alliances: pair(4, [1], [3]) }),
+    match({ id: 5, label: "Q1", status: "completed", phase: "ended", scheduled_time: iso(-300_000), alliances: pair(5, [4], [1]) }),
+  ];
+  const serve = (list = matches, group = pitGroup({ screen: "team_schedule", division_id: 4 })) =>
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/divisions": [...DIVISIONS, { id: 5, name: "Division 2" }],
+      "/api/teams": teams,
+      "/api/displays/me": me(group),
+      "/api/matches?session_id=1": list,
+    });
+
+  it("lists the division's teams in number order", async () => {
+    serve();
+    renderDisplay();
+    const table = await screen.findByRole("table", { name: "Schedule by Team" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows.map((r) => r.getAttribute("data-testid"))).toEqual(["team-row-4", "team-row-3", "team-row-2", "team-row-1"]);
+    expect(rows.map((r) => within(r).getAllByRole("rowheader")[0].textContent)).toEqual(["7Z", "9A", "10A", "83897A"]);
+    expect(screen.getByText("Next matches · teams in number order")).toBeInTheDocument();
+    expect(screen.queryByTestId("team-row-5")).not.toBeInTheDocument();
+  });
+
+  it("shows three cells with label, field, time and a dot for the team's side", async () => {
+    serve();
+    renderDisplay();
+    const first = await screen.findByTestId("next-2-0");
+    expect(first).toHaveTextContent("Q13 · F1 · 4:05 PM");
+    expect(first.querySelector(".side-dot--red")).not.toBeNull();
+    expect(screen.getByTestId("next-2-1").querySelector(".side-dot--blue")).not.toBeNull();
+    expect(screen.getByTestId("next-2-1")).toHaveTextContent("Q20 · F2 · 4:10 PM");
+    expect(screen.getByTestId("next-2-2")).toHaveTextContent("Q27");
+  });
+
+  it("shows now for a running match, leaves off a missing time, and dashes empty cells", async () => {
+    const running = matches.map((m) => (m.id === 1 ? { ...m, phase: "driver", status: "in_progress" } : m));
+    serve(running as typeof matches);
+    renderDisplay();
+    expect(await screen.findByTestId("next-2-0")).toHaveTextContent("Q13 · F1 · now");
+    expect(screen.getByTestId("next-1-0")).toHaveTextContent(/^F1 · F1$/);
+    expect(screen.getByTestId("next-1-1")).toHaveTextContent("–");
+    expect(screen.getByTestId("next-1-2")).toHaveTextContent("–");
+  });
+
+  it("shows a muted No more matches for a team with none left", async () => {
+    serve();
+    renderDisplay();
+    await screen.findByTestId("team-row-4");
+    const row = screen.getByTestId("team-row-4");
+    expect(row).toHaveTextContent("No more matches");
+    expect(screen.queryByTestId("next-4-0")).not.toBeInTheDocument();
+    expect(within(row).getByText("No more matches")).toHaveAttribute("colspan", "3");
+  });
+
+  it("shows every team when the group has no division", async () => {
+    serve(matches, pitGroup({ screen: "team_schedule" }));
+    renderDisplay();
+    await screen.findByTestId("team-row-5");
+  });
+
+  it("is registered under team_schedule", () => {
+    expect(screenModule("team_schedule").key).toBe("team_schedule");
+    expect(screenModule("team_schedule").scrolls).toBe(true);
   });
 });

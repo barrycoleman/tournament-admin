@@ -8,6 +8,7 @@ import { matchIntroScreen } from "./matchIntro";
 import { matchResultsScreen } from "./matchResults";
 import { scheduleScreen } from "./schedule";
 import { skillsRankingsScreen } from "./skillsRankings";
+import { teamScheduleScreen } from "./teamSchedule";
 import { teamworkRankingsScreen } from "./teamworkRankings";
 import { upcomingMatchesScreen } from "./upcomingMatches";
 
@@ -22,6 +23,7 @@ const MODULES: Partial<Record<ScreenKey, ScreenModule>> = {
   upcoming_matches: upcomingMatchesScreen,
   match_results: matchResultsScreen,
   schedule: scheduleScreen,
+  team_schedule: teamScheduleScreen,
   elimination_bracket: eliminationBracketScreen,
   logo: logoScreen,
 };

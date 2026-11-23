@@ -250,3 +250,16 @@
 .schedule-table tbody tr.is-on-field { background: rgba(227, 178, 26, 0.14); }
 .schedule-table tr.is-done { opacity: 0.45; }
 .on-field-tag { margin-left: 1vw; padding: 0.1vw 0.7vw; border-radius: 0.4vw; background: var(--kiosk-soon); color: var(--kiosk-ink-on-band); font-size: 0.5em; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; vertical-align: middle; }
+
+/* Schedule by team: number, name, then three fixed match cells. */
+.team-schedule-table thead th:nth-child(1) { width: 14vw; text-align: left; }
+.team-schedule-table thead th:nth-child(2) { width: 17vw; text-align: left; }
+.team-schedule-table thead th:nth-child(n+3) { width: auto; text-align: left; }
+.team-schedule-table tbody th { padding: var(--rank-pad) 1.5vw var(--rank-pad) 0.8vw; text-align: left; border-top: 0.15vw solid var(--kiosk-rule); }
+.team-schedule-table td { text-align: left; }
+.team-schedule-table__cell { font-weight: 600; font-size: 0.88em; }
+.team-schedule-table__cell .nowrap { white-space: nowrap; }
+.team-schedule-table__empty, .team-schedule-table__none { color: var(--kiosk-muted); }
+.side-dot { display: inline-block; width: 0.8em; height: 0.8em; border-radius: 50%; margin-right: 0.5em; vertical-align: middle; }
+.side-dot--red { background: var(--kiosk-red); }
+.side-dot--blue { background: var(--kiosk-blue); }

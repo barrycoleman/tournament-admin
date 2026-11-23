@@ -37,8 +37,11 @@
       "rankingsProgress": "After {{played}} of {{total}} qualification matches",
       "practice": "Practice · {{played}} of {{total}} played",
       "qualification": "Qualification · {{played}} of {{total}} played",
-      "elimination": "Eliminations"
+      "elimination": "Eliminations",
+      "teamSchedule": "Next matches · teams in number order"
     },
+    "now": "now",
+    "noMoreForTeam": "No more matches",
     "onField": "On field",
     "noEliminations": "No eliminations yet",
     "finalsRankings": "Finals rankings",
@@ -54,6 +57,7 @@
     "col": {
       "rank": "Rank", "name": "Name", "team": "Team", "winPoints": "WP", "sos": "SoS", "record": "W-L-T",
       "matches": "Matches", "average": "Average", "match": "Match", "teams": "Teams",
+      "next": "Next", "then": "Then",
       "field": "Field", "time": "Time", "red": "Red", "blue": "Blue", "score": "Score", "total": "Total"
     },
     "waiting": "Waiting for data",

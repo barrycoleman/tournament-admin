@@ -37,8 +37,11 @@
       "rankingsProgress": "已进行 {{played}} / {{total}} 场资格赛",
       "practice": "练习赛 · 已进行 {{played}} / {{total}} 场",
       "qualification": "资格赛 · 已进行 {{played}} / {{total}} 场",
-      "elimination": "淘汰赛"
+      "elimination": "淘汰赛",
+      "teamSchedule": "接下来的比赛 · 按队号排序"
     },
+    "now": "现在",
+    "noMoreForTeam": "没有更多比赛",
     "onField": "场上",
     "noEliminations": "淘汰赛尚未开始",
     "finalsRankings": "决赛排名",
@@ -54,6 +57,7 @@
     "col": {
       "rank": "排名", "name": "队名", "team": "队伍", "winPoints": "胜点", "sos": "对手强度", "record": "胜-负-平",
       "matches": "场数", "average": "平均分", "match": "比赛", "teams": "队伍",
+      "next": "下一场", "then": "之后",
       "field": "场地", "time": "时间", "red": "红方", "blue": "蓝方", "score": "得分", "total": "总分"
     },
     "waiting": "正在等待数据",
