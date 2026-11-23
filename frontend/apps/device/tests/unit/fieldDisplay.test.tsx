@@ -39,7 +39,8 @@ describe("field display", () => {
     expect(within(screen.getByTestId("bar-red")).getByText("101A")).toBeInTheDocument();
     expect(within(screen.getByTestId("bar-blue")).getByText("104D")).toBeInTheDocument();
     const start = screen.getByTestId("start");
-    expect(start).toHaveTextContent("1:23 to go");
+    expect(start.querySelector(".start__label")).toHaveTextContent("Starts in");
+    expect(start.querySelector(".start__time")).toHaveTextContent("1:23");
     expect(start).toHaveAttribute("data-band", "early");
   });
 
@@ -51,7 +52,8 @@ describe("field display", () => {
     expect(screen.getByTestId("start")).toHaveAttribute("data-band", "soon");
     await act(() => vi.advanceTimersByTimeAsync(30_000));
     expect(screen.getByTestId("start")).toHaveAttribute("data-band", "late");
-    expect(screen.getByTestId("start")).toHaveTextContent("0:00 late");
+    expect(screen.getByTestId("start").querySelector(".start__label")).toHaveTextContent("Late by");
+    expect(screen.getByTestId("start").querySelector(".start__time")).toHaveTextContent("0:00");
   });
 
   it("uses the server's clock, not the TV's", async () => {

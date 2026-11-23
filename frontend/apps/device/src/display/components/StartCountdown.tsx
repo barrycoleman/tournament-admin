@@ -15,7 +15,8 @@ export function StartCountdown({ scheduledTime, now }: { scheduledTime: string |
   const band = startBand(ms);
   return (
     <p className={`start start--${band}`} data-testid="start" data-band={band}>
-      {band === "late" ? t("display.late", { time: formatOffset(ms) }) : t("display.startsIn", { time: formatOffset(ms) })}
+      <span className="start__label">{band === "late" ? t("display.lateLabel") : t("display.startsInLabel")}</span>
+      <span className="start__time">{formatOffset(ms)}</span>
     </p>
   );
 }

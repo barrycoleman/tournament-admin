@@ -2,15 +2,17 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useEventInfo } from "../api";
 
-/** The kiosk frame every screen shares: the event name small, the screen's title large. */
+/** The compact frame table screens share: one heading row with the title left, a muted context on the right, and the event name small beside it. */
 export function ScreenFrame({
   title,
   subtitle,
+  context,
   className,
   children,
 }: {
   title: string;
   subtitle?: string;
+  context?: string;
   className?: string;
   children?: ReactNode;
 }) {
@@ -18,9 +20,13 @@ export function ScreenFrame({
   return (
     <section className={`screen ${className ?? ""}`}>
       <header className="screen__header">
-        <p className="screen__event">{event.data?.name ?? ""}</p>
         <h1 className="screen__title">{title}</h1>
-        {subtitle && <p className="screen__subtitle">{subtitle}</p>}
+        <p className="screen__event">{event.data?.name ?? ""}</p>
+        {context ? (
+          <p className="screen__context">{context}</p>
+        ) : (
+          subtitle && <p className="screen__subtitle">{subtitle}</p>
+        )}
       </header>
       <div className="screen__body">{children}</div>
     </section>

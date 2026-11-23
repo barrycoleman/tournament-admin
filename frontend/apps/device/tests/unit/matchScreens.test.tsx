@@ -34,7 +34,7 @@ describe("Match Intro", () => {
     renderDisplay();
     expect(await screen.findByRole("heading", { name: "Qualification 9" })).toBeInTheDocument();
     expect(screen.getByText("Field 2")).toBeInTheDocument();
-    expect(screen.getByTestId("start")).toHaveTextContent("2:00 to go");
+    expect(screen.getByTestId("start")).toHaveTextContent("Starts in2:00");
     const blue = screen.getByRole("region", { name: "Blue alliance" });
     expect(within(blue).getByText("103C")).toBeInTheDocument();
     expect(within(blue).getByText("Bolts")).toBeInTheDocument();
