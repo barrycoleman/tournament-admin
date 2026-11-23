@@ -263,3 +263,22 @@
 .side-dot { display: inline-block; width: 0.8em; height: 0.8em; border-radius: 50%; margin-right: 0.5em; vertical-align: middle; }
 .side-dot--red { background: var(--kiosk-red); }
 .side-dot--blue { background: var(--kiosk-blue); }
+
+/* Check-in status: dark tiles; state reads from the icon shape and the dashed outline, never from red or blue. */
+.checkin { --checkin-font: 1.8vw; }
+.checkin--audience { --checkin-font: 2.4vw; }
+.checkin-icon { flex: none; width: 1.3em; height: 1.3em; }
+.checkin-totals { flex: none; display: flex; gap: 1.5vw; margin-bottom: 1.2vw; }
+.checkin-total { display: flex; align-items: center; gap: 1.2vw; padding: 0.8vw 1.6vw; background: var(--kiosk-surface); border-radius: 0.6vw; font-variant-numeric: tabular-nums; }
+.checkin-total .checkin-icon { width: 3.2vw; height: 3.2vw; }
+.checkin-total__count { font-size: 3.6vw; font-weight: 900; line-height: 1; }
+.checkin-total__count small { font-size: 1.8vw; font-weight: 600; color: var(--kiosk-muted); }
+.checkin-total__label { margin-top: 0.3vw; font-size: 1.1vw; letter-spacing: 0.08em; text-transform: uppercase; color: var(--kiosk-muted); }
+.checkin-total--out { color: var(--kiosk-muted); }
+.checkin-total--in .checkin-icon { color: var(--kiosk-ink); }
+.checkin-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8vw; font-size: var(--checkin-font); font-variant-numeric: tabular-nums; }
+.checkin-grid--four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.checkin-tile { display: flex; align-items: center; gap: 0.7vw; min-width: 0; padding: 0.6vw 1vw; border: 0.15vw solid var(--kiosk-surface); border-radius: 0.5vw; background: var(--kiosk-surface); color: var(--kiosk-ink); }
+.checkin-tile__number { flex: none; font-weight: 800; }
+.checkin-tile__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--kiosk-muted); }
+.checkin-tile[data-state="out"] { background: transparent; border: 0.15vw dashed var(--kiosk-rule); color: var(--kiosk-muted); opacity: 0.75; }

@@ -53,6 +53,8 @@
     "notSetUp": "Not set up for this session",
     "noSession": "No session is running",
     "noRankings": "No rankings yet",
+    "noTeams": "No teams in this division",
+    "checkin": { "title": "Check-in", "none": "No teams are taking part in this session yet", "checkedIn": "Checked in", "notCheckedIn": "Not checked in" },
     "schedulePanel": "Match schedule & results",
     "col": {
       "rank": "Rank", "name": "Name", "team": "Team", "winPoints": "WP", "sos": "SoS", "record": "W-L-T",

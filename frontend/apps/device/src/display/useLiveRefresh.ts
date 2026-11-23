@@ -19,6 +19,7 @@ const REFRESH: Record<string, readonly string[]> = {
   ranking_updated: ["rankings"],
   skills_changed: ["skillsRankings", "skillsAttempts"],
   skills_settings_changed: ["skillsSettings", "skillsRankings"],
+  participation_changed: ["participants"],
   finals_changed: ["finals", "matches"],
 };
 

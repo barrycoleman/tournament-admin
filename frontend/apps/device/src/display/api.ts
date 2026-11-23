@@ -71,6 +71,12 @@ export interface Ranking {
   average_score: number;
   matches_played: number;
 }
+export interface Participant {
+  id: number;
+  session_id: number;
+  team_id: number;
+  checked_in: boolean;
+}
 export interface SkillsSettings {
   enabled: boolean;
   attempts: Record<string, number>;
@@ -142,6 +148,7 @@ export const paths = {
     `/api/skills/rankings?tab=${encodeURIComponent(tab)}&session_id=${sessionId}`,
   skillsSet: (fieldSetId: number) => `/api/field-sets/${fieldSetId}/skills`,
   liveScores: (fieldSetId: number) => `/api/displays/live-scores?field_set_id=${fieldSetId}`,
+  participants: (sessionId: number) => `/api/sessions/${sessionId}/participants`,
   skillsAttempts: (sessionId: number) => `/api/sessions/${sessionId}/skills/attempts`,
   finals: (sessionId: number, divisionId: number | null) =>
     divisionId === null
@@ -179,6 +186,8 @@ export const useSkillsSet = (fieldSetId: number) =>
   useJson<SkillsSet>(["skillsSet", fieldSetId], paths.skillsSet(fieldSetId));
 export const useSkillsAttempts = (sessionId: number) =>
   useJson<SkillsAttempt[]>(["skillsAttempts", sessionId], paths.skillsAttempts(sessionId));
+export const useParticipants = (sessionId: number) =>
+  useJson<Participant[]>(["participants", sessionId], paths.participants(sessionId));
 export const useFinals = (sessionId: number, divisionId: number | null) =>
   useJson<FinalsBracket[]>(["finals", sessionId, divisionId], paths.finals(sessionId, divisionId));
 

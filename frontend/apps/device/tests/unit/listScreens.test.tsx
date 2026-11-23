@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { teamRecords } from "../../src/display/logic/records";
 import { screenModule } from "../../src/display/screens/registry";
@@ -346,5 +346,88 @@ describe("Schedule by Team", () => {
   it("is registered under team_schedule", () => {
     expect(screenModule("team_schedule").key).toBe("team_schedule");
     expect(screenModule("team_schedule").scrolls).toBe(true);
+  });
+});
+
+describe("Check-in Status", () => {
+  const team = (id: number, number: string, division_id = 4) => ({ id, number, name: `T${id}`, division_id, city: null, state: null, country: null });
+  const teams = [team(1, "83897A"), team(2, "10A"), team(3, "9A"), team(4, "7Z", 5)];
+  const part = (id: number, team_id: number, checked_in: boolean) => ({ id, session_id: 1, team_id, checked_in });
+  const serve = (participants: unknown, group = pitGroup({ screen: "checkin_status", division_id: 4 })) =>
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/divisions": [...DIVISIONS, { id: 5, name: "Division 2" }],
+      "/api/teams": teams,
+      "/api/displays/me": me(group),
+      "/api/sessions/1/participants": () => participants,
+    });
+
+  it("shows the totals and a tile per team in number order with its state", async () => {
+    serve([part(1, 1, true), part(2, 2, false), part(3, 3, true), part(4, 4, true)]);
+    renderDisplay();
+    expect(await screen.findByTestId("total-in")).toHaveTextContent("2 / 3");
+    expect(screen.getByTestId("total-out")).toHaveTextContent("1 / 3");
+    expect(screen.getByRole("heading", { name: "Check-in" })).toBeInTheDocument();
+    expect(screen.getByText("Saturday")).toBeInTheDocument();
+    const tiles = screen.getAllByTestId(/^checkin-\d+$/);
+    expect(tiles.map((t) => t.getAttribute("data-testid"))).toEqual(["checkin-3", "checkin-2", "checkin-1"]);
+    expect(tiles.map((t) => t.getAttribute("data-state"))).toEqual(["in", "out", "in"]);
+    expect(tiles[0]).toHaveTextContent("9AT3");
+  });
+
+  it("updates a tile when participation_changed arrives", async () => {
+    let served = [part(1, 1, true), part(2, 2, false), part(3, 3, true)];
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/teams": teams,
+      "/api/displays/me": me(pitGroup({ screen: "checkin_status", division_id: 4 })),
+      "/api/sessions/1/participants": () => served,
+    });
+    const { emit } = renderDisplay();
+    expect(await screen.findByTestId("total-in")).toHaveTextContent("2 / 3");
+    expect(screen.getByTestId("checkin-2")).toHaveAttribute("data-state", "out");
+    served = [part(1, 1, true), part(2, 2, true), part(3, 3, true)];
+    emit("participation_changed", { session_id: 1 });
+    await waitFor(() => expect(screen.getByTestId("checkin-2")).toHaveAttribute("data-state", "in"));
+    expect(screen.getByTestId("total-in")).toHaveTextContent("3 / 3");
+    expect(screen.getByTestId("total-out")).toHaveTextContent("0 / 3");
+  });
+
+  it("shows a notice when no teams are taking part", async () => {
+    serve([]);
+    renderDisplay();
+    expect(await screen.findByText("No teams are taking part in this session yet")).toBeInTheDocument();
+  });
+
+  it("is registered under checkin_status and scrolls", () => {
+    expect(screenModule("checkin_status").key).toBe("checkin_status");
+    expect(screenModule("checkin_status").scrolls).toBe(true);
+  });
+});
+
+describe("Schedule by Team without teams", () => {
+  it("says there are no teams in the division", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/displays/me": me(pitGroup({ screen: "team_schedule", division_id: 9 })),
+      "/api/divisions": [...DIVISIONS, { id: 9, name: "Empty" }],
+    });
+    renderDisplay();
+    expect(await screen.findByText("No teams in this division")).toBeInTheDocument();
+  });
+});
+
+describe("Schedule by Team solo alliance", () => {
+  it("shows the better-ranked team's dot red and the other blue", async () => {
+    const solo = match({ id: 7, label: "F1", field_id: 1, scheduled_time: iso(300_000), alliances: [{ id: 71, station: "alliance", team_ids: [1, 2] }] as never });
+    serveDisplay({
+      ...baseRoutes(),
+      "/api/displays/me": me(pitGroup({ screen: "team_schedule", division_id: 4 })),
+      "/api/matches?session_id=1": [solo],
+      "/api/rankings?session_id=1&division_id=4": [ranking(2, 1), ranking(1, 2)],
+    });
+    renderDisplay();
+    await waitFor(() => expect(screen.getByTestId("next-2-0").querySelector(".side-dot--red")).not.toBeNull());
+    expect(screen.getByTestId("next-1-0").querySelector(".side-dot--blue")).not.toBeNull();
   });
 });

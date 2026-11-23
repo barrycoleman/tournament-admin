@@ -464,8 +464,8 @@ test.describe.serial("TV screens", () => {
     // Number order, not alphabetical: 10480B, 19533Z, 31415P, 55210C, 83897A, 94927X.
     await expect(table.getByRole("rowheader")).toHaveText(["10480B", "19533Z", "31415P", "55210C", "83897A", "94927X"]);
     // 10480B: red in Q3 (field 1), blue in Q4 (field 2); Q1 is played.
-    const dateless = /^Q\d · F\d · \d{1,2}:\d{2}\s?[AP]M( UTC)?$/;
-    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toHaveText(dateless);
+    const labelFieldTime = /^Q\d · F\d · \d{1,2}:\d{2}\s?[AP]M( UTC)?$/;
+    await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toHaveText(labelFieldTime);
     await expect(pitTv.getByTestId(`next-${teams[1]}-0`)).toContainText("Q3 · F1");
     await expect(pitTv.getByTestId(`next-${teams[1]}-0`).locator(".side-dot--red")).toHaveCount(1);
     await expect(pitTv.getByTestId(`next-${teams[1]}-1`)).toContainText("Q4 · F2");
@@ -481,6 +481,28 @@ test.describe.serial("TV screens", () => {
     const dir = path.resolve(process.cwd(), "../../../.superpowers/sdd/2026-11-23-tv-readability/shots");
     fs.mkdirSync(dir, { recursive: true });
     await pitTv.screenshot({ path: path.join(dir, "team-schedule-pit-1920x1080.png") });
+  });
+
+  test("check-in status on a pit TV updates live when a team is checked in, at 1920×1080", async ({ request }, testInfo) => {
+    const pitTv = screens["Pit TV"];
+    const pit = (await call(request, "get", `/api/displays?session_id=${saturday}`)).groups.find((g: { name: string }) => g.name === "Pit Rankings");
+    for (const id of teams) await call(request, "post", `/api/sessions/${saturday}/participants`, { team_id: id, checked_in: false });
+    await call(request, "post", `/api/sessions/${saturday}/participants`, { team_id: teams[1], checked_in: true });
+    await call(request, "patch", `/api/displays/groups/${pit.id}`, { screen: "checkin_status" });
+    await expect(pitTv.getByRole("heading", { name: "Check-in", exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(pitTv.getByText("Saturday", { exact: true })).toBeVisible();
+    await expect(pitTv.getByTestId("total-in")).toContainText("1 / 6");
+    await expect(pitTv.getByTestId("total-out")).toContainText("5 / 6");
+    await expect(pitTv.getByTestId(`checkin-${teams[1]}`)).toHaveAttribute("data-state", "in");
+    await expect(pitTv.getByTestId(`checkin-${teams[2]}`)).toHaveAttribute("data-state", "out");
+    // The front desk checks a team in; the TV is not reloaded.
+    await call(request, "post", `/api/sessions/${saturday}/participants`, { team_id: teams[2], checked_in: true });
+    await expect(pitTv.getByTestId(`checkin-${teams[2]}`)).toHaveAttribute("data-state", "in", { timeout: 5_000 });
+    await expect(pitTv.getByTestId("total-in")).toContainText("2 / 6", { timeout: 5_000 });
+    await expect(pitTv.getByTestId("total-out")).toContainText("4 / 6");
+    // Number order: 10480B, 19533Z, 31415P, 55210C, 83897A, 94927X.
+    await expect(pitTv.locator(".checkin-tile .checkin-tile__number")).toHaveText(["10480B", "19533Z", "31415P", "55210C", "83897A", "94927X"]);
+    await pitTv.screenshot({ path: testInfo.outputPath("checkin-pit-1920x1080.png") });
   });
 });
 

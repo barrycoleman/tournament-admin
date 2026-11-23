@@ -21,7 +21,7 @@ function TeamScheduleScreen({ context, onDone, fitSeconds }: ScreenProps) {
   const title = t("display.screens.team_schedule");
   if (!matches.data || !fields.data || !teams.data || timeZone === undefined) return <WaitingForData title={title} onDone={onDone} fitSeconds={fitSeconds} />;
   const rows = teams.data.filter(keep).sort((a, b) => compareTeamNumbers(a.number, b.number));
-  if (rows.length === 0) return <ScreenNotice title={title} text={t("display.noRankings")} onDone={onDone} fitSeconds={fitSeconds} />;
+  if (rows.length === 0) return <ScreenNotice title={title} text={t("display.noTeams")} onDone={onDone} fitSeconds={fitSeconds} />;
   /** "Q13 · F2 · 10:32": the label and field stay together; a long time may wrap below them. */
   const cellText = (match: LiveMatch) => {
     const when = isOnFieldNow(match) ? t("display.now") : match.scheduled_time ? formatTime(match.scheduled_time, timeZone, i18n.language) : "";
