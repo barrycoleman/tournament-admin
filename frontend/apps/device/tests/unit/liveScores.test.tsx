@@ -82,7 +82,7 @@ describe("live totals on In Match", () => {
     matches = [match({ id: 5, label: "Q5", match_number: 5, phase: "not_started" })];
     live = { matches: [TOTALS], skills: [] };
     show(fieldGroup(), { "/api/displays/live-scores?field_set_id=10": () => live });
-    await screen.findByTestId("bar-red");
+    await screen.findByTestId("band-red");
     expect(screen.queryByTestId("live-red")).not.toBeInTheDocument();
   });
 

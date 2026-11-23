@@ -106,8 +106,8 @@ test.describe.serial("display groups", () => {
       .getByLabel("Put Big TV in a group")
       .selectOption({ label: "Main Fields (audience)" });
 
-    await expect(fieldTv.getByRole("heading", { name: "Qualification 1" })).toBeVisible({ timeout: 10_000 });
-    await expect(fieldTv.getByTestId("bar-red")).toContainText("11A");
+    await expect(fieldTv.getByTestId("bottom-bar")).toContainText("Qualification 1", { timeout: 10_000 });
+    await expect(fieldTv.getByTestId("band-red")).toContainText("11A");
     await expect(fieldTv.getByTestId("start")).toHaveAttribute("data-band", "early");
     await expect(screens["Big TV"].getByRole("heading", { name: "Display League" })).toBeVisible({ timeout: 10_000 });
   });
@@ -130,7 +130,7 @@ test.describe.serial("display groups", () => {
   test("saving the score moves the field display on and Last Scored Match shows it", async ({ browser, request }) => {
     const red = matches.Q1.alliances.find((a) => a.station === "red")!;
     await call(request, "post", `/api/matches/${matches.Q1.id}/alliances/${red.id}/score`, { data: { score: 42 } });
-    await expect(screens["Field TV"].getByRole("heading", { name: "Qualification 3" })).toBeVisible({ timeout: 10_000 });
+    await expect(screens["Field TV"].getByTestId("bottom-bar")).toContainText("Qualification 3", { timeout: 10_000 });
 
     const admin = await adminPage(browser, "/match-control");
     const audience = admin.getByRole("region", { name: "Audience screen" });
@@ -149,6 +149,8 @@ test.describe.serial("display groups", () => {
     await expect(next.getByText("Q4 · Field 2")).toBeVisible();
     await admin.getByRole("button", { name: "Start", exact: true }).click();
     await expect(screens["Big TV"].getByTestId("bottom-bar")).toContainText("Qualification 4", { timeout: 10_000 });
+    // The bar alone could be the next-match screen; the clock or count-in shows the match is running.
+    await expect(screens["Big TV"].getByTestId("clock").or(screens["Big TV"].getByTestId("count-in"))).toBeVisible({ timeout: 10_000 });
     await call(request, "post", `/api/matches/${matches.Q4.id}/end`, {});
   });
 

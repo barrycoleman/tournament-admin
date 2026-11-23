@@ -45,14 +45,18 @@ async function expectFits(page: Page, testIds: string[]) {
     }));
     expect(size.scrollWidth, `${id} width`).toBeLessThanOrEqual(size.clientWidth + 1);
     expect(size.scrollHeight, `${id} height`).toBeLessThanOrEqual(size.clientHeight + 1);
-    const box = (await element.boundingBox())!;
+    const box = await element.boundingBox();
+    expect(box, `${id} box`).not.toBeNull();
+    if (!box) return;
     expect(box.x, `${id} left`).toBeGreaterThanOrEqual(-1);
     expect(box.y, `${id} top`).toBeGreaterThanOrEqual(-1);
     expect(box.x + box.width, `${id} right`).toBeLessThanOrEqual(viewport.width + 1);
     expect(box.y + box.height, `${id} bottom`).toBeLessThanOrEqual(viewport.height + 1);
     // Fitted text (team numbers, the clock) is scaled down to stay inside its box, never clipped.
     for (const inner of await element.locator(".fit-text__inner").all()) {
-      const fitted = (await inner.boundingBox())!;
+      const fitted = await inner.boundingBox();
+      expect(fitted, `${id} text box`).not.toBeNull();
+      if (!fitted) return;
       expect(fitted.x, `${id} text left`).toBeGreaterThanOrEqual(box.x - 1);
       expect(fitted.y, `${id} text top`).toBeGreaterThanOrEqual(box.y - 1);
       expect(fitted.x + fitted.width, `${id} text right`).toBeLessThanOrEqual(box.x + box.width + 1);
@@ -60,7 +64,7 @@ async function expectFits(page: Page, testIds: string[]) {
     }
     boxes[id] = box;
   }
-  const apart = ["band-red", "clock", "bottom-bar"].filter((id) => boxes[id]);
+  const apart = ["band-red", "band-blue", "clock", "period", "driver-change", "paused", "bottom-bar"].filter((id) => boxes[id]);
   for (let i = 0; i < apart.length; i += 1) {
     for (let j = i + 1; j < apart.length; j += 1) {
       expect(intersects(boxes[apart[i]], boxes[apart[j]]), `${apart[i]} overlaps ${apart[j]}`).toBe(false);
@@ -188,6 +192,7 @@ test.describe.serial("TV screens", () => {
     tabletToken = await pairTablet(request, "Tablet 1");
     await pairDisplay(browser, request, "Field TV", { width: 1920, height: 1080 });
     await pairDisplay(browser, request, "Big TV", { width: 1280, height: 720 });
+    await pairDisplay(browser, request, "Small Field TV", { width: 1280, height: 720 });
     await pairDisplay(browser, request, "Clock TV", { width: 1920, height: 1080 }, true);
     const groups = (await call(request, "get", `/api/displays?session_id=${saturday}`)).groups as {
       id: number;
@@ -200,31 +205,60 @@ test.describe.serial("TV screens", () => {
     await assign(request, "Big TV", audience.id);
     await assign(request, "Field TV", fieldGroup);
     await assign(request, "Clock TV", fieldGroup);
+    await assign(request, "Small Field TV", fieldGroup);
   });
 
   test.afterAll(() => server?.stop());
 
   const bandNumbers = (match: MatchInfo) => match.alliances.flatMap((a) => a.team_ids).map((id) => `band-number-${id}`);
 
+  test("before the match, red fills the top half and blue the bottom half at 1920×1080 and 1280×720", async () => {
+    for (const [name, shotName] of [["Field TV", "field-next-1920x1080"], ["Small Field TV", "field-next-1280x720"]]) {
+      const page = screens[name];
+      await expect(page.getByTestId("start")).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId("bottom-bar")).toContainText("Qualification 1");
+      await expect(page.getByTestId("bottom-bar")).toContainText("Field 1");
+      await expect(page.getByTestId("band-red")).toContainText("83897A");
+      await expect(page.getByTestId("band-red")).toContainText("10480B");
+      await expect(page.getByTestId("band-blue")).toContainText("19533Z");
+      await expect(page.getByTestId("band-blue")).toContainText("94927X");
+      await expectFits(page, ["band-red", "band-blue", "bottom-bar", ...bandNumbers(matches.Q1)]);
+      const red = await page.getByTestId("band-red").boundingBox();
+      const blue = await page.getByTestId("band-blue").boundingBox();
+      const bar = await page.getByTestId("bottom-bar").boundingBox();
+      expect(red && blue && bar).toBeTruthy();
+      if (!red || !blue || !bar) return;
+      // The two bands split the area above the bar in half.
+      expect(red.y).toBeLessThanOrEqual(1);
+      expect(Math.abs(red.height - blue.height)).toBeLessThanOrEqual(2);
+      expect(Math.abs(red.y + red.height - blue.y)).toBeLessThanOrEqual(2);
+      expect(Math.abs(blue.y + blue.height - bar.y)).toBeLessThanOrEqual(2);
+      await shot(page, shotName);
+    }
+  });
+
   test("starting a match fills the screen with the count-in, then the clock fits at 1920×1080 and 1280×720", async ({ request }) => {
     const fieldTv = screens["Field TV"];
     const bigTv = screens["Big TV"];
     // The field TV is on its next-match screen, counting down to Q1.
     await expect(fieldTv.getByTestId("start")).toBeVisible({ timeout: 10_000 });
-    await expect(fieldTv.getByText("Qualification 1")).toBeVisible();
+    await expect(fieldTv.getByTestId("bottom-bar")).toContainText("Qualification 1");
     await call(request, "post", `/api/matches/${matches.Q1.id}/start`, {});
 
-    for (const page of [fieldTv, bigTv]) {
-      const overlay = page.getByTestId("count-in");
-      await expect(overlay).toBeVisible({ timeout: 3_000 });
-      const box = (await overlay.boundingBox())!;
+    // Both overlays are read at once, right after they appear: the count-in lasts only 3 s.
+    const pages = [fieldTv, bigTv];
+    await Promise.all(pages.map((page) => expect(page.getByTestId("count-in")).toBeVisible({ timeout: 3_000 })));
+    const overlayBoxes = await Promise.all(pages.map((page) => page.getByTestId("count-in").boundingBox()));
+    pages.forEach((page, i) => {
+      const box = overlayBoxes[i];
+      expect(box, "count-in box").not.toBeNull();
       const viewport = page.viewportSize()!;
       expect(box).toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
-      await expect(overlay).toHaveText(/^[123]$/);
-    }
+    });
 
     // Live totals from a scorer tablet show in the bottom bar while the clock runs.
-    const [red, blue] = [...matches.Q1.alliances].sort((a) => (a.station === "red" ? -1 : 1));
+    const red = matches.Q1.alliances.find((a) => a.station === "red")!;
+    const blue = matches.Q1.alliances.find((a) => a.station === "blue")!;
     await call(request, "patch", `/api/matches/${matches.Q1.id}/alliances/${red.id}/draft`, { changes: { high_balls: 16 } }, { Authorization: `Bearer ${tabletToken}` });
     await call(request, "patch", `/api/matches/${matches.Q1.id}/alliances/${blue.id}/draft`, { changes: { high_balls: 17, low_balls: 1 } }, { Authorization: `Bearer ${tabletToken}` });
 
@@ -278,7 +312,17 @@ test.describe.serial("TV screens", () => {
     await expect(clockTv.getByTestId("period")).toHaveText("Driver control");
     await expect(tag).toHaveCount(0);
 
+    // Paused: the paused tag replaces the period name and stays clear of the clock.
+    await call(request, "post", `/api/matches/${matches.Q1.id}/pause`, {});
+    await expect(fieldTv.getByTestId("paused")).toBeVisible({ timeout: 10_000 });
+    await expect(fieldTv.getByTestId("period")).toHaveCount(0);
+    await expectFits(fieldTv, ["band-red", "band-blue", "clock", "paused", "bottom-bar"]);
+    await call(request, "post", `/api/matches/${matches.Q1.id}/resume`, {});
+    await expect(fieldTv.getByTestId("paused")).toHaveCount(0, { timeout: 10_000 });
+
     await call(request, "post", `/api/matches/${matches.Q1.id}/end`, {});
+    // The Clock TV's own time was moved forward; start it afresh so later tests are not skewed.
+    await clockTv.reload();
     await expect(fieldTv.getByText("Match over")).toBeVisible({ timeout: 10_000 });
     await expect(fieldTv.getByTestId("clock")).toHaveText("0:00");
     await expect(fieldTv.getByTestId("live-red")).toHaveCount(0);

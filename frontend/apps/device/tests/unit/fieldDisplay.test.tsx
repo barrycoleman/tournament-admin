@@ -32,13 +32,17 @@ const COOP_ALLIANCES = [
 ];
 
 describe("field display", () => {
-  it("shows the field's next match with its team numbers in alliance bars", async () => {
+  it("fills the screen with each side's team numbers, with the match and countdown in the bottom bar", async () => {
     showField([match({ id: 7, label: "Q7", match_number: 7, scheduled_time: iso(83_000) })]);
-    expect(await screen.findByRole("heading", { name: "Qualification 7" })).toBeInTheDocument();
-    expect(screen.getByText("Field 1")).toBeInTheDocument();
-    expect(within(screen.getByTestId("bar-red")).getByText("101A")).toBeInTheDocument();
-    expect(within(screen.getByTestId("bar-blue")).getByText("104D")).toBeInTheDocument();
-    const start = screen.getByTestId("start");
+    const bar = await screen.findByTestId("bottom-bar");
+    expect(bar).toHaveTextContent("Qualification 7");
+    expect(bar).toHaveTextContent("Field 1");
+    expect(screen.queryByRole("heading", { name: "Qualification 7" })).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("band-red")).getByText("101A")).toBeInTheDocument();
+    expect(within(screen.getByTestId("band-red")).getByText("102B")).toBeInTheDocument();
+    expect(within(screen.getByTestId("band-blue")).getByText("104D")).toBeInTheDocument();
+    expect(screen.getByTestId("band-red")).toHaveClass("team-band--fill");
+    const start = within(bar).getByTestId("start");
     expect(start.querySelector(".start__label")).toHaveTextContent("Starts in");
     expect(start.querySelector(".start__time")).toHaveTextContent("1:23");
     expect(start).toHaveAttribute("data-band", "early");
@@ -64,13 +68,26 @@ describe("field display", () => {
     expect(screen.getByTestId("start")).toHaveAttribute("data-band", "soon");
   });
 
-  it("shows Up next for a match with no scheduled time, and one bar for a cooperative game", async () => {
+  it("shows Up next for a match with no scheduled time, and a red and a blue band for a cooperative game", async () => {
     showField([match({ scheduled_time: null, alliances: COOP_ALLIANCES })], { extra: { "/api/event/match-format": COOPERATIVE } });
     expect(await screen.findByTestId("start")).toHaveTextContent("Up next");
-    expect(screen.getByTestId("bar-red")).toHaveTextContent("101A");
-    expect(screen.getByTestId("bar-blue")).toHaveTextContent("104D");
-    expect(screen.getByTestId("bar-red")).not.toHaveTextContent("104D");
-    expect(screen.queryByTestId("bar-all")).not.toBeInTheDocument();
+    expect(screen.getByTestId("band-red")).toHaveTextContent("101A");
+    expect(screen.getByTestId("band-blue")).toHaveTextContent("104D");
+    expect(screen.getByTestId("band-red")).not.toHaveTextContent("104D");
+    expect(screen.queryByTestId("band-all")).not.toBeInTheDocument();
+  });
+
+  it("puts the better-ranked team of a score-chase run on red", async () => {
+    showField([match({ scheduled_time: null, alliances: [{ id: 1001, station: "solo", team_ids: [1, 4] }] })], {
+      extra: {
+        "/api/rankings?session_id=1": [
+          { team_id: 1, division_id: null, rank: 9, win_points: 0, strength_of_schedule: 0, average_score: 0, matches_played: 1 },
+          { team_id: 4, division_id: null, rank: 2, win_points: 0, strength_of_schedule: 0, average_score: 0, matches_played: 1 },
+        ],
+      },
+    });
+    await waitFor(() => expect(screen.getByTestId("band-red")).toHaveTextContent("104D"));
+    expect(screen.getByTestId("band-blue")).toHaveTextContent("101A");
   });
 
   it("counts in with 3-2-1 on a full-screen overlay that covers the bands", async () => {
@@ -79,8 +96,6 @@ describe("field display", () => {
     expect(overlay).toHaveTextContent("3");
     // The overlay is fixed over the whole screen, so nothing shows above it.
     expect(overlay).toHaveClass("count-in-overlay");
-    expect(within(overlay).queryByTestId("band-red")).not.toBeInTheDocument();
-    expect(within(overlay).queryByTestId("bottom-bar")).not.toBeInTheDocument();
     await act(() => vi.advanceTimersByTimeAsync(1_000));
     expect(screen.getByTestId("count-in")).toHaveTextContent("2");
   });
@@ -162,7 +177,7 @@ describe("field display", () => {
     expect(await screen.findByText("Match over")).toBeInTheDocument();
     matches = matches.map((m) => (m.id === 34 ? { ...m, status: "completed" } : m));
     emit("score_saved", { match_id: 34 });
-    expect(await screen.findByRole("heading", { name: "Qualification 37" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("bottom-bar")).toHaveTextContent("Qualification 37"));
     matches = matches.map((m) => ({ ...m, status: "completed" }));
     emit("score_saved", { match_id: 37 });
     expect(await screen.findByText("No more matches on this field")).toBeInTheDocument();

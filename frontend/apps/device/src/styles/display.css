@@ -78,13 +78,17 @@
 .start--late { background: var(--kiosk-late); }
 .start--next { background: var(--kiosk-surface); }
 
-/* The field monitor's next match: the numbers are the biggest thing on the screen. */
-.field-next__bars { display: flex; flex-direction: column; gap: 1.5vw; }
-.team-bar { display: flex; justify-content: space-around; padding: 1.5vw 2vw; border-radius: 1vw; }
-.team-bar--red { background: var(--kiosk-red); }
-.team-bar--blue { background: var(--kiosk-blue); }
-.team-bar--all { background: var(--kiosk-blue); flex-wrap: wrap; }
-.team-bar__number { font-size: 9vw; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+/* The field monitor's next match: red fills the top half, blue the bottom, and
+   the numbers are as large as FitText allows. The bar below holds the match
+   and the start badge. */
+.field-next .match-frame__body { display: grid; grid-template-rows: 1fr 1fr; }
+.field-next .team-band { border-radius: 0; flex-direction: row; }
+.field-next .team-band--fill .team-band__cell { font-size: 11vw; font-weight: 900; padding: 1vw 3vw; }
+.field-next .team-band--fill .team-band__cell:only-child { font-size: 14vw; }
+.field-next .team-band--fill .team-band__cell + .team-band__cell { border-top: 0; border-left: 0.4vw solid rgb(255 255 255 / 0.55); }
+.field-next .bottom-bar { min-height: 8vw; padding: 0.5vw 3vw; }
+.field-next .bottom-bar__id { font-size: 3vw; }
+.field-next .start { margin: 0; padding: 0.4vw 2.4vw; font-size: 6vw; font-weight: 900; }
 
 /* In match: teams by side across the top, the clock filling the middle, one
    line under it, and the live totals either side of the match name below. */
