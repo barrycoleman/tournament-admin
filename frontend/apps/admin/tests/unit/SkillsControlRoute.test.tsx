@@ -330,3 +330,16 @@ describe("Skills Control", () => {
     await waitFor(() => expect(gets("/api/field-sets/20/skills")).toBeGreaterThan(before));
   });
 });
+
+describe("Operator sounds switch", () => {
+  it("is off by default, remembers being turned on, and asks for no sound requests while off", async () => {
+    localStorage.removeItem("tm.operatorSounds.skillsControl");
+    renderRoute();
+    const box = await screen.findByLabelText("Play sounds on this computer");
+    expect(box).not.toBeChecked();
+    expect(apiRequest).not.toHaveBeenCalledWith("/api/sounds");
+    fireEvent.click(box);
+    expect(localStorage.getItem("tm.operatorSounds.skillsControl")).toBe("1");
+    localStorage.removeItem("tm.operatorSounds.skillsControl");
+  });
+});

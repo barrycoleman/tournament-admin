@@ -1209,5 +1209,9 @@
     "nextStep": {
       "label": "下一步："
     }
+  },
+  "operatorSounds": {
+    "switch": "在此电脑上播放声音",
+    "enable": "点击以启用声音"
   }
 }

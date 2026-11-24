@@ -16,6 +16,7 @@ import {
   type AllianceScore,
   type LiveMatch,
 } from "@tournament-admin/shared";
+import { OperatorSounds } from "../cues/OperatorSounds";
 import { apiErrorMessage } from "../apiErrorMessage";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Modal } from "../components/Modal";
@@ -227,6 +228,18 @@ function FieldSetPanel({
 
       <section className="panel" role="region" aria-label={t("matchControl.timerHeading")}>
         <h2>{t("matchControl.timerHeading")}</h2>
+        <OperatorSounds
+          page="matchControl"
+          streams={[
+            {
+              kind: "match",
+              key: `fieldSet:${fieldSet.id}`,
+              matches,
+              fieldIds,
+              timeoutDeadline: fieldSet.timeout_deadline,
+            },
+          ]}
+        />
         {current === null ? (
           <p>{t("matchControl.noRunning")}</p>
         ) : (

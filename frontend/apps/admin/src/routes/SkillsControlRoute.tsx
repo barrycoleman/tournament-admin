@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { apiRequest } from "@tournament-admin/shared";
+import { OperatorSounds } from "../cues/OperatorSounds";
 import { SkillsSetCard } from "../skillsControl/SkillsSetCard";
 import { useNow, useSkillsControlData } from "../skillsControl/useSkillsControl";
 import type { EventRead } from "../types";
@@ -56,6 +57,13 @@ function SkillsControlBody({ sessionId }: { sessionId: number }) {
   );
   return (
     <div className="skills-control">
+      <OperatorSounds
+        page="skillsControl"
+        streams={data.skillsSets.flatMap((fieldSet, index) => {
+          const set = loaded[index];
+          return set ? [{ kind: "skills" as const, key: `set:${fieldSet.id}`, timer: set.timer }] : [];
+        })}
+      />
       {data.skillsSets.map((fieldSet, index) => {
         const set = loaded[index];
         if (!set) return <p key={fieldSet.id}>{t("skillsControl.loading")}</p>;

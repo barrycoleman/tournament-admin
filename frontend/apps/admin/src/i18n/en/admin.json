@@ -1212,5 +1212,9 @@
     "nextStep": {
       "label": "Next:"
     }
+  },
+  "operatorSounds": {
+    "switch": "Play sounds on this computer",
+    "enable": "Click to enable sound"
   }
 }

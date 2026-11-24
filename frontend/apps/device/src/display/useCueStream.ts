@@ -1,17 +1,9 @@
-import { useCallback, useEffect, useRef } from "react";
 import {
-  holdMatchReading,
-  holdSkillsReading,
-  latestStartedMatchForFieldSet,
-  matchCues,
-  remainingSeconds,
-  skillsClockPhase,
-  skillsClockSeconds,
-  skillsCues,
-  timeoutCues,
-  useCueTrigger,
-  useHeldReading,
+  READ_MS,
+  useMatchReadingFrom,
   useServerNow,
+  useSkillsReading as useSharedSkillsReading,
+  useTimerCues,
   type Cue,
   type MatchReading,
   type SkillsClockState,
@@ -19,10 +11,6 @@ import {
 } from "@tournament-admin/shared";
 import { useFields, useMatchFormat, useMatches, useOptionalSkillsSet } from "./api";
 import { fieldIdsOf } from "./screens/inMatch";
-
-/** How often a TV reads its timer, so a cue lands within 0.1 s of the
- * server-time crossing. */
-const READ_MS = 100;
 
 /** The timer a TV follows for its cues. */
 export type Follows =
@@ -46,38 +34,10 @@ export function followsKey(follows: Follows): string {
   }
 }
 
-const wholeSeconds = (seconds: number) => Math.ceil(seconds - 1e-9);
-
 /** The match clock on these fields (the running match, else the last
  * ended one); null when there is none or no fields. */
 export function useMatchReading(sessionId: number, fieldIds: readonly number[]): MatchReading | null {
-  const now = useServerNow(READ_MS);
-  const matches = useMatches(sessionId);
-  const last = useRef<{ matchId: number; phase: string } | null>(null);
-  let match =
-    matches.data && fieldIds.length > 0 ? latestStartedMatchForFieldSet(matches.data, fieldIds) : null;
-  // A live match reset to not started is no longer a started match; read it
-  // once more so the reset shows as a stop.
-  const lastLive = last.current !== null && last.current.phase !== "not_started" && last.current.phase !== "ended";
-  if (lastLive && match?.id !== last.current?.matchId) {
-    const reset = matches.data?.find((m) => m.id === last.current?.matchId && m.phase === "not_started");
-    if (reset) match = reset;
-  }
-  const followedId = match?.id ?? null;
-  const followedPhase = match?.phase ?? null;
-  useEffect(() => {
-    last.current = followedId === null || followedPhase === null ? null : { matchId: followedId, phase: followedPhase };
-  }, [followedId, followedPhase]);
-  const reading: MatchReading | null = match
-    ? {
-        matchId: match.id,
-        phase: match.phase,
-        whole: wholeSeconds(remainingSeconds(match, now) ?? 0),
-        paused: match.paused,
-        endedEarly: match.ended_early,
-      }
-    : null;
-  return useHeldReading(reading, holdMatchReading);
+  return useMatchReadingFrom(useMatches(sessionId).data, fieldIds);
 }
 
 export type SkillsTimerLike = SkillsClockState;
@@ -85,24 +45,7 @@ export type SkillsTimerLike = SkillsClockState;
 /** A skills timer's reading; `timerKey` names the timer, so another one
  * reads as new. */
 export function useSkillsReading(timer: SkillsTimerLike | null, timerKey: string): SkillsReading | null {
-  const now = useServerNow(READ_MS);
-  const reading: SkillsReading | null = timer
-    ? {
-        timerKey,
-        phase: skillsClockPhase(timer, now) as SkillsReading["phase"],
-        whole: wholeSeconds(skillsClockSeconds(timer, now, null)),
-        paused: timer.paused,
-        endedEarly: timer.ended_early,
-      }
-    : null;
-  return useHeldReading(reading, holdSkillsReading);
-}
-
-interface FollowedReading {
-  key: string;
-  match: MatchReading | null;
-  skills: SkillsReading | null;
-  timeout: number | null;
+  return useSharedSkillsReading(timer, timerKey);
 }
 
 /** Calls `onCues` with the cues of the timer a TV follows: its field set's
@@ -133,19 +76,5 @@ export function useFollowedCues(sessionId: number, follows: Follows, onCues: (cu
 
   const deadline = follows.kind === "fieldSet" || follows.kind === "field" ? follows.timeoutDeadline : null;
   const timeout = deadline === null ? null : (Date.parse(deadline) - now) / 1000;
-  const reading: FollowedReading = { key: followsKey(follows), match, skills, timeout };
-
-  const compute = useCallback(
-    (prev: FollowedReading | null, next: FollowedReading | null): Cue[] => {
-      // Following another timer starts over, like a TV just switched on.
-      if (prev === null || next === null || prev.key !== next.key) return [];
-      return [
-        ...matchCues(prev.match, next.match, moments ?? []),
-        ...skillsCues(prev.skills, next.skills),
-        ...timeoutCues(prev.timeout, next.timeout),
-      ];
-    },
-    [moments]
-  );
-  useCueTrigger(reading, compute, onCues);
+  useTimerCues({ key: followsKey(follows), match, skills, timeout, moments }, onCues);
 }
