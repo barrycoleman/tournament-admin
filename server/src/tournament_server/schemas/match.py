@@ -50,6 +50,7 @@ class MatchRead(BaseModel):
     phase_deadline: dt.datetime | None
     paused: bool
     remaining_seconds_at_pause: float | None
+    ended_early: bool = False
     is_finals: bool
     bracket_matchup_id: int | None = None
     bracket_alliance_id: int | None = None

@@ -83,6 +83,9 @@ class TimerState(NamedTuple):
     deadline: dt.datetime | None
     paused: bool
     remaining: int | None
+    # True only for a timer the operator ended with END; a deadline that
+    # passed reads as ended with this False.
+    ended_early: bool = False
 
 
 _READY_STATE = TimerState(READY, None, False, None)
@@ -101,7 +104,7 @@ def timer_state(row: SkillsSetTimer | SkillsRun | None, now: dt.datetime | None 
         if left <= 0:
             return TimerState(ENDED, None, False, None)
         return TimerState(RUNNING, row.deadline, False, math.ceil(left))
-    return TimerState(row.phase, None, False, None)
+    return TimerState(row.phase, None, False, None, row.phase == ENDED and row.ended_early)
 
 
 def effective_timer(run: SkillsRun, set_timer: SkillsSetTimer | None) -> TimerState:
@@ -114,6 +117,7 @@ def _copy_state(row: SkillsSetTimer | SkillsRun, state: TimerState) -> None:
     row.deadline = state.deadline
     row.paused = state.paused
     row.remaining_seconds_at_pause = state.remaining if state.paused else None
+    row.ended_early = state.ended_early
 
 
 def require_skills_set(field_set: FieldSet) -> FieldSet:
@@ -334,6 +338,7 @@ def _run_read(db: Session, plugin: LoadedPlugin, run: SkillsRun, set_timer: Skil
         deadline=state.deadline,
         paused=state.paused,
         remaining_seconds=state.remaining,
+        ended_early=state.ended_early,
     )
 
 
@@ -351,6 +356,7 @@ def _timer_read(plugin: LoadedPlugin, field_set_id: int, set_timer: SkillsSetTim
         deadline=state.deadline,
         paused=state.paused,
         remaining_seconds=state.remaining,
+        ended_early=state.ended_early,
         run_seconds=_run_length(plugin, skills_type),
     )
 
@@ -433,7 +439,7 @@ def _apply_action(row: SkillsSetTimer | SkillsRun, action: str, length: int | No
     elif action == TimerAction.END:
         if state.phase != RUNNING:
             raise RunRefused(409, TIMER_NOT_RUNNING)
-        _copy_state(row, TimerState(ENDED, None, False, None))
+        _copy_state(row, TimerState(ENDED, None, False, None, True))
     else:
         _copy_state(row, _READY_STATE)
 

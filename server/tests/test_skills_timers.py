@@ -285,3 +285,49 @@ def test_timer_routes_refuse_teamwork_fields_and_sets_and_other_roles(client, ev
     start_run(client, event["set"]["field_ids"][0], event["teams"][0], headers=scorer["headers"])
     started = client.post(f"/api/field-sets/{skills_set}/skills-timer/start", headers=scorer["headers"])
     assert started.status_code == 200, started.text
+
+
+def test_ending_a_set_timer_early_is_recorded_and_cleared_by_reset(client, event):
+    first, second = event["set"]["field_ids"]
+    start_run(client, first, event["teams"][0])
+    started = _set_action(client, event, "start")
+    assert started["timer"]["ended_early"] is False
+    assert runs_by_field(started)[first]["ended_early"] is False
+    ended = _set_action(client, event, "end")
+    assert ended["timer"]["ended_early"] is True
+    assert runs_by_field(ended)[first]["ended_early"] is True
+    reset = _set_action(client, event, "reset")
+    assert reset["timer"]["ended_early"] is False
+    assert runs_by_field(reset)[first]["ended_early"] is False
+    assert _set_action(client, event, "start")["timer"]["ended_early"] is False
+
+
+def test_ending_a_field_timer_early_is_recorded_and_cleared_by_reset(client, event):
+    first, _second = event["set"]["field_ids"]
+    start_run(client, first, event["teams"][0], follows_set=False)
+    _field_action(client, first, "start")
+    assert _field_action(client, first, "end")["ended_early"] is True
+    assert _field_action(client, first, "reset")["ended_early"] is False
+
+
+def test_a_timer_that_ran_out_is_not_ended_early(client, event):
+    first, _second = event["set"]["field_ids"]
+    start_run(client, first, event["teams"][0])
+    _set_action(client, event, "start")
+    expire(client, SkillsSetTimer, field_set_id=event["set"]["id"])
+    body = read_set(client, event["set"]["id"])
+    assert (body["timer"]["phase"], body["timer"]["ended_early"]) == ("ended", False)
+    assert runs_by_field(body)[first]["ended_early"] is False
+
+
+def test_a_run_left_behind_by_the_next_batch_keeps_the_ended_early_flag(client, event):
+    first, second = event["set"]["field_ids"]
+    start_run(client, first, event["teams"][0])
+    _set_action(client, event, "start")
+    _set_action(client, event, "end")
+    start_run(client, second, event["teams"][1])
+    body = read_set(client, event["set"]["id"])
+    runs = runs_by_field(body)
+    assert (runs[first]["follows_set"], runs[first]["ended_early"]) == (False, True)
+    assert (runs[second]["follows_set"], runs[second]["ended_early"]) == (True, False)
+    assert body["timer"]["ended_early"] is False

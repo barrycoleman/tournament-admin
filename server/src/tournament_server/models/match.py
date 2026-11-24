@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Float, ForeignKey, Integer, String
+from sqlalchemy import Float, ForeignKey, Integer, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tournament_server.db import Base, UTCDateTime
@@ -41,6 +41,9 @@ class Match(Base):
         UTCDateTime, default=None
     )
     paused: Mapped[bool] = mapped_column(default=False)
+    # True only when the operator stopped the match with End; a match that
+    # ran out on its own stays False.
+    ended_early: Mapped[bool] = mapped_column(default=False, server_default=false())
     remaining_seconds_at_pause: Mapped[float | None] = mapped_column(
         Float, default=None
     )

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tournament_server.db import Base, UTCDateTime, utc_now
@@ -50,6 +50,8 @@ class SkillsSetTimer(Base):
     deadline: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, default=None)
     paused: Mapped[bool] = mapped_column(Boolean, default=False)
     remaining_seconds_at_pause: Mapped[int | None] = mapped_column(Integer, default=None)
+    # True when the operator stopped the timer with End rather than it running out.
+    ended_early: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
 
 class SkillsRun(Base):
@@ -76,6 +78,8 @@ class SkillsRun(Base):
     deadline: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, default=None)
     paused: Mapped[bool] = mapped_column(Boolean, default=False)
     remaining_seconds_at_pause: Mapped[int | None] = mapped_column(Integer, default=None)
+    # True when the operator stopped the timer with End rather than it running out.
+    ended_early: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_by_device: Mapped[str | None] = mapped_column(String(200), default=None)
     created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utc_now)
 

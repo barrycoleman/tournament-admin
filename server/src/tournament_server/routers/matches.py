@@ -99,6 +99,7 @@ def _to_match_read(match: Match, db: Session) -> MatchRead:
         phase_deadline=match.phase_deadline,
         paused=match.paused,
         remaining_seconds_at_pause=match.remaining_seconds_at_pause,
+        ended_early=match.ended_early,
         is_finals=match.finals_bracket_id is not None,
         bracket_matchup_id=match.bracket_matchup_id,
         bracket_alliance_id=match.bracket_alliance_id,
@@ -312,7 +313,7 @@ async def _auto_advance_match(
             "match_phase_changed",
             {"match_id": match.id, "phase": match.phase, "phase_deadline": (
                 match.phase_deadline.isoformat() if match.phase_deadline else None
-            )},
+            ), "ended_early": False},
         )
         live_scores.on_match_phase_changed(request_app, db, match)
 
@@ -351,6 +352,7 @@ def start_match(
     plugin = get_game_plugin_for_event(request, db)
     match_format = plugin.module.match_format()
     match.phase = phase_after_start(match_format["autonomous_seconds"])
+    match.ended_early = False
     duration = phase_duration_seconds(
         match.phase, match_format["autonomous_seconds"], match_format["driver_seconds"]
     )
@@ -361,7 +363,8 @@ def start_match(
 
     broadcast_for_session(
         request.app, db, match.session_id, "match_phase_changed",
-        {"match_id": match.id, "phase": match.phase, "phase_deadline": match.phase_deadline.isoformat()},
+        {"match_id": match.id, "phase": match.phase, "phase_deadline": match.phase_deadline.isoformat(),
+         "ended_early": match.ended_early},
     )
     live_scores.on_match_phase_changed(request.app, db, match)
     schedule_auto_advance(request.app, match.id, _auto_advance_match(request.app, match.id))
@@ -400,7 +403,8 @@ def start_driver(
 
     broadcast_for_session(
         request.app, db, match.session_id, "match_phase_changed",
-        {"match_id": match.id, "phase": match.phase, "phase_deadline": match.phase_deadline.isoformat()},
+        {"match_id": match.id, "phase": match.phase, "phase_deadline": match.phase_deadline.isoformat(),
+         "ended_early": match.ended_early},
     )
     live_scores.on_match_phase_changed(request.app, db, match)
     schedule_auto_advance(request.app, match.id, _auto_advance_match(request.app, match.id))
@@ -460,7 +464,8 @@ def resume_match(
 
     broadcast_for_session(
         request.app, db, match.session_id, "match_resumed",
-        {"match_id": match.id, "phase": match.phase, "phase_deadline": match.phase_deadline.isoformat()},
+        {"match_id": match.id, "phase": match.phase, "phase_deadline": match.phase_deadline.isoformat(),
+         "ended_early": match.ended_early},
     )
     # Resume with only the actual remaining time, not the full phase
     # duration — the phase already ran partway before it was paused.
@@ -486,6 +491,7 @@ def end_match(
         raise HTTPException(status_code=409, detail=f"Match cannot be ended from {match.phase}")
     cancel_auto_advance(request.app, match.id)
     match.phase = "ended"
+    match.ended_early = True
     match.phase_deadline = None
     match.paused = False
     match.remaining_seconds_at_pause = None
@@ -494,7 +500,7 @@ def end_match(
 
     broadcast_for_session(
         request.app, db, match.session_id, "match_phase_changed",
-        {"match_id": match.id, "phase": "ended", "phase_deadline": None},
+        {"match_id": match.id, "phase": "ended", "phase_deadline": None, "ended_early": True},
     )
     live_scores.on_match_phase_changed(request.app, db, match)
     return _to_match_read(match, db)
@@ -528,6 +534,7 @@ def reset_match(
         new_phase = "not_started"
 
     match.phase = new_phase
+    match.ended_early = False
     match.phase_deadline = None
     match.paused = False
     match.remaining_seconds_at_pause = None

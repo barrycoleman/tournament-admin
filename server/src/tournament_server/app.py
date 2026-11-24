@@ -126,6 +126,7 @@ async def _recover_in_flight_matches(app: FastAPI) -> None:
                             match.phase_deadline.isoformat()
                             if match.phase_deadline else None
                         ),
+                        "ended_early": match.ended_early,
                     },
                 )
                 live_scores.on_match_phase_changed(app, db, match)

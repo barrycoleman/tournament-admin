@@ -45,6 +45,8 @@ class SkillsRunRead(BaseModel):
     deadline: dt.datetime | None
     paused: bool
     remaining_seconds: int | None
+    # True when the operator stopped this timer rather than it running out.
+    ended_early: bool = False
 
 
 class SkillsSetTimerRead(BaseModel):
@@ -54,6 +56,8 @@ class SkillsSetTimerRead(BaseModel):
     deadline: dt.datetime | None
     paused: bool
     remaining_seconds: int | None
+    # True when the operator stopped this timer rather than it running out.
+    ended_early: bool = False
     run_seconds: int | None
 
 

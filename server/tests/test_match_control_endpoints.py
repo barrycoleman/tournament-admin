@@ -391,7 +391,7 @@ def test_auto_advance_broadcasts_the_transition_into_ended(no_autonomous_client)
     assert driver["data"]["phase_deadline"] is not None
     assert ended == {
         "event": "match_phase_changed",
-        "data": {"match_id": match_id, "phase": "ended", "phase_deadline": None},
+        "data": {"match_id": match_id, "phase": "ended", "phase_deadline": None, "ended_early": False},
     }
 
 
@@ -444,7 +444,7 @@ def test_end_broadcasts_match_phase_changed_ended(fast_timer_client):
 
     assert message == {
         "event": "match_phase_changed",
-        "data": {"match_id": match_id, "phase": "ended", "phase_deadline": None},
+        "data": {"match_id": match_id, "phase": "ended", "phase_deadline": None, "ended_early": True},
     }
 
 
@@ -624,3 +624,57 @@ def test_scheduling_a_second_timer_cancels_the_one_it_replaces(fast_timer_client
     assert first.cancelled()
 
     second.cancel()
+
+
+# --- how a match stopped: ended_early ---
+
+
+def test_ending_a_running_match_marks_it_ended_early(fast_timer_client):
+    client = fast_timer_client
+    match_id = client.match_id
+    with _active_session_ws(client) as ws:
+        client.post(f"/api/matches/{match_id}/start")
+        started = ws.receive_json()
+        assert started["data"]["ended_early"] is False
+
+        response = client.post(f"/api/matches/{match_id}/end")
+        message = ws.receive_json()
+
+    assert response.json()["ended_early"] is True
+    assert client.get(f"/api/matches/{match_id}").json()["ended_early"] is True
+    assert message["data"]["phase"] == "ended"
+    assert message["data"]["ended_early"] is True
+
+
+def test_ending_during_awaiting_driver_marks_it_ended_early(fast_timer_client):
+    client = fast_timer_client
+    match_id = client.match_id
+    client.post(f"/api/matches/{match_id}/start")
+    _wait_for_phase(client, match_id, "awaiting_driver")
+
+    body = client.post(f"/api/matches/{match_id}/end").json()
+
+    assert (body["phase"], body["ended_early"]) == ("ended", True)
+
+
+def test_a_match_left_to_run_out_is_not_ended_early(no_autonomous_client):
+    client = no_autonomous_client
+    match_id = client.match_id
+    client.post(f"/api/matches/{match_id}/start")
+
+    body = _wait_for_phase(client, match_id, "ended")
+
+    assert body["ended_early"] is False
+
+
+def test_reset_and_a_new_start_clear_ended_early(fast_timer_client):
+    client = fast_timer_client
+    match_id = client.match_id
+    client.post(f"/api/matches/{match_id}/start")
+    client.post(f"/api/matches/{match_id}/end")
+
+    reset = client.post(f"/api/matches/{match_id}/reset", json={"scope": "full"}).json()
+    assert reset["ended_early"] is False
+
+    started = client.post(f"/api/matches/{match_id}/start").json()
+    assert started["ended_early"] is False
