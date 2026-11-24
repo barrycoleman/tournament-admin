@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { COUNT_IN_PHASES, formatClock, remainingSeconds, type LiveMatch } from "@tournament-admin/shared";
+import { COUNT_IN_PHASES, activeWindow, formatClock, remainingSeconds, type LiveMatch } from "@tournament-admin/shared";
 import { useFields, useMatchFormat, useRanks, useTeamsById, type Team } from "../api";
-import { inDriverChange } from "../logic/driverChange";
 import { groupScore, scoreGroups, sideGroups, type ScoreGroup } from "../logic/sides";
 import { matchTitle } from "../matchTitle";
 import { useLiveScores } from "../useLiveScores";
@@ -71,7 +70,7 @@ export function InMatchView({ match, sessionId, now }: { match: LiveMatch; sessi
         {t("display.paused")}
       </p>
     );
-  } else if (format.data && inDriverChange(match.phase, remaining, format.data.driver_seconds)) {
+  } else if (format.data && activeWindow(match.phase, remaining, format.data.moments ?? []) !== null) {
     under = <DriverChangeTag />;
   } else if (period) {
     under = (

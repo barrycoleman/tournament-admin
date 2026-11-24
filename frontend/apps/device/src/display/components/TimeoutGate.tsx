@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { formatClock } from "@tournament-admin/shared";
-import { useServerNow } from "../serverClock";
+import { formatClock, useServerNow } from "@tournament-admin/shared";
 import { ScreenFrame } from "./ScreenFrame";
 
 /** While a time-out runs on the field group, shows its countdown instead of `children`. */

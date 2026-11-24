@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { inDriverChange } from "../../src/display/logic/driverChange";
 import { groupScore, matchSides, resultOutcome, scoreGroups } from "../../src/display/logic/sides";
 import { match } from "./displayFixtures";
 
@@ -42,16 +41,5 @@ describe("scoreGroups and results", () => {
     const combined = scoreGroups(coop(), "cooperative_score");
     expect(resultOutcome(combined, new Map([[1, 30], [2, 30]]))).toBeNull();
     expect(groupScore(combined[0], new Map([[1, 30], [2, 30]]))).toBe(30);
-  });
-});
-
-describe("inDriverChange", () => {
-  it("is on only inside the window of a long driver period", () => {
-    expect(inDriverChange("driver", 35, 105)).toBe(true);
-    expect(inDriverChange("driver", 30, 105)).toBe(true);
-    expect(inDriverChange("driver", 25, 105)).toBe(false);
-    expect(inDriverChange("driver", 35.5, 105)).toBe(false);
-    expect(inDriverChange("driver", 30, 35)).toBe(false);
-    expect(inDriverChange("autonomous", 30, 105)).toBe(false);
   });
 });

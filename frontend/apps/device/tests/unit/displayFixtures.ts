@@ -14,8 +14,9 @@ export const TEAMS = [
   { id: 3, number: "103C", name: "Bolts", division_id: 4, city: "Shelbyville", state: null, country: null },
   { id: 4, number: "104D", name: "Sparks", division_id: 4, city: null, state: null, country: "Canada" },
 ];
-export const HEAD_TO_HEAD = { game_model: "head_to_head", autonomous_seconds: 15, driver_seconds: 105, alliance_count: 2, teams_per_alliance: 2 };
-export const COOPERATIVE = { game_model: "cooperative_score", autonomous_seconds: 0, driver_seconds: 60, alliance_count: 2, teams_per_alliance: 1 };
+const DRIVER_CHANGE_MOMENT = { key: "driver_change", label: "Driver change", period: "driver", at_remaining: 35, until_remaining: 25 };
+export const HEAD_TO_HEAD = { game_model: "head_to_head", autonomous_seconds: 15, driver_seconds: 105, alliance_count: 2, teams_per_alliance: 2, moments: [DRIVER_CHANGE_MOMENT] };
+export const COOPERATIVE = { game_model: "cooperative_score", autonomous_seconds: 0, driver_seconds: 60, alliance_count: 2, teams_per_alliance: 1, moments: [DRIVER_CHANGE_MOMENT] };
 
 let nextId = 100;
 export function match(overrides: Partial<LiveMatch> = {}): LiveMatch {
@@ -34,6 +35,7 @@ export function match(overrides: Partial<LiveMatch> = {}): LiveMatch {
     phase_deadline: null,
     paused: false,
     remaining_seconds_at_pause: null,
+    ended_early: false,
     is_finals: false,
     bracket_matchup_id: null,
     bracket_alliance_id: null,

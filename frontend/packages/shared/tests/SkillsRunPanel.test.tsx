@@ -13,7 +13,7 @@ const SCORE: ScoresheetField = {
 const RUN: SkillsRun = {
   id: 40, field_id: 3, field_set_id: 9, team_id: 7, team_number: "101A", team_name: "Rockets", skills_type: "driver",
   data: { score: 4 }, item_meta: { score: { device_name: "Admin", at: AT } }, version: 1, score: 4,
-  follows_set: true, phase: "ended", deadline: null, paused: false, remaining_seconds: 0,
+  follows_set: true, phase: "ended", deadline: null, paused: false, remaining_seconds: 0, ended_early: false,
 };
 
 let run: SkillsRun | null;
@@ -22,7 +22,7 @@ let request: ReturnType<typeof vi.fn>;
 
 function skillsSet(): SkillsSet {
   return {
-    timer: { field_set_id: 9, skills_type: "driver", phase: "ended", deadline: null, paused: false, remaining_seconds: 0, run_seconds: 60 },
+    timer: { field_set_id: 9, skills_type: "driver", phase: "ended", deadline: null, paused: false, remaining_seconds: 0, run_seconds: 60, ended_early: false },
     fields: [{ field_id: 3, name: "Skills 1", run }],
   };
 }

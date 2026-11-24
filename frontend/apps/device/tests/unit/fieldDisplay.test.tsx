@@ -151,9 +151,9 @@ describe("field display", () => {
     expect(screen.getByTestId("band-blue")).toHaveTextContent("104D");
   });
 
-  it("never shows the Driver change tag when the driver period is 35 s or shorter", async () => {
+  it("never shows the Driver change tag when the game declares no window", async () => {
     showField([match({ phase: "driver", phase_deadline: iso(30_000) })], {
-      extra: { "/api/event/match-format": { ...HEAD_TO_HEAD, driver_seconds: 30 } },
+      extra: { "/api/event/match-format": { ...HEAD_TO_HEAD, moments: [] } },
     });
     expect(await screen.findByTestId("period")).toHaveTextContent("Driver control");
     expect(screen.queryByTestId("driver-change")).not.toBeInTheDocument();

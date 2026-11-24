@@ -6,6 +6,7 @@ import {
   type DisplayGroupState,
   type FieldSetLive,
   type LiveMatch,
+  type Moment,
   type SkillsSet,
 } from "@tournament-admin/shared";
 import { getJson } from "../deviceApi";
@@ -31,6 +32,7 @@ export interface MatchFormat {
   driver_seconds: number;
   alliance_count: number;
   teams_per_alliance: number;
+  moments: Moment[];
 }
 export interface Team {
   id: number;

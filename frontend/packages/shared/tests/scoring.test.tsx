@@ -373,12 +373,12 @@ describe("useLiveDraft", () => {
 const RUN: SkillsRun = {
   id: 40, field_id: 3, field_set_id: 9, team_id: 7, team_number: "101A", team_name: "Rockets", skills_type: "driver",
   data: { balls: 1 }, item_meta: { balls: { device_name: "Admin", at: AT } }, version: 1, score: 1,
-  follows_set: true, phase: "running", deadline: null, paused: true, remaining_seconds: 30,
+  follows_set: true, phase: "running", deadline: null, paused: true, remaining_seconds: 30, ended_early: false,
 };
 
 function skillsSet(run: SkillsRun | null): SkillsSet {
   return {
-    timer: { field_set_id: 9, skills_type: "driver", phase: "running", deadline: null, paused: true, remaining_seconds: 30, run_seconds: 60 },
+    timer: { field_set_id: 9, skills_type: "driver", phase: "running", deadline: null, paused: true, remaining_seconds: 30, run_seconds: 60, ended_early: false },
     fields: [{ field_id: 3, name: "Skills 1", run }],
   };
 }

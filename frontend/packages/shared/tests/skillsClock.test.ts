@@ -6,6 +6,7 @@ const at = (ms: number) => new Date(NOW + ms).toISOString();
 const timer = (overrides: Partial<SkillsClockState> = {}): SkillsClockState => ({
   phase: "ready",
   deadline: null,
+  ended_early: false,
   paused: false,
   remaining_seconds: null,
   ...overrides,

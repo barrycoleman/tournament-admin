@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useMe } from "./api";
 import { useLiveEvents } from "./events";
 import { GroupView } from "./GroupView";
-import { ServerClockContext, useServerClockOffset } from "./serverClock";
+import { ServerClockContext, useServerClockOffset } from "@tournament-admin/shared";
 import { useLiveRefresh } from "./useLiveRefresh";
 
 export const IDENTIFY_MS = 10_000;

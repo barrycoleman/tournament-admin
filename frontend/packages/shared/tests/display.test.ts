@@ -35,7 +35,7 @@ function match(overrides: Partial<LiveMatch> = {}): LiveMatch {
     phase: "not_started",
     phase_deadline: null,
     paused: false,
-    remaining_seconds_at_pause: null,
+    remaining_seconds_at_pause: null, ended_early: false,
     is_finals: false,
     alliances: [],
     ...overrides,

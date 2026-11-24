@@ -1,9 +1,14 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { latestStartedMatchForFieldSet, remainingSeconds } from "@tournament-admin/shared";
-import { useFields, useMatches } from "./api";
-import { matchCues, timeoutCues, type ClockState } from "./logic/sounds";
-import { useServerNow } from "./serverClock";
+import {
+  latestStartedMatchForFieldSet,
+  matchCues,
+  type MatchReading,
+  remainingSeconds,
+  timeoutCues,
+  useServerNow,
+} from "@tournament-admin/shared";
+import { useFields, useMatchFormat, useMatches } from "./api";
 import { SoundPlayer, SoundPlayerContext } from "./soundPlayer";
 import { fieldIdsOf } from "./screens/inMatch";
 
@@ -31,20 +36,27 @@ export function AudienceSounds({
   const now = useServerNow();
   const matches = useMatches(sessionId);
   const fields = useFields(sessionId);
+  const moments = useMatchFormat().data?.moments ?? [];
   const match =
     matches.data && fields.data ? latestStartedMatchForFieldSet(matches.data, fieldIdsOf(fields.data, fieldSetId)) : null;
-  const reading: ClockState | null = match
-    ? { matchId: match.id, phase: match.phase, whole: Math.ceil((remainingSeconds(match, now) ?? 0) - 1e-9), paused: match.paused }
+  const reading: MatchReading | null = match
+    ? {
+        matchId: match.id,
+        phase: match.phase,
+        whole: Math.ceil((remainingSeconds(match, now) ?? 0) - 1e-9),
+        paused: match.paused,
+        endedEarly: match.ended_early,
+      }
     : null;
   const timeoutRemaining = timeoutDeadline === null ? null : (Date.parse(timeoutDeadline) - now) / 1000;
-  const previous = useRef<{ clock: ClockState | null; timeout: number | null } | null>(null);
+  const previous = useRef<{ clock: MatchReading | null; timeout: number | null } | null>(null);
 
   useEffect(() => {
     const before = previous.current;
     previous.current = { clock: reading, timeout: timeoutRemaining };
     if (before === null) return;
-    for (const cue of [...matchCues(before.clock, reading), ...timeoutCues(before.timeout, timeoutRemaining)]) {
-      player.play(cue);
+    for (const cue of [...matchCues(before.clock, reading, moments), ...timeoutCues(before.timeout, timeoutRemaining)]) {
+      if (cue.sound !== null) player.play(cue.sound);
     }
   });
 

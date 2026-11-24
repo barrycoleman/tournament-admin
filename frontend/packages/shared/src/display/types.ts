@@ -22,6 +22,8 @@ export interface LiveMatch {
   phase_deadline: string | null;
   paused: boolean;
   remaining_seconds_at_pause: number | null;
+  /** True only when the operator ended the match early. */
+  ended_early: boolean;
   is_finals: boolean;
   bracket_matchup_id?: number | null;
   bracket_alliance_id?: number | null;

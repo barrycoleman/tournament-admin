@@ -37,7 +37,7 @@ function liveMatch(overrides: Partial<LiveMatch> = {}): LiveMatch {
   return {
     id: 7, session_id: 1, division_id: null, round_type: "qualification", match_number: 7, label: "Q7",
     field_id: 3, scheduled_time: null, status: "scheduled", phase: "driver",
-    phase_deadline: new Date(Date.now() + 60_000).toISOString(), paused: false, remaining_seconds_at_pause: null,
+    phase_deadline: new Date(Date.now() + 60_000).toISOString(), paused: false, remaining_seconds_at_pause: null, ended_early: false,
     is_finals: false,
     alliances: [
       { id: 71, station: "red", team_ids: [1] },

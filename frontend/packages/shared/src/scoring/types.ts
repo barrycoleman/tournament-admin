@@ -56,6 +56,7 @@ export interface SkillsSetTimer {
   paused: boolean;
   remaining_seconds: number | null;
   run_seconds: number | null;
+  ended_early: boolean;
 }
 
 /** A skills run; its timer fields are the effective ones (the set's while it follows the set). */
@@ -76,6 +77,7 @@ export interface SkillsRun {
   deadline: string | null;
   paused: boolean;
   remaining_seconds: number | null;
+  ended_early: boolean;
 }
 
 export interface SkillsSetField {

@@ -20,7 +20,7 @@ function match(overrides: Partial<LiveMatch>): LiveMatch {
   return {
     id, session_id: 1, division_id: null, round_type: "qualification", match_number: id, label: `Q${id}`,
     field_id: 1, scheduled_time: soon(id), status: "scheduled", phase: "not_started", phase_deadline: null,
-    paused: false, remaining_seconds_at_pause: null, is_finals: false,
+    paused: false, remaining_seconds_at_pause: null, ended_early: false, is_finals: false,
     alliances: [
       { id: id * 10 + 1, station: "red", team_ids: [1] },
       { id: id * 10 + 2, station: "blue", team_ids: [2] },

@@ -1,8 +1,7 @@
 import { useTranslation } from "react-i18next";
-import { formatClock, skillsClockPhase, skillsClockSeconds } from "@tournament-admin/shared";
+import { formatClock, skillsClockPhase, skillsClockSeconds, useServerNow } from "@tournament-admin/shared";
 import { useFieldSets, useSkillsSet, useSkillsSettings } from "./api";
 import { ScreenFrame, WaitingForData } from "./components/ScreenFrame";
-import { useServerNow } from "./serverClock";
 
 /** A skills field set's audience TV: the set's name, its type and its shared
  * countdown, never a score. */

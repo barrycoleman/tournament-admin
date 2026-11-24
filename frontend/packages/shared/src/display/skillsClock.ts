@@ -4,6 +4,8 @@ export interface SkillsClockState {
   deadline: string | null;
   paused: boolean;
   remaining_seconds: number | null;
+  /** True only when the operator ended the run early. */
+  ended_early: boolean;
 }
 
 export type SkillsClockAction = "start" | "pause" | "resume" | "reset" | "end";

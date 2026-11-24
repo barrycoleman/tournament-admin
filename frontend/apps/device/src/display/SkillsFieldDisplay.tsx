@@ -1,10 +1,9 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { formatClock, skillsClockPhase, skillsClockSeconds } from "@tournament-admin/shared";
+import { formatClock, skillsClockPhase, skillsClockSeconds, useServerNow } from "@tournament-admin/shared";
 import { useFields, useSkillsAttempts, useSkillsSet, useSkillsSettings, useTeamsById, type SkillsAttempt } from "./api";
 import { ScreenFrame, ScreenNotice, WaitingForData } from "./components/ScreenFrame";
 import { formatSheetValue } from "./logic/sheet";
-import { useServerNow } from "./serverClock";
 import { useLiveScores } from "./useLiveScores";
 
 function latestFieldAttempt(attempts: SkillsAttempt[], fieldId: number): SkillsAttempt | null {

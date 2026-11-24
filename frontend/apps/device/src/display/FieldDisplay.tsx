@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { currentMatchForField } from "@tournament-admin/shared";
+import { currentMatchForField, useServerNow } from "@tournament-admin/shared";
 import { useFields, useMatchFormat, useMatches, useRanks, useTeamsById } from "./api";
 import { InMatchView } from "./components/InMatchView";
 import { BottomBar, MatchFrame } from "./components/MatchFrame";
@@ -8,7 +8,6 @@ import { StartCountdown } from "./components/StartCountdown";
 import { TeamBand } from "./components/TeamBand";
 import { sideGroups } from "./logic/sides";
 import { matchTitle } from "./matchTitle";
-import { useServerNow } from "./serverClock";
 
 /** A field's own monitor: its next match in numbers big enough for the
  * referees' robot check, then the count-in and clock, then the next match

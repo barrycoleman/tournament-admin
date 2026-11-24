@@ -18,13 +18,13 @@ const SETTINGS = {
 };
 
 function timer(overrides: Record<string, unknown> = {}) {
-  return { field_set_id: 20, skills_type: "autonomous", phase: "ready", deadline: null, paused: false, remaining_seconds: null, run_seconds: 60, ...overrides };
+  return { field_set_id: 20, skills_type: "autonomous", phase: "ready", deadline: null, paused: false, remaining_seconds: null, run_seconds: 60, ended_early: false, ...overrides };
 }
 function run(overrides: Record<string, unknown> = {}) {
   return {
     id: 1, field_id: 31, field_set_id: 20, team_id: 1, team_number: "101A", team_name: "Rockets",
     skills_type: "autonomous", data: {}, item_meta: {}, version: 1, score: 0, follows_set: true,
-    phase: "ready", deadline: null, paused: false, remaining_seconds: null, ...overrides,
+    phase: "ready", deadline: null, paused: false, remaining_seconds: null, ended_early: false, ...overrides,
   };
 }
 const fieldRow = (fieldRun: unknown) => ({ field_id: 31, name: "Skills 1", run: fieldRun });

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { nextMatchForFieldSet } from "@tournament-admin/shared";
+import { nextMatchForFieldSet, useServerNow } from "@tournament-admin/shared";
 import { useFields, useMatchFormat, useMatches, useRanks, useTeamsById } from "../api";
 import { FitText } from "../components/FitText";
 import { BottomBar, MatchFrame } from "../components/MatchFrame";
@@ -8,7 +8,6 @@ import { StartCountdown } from "../components/StartCountdown";
 import { sideGroups, teamPlace } from "../logic/sides";
 import { matchTitle } from "../matchTitle";
 import type { ScreenModule, ScreenProps } from "../screenTypes";
-import { useServerNow } from "../serverClock";
 import { fieldIdsOf } from "./inMatch";
 
 function MatchIntroScreen({ context }: ScreenProps) {

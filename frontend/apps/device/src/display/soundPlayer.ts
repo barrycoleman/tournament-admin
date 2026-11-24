@@ -1,13 +1,13 @@
 import { createContext } from "react";
-import type { Cue } from "./logic/sounds";
+import type { SoundSlot } from "@tournament-admin/shared";
 
-const TONES: Record<Cue, { frequency: number; seconds: number; repeat: number }> = {
-  beat: { frequency: 880, seconds: 0.15, repeat: 1 },
+// Stand-in tones per sound slot until the sound files replace them.
+const TONES: Record<SoundSlot, { frequency: number; seconds: number; repeat: number }> = {
+  beep: { frequency: 880, seconds: 0.15, repeat: 1 },
   start: { frequency: 1320, seconds: 0.4, repeat: 1 },
-  warning: { frequency: 660, seconds: 0.25, repeat: 2 },
-  periodEnd: { frequency: 440, seconds: 0.6, repeat: 1 },
-  matchEnd: { frequency: 330, seconds: 0.9, repeat: 1 },
-  timeoutEnd: { frequency: 520, seconds: 0.7, repeat: 2 },
+  buzzer: { frequency: 330, seconds: 0.9, repeat: 1 },
+  moment: { frequency: 520, seconds: 0.7, repeat: 2 },
+  stop: { frequency: 220, seconds: 0.6, repeat: 1 },
 };
 const GAP_SECONDS = 0.1;
 
@@ -44,7 +44,7 @@ export class SoundPlayer {
     void context?.close().catch(() => undefined);
   }
 
-  play(cue: Cue): void {
+  play(cue: SoundSlot): void {
     const context = this.ensure();
     if (context === null || context.state !== "running") return;
     const tone = TONES[cue];

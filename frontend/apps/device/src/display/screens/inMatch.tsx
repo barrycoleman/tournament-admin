@@ -1,10 +1,9 @@
 import { useTranslation } from "react-i18next";
-import { latestStartedMatchForFieldSet } from "@tournament-admin/shared";
+import { latestStartedMatchForFieldSet, useServerNow } from "@tournament-admin/shared";
 import { useFields, useMatches } from "../api";
 import { InMatchView } from "../components/InMatchView";
 import { ScreenNotice, WaitingForData } from "../components/ScreenFrame";
 import type { ScreenModule, ScreenProps } from "../screenTypes";
-import { useServerNow } from "../serverClock";
 
 export function fieldIdsOf(fields: { id: number; field_set_id: number }[], fieldSetId: number | null): number[] {
   return fields.filter((f) => fieldSetId === null || f.field_set_id === fieldSetId).map((f) => f.id);
