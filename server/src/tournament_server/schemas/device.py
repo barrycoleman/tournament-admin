@@ -27,6 +27,7 @@ class DeviceRead(BaseModel):
     paired_by: str
     last_seen_at: dt.datetime
     disabled_at: dt.datetime | None
+    play_sounds: bool = False
     display_group: str | None = None
     # A scorer's or referee's field in the active session.
     binding: BindingRead | None = None
@@ -67,6 +68,7 @@ class PairingPollRead(BaseModel):
 class DeviceUpdate(BaseModel):
     name: str | None = None
     role: str | None = None
+    play_sounds: bool | None = None
 
 
 class DeviceSettings(BaseModel):

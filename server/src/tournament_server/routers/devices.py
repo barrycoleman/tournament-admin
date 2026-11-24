@@ -48,6 +48,7 @@ def to_device_read(device: Device, db: Session) -> DeviceRead:
         paired_by=device.paired_by,
         last_seen_at=device.last_seen_at,
         disabled_at=device.disabled_at,
+        play_sounds=device.play_sounds,
         display_group=displays.display_group_name(db, device.id) if device.role == "display_device" else None,
         binding=scorer_bindings.binding_read(db, device.id) if device.role in SCORING_ROLES else None,
     )
@@ -209,6 +210,12 @@ def update_device(
             displays.delete_device_assignments(db, device.id)
         if role_changed and role not in SCORING_ROLES:
             scorer_bindings.clear_for_device(db, device.id)
+    if "play_sounds" in changes:
+        if changes["play_sounds"] is None:
+            raise HTTPException(status_code=422, detail="play_sounds must be true or false.")
+        if device.role != "display_device":
+            raise HTTPException(status_code=422, detail="Only TVs play sounds.")
+        device.play_sounds = changes["play_sounds"]
     if "name" in changes:
         name = checked_name(changes["name"])
         clash = db.execute(
@@ -227,6 +234,11 @@ def update_device(
     db.refresh(device)
     if role_changed:
         realtime.close_device_sockets(request.app, device.id)
+    if "play_sounds" in changes and not role_changed:
+        event = get_event_or_404(db)
+        realtime.send_to_device(
+            request.app, device.id, "display_changed", {"session_id": event.active_session_id, "group_id": None}
+        )
     notify_devices_changed(request)
     return to_device_read(device, db)
 

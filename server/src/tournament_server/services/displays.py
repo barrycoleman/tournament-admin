@@ -236,7 +236,6 @@ def copy_displays(db: Session, target_session_id: int, source_session_id: int) -
         if source.kind == AUDIENCE:
             target.screen = source.screen
             target.screen_settings = dict(source.screen_settings or {})
-            target.play_sounds = source.play_sounds
         copied_to[source.id] = target
     unplaced = []
     for assignment in db.execute(

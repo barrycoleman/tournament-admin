@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tournament_server.db import Base
@@ -26,7 +26,6 @@ class DisplayGroup(Base):
     screen: Mapped[str | None] = mapped_column(String(50), default=None)
     screen_settings: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     rotation: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, default=None)
-    play_sounds: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class DisplayAssignment(Base):

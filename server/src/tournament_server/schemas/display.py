@@ -23,7 +23,6 @@ class DisplayGroupFields(BaseModel):
     screen: str | None
     screen_settings: dict[str, Any]
     rotation: list[dict[str, Any]] | None
-    play_sounds: bool
 
 
 class DisplayGroupRead(DisplayGroupFields):
@@ -53,7 +52,16 @@ class DisplayGroupUpdate(BaseModel):
     rotation: list[dict[str, Any]] | None = None
     name: str | None = None
     division_id: int | None = None
-    play_sounds: bool | None = None
+
+
+class FieldSetSoundsWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    play_sounds: bool
+
+
+class FieldSetSoundsRead(BaseModel):
+    device_ids: list[int]
 
 
 class AssignmentWrite(BaseModel):
@@ -76,6 +84,7 @@ class DisplayMeGroup(DisplayGroupFields):
 class DisplayDevice(BaseModel):
     id: int
     name: str
+    play_sounds: bool
 
 
 class DisplayMe(BaseModel):

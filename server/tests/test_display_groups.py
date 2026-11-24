@@ -24,8 +24,8 @@ def test_a_field_set_gets_an_audience_group_and_each_field_a_field_group(client)
     session_id = setup_event(client)
     field_set = add_field_set(client, session_id)
     audience = groups(client, kind="audience")
-    assert [(g.field_set_id, g.session_id, g.screen, g.screen_settings, g.play_sounds) for g in audience] == [
-        (field_set["id"], session_id, "logo", {}, False)
+    assert [(g.field_set_id, g.session_id, g.screen, g.screen_settings) for g in audience] == [
+        (field_set["id"], session_id, "logo", {})
     ]
     field_groups = groups(client, kind="field")
     assert [g.field_id for g in field_groups] == field_set["field_ids"]

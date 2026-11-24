@@ -27,6 +27,8 @@ from tournament_server.schemas.display import (
     DisplayRef,
     DisplaysRead,
     FieldSetLive,
+    FieldSetSoundsRead,
+    FieldSetSoundsWrite,
     PitGroupCreate,
     UnplacedDisplay,
 )
@@ -40,7 +42,7 @@ DUPLICATE_PIT_NAME = "A pit group with that name already exists."
 PIT_NAME_MAX_LENGTH = 100
 # Which fields each kind of group takes in PATCH (spec §8).
 PATCHABLE = {
-    displays.AUDIENCE: {"screen", "screen_settings", "play_sounds"},
+    displays.AUDIENCE: {"screen", "screen_settings"},
     displays.PIT: {"screen", "screen_settings", "rotation", "name", "division_id"},
     displays.FIELD: set(),
 }
@@ -97,7 +99,6 @@ def _group_fields(db: Session, group: DisplayGroup) -> dict:
         "screen": group.screen,
         "screen_settings": group.screen_settings or {},
         "rotation": group.rotation,
-        "play_sounds": group.play_sounds,
     }
 
 
@@ -210,10 +211,6 @@ def update_group(
     if "division_id" in changes:
         _check_division(db, changes["division_id"])
         group.division_id = changes["division_id"]
-    if "play_sounds" in changes:
-        if changes["play_sounds"] is None:
-            raise HTTPException(status_code=422, detail="play_sounds must be true or false.")
-        group.play_sounds = changes["play_sounds"]
     db.commit()
     notify_display_changed(request, group.session_id, group.id)
     members = displays_read(request, db, group.session_id)
@@ -289,6 +286,42 @@ def identify_display(
     return Response(status_code=204)
 
 
+@router.put("/api/displays/field-sets/{field_set_id}/sounds", response_model=FieldSetSoundsRead)
+def set_field_set_sounds(
+    field_set_id: int,
+    payload: FieldSetSoundsWrite,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> FieldSetSoundsRead:
+    """Turns sound on or off for every TV showing this field set: its
+    audience screen and each of its fields' screens."""
+    field_set = db.get(FieldSet, field_set_id)
+    if field_set is None:
+        raise HTTPException(status_code=404, detail="Field set not found")
+    group_ids = [
+        group.id
+        for group in displays.session_groups(db, field_set.session_id)
+        if group.kind in (displays.AUDIENCE, displays.FIELD) and displays.group_field_set_id(db, group) == field_set_id
+    ]
+    device_ids = sorted(
+        db.execute(
+            select(DisplayAssignment.device_id).where(
+                DisplayAssignment.session_id == field_set.session_id, DisplayAssignment.group_id.in_(group_ids)
+            )
+        ).scalars().all()
+    )
+    for device in db.execute(select(Device).where(Device.id.in_(device_ids), Device.role == DISPLAY_ROLE)).scalars():
+        device.play_sounds = payload.play_sounds
+    db.commit()
+    for device_id in device_ids:
+        realtime.send_to_device(
+            request.app, device_id, "display_changed", {"session_id": field_set.session_id, "group_id": None}
+        )
+    realtime.broadcast_active_session(request.app, "devices_changed", {})
+    return FieldSetSoundsRead(device_ids=device_ids)
+
+
 @router.get("/api/displays/me", response_model=DisplayMe)
 def read_me(caller: Caller = Depends(get_caller), db: Session = Depends(get_db)) -> DisplayMe:
     if caller.device_id is None or caller.role != DISPLAY_ROLE:
@@ -313,7 +346,7 @@ def read_me(caller: Caller = Depends(get_caller), db: Session = Depends(get_db))
                 else None
             )
             group = DisplayMeGroup(**fields, field_set=live)
-    return DisplayMe(device=DisplayDevice(id=device.id, name=device.name), session_id=session_id, group=group)
+    return DisplayMe(device=DisplayDevice(id=device.id, name=device.name, play_sounds=device.play_sounds), session_id=session_id, group=group)
 
 
 @router.get("/api/displays/live-scores")

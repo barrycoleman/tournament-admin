@@ -30,7 +30,7 @@ def test_copy_matches_groups_by_name_and_lists_what_it_cannot_place(client, leag
     # A second division, so the pit group's division survives the copy.
     division = client.post("/api/divisions", json={"name": "Second", "target_team_count": 10}).json()["id"]
     audience = groups(client, session_id=saturday, kind="audience")[0]
-    client.patch(f"/api/displays/groups/{audience.id}", json={"screen": "upcoming_matches", "screen_settings": {"count": 5}, "play_sounds": True})
+    client.patch(f"/api/displays/groups/{audience.id}", json={"screen": "upcoming_matches", "screen_settings": {"count": 5}})
     pit = client.post("/api/displays/pit-groups", json={"session_id": saturday, "name": "Pits", "division_id": division}).json()
     client.patch(f"/api/displays/groups/{pit['id']}", json={"rotation": [{"screen": "schedule"}, {"screen": "logo", "seconds": 10}]})
     big, field_two, pit_tv, scorer = (paired_device(client, role="display_device", name=n) for n in ("Big", "F2", "Pit", "Was display"))
@@ -56,8 +56,8 @@ def test_copy_matches_groups_by_name_and_lists_what_it_cannot_place(client, leag
         {"device_id": unplaced_tv["id"], "device_name": "Lost", "source_group_name": "Field 1"},
     ]
     sunday_audience = groups(client, session_id=sunday, kind="audience")[0]
-    assert (sunday_audience.screen, sunday_audience.screen_settings, sunday_audience.play_sounds) == (
-        "upcoming_matches", {"count": 5, "scope": "field_set"}, True,
+    assert (sunday_audience.screen, sunday_audience.screen_settings) == (
+        "upcoming_matches", {"count": 5, "scope": "field_set"},
     )
     sunday_pit = groups(client, session_id=sunday, kind="pit")[0]
     assert (sunday_pit.name, sunday_pit.division_id, sunday_pit.rotation) == ("Pits", division, [

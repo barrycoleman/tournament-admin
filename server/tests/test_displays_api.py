@@ -81,7 +81,8 @@ def test_patching_screens_is_checked_against_the_registry(client, event):
     assert client.patch(f"/api/displays/groups/{audience.id}", json={"screen": "banner"}).status_code == 422
     assert client.patch(f"/api/displays/groups/{audience.id}", json={"rotation": [{"screen": "logo"}]}).status_code == 422
     assert client.patch(f"/api/displays/groups/{audience.id}", json={"name": "X"}).status_code == 422
-    assert client.patch(f"/api/displays/groups/{audience.id}", json={"play_sounds": True}).json()["play_sounds"] is True
+    assert client.patch(f"/api/displays/groups/{audience.id}", json={"play_sounds": True}).status_code == 422
+    assert "play_sounds" not in client.get(f"/api/displays?session_id={event['session_id']}").json()["groups"][0]
     field_group = groups(client, kind="field")[0]
     assert client.patch(f"/api/displays/groups/{field_group.id}", json={"screen": "logo"}).status_code == 422
 
@@ -153,7 +154,7 @@ def test_me_reports_each_state(client, event):
     session_id = event["session_id"]
     tv = paired_device(client, role="display_device", name="Big TV")
     me = lambda: client.get("/api/displays/me", headers=tv["headers"])
-    assert me().json() == {"device": {"id": tv["id"], "name": "Big TV"}, "session_id": session_id, "group": None}
+    assert me().json() == {"device": {"id": tv["id"], "name": "Big TV", "play_sounds": False}, "session_id": session_id, "group": None}
     field_group = groups(client, kind="field")[0]
     client.put("/api/displays/assignments", json={"session_id": session_id, "device_id": tv["id"], "group_id": field_group.id})
     with client.app.state.session_factory() as db:
@@ -209,3 +210,73 @@ def test_has_setup_turns_true_with_a_pit_group_or_an_assignment(client, event):
     assert client.get(f"/api/displays?session_id={session_id}").json()["has_setup"] is False
     _pit(client, session_id)
     assert client.get(f"/api/displays?session_id={session_id}").json()["has_setup"] is True
+
+
+def _put(client, session_id, device_id, group_id):
+    assert client.put(
+        "/api/displays/assignments", json={"session_id": session_id, "device_id": device_id, "group_id": group_id}
+    ).status_code == 200
+
+
+def _device_row(client, device_id):
+    return next(d for d in client.get("/api/devices").json() if d["id"] == device_id)
+
+
+def test_a_tv_sound_switch_shows_in_the_device_list_and_its_own_display_setup(client, event):
+    tv = paired_device(client, role="display_device", name="Big TV")
+    assert _device_row(client, tv["id"])["play_sounds"] is False
+    assert client.get("/api/displays/me", headers=tv["headers"]).json()["device"] == {
+        "id": tv["id"], "name": "Big TV", "play_sounds": False,
+    }
+    with client.websocket_connect(f"/ws/active-session?token={tv['access_token']}") as tv_socket:
+        patched = client.patch(f"/api/devices/{tv['id']}", json={"play_sounds": True})
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["play_sounds"] is True
+        assert next_event(tv_socket, "display_changed")["data"]["session_id"] == event["session_id"]
+    assert _device_row(client, tv["id"])["play_sounds"] is True
+    assert client.get("/api/displays/me", headers=tv["headers"]).json()["device"]["play_sounds"] is True
+    assert client.patch(f"/api/devices/{tv['id']}", json={"name": "Renamed"}).json()["play_sounds"] is True
+    assert client.patch(f"/api/devices/{tv['id']}", json={"play_sounds": False}).json()["play_sounds"] is False
+
+
+def test_only_tvs_play_sounds(client, event):
+    scorer = paired_device(client, role="scorer")
+    refused = client.patch(f"/api/devices/{scorer['id']}", json={"play_sounds": True})
+    assert refused.status_code == 422 and refused.json()["detail"] == "Only TVs play sounds."
+    assert client.patch(f"/api/devices/{scorer['id']}", json={"play_sounds": None}).status_code == 422
+    assert _device_row(client, scorer["id"])["play_sounds"] is False
+
+
+def test_the_field_set_switch_sets_every_tv_of_that_set_and_no_other(client, event):
+    session_id = event["session_id"]
+    other_set = add_field_set(client, session_id, "Side Fields", ("Side 1",))
+    audience = groups(client, kind="audience")
+    main_audience = next(g for g in audience if g.field_set_id == event["field_set"]["id"])
+    side_audience = next(g for g in audience if g.field_set_id == other_set["id"])
+    main_field = next(g for g in groups(client, kind="field") if g.field_id == event["field_set"]["field_ids"][0])
+    pit = _pit(client, session_id)
+    tvs = {name: paired_device(client, role="display_device", name=name) for name in ("Aud", "Fld", "Side", "Pit", "Spare")}
+    _put(client, session_id, tvs["Aud"]["id"], main_audience.id)
+    _put(client, session_id, tvs["Fld"]["id"], main_field.id)
+    _put(client, session_id, tvs["Side"]["id"], side_audience.id)
+    _put(client, session_id, tvs["Pit"]["id"], pit["id"])
+    url = f"/api/displays/field-sets/{event['field_set']['id']}/sounds"
+    with client.websocket_connect(f"/ws/active-session?token={tvs['Aud']['access_token']}") as socket:
+        on = client.put(url, json={"play_sounds": True})
+        assert on.status_code == 200, on.text
+        assert sorted(on.json()["device_ids"]) == sorted([tvs["Aud"]["id"], tvs["Fld"]["id"]])
+        assert next_event(socket, "display_changed")["data"]["session_id"] == session_id
+    states = {name: _device_row(client, tv["id"])["play_sounds"] for name, tv in tvs.items()}
+    assert states == {"Aud": True, "Fld": True, "Side": False, "Pit": False, "Spare": False}
+    off = client.put(url, json={"play_sounds": False})
+    assert sorted(off.json()["device_ids"]) == sorted([tvs["Aud"]["id"], tvs["Fld"]["id"]])
+    assert _device_row(client, tvs["Aud"]["id"])["play_sounds"] is False
+    assert _device_row(client, tvs["Fld"]["id"])["play_sounds"] is False
+
+
+def test_the_field_set_switch_needs_a_known_set_a_boolean_and_an_admin(client, event):
+    url = f"/api/displays/field-sets/{event['field_set']['id']}/sounds"
+    assert client.put("/api/displays/field-sets/999/sounds", json={"play_sounds": True}).status_code == 404
+    assert client.put(url, json={}).status_code == 422
+    tv = paired_device(client, role="display_device")
+    assert client.put(url, json={"play_sounds": True}, headers=tv["headers"]).status_code == 403

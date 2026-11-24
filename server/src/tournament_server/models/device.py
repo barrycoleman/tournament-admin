@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import String
+from sqlalchemy import Boolean, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tournament_server.db import Base, UTCDateTime, utc_now
@@ -26,3 +26,5 @@ class Device(Base):
     paired_by: Mapped[str] = mapped_column(String(200))
     last_seen_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utc_now)
     disabled_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, default=None)
+    # A TV plays the in-match cues out loud only when this is on.
+    play_sounds: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
