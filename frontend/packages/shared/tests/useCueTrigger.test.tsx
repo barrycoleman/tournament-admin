@@ -1,6 +1,6 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { holdMatchReading, matchCues, useCueTrigger, useHeldReading, type Cue, type MatchReading } from "../src";
+import { holdMatchReading, matchCues, useCueTrigger, useHeldReading, useTimerCues, type Cue, type MatchReading } from "../src";
 
 const reading = (phase: string, whole: number, extra: Partial<MatchReading> = {}): MatchReading => ({
   matchId: 1,
@@ -68,5 +68,42 @@ describe("useHeldReading with the cue trigger", () => {
     rerender({ r: reading("driver", 2) });
     expect(onCues).toHaveBeenCalledTimes(2);
     expect(onCues).toHaveBeenLastCalledWith([BEEP]);
+  });
+});
+
+describe("useTimerCues and the first match of the day", () => {
+  const run = (matchLoaded: boolean | undefined) => {
+    const onCues = vi.fn();
+    const props = (match: MatchReading | null) => ({ match });
+    const { rerender } = renderHook(
+      ({ match }) =>
+        useTimerCues({ key: "fieldSet:1", match, matchLoaded, skills: null, timeout: null, moments: [] }, onCues),
+      { initialProps: props(null) }
+    );
+    rerender(props(null));
+    rerender(props(reading("countdown_autonomous", 3)));
+    rerender(props(reading("countdown_autonomous", 2)));
+    return onCues;
+  };
+
+  it("beeps the first count-in second when no match had started on the loaded fields", () => {
+    const onCues = run(true);
+    expect(onCues.mock.calls).toEqual([[[BEEP]], [[BEEP]]]);
+  });
+
+  it("treats the first match reading as a first reading while the matches are still loading", () => {
+    const onCues = run(false);
+    expect(onCues.mock.calls).toEqual([[[BEEP]]]);
+  });
+
+  it("stays silent for a match first seen inside a section, loaded or not", () => {
+    const onCues = vi.fn();
+    const { rerender } = renderHook(
+      ({ match }) => useTimerCues({ key: "k", match, matchLoaded: true, skills: null, timeout: null, moments: [] }, onCues),
+      { initialProps: { match: null as MatchReading | null } }
+    );
+    rerender({ match: reading("autonomous", 12) });
+    rerender({ match: reading("autonomous", 12) });
+    expect(onCues).not.toHaveBeenCalled();
   });
 });

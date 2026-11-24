@@ -54,7 +54,8 @@ function Stream({
   const skills = useSkillsReading(stream.kind === "skills" ? stream.timer : null, stream.key);
   const deadline = stream.kind === "match" ? stream.timeoutDeadline : null;
   const timeout = deadline === null ? null : (Date.parse(deadline) - now) / 1000;
-  useTimerCues({ key: stream.key, match, skills, timeout, moments }, onCues);
+  // Match Control renders only once its matches and fields have loaded.
+  useTimerCues({ key: stream.key, match, matchLoaded: stream.kind === "match", skills, timeout, moments }, onCues);
   return null;
 }
 

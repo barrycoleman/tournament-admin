@@ -107,7 +107,7 @@
 .bottom-bar--split { display: grid; grid-template-columns: 1fr auto 1fr; }
 .bottom-bar--split .bottom-bar__id { text-align: center; }
 .bottom-bar--split .bottom-bar__end { justify-self: end; }
-.in-match-score { display: flex; align-items: center; gap: 1vw; margin: 0; font-size: 5.5vw; font-weight: 900; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.in-match-score { display: flex; width: fit-content; align-items: center; gap: 1vw; margin: 0; font-size: 5.5vw; font-weight: 900; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .in-match-score--red { color: var(--kiosk-red-text); }
 .in-match-score--blue { color: var(--kiosk-blue-text); }
 .in-match-score--combined { color: var(--kiosk-ink); }
@@ -132,7 +132,8 @@
 .cue-flash--bottom .cue-flash__banner { bottom: 0; height: 7.5vw; padding: 0 20vw; }
 /* A skills screen's padding and title row (ScreenFrame's header). */
 .cue-flash--top .cue-flash__banner { top: 0; height: 6.6vw; padding: 0 3vw; font-size: 3.6vw; }
-.cue-flash__text { justify-content: center; }
+/* Beats .fit-line's own flex-start, which comes later in this file. */
+.cue-flash__banner .cue-flash__text { justify-content: center; }
 .cue-flash__text .fit-line__inner { transform-origin: center; }
 @keyframes cue-flash-pulse {
   0% { opacity: 0; }

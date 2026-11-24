@@ -65,12 +65,19 @@ export function useSkillsReading(timer: SkillsClockState | null, timerKey: strin
 interface FollowedReading {
   key: string;
   match: MatchReading | null;
+  matchLoaded: boolean;
   skills: SkillsReading | null;
   timeout: number | null;
 }
 
+/** Stands in for "no match started yet on these fields", so the first match
+ * of the day cues its whole count-in like every later one. */
+const NO_MATCH: MatchReading = { matchId: -1, phase: "not_started", whole: 0, paused: false, endedEarly: false };
+
 /** Calls `onCues` with the cues of one followed timer. `key` names which
- * timer: a change starts over from a first reading, which never cues. */
+ * timer: a change starts over from a first reading, which never cues.
+ * `matchLoaded` says the matches and fields behind `match` have loaded, so a
+ * null `match` means no match has started on them yet (not "still loading"). */
 export function useTimerCues(
   input: {
     key: string;
@@ -78,16 +85,25 @@ export function useTimerCues(
     skills: SkillsReading | null;
     timeout: number | null;
     moments: readonly Moment[] | undefined;
+    matchLoaded?: boolean;
   },
   onCues: (cues: Cue[]) => void
 ): void {
   const { moments } = input;
-  const reading: FollowedReading = { key: input.key, match: input.match, skills: input.skills, timeout: input.timeout };
+  const reading: FollowedReading = {
+    key: input.key,
+    match: input.match,
+    matchLoaded: input.matchLoaded ?? false,
+    skills: input.skills,
+    timeout: input.timeout,
+  };
   const compute = useCallback(
     (prev: FollowedReading | null, next: FollowedReading | null): Cue[] => {
       if (prev === null || next === null || prev.key !== next.key) return [];
+      // A loaded reading with no match yet is "not started", not a first reading.
+      const prevMatch = prev.match ?? (prev.matchLoaded ? NO_MATCH : null);
       return [
-        ...matchCues(prev.match, next.match, moments ?? []),
+        ...matchCues(prevMatch, next.match, moments ?? []),
         ...skillsCues(prev.skills, next.skills),
         ...timeoutCues(prev.timeout, next.timeout),
       ];

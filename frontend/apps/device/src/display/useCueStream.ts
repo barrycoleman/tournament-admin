@@ -59,6 +59,9 @@ export function useFollowedCues(sessionId: number, follows: Follows, onCues: (cu
   if (follows.kind === "fieldSet" && fields.data) fieldIds = fieldIdsOf(fields.data, follows.fieldSetId);
   if (follows.kind === "field") fieldIds = [follows.fieldId];
   const match = useMatchReading(sessionId, fieldIds);
+  const matchesLoaded = useMatches(sessionId).data !== undefined;
+  const matchLoaded =
+    matchesLoaded && (follows.kind === "field" || (follows.kind === "fieldSet" && fields.data !== undefined));
 
   const skillsSetId = follows.kind === "skillsSet" || follows.kind === "skillsField" ? follows.fieldSetId : null;
   const set = useOptionalSkillsSet(skillsSetId).data;
@@ -76,5 +79,5 @@ export function useFollowedCues(sessionId: number, follows: Follows, onCues: (cu
 
   const deadline = follows.kind === "fieldSet" || follows.kind === "field" ? follows.timeoutDeadline : null;
   const timeout = deadline === null ? null : (Date.parse(deadline) - now) / 1000;
-  useTimerCues({ key: followsKey(follows), match, skills, timeout, moments }, onCues);
+  useTimerCues({ key: followsKey(follows), match, matchLoaded, skills, timeout, moments }, onCues);
 }

@@ -90,3 +90,24 @@ export async function buildSampleCooperativePluginZip(): Promise<string> {
   });
   return outPath;
 }
+
+const CUE_GAME_PLUGIN_DIR = path.resolve(
+  __dirname,
+  "../../../../../../server/tests/fixtures/plugins/games/cue-game"
+);
+
+/** The cue test game (short periods, two game moments, a 6 s skills run). Only manifest.json and plugin.py. */
+export async function buildCueGamePluginZip(): Promise<string> {
+  const outPath = path.join(os.tmpdir(), `cue-game-${Date.now()}.zip`);
+  await new Promise<void>((resolve, reject) => {
+    const output = createWriteStream(outPath);
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    output.on("close", () => resolve());
+    archive.on("error", reject);
+    archive.pipe(output);
+    archive.file(path.join(CUE_GAME_PLUGIN_DIR, "manifest.json"), { name: "manifest.json" });
+    archive.file(path.join(CUE_GAME_PLUGIN_DIR, "plugin.py"), { name: "plugin.py" });
+    void archive.finalize();
+  });
+  return outPath;
+}

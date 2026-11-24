@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { test, expect, type APIRequestContext, type Browser, type Page } from "@playwright/test";
 import { buildSampleCooperativePluginZip } from "./fixtures/buildPluginZip";
 import { startIsolatedServer, type IsolatedServer } from "./fixtures/isolatedServer";
+import { makeWav } from "./fixtures/wav";
 
 const PASSWORD = "displays-e2e-pw";
 
@@ -110,6 +111,52 @@ test.describe.serial("display groups", () => {
     await expect(fieldTv.getByTestId("band-red")).toContainText("11A");
     await expect(fieldTv.getByTestId("start")).toHaveAttribute("data-band", "early");
     await expect(screens["Big TV"].getByRole("heading", { name: "Display League" })).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("the Sounds panel uploads, plays and restores a sound, and a TV's Sound switch holds after a reload", async ({ browser, request }) => {
+    const admin = await adminPage(browser, "/devices");
+    const sounds = admin.getByRole("region", { name: "Sounds" });
+    const start = sounds.locator("li").filter({ hasText: "Match start and driver start" });
+    await expect(start).toContainText("Default");
+    await expect(start.getByRole("button", { name: "Restore default" })).toHaveCount(0);
+
+    // Checked in the browser (decoded for its length) before it is sent.
+    const sent = admin.waitForResponse((r) => r.url().endsWith("/api/sounds/start") && r.request().method() === "PUT");
+    await start.getByLabel("Upload a Start sound file").setInputFiles({ name: "fanfare.wav", mimeType: "audio/wav", buffer: makeWav() });
+    expect((await sent).ok()).toBe(true);
+    await expect(start).toContainText("fanfare.wav");
+    await expect(start).not.toContainText("Default");
+
+    const fetched = admin.waitForResponse((r) => r.url().includes("/api/sounds/start/audio"));
+    await start.getByRole("button", { name: "Play the Start sound" }).click();
+    const audio = await fetched;
+    expect(audio.status()).toBe(200);
+    expect((await audio.body()).subarray(0, 4).toString("ascii")).toBe("RIFF");
+    await expect(start.getByRole("alert")).toHaveCount(0);
+
+    await start.getByRole("button", { name: "Restore default" }).click();
+    await expect(start).toContainText("Default");
+    await expect(start).not.toContainText("fanfare.wav");
+    await expect(start.getByRole("button", { name: "Restore default" })).toHaveCount(0);
+
+    // Each TV row has its own Sound switch, off for a new TV, kept on the device.
+    const row = admin.locator("tr").filter({ has: admin.getByLabel("What Field TV shows") });
+    const sound = row.getByLabel("Sound");
+    await expect(sound).not.toBeChecked();
+    // The switch shows the saved value, so it turns on once the server has it.
+    await sound.click();
+    await expect(sound).toBeChecked();
+    await expect
+      .poll(async () => {
+        const list = (await (await request.get(api("/api/devices"), { headers: headers() })).json()) as { id: number; play_sounds: boolean }[];
+        return list.find((d) => d.id === devices["Field TV"])?.play_sounds;
+      })
+      .toBe(true);
+    await admin.reload();
+    await expect(admin.locator("tr").filter({ has: admin.getByLabel("What Field TV shows") }).getByLabel("Sound")).toBeChecked();
+    await admin.locator("tr").filter({ has: admin.getByLabel("What Field TV shows") }).getByLabel("Sound").click();
+    await expect(admin.locator("tr").filter({ has: admin.getByLabel("What Field TV shows") }).getByLabel("Sound")).not.toBeChecked();
+    await admin.context().close();
   });
 
   test("Match Control starts the next match and the audience switches to In Match", async ({ browser }) => {
