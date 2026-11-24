@@ -1,7 +1,9 @@
+import type { ReactNode } from "react";
 import type { ScreenSettings } from "@tournament-admin/shared";
 import { useFieldSets, type DisplayMe, type DisplayMeGroup } from "./api";
 import type { ScreenContext } from "./screenTypes";
-import { AudienceSounds } from "./AudienceSounds";
+import { TvSounds } from "./TvSounds";
+import type { Follows } from "./useCueStream";
 import { FieldDisplay } from "./FieldDisplay";
 import { WaitingForData } from "./components/ScreenFrame";
 import { SkillsFieldDisplay } from "./SkillsFieldDisplay";
@@ -25,7 +27,19 @@ export function screenContext(
   };
 }
 
-/** Mounts what a display's group shows. */
+/** The timer a group's TV follows for its cues; a pit group follows none. */
+function followsOf(group: DisplayMeGroup, skills: boolean, timeoutDeadline: string | null): Follows | null {
+  if (group.kind === "pit" || group.field_set_id === null) return null;
+  const fieldSetId = group.field_set_id;
+  if (group.kind === "field") {
+    if (group.field_id === null) return null;
+    return skills ? { kind: "skillsField", fieldSetId, fieldId: group.field_id } : { kind: "field", fieldId: group.field_id };
+  }
+  return skills ? { kind: "skillsSet", fieldSetId } : { kind: "fieldSet", fieldSetId, timeoutDeadline };
+}
+
+/** Mounts what a display's group shows, plus the cue sounds when this TV's
+ * sound is on. */
 export function GroupView({ me }: { me: DisplayMe & { session_id: number; group: DisplayMeGroup } }) {
   const { group, session_id: sessionId } = me;
   const fieldSets = useFieldSets(sessionId);
@@ -34,6 +48,28 @@ export function GroupView({ me }: { me: DisplayMe & { session_id: number; group:
   // A skills set's groups show skills screens, so wait to know the set's purpose.
   if (fieldSetId !== null && !fieldSets.data) return <WaitingForData title={group.name} />;
   const skills = fieldSetId !== null && fieldSets.data?.find((fs) => fs.id === fieldSetId)?.purpose === "skills";
+  const follows = me.device.play_sounds ? followsOf(group, skills, timeoutDeadline) : null;
+  return (
+    <>
+      <GroupPicture group={group} sessionId={sessionId} skills={skills} timeoutDeadline={timeoutDeadline} />
+      {follows && <TvSounds sessionId={sessionId} follows={follows} />}
+    </>
+  );
+}
+
+function GroupPicture({
+  group,
+  sessionId,
+  skills,
+  timeoutDeadline,
+}: {
+  group: DisplayMeGroup;
+  sessionId: number;
+  skills: boolean;
+  timeoutDeadline: string | null;
+}): ReactNode {
+  const fieldSets = useFieldSets(sessionId);
+  const fieldSetId = group.kind === "pit" ? null : group.field_set_id;
   if (group.kind === "field" && group.field_id !== null) {
     return (
       <TimeoutGate deadline={timeoutDeadline}>
@@ -65,13 +101,8 @@ export function GroupView({ me }: { me: DisplayMe & { session_id: number; group:
   const { Component } = screenModule(group.screen);
   if (group.kind !== "audience") return <Component context={context} />;
   return (
-    <>
-      <TimeoutGate deadline={timeoutDeadline}>
-        <Component context={context} />
-      </TimeoutGate>
-      {group.play_sounds && (
-        <AudienceSounds sessionId={sessionId} fieldSetId={group.field_set_id} timeoutDeadline={timeoutDeadline} />
-      )}
-    </>
+    <TimeoutGate deadline={timeoutDeadline}>
+      <Component context={context} />
+    </TimeoutGate>
   );
 }

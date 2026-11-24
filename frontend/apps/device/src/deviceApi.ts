@@ -160,3 +160,10 @@ export async function getJson<T>(path: string, accessToken: string): Promise<T> 
   if (!response.ok) throw new ApiStatusError(response.status);
   return readJson<T>(response);
 }
+
+/** An authorized GET for audio bytes (a cue sound). */
+export async function getAudio(path: string, accessToken: string): Promise<ArrayBuffer> {
+  const response = await send(path, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!response.ok) throw new ApiStatusError(response.status);
+  return response.arrayBuffer();
+}

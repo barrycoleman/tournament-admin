@@ -21,6 +21,7 @@ const REFRESH: Record<string, readonly string[]> = {
   skills_settings_changed: ["skillsSettings", "skillsRankings"],
   participation_changed: ["participants"],
   finals_changed: ["finals", "matches"],
+  sounds_changed: ["sounds"],
 };
 
 /** Keeps every screen's data live. Returns how many times the socket has

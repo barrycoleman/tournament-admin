@@ -8,14 +8,16 @@ import {
   type LiveMatch,
   type Moment,
   type SkillsSet,
+  type SoundSlot,
 } from "@tournament-admin/shared";
-import { getJson } from "../deviceApi";
+import { getAudio, getJson } from "../deviceApi";
 
-export interface DisplayMeGroup extends DisplayGroupState {
+// Sound is switched per TV now (`device.play_sounds`), never per group.
+export interface DisplayMeGroup extends Omit<DisplayGroupState, "play_sounds"> {
   field_set: FieldSetLive | null;
 }
 export interface DisplayMe {
-  device: { id: number; name: string };
+  device: { id: number; name: string; play_sounds: boolean };
   session_id: number | null;
   group: DisplayMeGroup | null;
 }
@@ -119,6 +121,13 @@ export interface FinalsBracket {
     winner_alliance_id: number | null;
   }[];
 }
+/** One row of GET /api/sounds: whether the event replaced a slot's default. */
+export interface EventSound {
+  slot: SoundSlot;
+  replaced: boolean;
+  filename: string | null;
+  uploaded_at: string | null;
+}
 export interface ScoresheetFieldInfo {
   name: string;
   label: string;
@@ -131,6 +140,8 @@ export const TokenContext = createContext<() => string>(() => "");
 
 export const paths = {
   me: "/api/displays/me",
+  sounds: "/api/sounds",
+  soundAudio: (slot: SoundSlot, useDefault: boolean) => `/api/sounds/${slot}/audio${useDefault ? "?default=1" : ""}`,
   event: "/api/event",
   matchFormat: "/api/event/match-format",
   scoresheet: "/api/event/scoresheet-schema",
@@ -163,6 +174,11 @@ export function useFetchJson() {
   return useCallback(<T,>(path: string) => getJson<T>(path, getToken()), [getToken]);
 }
 
+export function useFetchAudio() {
+  const getToken = useContext(TokenContext);
+  return useCallback((path: string) => getAudio(path, getToken()), [getToken]);
+}
+
 function useJson<T>(queryKey: readonly unknown[], path: string) {
   const fetchJson = useFetchJson();
   return useQuery({ queryKey, queryFn: () => fetchJson<T>(path) });
@@ -186,6 +202,16 @@ export const useSkillsRankings = (sessionId: number, tab: string) =>
   useJson<SkillsRankingRow[]>(["skillsRankings", sessionId, tab], paths.skillsRankings(sessionId, tab));
 export const useSkillsSet = (fieldSetId: number) =>
   useJson<SkillsSet>(["skillsSet", fieldSetId], paths.skillsSet(fieldSetId));
+/** A skills set's state, or nothing (no request) when there is no set to read. */
+export function useOptionalSkillsSet(fieldSetId: number | null) {
+  const fetchJson = useFetchJson();
+  return useQuery({
+    queryKey: ["skillsSet", fieldSetId],
+    queryFn: () => fetchJson<SkillsSet>(paths.skillsSet(fieldSetId!)),
+    enabled: fieldSetId !== null,
+  });
+}
+export const useEventSounds = () => useJson<EventSound[]>(["sounds"], paths.sounds);
 export const useSkillsAttempts = (sessionId: number) =>
   useJson<SkillsAttempt[]>(["skillsAttempts", sessionId], paths.skillsAttempts(sessionId));
 export const useParticipants = (sessionId: number) =>

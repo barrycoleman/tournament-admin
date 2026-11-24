@@ -55,6 +55,7 @@ type Period = "autonomous" | "driver";
 const MATCH_ORDER = ["not_started", "countdown_autonomous", "autonomous", "awaiting_driver", "countdown_driver", "driver"];
 const LIVE_MATCH_PHASES = new Set(MATCH_ORDER.slice(1));
 const COUNT_INS = new Set(["countdown_autonomous", "countdown_driver"]);
+const SECTIONS = new Set(["autonomous", "driver"]);
 
 /** The runout (buzzer, over) or an operator's early end (power-down, stop);
  * only the server's `ended_early` flag decides which. */
@@ -95,6 +96,9 @@ const NOT_STARTED = { phase: "not_started", whole: 0, paused: false, endedEarly:
  * silent, so a TV turned on mid-match plays nothing. */
 export function matchCues(prev: MatchReading | null, next: MatchReading | null, moments: readonly Moment[]): Cue[] {
   if (prev === null || next === null) return [];
+  // A new match first seen already inside a section: its count-in and start
+  // were missed, so this reading counts as a first reading.
+  if (prev.matchId !== next.matchId && SECTIONS.has(next.phase)) return [];
   const before = prev.matchId === next.matchId ? prev : { ...NOT_STARTED, matchId: next.matchId };
   const wasLive = LIVE_MATCH_PHASES.has(before.phase);
 
@@ -127,6 +131,8 @@ export function matchCues(prev: MatchReading | null, next: MatchReading | null, 
 /** The cues between two readings of a skills timer: no count-in, one section. */
 export function skillsCues(prev: SkillsReading | null, next: SkillsReading | null): Cue[] {
   if (prev === null || next === null) return [];
+  // A new timer first seen already running: its start was missed.
+  if (prev.timerKey !== next.timerKey && next.phase === "running") return [];
   const before = prev.timerKey === next.timerKey ? prev : { ...next, phase: "ready" as const, whole: 0, paused: false };
   const wasLive = before.phase === "running";
 
@@ -137,6 +143,34 @@ export function skillsCues(prev: SkillsReading | null, next: SkillsReading | nul
   const cues: Cue[] = wasLive ? [] : [START];
   cues.push(...crossings(before.whole, wasLive, next.whole, sectionThresholds([], null)));
   return cues;
+}
+
+/** The reading to compare the next one against: the earlier, lower one when
+ * the clock moves up within the same running phase of the same match (a
+ * re-measured server-clock offset), so the next real second is not crossed
+ * twice; otherwise the new reading. */
+export function holdMatchReading(held: MatchReading | null, next: MatchReading | null): MatchReading | null {
+  if (held === null || next === null) return next;
+  const jitter =
+    held.matchId === next.matchId &&
+    held.phase === next.phase &&
+    !held.paused &&
+    !next.paused &&
+    next.whole > held.whole;
+  return jitter ? held : next;
+}
+
+/** The same rule for a running skills timer. */
+export function holdSkillsReading(held: SkillsReading | null, next: SkillsReading | null): SkillsReading | null {
+  if (held === null || next === null) return next;
+  const jitter =
+    held.timerKey === next.timerKey &&
+    held.phase === "running" &&
+    next.phase === "running" &&
+    !held.paused &&
+    !next.paused &&
+    next.whole > held.whole;
+  return jitter ? held : next;
 }
 
 /** A time-out that runs out dings; a cancelled one (no deadline) is silent. */

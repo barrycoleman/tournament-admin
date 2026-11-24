@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   SOUND_SLOTS,
   activeWindow,
+  holdMatchReading,
+  holdSkillsReading,
   matchCues,
   skillsCues,
   timeoutCues,
@@ -172,10 +174,52 @@ describe("matchCues", () => {
     expect(
       matchCues(reading("ended", 0, { matchId: 1 }), reading("countdown_autonomous", 3, { matchId: 2 }), [])
     ).toEqual([BEEP]);
+    expect(
+      matchCues(reading("ended", 0, { matchId: 1 }), reading("countdown_driver", 2, { matchId: 2 }), [])
+    ).toEqual([BEEP]);
     expect(matchCues(reading("driver", 40, { matchId: 1 }), reading("not_started", 0, { matchId: 2 }), [])).toEqual(
       []
     );
     expect(matchCues(reading("driver", 1, { matchId: 1 }), reading("ended", 0, { matchId: 2 }), [])).toEqual([]);
+  });
+
+  it("is silent for a new match first seen already inside a section (its count-in and start were missed)", () => {
+    // Without this rule the first reading would burst a start, moments and beeps.
+    expect(
+      matchCues(reading("ended", 0, { matchId: 1 }), reading("driver", 2, { matchId: 2 }), CUE_GAME)
+    ).toEqual([]);
+    expect(
+      matchCues(reading("ended", 0, { matchId: 1 }), reading("autonomous", 15, { matchId: 2 }), CUE_GAME)
+    ).toEqual([]);
+    // The next reading of that match cues as usual.
+    expect(
+      matchCues(reading("driver", 4, { matchId: 2 }), reading("driver", 3, { matchId: 2 }), [])
+    ).toEqual([BEEP]);
+  });
+});
+
+describe("holdMatchReading", () => {
+  it("keeps the earlier, lower reading when the clock jitters up within a phase", () => {
+    const held = reading("driver", 41);
+    expect(holdMatchReading(held, reading("driver", 42))).toBe(held);
+    expect(holdMatchReading(reading("countdown_driver", 2), reading("countdown_driver", 3))?.whole).toBe(2);
+    // So the next real second is not a second crossing.
+    expect(matchCues(holdMatchReading(held, reading("driver", 42)), reading("driver", 41), [])).toEqual([]);
+  });
+
+  it("takes the new reading when it counts down, or the match, phase or pause changes", () => {
+    const next = reading("driver", 40);
+    expect(holdMatchReading(reading("driver", 41), next)).toBe(next);
+    const otherMatch = reading("driver", 50, { matchId: 2 });
+    expect(holdMatchReading(reading("driver", 41), otherMatch)).toBe(otherMatch);
+    const otherPhase = reading("driver", 105);
+    expect(holdMatchReading(reading("countdown_driver", 1), otherPhase)).toBe(otherPhase);
+    const paused = reading("driver", 42, { paused: true });
+    expect(holdMatchReading(reading("driver", 41), paused)).toBe(paused);
+    const resumed = reading("driver", 42);
+    expect(holdMatchReading(reading("driver", 41, { paused: true }), resumed)).toBe(resumed);
+    expect(holdMatchReading(null, next)).toBe(next);
+    expect(holdMatchReading(next, null)).toBeNull();
   });
 });
 
@@ -226,9 +270,36 @@ describe("skillsCues", () => {
 
   it("treats a changed timer as ready, so a first reading already ended is silent", () => {
     expect(skillsCues(skills("running", 1, { timerKey: "a" }), skills("ended", 0, { timerKey: "b" }))).toEqual([]);
-    expect(skillsCues(skills("ended", 0, { timerKey: "a" }), skills("running", 60, { timerKey: "b" }))).toEqual([
+  });
+
+  it("is silent for a changed timer first seen already running (its start was missed)", () => {
+    expect(skillsCues(skills("ended", 0, { timerKey: "a" }), skills("running", 60, { timerKey: "b" }))).toEqual([]);
+    expect(skillsCues(skills("ready", 60, { timerKey: "a" }), skills("running", 2, { timerKey: "b" }))).toEqual([]);
+    // A changed timer first seen ready starts normally afterwards.
+    expect(skillsCues(skills("ready", 60, { timerKey: "b" }), skills("running", 60, { timerKey: "b" }))).toEqual([
       START,
     ]);
+  });
+});
+
+describe("holdSkillsReading", () => {
+  it("keeps the earlier, lower reading when a running timer jitters up", () => {
+    const held = skills("running", 4);
+    expect(holdSkillsReading(held, skills("running", 5))).toBe(held);
+    expect(skillsCues(holdSkillsReading(held, skills("running", 5)), skills("running", 4))).toEqual([]);
+  });
+
+  it("takes the new reading otherwise", () => {
+    const down = skills("running", 3);
+    expect(holdSkillsReading(skills("running", 4), down)).toBe(down);
+    const other = skills("running", 50, { timerKey: "b" });
+    expect(holdSkillsReading(skills("running", 4), other)).toBe(other);
+    const ready = skills("ready", 60);
+    expect(holdSkillsReading(skills("ready", 30), ready)).toBe(ready);
+    const paused = skills("running", 5, { paused: true });
+    expect(holdSkillsReading(skills("running", 4), paused)).toBe(paused);
+    expect(holdSkillsReading(null, down)).toBe(down);
+    expect(holdSkillsReading(down, null)).toBeNull();
   });
 });
 

@@ -48,13 +48,13 @@ export function match(overrides: Partial<LiveMatch> = {}): LiveMatch {
 }
 
 export function me(group: Record<string, unknown> | null, sessionId: number | null = 1) {
-  return { device: { id: 7, name: "Big TV" }, session_id: sessionId, group };
+  return { device: { id: 7, name: "Big TV", play_sounds: false }, session_id: sessionId, group };
 }
 
 export function audienceGroup(overrides: Record<string, unknown> = {}) {
   return {
     id: 50, session_id: 1, kind: "audience", name: "Main Fields", field_set_id: 10, field_id: null, division_id: null,
-    screen: "logo", screen_settings: {}, rotation: null, play_sounds: false,
+    screen: "logo", screen_settings: {}, rotation: null,
     field_set: { queued_match_id: null, timeout_deadline: null }, ...overrides,
   };
 }
@@ -62,7 +62,7 @@ export function audienceGroup(overrides: Record<string, unknown> = {}) {
 export function fieldGroup(overrides: Record<string, unknown> = {}) {
   return {
     id: 51, session_id: 1, kind: "field", name: "Field 1", field_set_id: 10, field_id: 1, division_id: null,
-    screen: null, screen_settings: {}, rotation: null, play_sounds: false,
+    screen: null, screen_settings: {}, rotation: null,
     field_set: { queued_match_id: null, timeout_deadline: null }, ...overrides,
   };
 }
@@ -70,7 +70,7 @@ export function fieldGroup(overrides: Record<string, unknown> = {}) {
 export function pitGroup(overrides: Record<string, unknown> = {}) {
   return {
     id: 52, session_id: 1, kind: "pit", name: "Pit TVs", field_set_id: null, field_id: null, division_id: null,
-    screen: "logo", screen_settings: {}, rotation: null, play_sounds: false, field_set: null, ...overrides,
+    screen: "logo", screen_settings: {}, rotation: null, field_set: null, ...overrides,
   };
 }
 
