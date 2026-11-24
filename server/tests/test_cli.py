@@ -146,3 +146,10 @@ def test_migrate_command_works_in_a_fresh_process(tmp_path):
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "stamped as up to date" in result.stdout
+
+
+def test_test_plugin_command_exits_zero_on_cue_game(capsys):
+    cue_game = (
+        Path(__file__).parent / "fixtures" / "plugins" / "games" / "cue-game"
+    )
+    assert main(["test-plugin", str(cue_game)]) == 0

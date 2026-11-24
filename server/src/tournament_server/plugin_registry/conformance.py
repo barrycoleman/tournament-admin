@@ -241,6 +241,65 @@ def _check_match_format(module: Any) -> CheckResult:
                 f"default_cycle_time_seconds ({default_cycle}) must be at least the "
                 f"match length ({match_seconds}s)",
             )
+    return _check_moments(result)
+
+
+_MOMENT_KEYS = {"key", "label", "period", "at_remaining", "until_remaining"}
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _check_moments(match_format: dict[str, Any]) -> CheckResult:
+    def fail(message: str) -> CheckResult:
+        return CheckResult("match_format() shape", False, message)
+
+    moments = match_format.get("moments")
+    if moments is None:
+        return CheckResult("match_format() shape", True)
+    if not isinstance(moments, list):
+        return fail("moments must be a list")
+    period_seconds = {
+        "autonomous": match_format["autonomous_seconds"],
+        "driver": match_format["driver_seconds"],
+    }
+    seen: set[Any] = set()
+    for index, moment in enumerate(moments):
+        if not isinstance(moment, dict):
+            return fail(f"moments entry {index} must be an object, got {moment!r}")
+        key = moment.get("key")
+        name = f"moment {key!r}"
+        unknown = set(moment) - _MOMENT_KEYS
+        if unknown:
+            return fail(f"{name} has unknown keys: {sorted(unknown)}")
+        if not isinstance(key, str) or not key:
+            return fail(f"moments entry {index} needs a non-empty string key")
+        if not isinstance(moment.get("label"), str) or not moment["label"]:
+            return fail(f"{name} needs a non-empty string label")
+        if key in seen:
+            return fail(f"{name} is declared more than once")
+        seen.add(key)
+        period = moment.get("period")
+        if period not in period_seconds:
+            return fail(f"{name} period must be 'autonomous' or 'driver', got {period!r}")
+        at = moment.get("at_remaining")
+        if not _is_int(at):
+            return fail(f"{name} at_remaining must be an integer, got {at!r}")
+        if at < 1 or at >= period_seconds[period]:
+            return fail(
+                f"{name} at_remaining ({at}) must be at least 1 and less than the "
+                f"{period} period length ({period_seconds[period]}s)"
+            )
+        until = moment.get("until_remaining")
+        if until is not None:
+            if not _is_int(until):
+                return fail(f"{name} until_remaining must be an integer or null, got {until!r}")
+            if until < 0 or until >= at:
+                return fail(
+                    f"{name} until_remaining ({until}) must be at least 0 and less "
+                    f"than at_remaining ({at})"
+                )
     return CheckResult("match_format() shape", True)
 
 

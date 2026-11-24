@@ -27,6 +27,7 @@ from tournament_server.schemas.event import (
     GamePluginChangePreview,
     GamePluginSelect,
     MatchFormatRead,
+    MomentRead,
 )
 from tournament_server.services import game_plugin as game_plugin_service
 
@@ -111,6 +112,9 @@ def read_match_format(
         game_model=match_format["game_model"],
         autonomous_seconds=match_format["autonomous_seconds"],
         driver_seconds=match_format["driver_seconds"],
+        moments=[
+            MomentRead(**moment) for moment in match_format.get("moments") or []
+        ],
     )
 
 

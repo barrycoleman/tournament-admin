@@ -599,3 +599,68 @@ def test_non_int_skills_scoring_fails(tmp_path):
     check = _named(report, "calculate_skills_score('driver') determinism")
     assert not check.passed
     assert "int" in check.message
+
+
+_VALID_MOMENT = {
+    "key": "driver_change",
+    "label": "Driver change",
+    "period": "driver",
+    "at_remaining": 35,
+    "until_remaining": 25,
+}
+
+
+def _match_format_check_with_moments(tmp_path, moments):
+    import shutil
+
+    plugin_dir = tmp_path / "moment-game"
+    shutil.copytree(FIXTURE_EXAMPLE_PLUGIN, plugin_dir)
+    manifest = json.loads((plugin_dir / "manifest.json").read_text())
+    manifest["name"] = "moment-game"
+    (plugin_dir / "manifest.json").write_text(json.dumps(manifest))
+    text = (plugin_dir / "plugin.py").read_text()
+    anchor = "    }\n\n\ndef scoresheet_schema"
+    assert anchor in text
+    (plugin_dir / "plugin.py").write_text(
+        text.replace(anchor, f'        "moments": {moments!r},\n' + anchor, 1)
+    )
+    report = run_conformance_checks(plugin_dir)
+    return next(c for c in report.checks if c.name == "match_format() shape")
+
+
+def test_moments_valid_list_passes(tmp_path):
+    check = _match_format_check_with_moments(
+        tmp_path, [_VALID_MOMENT, {**_VALID_MOMENT, "key": "endgame", "until_remaining": None}]
+    )
+    assert check.passed, check.message
+
+
+def test_moments_missing_list_passes():
+    report = run_conformance_checks(FIXTURE_BROKEN_PLUGIN.parent / "fast-timer-game")
+    check = next(c for c in report.checks if c.name == "match_format() shape")
+    assert check.passed
+
+
+@pytest.mark.parametrize(
+    ("moments", "needle"),
+    [
+        ("not a list", "moments"),
+        (["driver_change"], "moments"),
+        ([{**_VALID_MOMENT, "extra": 1}], "driver_change"),
+        ([{k: v for k, v in _VALID_MOMENT.items() if k != "label"}], "driver_change"),
+        ([_VALID_MOMENT, _VALID_MOMENT], "driver_change"),
+        ([{**_VALID_MOMENT, "period": "endgame"}], "driver_change"),
+        ([{**_VALID_MOMENT, "at_remaining": 0}], "driver_change"),
+        ([{**_VALID_MOMENT, "at_remaining": 105, "until_remaining": None}], "driver_change"),
+        ([{**_VALID_MOMENT, "at_remaining": 15, "period": "autonomous", "until_remaining": None}], "driver_change"),
+        ([{**_VALID_MOMENT, "at_remaining": 35.0}], "driver_change"),
+        ([{**_VALID_MOMENT, "at_remaining": True}], "driver_change"),
+        ([{**_VALID_MOMENT, "until_remaining": 35}], "driver_change"),
+        ([{**_VALID_MOMENT, "until_remaining": 40}], "driver_change"),
+        ([{**_VALID_MOMENT, "until_remaining": -1}], "driver_change"),
+    ],
+)
+def test_moments_invalid_entries_fail_naming_the_key(tmp_path, moments, needle):
+    check = _match_format_check_with_moments(tmp_path, moments)
+    assert not check.passed
+    assert needle in check.message

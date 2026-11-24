@@ -176,7 +176,54 @@ def test_match_format_reports_the_selected_game_plugin(client):
         "game_model": "head_to_head",
         "autonomous_seconds": 15,
         "driver_seconds": 105,
+        "moments": [
+            {
+                "key": "driver_change",
+                "label": "Driver change",
+                "period": "driver",
+                "at_remaining": 35,
+                "until_remaining": 25,
+            }
+        ],
     }
+
+
+def _fixture_game_client(tmp_path, name):
+    import shutil
+    from pathlib import Path
+
+    from conftest import _AutoAuthTestClient
+    from tournament_server.app import create_app
+
+    source = Path(__file__).parent / "fixtures" / "plugins" / "games" / name
+    plugins_root = tmp_path / "plugins"
+    shutil.copytree(source, plugins_root / "games" / name)
+    app = create_app(
+        db_path=str(tmp_path / "test.db"),
+        plugins_root=str(plugins_root),
+        config_path=tmp_path / "server-config.json",
+    )
+    return _AutoAuthTestClient(app)
+
+
+def test_match_format_moments_are_empty_without_a_plugin_list(tmp_path):
+    with _fixture_game_client(tmp_path, "fast-timer-game") as client:
+        client.post("/api/event", json={"name": "Regional Qualifier"})
+        client.post("/api/event/game-plugin", json={"name": "fast-timer-game"})
+        assert client.get("/api/event/match-format").json()["moments"] == []
+
+
+def test_match_format_fills_null_until_for_instant_moments(tmp_path):
+    with _fixture_game_client(tmp_path, "cue-game") as client:
+        client.post("/api/event", json={"name": "Regional Qualifier"})
+        client.post("/api/event/game-plugin", json={"name": "cue-game"})
+        moments = client.get("/api/event/match-format").json()["moments"]
+    assert moments == [
+        {"key": "driver_change", "label": "Driver change", "period": "driver",
+         "at_remaining": 8, "until_remaining": 6},
+        {"key": "endgame", "label": "Endgame", "period": "driver",
+         "at_remaining": 4, "until_remaining": None},
+    ]
 
 
 def test_match_format_without_a_game_plugin_is_422(client):

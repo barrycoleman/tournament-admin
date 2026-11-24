@@ -70,6 +70,15 @@ def test_match_format_is_a_cooperative_score_chase():
         "alliance_selection": "seed_pairing",
         "finals_format": "score_chase",
         "default_cycle_time_seconds": 300,
+        "moments": [
+            {
+                "key": "driver_change",
+                "label": "Driver change",
+                "period": "driver",
+                "at_remaining": 35,
+                "until_remaining": 25,
+            }
+        ],
     }
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -33,6 +34,14 @@ class GamePluginSelect(BaseModel):
     name: str
 
 
+class MomentRead(BaseModel):
+    key: str
+    label: str
+    period: Literal["autonomous", "driver"]
+    at_remaining: int
+    until_remaining: int | None = None
+
+
 class MatchFormatRead(BaseModel):
     round_types: list[str]
     teams_per_alliance: int
@@ -42,6 +51,7 @@ class MatchFormatRead(BaseModel):
     game_model: str
     autonomous_seconds: int
     driver_seconds: int
+    moments: list[MomentRead] = []
 
 
 class WouldReset(BaseModel):

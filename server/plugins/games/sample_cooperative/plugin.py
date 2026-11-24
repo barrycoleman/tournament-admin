@@ -34,6 +34,15 @@ def match_format() -> dict[str, Any]:
         # A starting point for the Schedule tab: a 60-second match plus
         # time to reset the field and queue the next teams.
         "default_cycle_time_seconds": 300,
+        "moments": [
+            {
+                "key": "driver_change",
+                "label": "Driver change",
+                "period": "driver",
+                "at_remaining": 35,
+                "until_remaining": 25,
+            }
+        ],
     }
 
 

@@ -13,6 +13,15 @@ def match_format() -> dict[str, Any]:
         "game_model": "cooperative_score",
         "alliance_selection": "seed_pairing",
         "finals_format": "score_chase",
+        "moments": [
+            {
+                "key": "driver_change",
+                "label": "Driver change",
+                "period": "driver",
+                "at_remaining": 35,
+                "until_remaining": 25,
+            }
+        ],
     }
 
 
