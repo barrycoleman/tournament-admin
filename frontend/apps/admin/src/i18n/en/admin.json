@@ -930,7 +930,6 @@
       "blue": "Blue"
     },
     "audienceHeading": "Audience screen",
-    "playSounds": "Play sounds",
     "timeoutHeading": "Time-out",
     "timeoutLength": "Length in seconds",
     "startTimeout": "Start time-out",
@@ -948,7 +947,8 @@
     "score": "Score",
     "hideLive": "Hide live scores",
     "showLive": "Show live scores",
-    "scoreSaved": "Score saved."
+    "scoreSaved": "Score saved.",
+    "tvsPlaySounds": "TVs play sounds"
   },
   "displays": {
     "activeSession": "{{label}} (active)",
@@ -960,7 +960,6 @@
     "unplacedItem": "{{name}} (was in {{group}})",
     "audienceHeading": "Audience",
     "audienceScreen": "Audience screen",
-    "playSounds": "Play sounds",
     "pitsHeading": "Pit groups",
     "pitName": "Pit group name",
     "pitDivision": "Division",
@@ -1216,5 +1215,42 @@
   "operatorSounds": {
     "switch": "Play sounds on this computer",
     "enable": "Click to enable sound"
+  },
+  "sounds": {
+    "heading": "Sounds",
+    "slots": {
+      "beep": {
+        "name": "Beep",
+        "when": "Count-in and last 3 seconds"
+      },
+      "start": {
+        "name": "Start",
+        "when": "Match start and driver start"
+      },
+      "buzzer": {
+        "name": "Buzzer",
+        "when": "Time runs out"
+      },
+      "moment": {
+        "name": "Ding",
+        "when": "Game moments and time-out end"
+      },
+      "stop": {
+        "name": "Stop",
+        "when": "Ended early or reset"
+      }
+    },
+    "play": "Play",
+    "playNamed": "Play the {{name}} sound",
+    "uploadNamed": "Upload a {{name}} sound file",
+    "default": "Default",
+    "upload": "Upload",
+    "restore": "Restore default",
+    "tooLong": "This sound is longer than 10 seconds.",
+    "tooBig": "This file is larger than 1 MB.",
+    "unreadable": "This file could not be read as audio.",
+    "playFailed": "This sound could not be played.",
+    "rights": "Only upload sounds you have the rights to use.",
+    "tvSwitch": "Sound"
   }
 }

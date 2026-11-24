@@ -48,8 +48,8 @@ function stub(overrides: Record<string, unknown> = {}) {
         has_setup: true,
         unassigned: [],
         groups: [
-          { id: 50, session_id: 1, kind: "audience", name: "Main Fields", field_set_id: 10, field_id: null, division_id: null, screen: "logo", screen_settings: {}, rotation: null, play_sounds: false, displays: [] },
-          { id: 51, session_id: 1, kind: "field", name: "Field 1", field_set_id: 10, field_id: 1, division_id: null, screen: null, screen_settings: {}, rotation: null, play_sounds: false, displays: [] },
+          { id: 50, session_id: 1, kind: "audience", name: "Main Fields", field_set_id: 10, field_id: null, division_id: null, screen: "logo", screen_settings: {}, rotation: null, displays: [] },
+          { id: 51, session_id: 1, kind: "field", name: "Field 1", field_set_id: 10, field_id: 1, division_id: null, screen: null, screen_settings: {}, rotation: null, displays: [] },
         ],
       } as never;
     if (key === "PUT /api/displays/assignments") return { session_id: 1, groups: [], unassigned: [], has_setup: true } as never;

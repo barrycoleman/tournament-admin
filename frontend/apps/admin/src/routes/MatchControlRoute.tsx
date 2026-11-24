@@ -23,6 +23,7 @@ import { Modal } from "../components/Modal";
 import { ScreenSettingsEditor } from "../displays/ScreenSettingsEditor";
 import type { DisplayGroupRead, FieldRead, FieldSetLiveRead } from "../displays/types";
 import { useMatchControlActions, useMatchControlData, type LiveScoresSwitch } from "../matchControl/useMatchControl";
+import type { DeviceRead } from "../devices/useDevices";
 import type { EventRead, SessionRead, TeamSummary } from "../types";
 
 const STORAGE_KEY = "tournament-admin.matchControl.fieldSet";
@@ -117,6 +118,8 @@ function MatchControlBody({ sessionId }: { sessionId: number }) {
         scores={data.scores.data}
         teams={new Map(data.teams.data.map((team) => [team.id, team]))}
         audience={audience}
+        groups={data.displays.data.groups}
+        devices={data.devices.data}
         session={data.sessions.data?.find((s) => s.id === sessionId) ?? null}
       />
     </>
@@ -130,6 +133,8 @@ function FieldSetPanel({
   scores,
   teams,
   audience,
+  groups,
+  devices,
   session,
 }: {
   fieldSet: FieldSetLiveRead;
@@ -138,6 +143,8 @@ function FieldSetPanel({
   scores: AllianceScore[];
   teams: Map<number, TeamSummary>;
   audience: DisplayGroupRead | null;
+  groups: DisplayGroupRead[];
+  devices: DeviceRead[] | undefined;
   session: SessionRead | null;
 }) {
   const { t } = useTranslation();
@@ -158,6 +165,11 @@ function FieldSetPanel({
     matches.filter((m) => onFields(fieldIds)(m) && m.phase === "not_started" && m.status !== "completed" && m.status !== "not_played")
   );
   const timeoutLeft = fieldSet.timeout_deadline ? (Date.parse(fieldSet.timeout_deadline) - now) / 1000 : 0;
+  // Every TV on this field set's audience and field screens has its sound on.
+  const tvIds = groups
+    .filter((g) => g.field_set_id === fieldSet.id && (g.kind === "audience" || g.kind === "field"))
+    .flatMap((g) => g.displays.map((d) => d.device_id));
+  const tvsPlaySounds = tvIds.length > 0 && tvIds.every((id) => devices?.find((d) => d.id === id)?.play_sounds === true);
   const failed = Object.values(actions).find((mutation) => mutation.isError);
   const liveSwitch: LiveScoresSwitch = current?.is_finals ? "live_scores_finals" : "live_scores_qualification";
   // An older server leaves the switches out; fall back to its defaults (qualification on, finals off).
@@ -346,10 +358,11 @@ function FieldSetPanel({
           <label className="choice">
             <input
               type="checkbox"
-              checked={audience.play_sounds}
-              onChange={(event) => actions.updateGroup.mutate({ groupId: audience.id, play_sounds: event.target.checked })}
+              checked={tvsPlaySounds}
+              disabled={tvIds.length === 0 || actions.setFieldSetSounds.isPending}
+              onChange={(event) => actions.setFieldSetSounds.mutate({ fieldSetId: fieldSet.id, play_sounds: event.target.checked })}
             />{" "}
-            {t("matchControl.playSounds")}
+            {t("matchControl.tvsPlaySounds")}
           </label>
         </section>
       )}

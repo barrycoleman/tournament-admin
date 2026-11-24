@@ -12,8 +12,10 @@ import { IdleTimeoutForm } from "../devices/IdleTimeoutForm";
 import { OtherDevicesTable } from "../devices/OtherDevicesTable";
 import { PairDeviceForm } from "../devices/PairDeviceForm";
 import { ServerInfoPanel } from "../devices/ServerInfoPanel";
+import { SoundsSection } from "../devices/SoundsSection";
 import { SpotsSection } from "../devices/SpotsSection";
 import { DEVICES_KEY, useDeviceMutations, useDevices, type DeviceRead } from "../devices/useDevices";
+import { SOUNDS_KEY } from "../devices/useEventSounds";
 import { useDisplays, type UnplacedDisplay } from "../displays/useDisplays";
 import { orderSessions } from "../orientation/sessionTime";
 import { useEvent, useSessions } from "../orientation/useOrientationData";
@@ -46,6 +48,7 @@ export function DevicesDisplaysRoute() {
       if (message.event === "devices_changed" || message.event === "scorer_binding_changed") {
         void queryClient.invalidateQueries({ queryKey: DEVICES_KEY });
       }
+      if (message.event === "sounds_changed") void queryClient.invalidateQueries({ queryKey: SOUNDS_KEY });
     },
   });
 
@@ -105,6 +108,8 @@ export function DevicesDisplaysRoute() {
           <CopySpotsPanel key={sessionId} sessionId={sessionId} otherSessions={otherSessions} onCopied={setUnplaced} />
         )}
       </section>
+
+      <SoundsSection />
 
       {sessionId !== null && <SpotsSection sessionId={sessionId} data={displays.data} unplaced={unplaced} />}
 

@@ -6,6 +6,7 @@ import {
   type LiveMatch,
   type ScreenSettings,
 } from "@tournament-admin/shared";
+import type { DeviceRead } from "../devices/useDevices";
 import type { DisplaysRead, FieldRead, FieldSetLiveRead } from "../displays/types";
 import type { SessionRead, TeamSummary } from "../types";
 
@@ -20,6 +21,7 @@ const LIVE: Record<string, readonly string[]> = {
   match_submitted: ["matches", "scores"],
   field_set_changed: ["fieldSets"],
   display_changed: ["displays"],
+  devices_changed: ["devices"],
   active_session_changed: ["event"],
 };
 
@@ -53,6 +55,7 @@ export function useMatchControlData(sessionId: number) {
       queryKey: ["displays", sessionId],
       queryFn: () => apiRequest<DisplaysRead>(`/api/displays?session_id=${sessionId}`),
     }),
+    devices: useQuery({ queryKey: ["devices"], queryFn: () => apiRequest<DeviceRead[]>("/api/devices") }),
     sessions: useQuery({ queryKey: ["sessions"], queryFn: () => apiRequest<SessionRead[]>("/api/sessions") }),
   };
 }
@@ -91,6 +94,14 @@ export function useMatchControlActions() {
         apiRequest<SessionRead>(`/api/sessions/${sessionId}`, { method: "PATCH", body: { [field]: value } }),
       onSuccess: () => refresh("sessions"),
     }),
+    setFieldSetSounds: useMutation({
+      mutationFn: ({ fieldSetId, play_sounds }: { fieldSetId: number; play_sounds: boolean }) =>
+        apiRequest<{ device_ids: number[] }>(`/api/displays/field-sets/${fieldSetId}/sounds`, {
+          method: "PUT",
+          body: { play_sounds },
+        }),
+      onSuccess: () => refresh("devices"),
+    }),
     updateGroup: useMutation({
       mutationFn: ({
         groupId,
@@ -99,7 +110,6 @@ export function useMatchControlActions() {
         groupId: number;
         screen?: string;
         screen_settings?: ScreenSettings;
-        play_sounds?: boolean;
       }) => apiRequest(`/api/displays/groups/${groupId}`, { method: "PATCH", body }),
       onSuccess: () => refresh("displays"),
     }),

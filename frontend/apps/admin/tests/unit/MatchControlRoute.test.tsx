@@ -35,6 +35,7 @@ let matches: LiveMatch[];
 let scores: Record<string, unknown>[];
 let audience: Record<string, unknown>;
 let sessions: Record<string, unknown>[];
+let devices: Record<string, unknown>[] = [];
 
 function stub() {
   vi.mocked(apiRequest).mockImplementation(async (path: string, options?: { method?: string }) => {
@@ -50,6 +51,7 @@ function stub() {
       ],
       "GET /api/matches?session_id=1": matches,
       "GET /api/scores?session_id=1": scores,
+      "GET /api/devices": devices,
       "GET /api/teams": [
         { id: 1, number: "101A", name: "Rockets", division_id: null },
         { id: 2, number: "102B", name: "Gears", division_id: null },
@@ -90,7 +92,7 @@ beforeEach(() => {
   scores = [];
   audience = {
     id: 50, session_id: 1, kind: "audience", name: "Main Fields", field_set_id: 10, field_id: null, division_id: null,
-    screen: "logo", screen_settings: {}, rotation: null, play_sounds: false, displays: [],
+    screen: "logo", screen_settings: {}, rotation: null, displays: [],
   };
   sessions = [
     {
@@ -99,6 +101,7 @@ beforeEach(() => {
       live_scores_qualification: true, live_scores_finals: false,
     },
   ];
+  devices = [];
   stub();
 });
 
@@ -231,10 +234,37 @@ describe("Match Control", () => {
         body: { screen_settings: { count: 5, scope: "field_set" } },
       })
     );
-    fireEvent.click(within(latest).getByLabelText("Play sounds"));
+  });
+
+  it("switches every TV on the field set's sound with one switch", async () => {
+    audience = { ...audience, displays: [{ device_id: 7, name: "Big TV", online: true }] };
+    devices = [{ id: 7, play_sounds: false }, { id: 8, play_sounds: true }];
+    stub();
+    renderRoute();
+    const panel = await screen.findByRole("region", { name: "Audience screen" });
+    const sw = await within(panel).findByLabelText("TVs play sounds");
+    expect(sw).not.toBeChecked();
+    fireEvent.click(sw);
     await waitFor(() =>
-      expect(apiRequest).toHaveBeenCalledWith("/api/displays/groups/50", { method: "PATCH", body: { play_sounds: true } })
+      expect(apiRequest).toHaveBeenCalledWith("/api/displays/field-sets/10/sounds", { method: "PUT", body: { play_sounds: true } })
     );
+  });
+
+  it("shows the TVs' sound switch on when every TV has its sound on", async () => {
+    audience = { ...audience, displays: [{ device_id: 7, name: "Big TV", online: true }, { device_id: 8, name: "Side TV", online: true }] };
+    devices = [{ id: 7, play_sounds: true }, { id: 8, play_sounds: true }];
+    stub();
+    renderRoute();
+    expect(await screen.findByLabelText("TVs play sounds")).toBeChecked();
+  });
+
+  it("leaves the TVs' sound switch off when one TV has its sound off", async () => {
+    audience = { ...audience, displays: [{ device_id: 7, name: "Big TV", online: true }, { device_id: 8, name: "Side TV", online: true }] };
+    devices = [{ id: 7, play_sounds: true }, { id: 8, play_sounds: false }];
+    stub();
+    renderRoute();
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/devices"));
+    expect(await screen.findByLabelText("TVs play sounds")).not.toBeChecked();
   });
 
   it("starts and cancels a time-out", async () => {

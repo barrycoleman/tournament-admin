@@ -49,12 +49,12 @@ export function DisplaysTable({
 }) {
   const { t, i18n } = useTranslation();
   const now = useNow(30_000).getTime();
-  const { setEnabled } = useDeviceMutations();
+  const { setEnabled, setSounds } = useDeviceMutations();
   const { assign, identify } = useDisplayMutations(sessionId);
   const groups = displays?.groups ?? [];
   const fieldSetName = fieldSetNameOf(groups);
   const byDevice = placements(displays);
-  const failed = [setEnabled, assign, identify].find((m) => m.isError);
+  const failed = [setEnabled, setSounds, assign, identify].find((m) => m.isError);
 
   if (devices.length === 0) {
     return (
@@ -76,6 +76,7 @@ export function DisplaysTable({
               <th scope="col">{t("devices.columns.name")}</th>
               <th scope="col">{t("devicesDisplays.columns.shows")}</th>
               <th scope="col">{t("devicesDisplays.columns.connection")}</th>
+              <th scope="col">{t("sounds.tvSwitch")}</th>
               <th scope="col">{t("devices.columns.status")}</th>
               <th scope="col">{t("devices.columns.lastSeen")}</th>
               <th scope="col" className="table__actions">
@@ -114,6 +115,17 @@ export function DisplaysTable({
                   </td>
                   <td className={`table__nowrap ${online ? "connection connection--on" : "connection"}`}>
                     {online ? t("devicesDisplays.connected") : t("devicesDisplays.notConnected")}
+                  </td>
+                  <td>
+                    <label className="choice">
+                      <input
+                        type="checkbox"
+                        checked={device.play_sounds}
+                        disabled={setSounds.isPending}
+                        onChange={(event) => setSounds.mutate({ id: device.id, play_sounds: event.target.checked })}
+                      />{" "}
+                      {t("sounds.tvSwitch")}
+                    </label>
                   </td>
                   <td>
                     <DeviceStatusBadge status={device.status} />

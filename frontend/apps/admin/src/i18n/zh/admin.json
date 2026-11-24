@@ -927,7 +927,6 @@
       "blue": "蓝方"
     },
     "audienceHeading": "观众屏幕",
-    "playSounds": "播放声音",
     "timeoutHeading": "暂停时间",
     "timeoutLength": "时长（秒）",
     "startTimeout": "开始暂停",
@@ -945,7 +944,8 @@
     "score": "计分",
     "hideLive": "隐藏实时分数",
     "showLive": "显示实时分数",
-    "scoreSaved": "分数已保存。"
+    "scoreSaved": "分数已保存。",
+    "tvsPlaySounds": "电视播放声音"
   },
   "displays": {
     "activeSession": "{{label}}（进行中）",
@@ -957,7 +957,6 @@
     "unplacedItem": "{{name}}（原在 {{group}}）",
     "audienceHeading": "观众",
     "audienceScreen": "观众屏幕",
-    "playSounds": "播放声音",
     "pitsHeading": "观赛区分组",
     "pitName": "观赛区分组名称",
     "pitDivision": "分组",
@@ -1213,5 +1212,42 @@
   "operatorSounds": {
     "switch": "在此电脑上播放声音",
     "enable": "点击以启用声音"
+  },
+  "sounds": {
+    "heading": "声音",
+    "slots": {
+      "beep": {
+        "name": "提示音",
+        "when": "倒数和最后3秒"
+      },
+      "start": {
+        "name": "开始",
+        "when": "比赛开始和手动阶段开始"
+      },
+      "buzzer": {
+        "name": "蜂鸣器",
+        "when": "时间用完"
+      },
+      "moment": {
+        "name": "叮",
+        "when": "比赛时刻和暂停结束"
+      },
+      "stop": {
+        "name": "停止",
+        "when": "提前结束或重置"
+      }
+    },
+    "play": "播放",
+    "playNamed": "播放{{name}}声音",
+    "uploadNamed": "上传{{name}}声音文件",
+    "default": "默认",
+    "upload": "上传",
+    "restore": "恢复默认",
+    "tooLong": "此声音超过10秒。",
+    "tooBig": "此文件超过1 MB。",
+    "unreadable": "无法将此文件读取为音频。",
+    "playFailed": "无法播放此声音。",
+    "rights": "请只上传您有权使用的声音。",
+    "tvSwitch": "声音"
   }
 }

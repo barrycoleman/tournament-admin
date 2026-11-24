@@ -98,14 +98,6 @@ export function SpotsSection({
               idPrefix={`displays-audience-${audience.id}`}
               onChange={(settings) => mutations.updateGroup.mutate({ groupId: audience.id, screen_settings: settings })}
             />
-            <label className="choice">
-              <input
-                type="checkbox"
-                checked={audience.play_sounds}
-                onChange={(e) => mutations.updateGroup.mutate({ groupId: audience.id, play_sounds: e.target.checked })}
-              />{" "}
-              {t("displays.playSounds")}
-            </label>
             <DisplayRows
               displays={audience.displays}
               groups={groups}

@@ -31,6 +31,7 @@ function device(overrides: Partial<DeviceRead>): DeviceRead {
     last_seen_at: minutesAgo(0),
     disabled_at: null,
     binding: null,
+    play_sounds: false,
     ...overrides,
   };
 }
@@ -43,7 +44,6 @@ const group = (overrides: Record<string, unknown>) => ({
   screen: null,
   screen_settings: {},
   rotation: null,
-  play_sounds: false,
   displays: [],
   ...overrides,
 });
@@ -81,6 +81,7 @@ function stub(overrides: Record<string, unknown> = {}) {
       "GET /api/displays?session_id=1": displays,
       "GET /api/displays?session_id=2": { session_id: 2, groups: [], unassigned: [], has_setup: false },
       "GET /api/devices": devices,
+      "GET /api/sounds": [],
       "GET /api/devices/settings": { idle_minutes: 240 },
       "GET /api/pairing/codes/KX49TM": { code: "KX49TM", suggested_name: "Tablet 3", expires_at: minutesAgo(-5) },
     };
@@ -209,7 +210,7 @@ describe("Devices & displays page: TVs and displays", () => {
     renderRoute();
     const tvs = await screen.findByRole("region", { name: "TVs and displays" });
     const headers = (await within(tvs).findAllByRole("columnheader")).map((h) => h.textContent);
-    expect(headers).toEqual(["Name", "Shows", "Connection", "Status", "Last seen", "Actions"]);
+    expect(headers).toEqual(["Name", "Shows", "Connection", "Sound", "Status", "Last seen", "Actions"]);
     expect(await within(tvs).findByRole("cell", { name: "Pit TV" })).toBeInTheDocument();
     expect(within(tvs).getByRole("cell", { name: "Big TV" })).toBeInTheDocument();
     expect(within(tvs).queryByRole("cell", { name: "Tablet 1" })).not.toBeInTheDocument();
@@ -511,13 +512,33 @@ describe("Devices & displays page: spots", () => {
         body: { screen: "schedule" },
       }),
     );
-    fireEvent.click(within(main).getByLabelText("Play sounds"));
+    expect(within(main).queryByLabelText("Play sounds")).toBeNull();
+  });
+
+  it("switches a TV's sound with its own switch", async () => {
+    renderRoute();
+    const row = await rowFor("Big TV");
+    fireEvent.click(within(row).getByLabelText("Sound"));
     await waitFor(() =>
-      expect(apiRequest).toHaveBeenCalledWith("/api/displays/groups/50", {
-        method: "PATCH",
-        body: { play_sounds: true },
-      }),
+      expect(apiRequest).toHaveBeenCalledWith("/api/devices/7", { method: "PATCH", body: { play_sounds: true } }),
     );
+  });
+
+  it("shows a TV with its sound on as switched on", async () => {
+    devices = devices.map((d) => (d.id === 7 ? { ...d, play_sounds: true } : d));
+    renderRoute();
+    const row = await rowFor("Big TV");
+    expect(within(row).getByLabelText("Sound")).toBeChecked();
+  });
+
+  it("refetches the sounds when a sound changes", async () => {
+    const emit = captureRealtime();
+    renderRoute();
+    await screen.findByRole("heading", { name: "Sounds" });
+    const fetches = () => vi.mocked(apiRequest).mock.calls.filter(([path]) => path === "/api/sounds").length;
+    const before = fetches();
+    act(() => emit({ event: "sounds_changed", data: { slot: "beep" } } as unknown as RealtimeEvent));
+    await waitFor(() => expect(fetches()).toBeGreaterThan(before));
   });
 
   it("moves and identifies displays", async () => {

@@ -62,7 +62,6 @@ export interface DisplayGroupState {
   screen: string | null;
   screen_settings: ScreenSettings;
   rotation: RotationEntry[] | null;
-  play_sounds: boolean;
 }
 
 export interface FieldSetLive {

@@ -19,6 +19,8 @@ export interface DeviceRead {
   paired_by: string;
   last_seen_at: string;
   disabled_at: string | null;
+  /** A TV plays the cue sounds when this is on; always false for other roles. */
+  play_sounds: boolean;
 }
 
 export interface PairingCodeCheck {
@@ -65,6 +67,11 @@ export function useDeviceMutations() {
     setEnabled: useMutation({
       mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
         apiRequest<DeviceRead>(`/api/devices/${id}/${enabled ? "enable" : "disable"}`, { method: "POST" }),
+      onSuccess: refresh,
+    }),
+    setSounds: useMutation({
+      mutationFn: ({ id, play_sounds }: { id: number; play_sounds: boolean }) =>
+        apiRequest<DeviceRead>(`/api/devices/${id}`, { method: "PATCH", body: { play_sounds } }),
       onSuccess: refresh,
     }),
     remove: useMutation({

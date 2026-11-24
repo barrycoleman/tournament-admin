@@ -47,7 +47,6 @@ export function useDisplayMutations(sessionId: number | null) {
         screen_settings?: ScreenSettings;
         rotation?: RotationEntry[] | null;
         division_id?: number | null;
-        play_sounds?: boolean;
       }) =>
         apiRequest(`/api/displays/groups/${groupId}`, {
           method: "PATCH",
