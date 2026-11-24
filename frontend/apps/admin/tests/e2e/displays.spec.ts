@@ -141,7 +141,7 @@ test.describe.serial("display groups", () => {
 
     // Each TV row has its own Sound switch, off for a new TV, kept on the device.
     const row = admin.locator("tr").filter({ has: admin.getByLabel("What Field TV shows") });
-    const sound = row.getByLabel("Sound");
+    const sound = row.getByLabel("Sound for Field TV");
     await expect(sound).not.toBeChecked();
     // The switch shows the saved value, so it turns on once the server has it.
     await sound.click();
@@ -153,9 +153,9 @@ test.describe.serial("display groups", () => {
       })
       .toBe(true);
     await admin.reload();
-    await expect(admin.locator("tr").filter({ has: admin.getByLabel("What Field TV shows") }).getByLabel("Sound")).toBeChecked();
-    await admin.locator("tr").filter({ has: admin.getByLabel("What Field TV shows") }).getByLabel("Sound").click();
-    await expect(admin.locator("tr").filter({ has: admin.getByLabel("What Field TV shows") }).getByLabel("Sound")).not.toBeChecked();
+    await expect(admin.locator("tr").filter({ has: admin.getByLabel("What Field TV shows") }).getByLabel("Sound for Field TV")).toBeChecked();
+    await admin.locator("tr").filter({ has: admin.getByLabel("What Field TV shows") }).getByLabel("Sound for Field TV").click();
+    await expect(admin.locator("tr").filter({ has: admin.getByLabel("What Field TV shows") }).getByLabel("Sound for Field TV")).not.toBeChecked();
     await admin.context().close();
   });
 
@@ -170,8 +170,8 @@ test.describe.serial("display groups", () => {
     const timer = admin.getByRole("region", { name: "Timer" });
     await timer.getByRole("button", { name: "End early" }).click();
     await admin.getByRole("alertdialog").getByRole("button", { name: "End early" }).click();
-    await expect(screens["Field TV"].getByText("Match over")).toBeVisible({ timeout: 10_000 });
-    await expect(screens["Big TV"].getByText("Match over")).toBeVisible();
+    await expect(screens["Field TV"].getByTestId("match-over")).toHaveText("Match stopped", { timeout: 10_000 });
+    await expect(screens["Big TV"].getByTestId("match-over")).toHaveText("Match stopped");
   });
 
   test("saving the score moves the field display on and Last Scored Match shows it", async ({ browser, request }) => {

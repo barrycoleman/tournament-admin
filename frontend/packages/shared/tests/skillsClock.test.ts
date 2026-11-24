@@ -31,6 +31,12 @@ describe("skills clock", () => {
     expect(skillsClockPhase(timer({ phase: "running", paused: true, deadline: at(-1) }), NOW)).toBe("running");
   });
 
+  it("freezes an early-ended timer where it stopped, and reads a run-out as 0", () => {
+    expect(skillsClockSeconds(timer({ phase: "ended", ended_early: true, remaining_seconds: 23 }), NOW, 60)).toBe(23);
+    expect(skillsClockSeconds(timer({ phase: "ended", ended_early: true, remaining_seconds: null }), NOW, 60)).toBe(0);
+    expect(skillsClockSeconds(timer({ phase: "ended", remaining_seconds: 23 }), NOW, 60)).toBe(0);
+  });
+
   it("offers Start when ready, Pause or Resume with End and Reset while running, and Reset once ended", () => {
     expect(skillsClockActions(timer(), NOW)).toEqual(["start"]);
     expect(skillsClockActions(timer({ phase: "running", deadline: at(5_000) }), NOW)).toEqual(["pause", "end", "reset"]);

@@ -88,7 +88,9 @@ export function SkillsFieldDisplay({
       </p>
       {phase === "ended" ? (
         <>
-          <p className="in-match__over">{t("display.skills.runOver")}</p>
+          <p className="in-match__over" data-testid="run-over">
+            {t(run.phase === "ended" && run.ended_early ? "display.skills.stopped" : "display.skills.runOver")}
+          </p>
           <ul className="skills-breakdown" aria-label={t("display.breakdown")}>
             {(entry?.breakdown ?? []).map((item) => (
               <li key={item.label}>

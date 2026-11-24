@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+import math
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
@@ -100,6 +101,7 @@ def _to_match_read(match: Match, db: Session) -> MatchRead:
         paused=match.paused,
         remaining_seconds_at_pause=match.remaining_seconds_at_pause,
         ended_early=match.ended_early,
+        remaining_seconds_at_end=match.remaining_seconds_at_end,
         is_finals=match.finals_bracket_id is not None,
         bracket_matchup_id=match.bracket_matchup_id,
         bracket_alliance_id=match.bracket_alliance_id,
@@ -353,6 +355,7 @@ def start_match(
     match_format = plugin.module.match_format()
     match.phase = phase_after_start(match_format["autonomous_seconds"])
     match.ended_early = False
+    match.remaining_seconds_at_end = None
     duration = phase_duration_seconds(
         match.phase, match_format["autonomous_seconds"], match_format["driver_seconds"]
     )
@@ -477,6 +480,23 @@ def resume_match(
     return _to_match_read(match, db)
 
 
+def _period_seconds_left(match: Match) -> int | None:
+    """Whole seconds left on the period clock right now (rounded up, as the
+    clock shows them), read the way pause reads them; None outside a period
+    (a count-in or waiting for driver control), where no period clock runs."""
+    if match.phase not in ("autonomous", "driver"):
+        return None
+    if match.paused:
+        left = match.remaining_seconds_at_pause
+    elif match.phase_deadline is not None:
+        left = (match.phase_deadline - utc_now()).total_seconds()
+    else:
+        return None
+    if left is None:
+        return None
+    return max(0, math.ceil(left - 1e-9))
+
+
 @router.post("/{match_id}/end", response_model=MatchRead)
 def end_match(
     match_id: int,
@@ -490,6 +510,7 @@ def end_match(
     if match.phase in ("not_started", "ended"):
         raise HTTPException(status_code=409, detail=f"Match cannot be ended from {match.phase}")
     cancel_auto_advance(request.app, match.id)
+    match.remaining_seconds_at_end = _period_seconds_left(match)
     match.phase = "ended"
     match.ended_early = True
     match.phase_deadline = None
@@ -535,6 +556,7 @@ def reset_match(
 
     match.phase = new_phase
     match.ended_early = False
+    match.remaining_seconds_at_end = None
     match.phase_deadline = None
     match.paused = False
     match.remaining_seconds_at_pause = None

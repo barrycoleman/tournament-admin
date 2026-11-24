@@ -130,6 +130,15 @@ describe("field display", () => {
     expect(screen.getByTestId("clock")).toHaveTextContent("0:00");
   });
 
+  it("freezes the clock where an early end stopped it and says the match was stopped", async () => {
+    showField([match({ id: 3, phase: "ended", ended_early: true, remaining_seconds_at_end: 42 })]);
+    expect(await screen.findByText("Match stopped")).toBeInTheDocument();
+    expect(screen.getByTestId("clock")).toHaveTextContent("0:42");
+    expect(screen.queryByText("Match over")).not.toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    expect(screen.getByTestId("clock")).toHaveTextContent("0:42");
+  });
+
   it("swaps the period name for a Driver change tag from 35 s down to 25 s left", async () => {
     showField([match({ phase: "driver", phase_deadline: iso(30_000) })]);
     expect(await screen.findByTestId("window-tag")).toHaveTextContent("Driver change");

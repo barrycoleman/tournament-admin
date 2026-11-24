@@ -678,3 +678,80 @@ def test_reset_and_a_new_start_clear_ended_early(fast_timer_client):
 
     started = client.post(f"/api/matches/{match_id}/start").json()
     assert started["ended_early"] is False
+
+
+# --- where an early end froze the clock: remaining_seconds_at_end ---
+
+
+def _force_clock(client, match_id: int, **columns) -> None:
+    """Puts the match's clock where a test needs it, straight in the test
+    database (no real server is running against it)."""
+    with client.app.state.session_factory() as db:
+        match = db.get(Match, match_id)
+        for name, value in columns.items():
+            setattr(match, name, value)
+        db.commit()
+
+
+def test_ending_early_keeps_the_whole_seconds_left_on_the_period_clock(fast_timer_client):
+    client = fast_timer_client
+    match_id = client.match_id
+    assert client.get(f"/api/matches/{match_id}").json()["remaining_seconds_at_end"] is None
+    client.post(f"/api/matches/{match_id}/start")
+    _force_clock(client, match_id, phase="driver", phase_deadline=utc_now() + dt.timedelta(seconds=42.4))
+
+    body = client.post(f"/api/matches/{match_id}/end").json()
+
+    # Rounded up, as the clock showed it when it stopped.
+    assert (body["phase"], body["ended_early"], body["remaining_seconds_at_end"]) == ("ended", True, 43)
+    assert client.get(f"/api/matches/{match_id}").json()["remaining_seconds_at_end"] == 43
+
+
+def test_ending_a_paused_match_keeps_the_paused_time(fast_timer_client):
+    client = fast_timer_client
+    match_id = client.match_id
+    client.post(f"/api/matches/{match_id}/start")
+    _force_clock(
+        client, match_id, phase="autonomous", phase_deadline=None, paused=True, remaining_seconds_at_pause=12.2
+    )
+
+    body = client.post(f"/api/matches/{match_id}/end").json()
+
+    assert (body["paused"], body["remaining_seconds_at_end"]) == (False, 13)
+
+
+def test_ending_outside_a_period_keeps_no_time(fast_timer_client):
+    client = fast_timer_client
+    match_id = client.match_id
+    client.post(f"/api/matches/{match_id}/start")
+    _wait_for_phase(client, match_id, "awaiting_driver")
+
+    body = client.post(f"/api/matches/{match_id}/end").json()
+
+    assert (body["ended_early"], body["remaining_seconds_at_end"]) == (True, None)
+
+
+def test_a_run_out_keeps_no_time(no_autonomous_client):
+    client = no_autonomous_client
+    match_id = client.match_id
+    client.post(f"/api/matches/{match_id}/start")
+
+    body = _wait_for_phase(client, match_id, "ended")
+
+    assert body["remaining_seconds_at_end"] is None
+
+
+def test_reset_and_a_new_start_clear_the_time_kept_at_an_early_end(fast_timer_client):
+    client = fast_timer_client
+    match_id = client.match_id
+    client.post(f"/api/matches/{match_id}/start")
+    _force_clock(client, match_id, phase="driver", phase_deadline=utc_now() + dt.timedelta(seconds=30))
+    assert client.post(f"/api/matches/{match_id}/end").json()["remaining_seconds_at_end"] == 30
+
+    reset = client.post(f"/api/matches/{match_id}/reset", json={"scope": "full"}).json()
+    assert reset["remaining_seconds_at_end"] is None
+
+    # A stale value left in the row (say, from an older server) is cleared by a start.
+    _force_clock(client, match_id, remaining_seconds_at_end=17)
+    started = client.post(f"/api/matches/{match_id}/start").json()
+    assert started["remaining_seconds_at_end"] is None

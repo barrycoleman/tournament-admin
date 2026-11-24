@@ -317,8 +317,10 @@ test.describe.serial("TV screens", () => {
     await call(request, "post", `/api/matches/${matches.Q1.id}/end`, {});
     // The Clock TV's own time was moved forward; start it afresh so later tests are not skewed.
     await clockTv.reload();
-    await expect(fieldTv.getByText("Match over")).toBeVisible({ timeout: 10_000 });
-    await expect(fieldTv.getByTestId("clock")).toHaveText("0:00");
+    await expect(fieldTv.getByTestId("match-over")).toHaveText("Match stopped", { timeout: 10_000 });
+    // Ended early, the clock stays where it was stopped rather than reading 0:00.
+    await expect(fieldTv.getByTestId("clock")).toHaveText(/^\d:\d\d$/);
+    await expect(fieldTv.getByTestId("clock")).not.toHaveText("0:00");
     await expect(fieldTv.getByTestId("live-red")).toHaveCount(0);
   });
   test("the match intro lists one row per team by side and keeps a six-character number whole at 1920×1080 and 1280×720", async ({ browser, request }, testInfo) => {
@@ -632,7 +634,7 @@ test.describe.serial("TV screens", () => {
       await shot(page, testInfo, `in-match-one-a-side-${size}`);
     }
     await call(request, "post", `/api/matches/${matches.Q5.id}/end`, {});
-    await expect(screens["Field TV"].getByText("Match over")).toBeVisible({ timeout: 10_000 });
+    await expect(screens["Field TV"].getByTestId("match-over")).toHaveText("Match stopped", { timeout: 10_000 });
   });
 
   test("the schedule and rankings on a pit TV at 1280×720 have no horizontal overflow", async ({ browser, request }, testInfo) => {

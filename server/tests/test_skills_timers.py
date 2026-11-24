@@ -331,3 +331,56 @@ def test_a_run_left_behind_by_the_next_batch_keeps_the_ended_early_flag(client, 
     assert (runs[first]["follows_set"], runs[first]["ended_early"]) == (False, True)
     assert (runs[second]["follows_set"], runs[second]["ended_early"]) == (True, False)
     assert body["timer"]["ended_early"] is False
+
+
+def test_an_early_end_keeps_the_seconds_left_until_reset(client, event):
+    first, _second = event["set"]["field_ids"]
+    start_run(client, first, event["teams"][0])
+    started = _set_action(client, event, "start")
+    full = started["timer"]["run_seconds"]
+    ended = _set_action(client, event, "end")
+    left = ended["timer"]["remaining_seconds"]
+    assert left is not None and 0 < left <= full
+    assert runs_by_field(ended)[first]["remaining_seconds"] == left
+    with client.app.state.session_factory() as db:
+        row = db.execute(select(SkillsSetTimer).filter_by(field_set_id=event["set"]["id"])).scalars().one()
+        assert (row.remaining_seconds_at_end, row.remaining_seconds_at_pause) == (left, None)
+    reset = _set_action(client, event, "reset")
+    assert reset["timer"]["remaining_seconds"] is None
+    with client.app.state.session_factory() as db:
+        row = db.execute(select(SkillsSetTimer).filter_by(field_set_id=event["set"]["id"])).scalars().one()
+        assert row.remaining_seconds_at_end is None
+
+
+def test_an_early_end_from_pause_keeps_the_paused_time(client, event):
+    first, _second = event["set"]["field_ids"]
+    start_run(client, first, event["teams"][0], follows_set=False)
+    _field_action(client, first, "start")
+    paused = _field_action(client, first, "pause")
+    ended = _field_action(client, first, "end")
+    assert (ended["phase"], ended["ended_early"], ended["remaining_seconds"]) == (
+        "ended", True, paused["remaining_seconds"],
+    )
+    assert _field_action(client, first, "reset")["remaining_seconds"] is None
+
+
+def test_a_run_out_keeps_no_time(client, event):
+    first, _second = event["set"]["field_ids"]
+    start_run(client, first, event["teams"][0])
+    _set_action(client, event, "start")
+    expire(client, SkillsSetTimer, field_set_id=event["set"]["id"])
+    body = read_set(client, event["set"]["id"])
+    assert (body["timer"]["phase"], body["timer"]["remaining_seconds"]) == ("ended", None)
+    assert runs_by_field(body)[first]["remaining_seconds"] is None
+
+
+def test_a_run_left_behind_by_the_next_batch_keeps_the_time_it_stopped_at(client, event):
+    first, second = event["set"]["field_ids"]
+    start_run(client, first, event["teams"][0])
+    _set_action(client, event, "start")
+    left = _set_action(client, event, "end")["timer"]["remaining_seconds"]
+    start_run(client, second, event["teams"][1])
+    body = read_set(client, event["set"]["id"])
+    runs = runs_by_field(body)
+    assert (runs[first]["follows_set"], runs[first]["remaining_seconds"]) == (False, left)
+    assert body["timer"]["remaining_seconds"] is None

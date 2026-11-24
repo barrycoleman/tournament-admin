@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { COUNT_IN_PHASES, activeWindow, formatClock, remainingSeconds, type LiveMatch } from "@tournament-admin/shared";
+import { COUNT_IN_PHASES, COUNT_IN_SECONDS, activeWindow, formatClock, remainingSeconds, type LiveMatch } from "@tournament-admin/shared";
 import { useFields, useMatchFormat, useRanks, useTeamsById, type Team } from "../api";
 import { groupScore, scoreGroups, sideGroups, type ScoreGroup } from "../logic/sides";
 import { matchTitle } from "../matchTitle";
@@ -51,7 +51,8 @@ export function InMatchView({ match, sessionId, now }: { match: LiveMatch; sessi
 
   let clock;
   if (match.phase === "ended") {
-    clock = <FitText className="in-match__clock" testId="clock">0:00</FitText>;
+    // A run-out reads 0:00; an early end stays where the operator stopped it.
+    clock = <FitText className="in-match__clock" testId="clock">{formatClock(remaining)}</FitText>;
   } else if (match.phase === "awaiting_driver") {
     clock = <FitText className="in-match__message">{t("display.driverNext")}</FitText>;
   } else if (COUNT_IN_PHASES.has(match.phase)) {
@@ -64,7 +65,11 @@ export function InMatchView({ match, sessionId, now }: { match: LiveMatch; sessi
   const openWindow = format.data ? activeWindow(match.phase, remaining, format.data.moments ?? []) : null;
   let under = null;
   if (match.phase === "ended") {
-    under = <p className="in-match__over">{t("display.matchOver")}</p>;
+    under = (
+      <p className="in-match__over" data-testid="match-over">
+        {t(match.ended_early ? "display.matchStopped" : "display.matchOver")}
+      </p>
+    );
   } else if (match.paused) {
     under = (
       <p className="in-match__paused-tag" role="status" data-testid="paused">
@@ -95,7 +100,7 @@ export function InMatchView({ match, sessionId, now }: { match: LiveMatch; sessi
       <div className="in-match__under">{under}</div>
       {COUNT_IN_PHASES.has(match.phase) && (
         <div className="count-in-overlay" data-testid="count-in">
-          <FitText className="count-in-overlay__number">{Math.max(1, Math.ceil(remaining - 1e-9))}</FitText>
+          <FitText className="count-in-overlay__number">{Math.min(COUNT_IN_SECONDS, Math.max(1, Math.ceil(remaining - 1e-9)))}</FitText>
         </div>
       )}
     </MatchFrame>

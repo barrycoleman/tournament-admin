@@ -3,6 +3,7 @@ export interface SkillsClockState {
   phase: string;
   deadline: string | null;
   paused: boolean;
+  /** Seconds left while paused or ready, or where an early end stopped it. */
   remaining_seconds: number | null;
   /** True only when the operator ended the run early. */
   ended_early: boolean;
@@ -19,11 +20,12 @@ export function skillsClockPhase(timer: SkillsClockState, nowMs: number): string
   return timer.phase;
 }
 
-/** Seconds left: to the deadline while running, frozen while paused, and the
- * run's full length (`fullSeconds`) while ready unless the server sent one. */
+/** Seconds left: to the deadline while running, frozen while paused, frozen
+ * where it stopped for a timer ended early, and the run's full length
+ * (`fullSeconds`) while ready unless the server sent one. */
 export function skillsClockSeconds(timer: SkillsClockState, nowMs: number, fullSeconds: number | null): number {
   const phase = skillsClockPhase(timer, nowMs);
-  if (phase === "ended") return 0;
+  if (phase === "ended") return timer.phase === "ended" && timer.ended_early ? timer.remaining_seconds ?? 0 : 0;
   if (phase === "running" && !timer.paused && timer.deadline !== null) {
     return Math.max(0, (Date.parse(timer.deadline) - nowMs) / 1000);
   }

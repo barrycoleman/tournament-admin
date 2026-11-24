@@ -297,6 +297,7 @@ def upgrade() -> None:
     sa.Column('paused', sa.Boolean(), nullable=False),
     sa.Column('remaining_seconds_at_pause', sa.Integer(), nullable=True),
     sa.Column('ended_early', sa.Boolean(), server_default=sa.false(), nullable=False),
+    sa.Column('remaining_seconds_at_end', sa.Integer(), nullable=True),
     sa.Column('created_by_device', sa.String(length=200), nullable=True),
     sa.Column('created_at', tournament_server.db.UTCDateTime(), nullable=False),
     sa.ForeignKeyConstraint(['field_id'], ['fields.id'], ondelete='CASCADE'),
@@ -313,6 +314,7 @@ def upgrade() -> None:
     sa.Column('paused', sa.Boolean(), nullable=False),
     sa.Column('remaining_seconds_at_pause', sa.Integer(), nullable=True),
     sa.Column('ended_early', sa.Boolean(), server_default=sa.false(), nullable=False),
+    sa.Column('remaining_seconds_at_end', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['field_set_id'], ['field_sets.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('field_set_id', name='uq_skills_set_timer_field_set')
@@ -436,6 +438,7 @@ def upgrade() -> None:
     sa.Column('paused', sa.Boolean(), nullable=False),
     sa.Column('remaining_seconds_at_pause', sa.Float(), nullable=True),
     sa.Column('ended_early', sa.Boolean(), server_default=sa.false(), nullable=False),
+    sa.Column('remaining_seconds_at_end', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['bracket_alliance_id'], ['bracket_alliances.id'], ),
     sa.ForeignKeyConstraint(['bracket_matchup_id'], ['bracket_matchups.id'], ),
     sa.ForeignKeyConstraint(['division_id'], ['divisions.id'], ),

@@ -25,7 +25,11 @@ export function SkillsSetDisplay({ sessionId, fieldSetId }: { sessionId: number;
         <p className="clock" data-testid="set-clock">
           {formatClock(skillsClockSeconds(timer, now, timer.run_seconds))}
         </p>
-        {phase === "ended" && <p className="in-match__over">{t("display.skills.timeUp")}</p>}
+        {phase === "ended" && (
+          <p className="in-match__over" data-testid="set-over">
+            {t(timer.phase === "ended" && timer.ended_early ? "display.skills.stopped" : "display.skills.timeUp")}
+          </p>
+        )}
       </div>
       {phase === "running" && timer.paused && (
         <p className="in-match__paused" role="status">

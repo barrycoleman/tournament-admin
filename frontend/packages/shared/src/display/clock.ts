@@ -5,10 +5,14 @@ export const PERIOD_PHASES: ReadonlySet<string> = new Set(["autonomous", "driver
 /** Yellow from here down to the scheduled start. */
 export const START_SOON_MS = 30_000;
 
+/** Seconds left on the match clock: frozen while paused, and frozen where it
+ * stopped for a match ended early. */
 export function remainingSeconds(
-  match: Pick<LiveMatch, "paused" | "remaining_seconds_at_pause" | "phase_deadline">,
+  match: Pick<LiveMatch, "paused" | "remaining_seconds_at_pause" | "phase_deadline"> &
+    Partial<Pick<LiveMatch, "phase" | "ended_early" | "remaining_seconds_at_end">>,
   nowMs: number
 ): number | null {
+  if (match.phase === "ended") return match.ended_early ? match.remaining_seconds_at_end ?? null : null;
   if (match.paused) return match.remaining_seconds_at_pause ?? null;
   if (match.phase_deadline === null) return null;
   return Math.max(0, (Date.parse(match.phase_deadline) - nowMs) / 1000);

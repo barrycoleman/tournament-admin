@@ -24,6 +24,9 @@ export interface LiveMatch {
   remaining_seconds_at_pause: number | null;
   /** True only when the operator ended the match early. */
   ended_early: boolean;
+  /** Whole seconds left on the period clock when the match was ended early;
+   * null otherwise (and when it was ended outside a period). */
+  remaining_seconds_at_end?: number | null;
   is_finals: boolean;
   bracket_matchup_id?: number | null;
   bracket_alliance_id?: number | null;

@@ -52,6 +52,8 @@ class SkillsSetTimer(Base):
     remaining_seconds_at_pause: Mapped[int | None] = mapped_column(Integer, default=None)
     # True when the operator stopped the timer with End rather than it running out.
     ended_early: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Whole seconds left when the operator ended the timer early; null otherwise.
+    remaining_seconds_at_end: Mapped[int | None] = mapped_column(Integer, default=None)
 
 
 class SkillsRun(Base):
@@ -80,6 +82,8 @@ class SkillsRun(Base):
     remaining_seconds_at_pause: Mapped[int | None] = mapped_column(Integer, default=None)
     # True when the operator stopped the timer with End rather than it running out.
     ended_early: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Whole seconds left when the operator ended the timer early; null otherwise.
+    remaining_seconds_at_end: Mapped[int | None] = mapped_column(Integer, default=None)
     created_by_device: Mapped[str | None] = mapped_column(String(200), default=None)
     created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utc_now)
 

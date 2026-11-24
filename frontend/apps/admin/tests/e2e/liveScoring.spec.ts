@@ -158,7 +158,7 @@ test.describe.serial("live scoring", () => {
     await expect(live).toContainText("Live");
 
     await call(request, "post", `/api/matches/${matches.Q1.id}/end`, {});
-    await expect(bigTv.getByText("Match over")).toBeVisible({ timeout: 10_000 });
+    await expect(bigTv.getByTestId("match-over")).toHaveText("Match stopped", { timeout: 10_000 });
     await expect(live).toHaveCount(0);
     expect((await call(request, "get", `/api/displays/live-scores?field_set_id=${mainFields}`)).matches).toEqual([]);
   });
@@ -290,7 +290,8 @@ test.describe.serial("live scoring", () => {
     const endSet = page.getByRole("alertdialog", { name: "End the set timer on Skills Row?" });
     await expect(endSet).toContainText("Fields affected: 2");
     await endSet.getByRole("button", { name: "End timer" }).click();
-    await expect(skillsTv.getByText("Run over")).toBeVisible({ timeout: 10_000 });
+    // Ended early, so the field TV says Stopped rather than Run over.
+    await expect(skillsTv.getByTestId("run-over")).toHaveText("Stopped", { timeout: 10_000 });
     const breakdown = skillsTv.getByRole("list", { name: "Score breakdown" });
     await expect(breakdown).toContainText("Score");
     await expect(breakdown).toContainText("33");

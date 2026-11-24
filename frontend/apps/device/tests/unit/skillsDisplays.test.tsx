@@ -105,6 +105,16 @@ describe("skills field TV", () => {
     expect(screen.getByTestId("skills-total")).toHaveTextContent("21");
   });
 
+  it("says Stopped, not Run over, for a run ended early", async () => {
+    set = {
+      timer: timer(),
+      fields: [fieldRow(run({ follows_set: false, phase: "ended", ended_early: true, remaining_seconds: 23 }))],
+    };
+    showFieldTv();
+    expect(await screen.findByText("Stopped")).toBeInTheDocument();
+    expect(screen.queryByText("Run over")).not.toBeInTheDocument();
+  });
+
   it("shows a dash for a breakdown item not entered, never null", async () => {
     set = { timer: timer({ phase: "ended" }), fields: [fieldRow(run({ phase: "ended" }))] };
     live = {
@@ -181,5 +191,18 @@ describe("skills set TV", () => {
     await act(() => vi.advanceTimersByTimeAsync(31_000));
     expect(screen.getByTestId("set-clock")).toHaveTextContent("0:00");
     expect(screen.getByText("Time's up")).toBeInTheDocument();
+  });
+
+  it("freezes the set clock where an early end stopped it and says Stopped", async () => {
+    set = {
+      timer: timer({ phase: "ended", ended_early: true, remaining_seconds: 23 }),
+      fields: [fieldRow(run({ phase: "ended", ended_early: true, remaining_seconds: 23 }))],
+    };
+    show(audienceGroup({ id: 61, name: "Skills Row", field_set_id: 20, screen: "in_match" }));
+    expect(await screen.findByTestId("set-clock")).toHaveTextContent("0:23");
+    expect(screen.getByText("Stopped")).toBeInTheDocument();
+    expect(screen.queryByText("Time's up")).not.toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    expect(screen.getByTestId("set-clock")).toHaveTextContent("0:23");
   });
 });

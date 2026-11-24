@@ -47,3 +47,6 @@ class Match(Base):
     remaining_seconds_at_pause: Mapped[float | None] = mapped_column(
         Float, default=None
     )
+    # Whole seconds left on the period clock when the operator ended the match
+    # early (null otherwise, and when no period clock was running).
+    remaining_seconds_at_end: Mapped[int | None] = mapped_column(Integer, default=None)

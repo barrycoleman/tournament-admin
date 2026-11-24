@@ -82,6 +82,7 @@ class TimerState(NamedTuple):
     phase: str
     deadline: dt.datetime | None
     paused: bool
+    # Whole seconds left: running, paused, or frozen by an early end.
     remaining: int | None
     # True only for a timer the operator ended with END; a deadline that
     # passed reads as ended with this False.
@@ -104,7 +105,9 @@ def timer_state(row: SkillsSetTimer | SkillsRun | None, now: dt.datetime | None 
         if left <= 0:
             return TimerState(ENDED, None, False, None)
         return TimerState(RUNNING, row.deadline, False, math.ceil(left))
-    return TimerState(row.phase, None, False, None, row.phase == ENDED and row.ended_early)
+    ended_early = row.phase == ENDED and row.ended_early
+    # An early end keeps the whole seconds left when it was stopped.
+    return TimerState(row.phase, None, False, row.remaining_seconds_at_end if ended_early else None, ended_early)
 
 
 def effective_timer(run: SkillsRun, set_timer: SkillsSetTimer | None) -> TimerState:
@@ -118,6 +121,7 @@ def _copy_state(row: SkillsSetTimer | SkillsRun, state: TimerState) -> None:
     row.paused = state.paused
     row.remaining_seconds_at_pause = state.remaining if state.paused else None
     row.ended_early = state.ended_early
+    row.remaining_seconds_at_end = state.remaining if state.phase == ENDED and state.ended_early else None
 
 
 def require_skills_set(field_set: FieldSet) -> FieldSet:
@@ -251,6 +255,7 @@ def _create_run(
         deadline=None,
         paused=False,
         remaining_seconds_at_pause=None,
+        remaining_seconds_at_end=None,
         created_by_device=device_name,
         created_at=now,
     )
@@ -439,7 +444,7 @@ def _apply_action(row: SkillsSetTimer | SkillsRun, action: str, length: int | No
     elif action == TimerAction.END:
         if state.phase != RUNNING:
             raise RunRefused(409, TIMER_NOT_RUNNING)
-        _copy_state(row, TimerState(ENDED, None, False, None, True))
+        _copy_state(row, TimerState(ENDED, None, False, state.remaining, True))
     else:
         _copy_state(row, _READY_STATE)
 

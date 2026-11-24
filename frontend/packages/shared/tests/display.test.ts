@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AUDIENCE_SCREENS,
   PIT_SCREENS,
+  SCREEN_KEYS,
   compareMatches,
   currentMatchForField,
   defaultSettings,
@@ -139,11 +140,22 @@ describe("clock", () => {
     expect(remainingSeconds({ paused: true, remaining_seconds_at_pause: 12.5, phase_deadline: null }, now)).toBe(12.5);
     expect(remainingSeconds({ paused: false, remaining_seconds_at_pause: null, phase_deadline: null }, now)).toBeNull();
   });
+
+  it("freezes an early-ended match where it stopped, and reads a run-out as no time", () => {
+    const now = Date.parse(at(0));
+    const ended = { paused: false, remaining_seconds_at_pause: null, phase_deadline: null, phase: "ended" };
+    expect(remainingSeconds({ ...ended, ended_early: true, remaining_seconds_at_end: 37 }, now)).toBe(37);
+    expect(remainingSeconds({ ...ended, ended_early: true, remaining_seconds_at_end: null }, now)).toBeNull();
+    expect(remainingSeconds({ ...ended, ended_early: false, remaining_seconds_at_end: 37 }, now)).toBeNull();
+  });
 });
 
 describe("screens", () => {
   it("audience groups get every screen and pit groups all but the match screens", () => {
-    expect(AUDIENCE_SCREENS).toHaveLength(10);
+    expect(AUDIENCE_SCREENS).toEqual(SCREEN_KEYS);
+    expect(PIT_SCREENS).toEqual(
+      SCREEN_KEYS.filter((key) => !["match_intro", "in_match", "last_scored_match"].includes(key))
+    );
     expect(PIT_SCREENS).not.toContain("in_match");
     expect(PIT_SCREENS).not.toContain("match_intro");
     expect(PIT_SCREENS).not.toContain("last_scored_match");

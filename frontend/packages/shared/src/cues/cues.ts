@@ -55,6 +55,8 @@ type Period = "autonomous" | "driver";
 const MATCH_ORDER = ["not_started", "countdown_autonomous", "autonomous", "awaiting_driver", "countdown_driver", "driver"];
 const LIVE_MATCH_PHASES = new Set(MATCH_ORDER.slice(1));
 const COUNT_INS = new Set(["countdown_autonomous", "countdown_driver"]);
+/** A count-in's length, the server's fixed COUNTDOWN_SECONDS. */
+export const COUNT_IN_SECONDS = 3;
 const SECTIONS = new Set(["autonomous", "driver"]);
 
 /** The runout (buzzer, over) or an operator's early end (power-down, stop);
@@ -116,7 +118,11 @@ export function matchCues(prev: MatchReading | null, next: MatchReading | null, 
 
   const phaseChanged = before.phase !== next.phase;
   if (COUNT_INS.has(next.phase)) {
-    return (phaseChanged || before.whole !== next.whole) && next.whole > 0 ? [BEEP] : [];
+    // A device whose server-clock estimate runs a little behind reads 3.0x s
+    // (a "4") just as a count-in starts; the count-in is 3 s, so cap it there.
+    const nextWhole = Math.min(next.whole, COUNT_IN_SECONDS);
+    const beforeWhole = Math.min(before.whole, COUNT_IN_SECONDS);
+    return (phaseChanged || beforeWhole !== nextWhole) && nextWhole > 0 ? [BEEP] : [];
   }
   if (next.phase !== "autonomous" && next.phase !== "driver") return [];
 

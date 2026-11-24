@@ -258,7 +258,7 @@ function FieldSetPanel({
           <>
             <p className="match-control__match">{`${current.label} · ${fieldName(current.field_id)}`}</p>
             <p className="match-control__clock" data-testid="mc-clock">
-              {current.phase === "ended" ? "0:00" : formatClock(remainingSeconds(current, now) ?? 0)}
+              {formatClock(remainingSeconds(current, now) ?? 0)}
             </p>
             <p>
               {current.paused ? t("matchControl.paused") : t(`matchControl.phase.${current.phase}`, { defaultValue: current.phase })}

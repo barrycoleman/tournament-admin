@@ -28,7 +28,8 @@
       "waiting": "Skills · Waiting for the next team",
       "runOver": "Run over",
       "finalScore": "Final score",
-      "timeUp": "Time's up"
+      "timeUp": "Time's up",
+      "stopped": "Stopped"
     },
     "enableSound": "Click to enable sound",
     "skillsOff": "Skills challenges aren't running",
@@ -71,6 +72,7 @@
     "startsInLabel": "Starts in",
     "lateLabel": "Late by",
     "matchOver": "Match over",
+    "matchStopped": "Match stopped",
     "driverNext": "Driver control next",
     "paused": "Paused",
     "cue": {

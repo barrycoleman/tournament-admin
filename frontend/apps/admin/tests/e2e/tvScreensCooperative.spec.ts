@@ -142,7 +142,7 @@ test.describe.serial("TV screens for a cooperative game", () => {
     }
     await shot(screens["Field TV"], testInfo, "coop-in-match-1920x1080");
     await call(request, "post", `/api/matches/${match.id}/end`, {});
-    await expect(screens["Field TV"].getByText("Match over")).toBeVisible({ timeout: 10_000 });
+    await expect(screens["Field TV"].getByTestId("match-over")).toHaveText("Match stopped", { timeout: 10_000 });
   });
 
   test("the result shows one combined score, both teams in their side colours and no winner", async ({ request }, testInfo) => {

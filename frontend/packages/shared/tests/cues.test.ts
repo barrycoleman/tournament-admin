@@ -122,6 +122,16 @@ describe("matchCues", () => {
     expect(matchCues(reading("ended", 0, { endedEarly: true }), reading("not_started", 0), [])).toEqual([]);
     expect(matchCues(reading("not_started", 0), reading("ended", 0, { endedEarly: true }), [])).toEqual([]);
     expect(matchCues(reading("ended", 0), reading("ended", 0), [])).toEqual([]);
+    // A count-in first read as 3.0x s (a "4", the device's clock a little
+    // behind the server's) still beeps only at 3, 2 and 1.
+    expect(matchCues(reading("not_started", 0), reading("countdown_autonomous", 4), [])).toEqual([BEEP]);
+    expect(matchCues(reading("countdown_autonomous", 4), reading("countdown_autonomous", 3), [])).toEqual([]);
+    expect(matchCues(reading("countdown_autonomous", 3), reading("countdown_autonomous", 2), [])).toEqual([BEEP]);
+    // An early end freezes the clock where it stopped: a stopped clock still reads as ended.
+    expect(matchCues(reading("driver", 41), reading("ended", 40, { endedEarly: true }), CUE_GAME)).toEqual([STOP]);
+    expect(
+      matchCues(reading("ended", 40, { endedEarly: true }), reading("ended", 40, { endedEarly: true }), CUE_GAME)
+    ).toEqual([]);
   });
 
   it("dings and flashes amber when a window opens and again when it closes", () => {
@@ -259,6 +269,7 @@ describe("skillsCues", () => {
   it("is silent resetting a finished timer for the next team", () => {
     expect(skillsCues(skills("ended", 0), skills("ready", 60))).toEqual([]);
     expect(skillsCues(skills("ended", 0, { endedEarly: true }), skills("ready", 60))).toEqual([]);
+    expect(skillsCues(skills("ended", 23, { endedEarly: true }), skills("ended", 23, { endedEarly: true }))).toEqual([]);
     expect(skillsCues(skills("ready", 60), skills("ready", 60))).toEqual([]);
   });
 

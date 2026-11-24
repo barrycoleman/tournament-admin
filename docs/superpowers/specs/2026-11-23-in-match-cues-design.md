@@ -50,6 +50,7 @@ All five were confirmed CC0 1.0 on their Freesound pages (`https://freesound.org
 - **Silent:** pause, resume, and a reset or end that touches a timer that isn't live (not started, ready, or already ended). Resetting a finished skills timer for the next team must not play the power-down.
 - "Live" means, for a match, started and not yet ended: a count-in, a section, or waiting for driver control (`awaiting_driver`), running or paused; for a skills timer, running or paused. Ending or resetting a match while it waits for driver control is a stop. A section reset (driver section back to awaiting driver) counts as a reset of a live match; its red flash shows over the awaiting-driver layout, since the TV stays on the in-match view.
 - A match that is ended early plays only the power-down, never the buzzer.
+- After the flash, an early-ended match never reads like a finish: the clock stays frozen at the time left when it was stopped (whole seconds, stored on the server as `remaining_seconds_at_end`; 0:00 when it was stopped outside a period, during a count-in or while waiting for driver control) and the line under it says "Match stopped" instead of "Match over".
 
 ### 5.2 Game moments (plugin data)
 
@@ -99,7 +100,7 @@ Sound is chosen **per TV and per operator computer**, not per group. Two set-ups
 
 ### 5.5 Skills runs
 
-Skills timers have no count-in and one section of the type's `run_seconds`. Cues: fanfare on start, beeps at 3/2/1, buzzer + white TIME flash when it runs out, power-down + red STOPPED flash when ended early or reset while live. A field running its own timer (off the set timer) cues on its own field TV (flash, and sound if that TV's switch is on).
+Skills timers have no count-in and one section of the type's `run_seconds`. Cues: fanfare on start, beeps at 3/2/1, buzzer + white TIME flash when it runs out, power-down + red STOPPED flash when ended early or reset while live. After an early end the clock stays frozen at the time left (the timer's `remaining_seconds`) and the TVs say "Stopped" instead of "Time's up" or "Run over". A field running its own timer (off the set timer) cues on its own field TV (flash, and sound if that TV's switch is on).
 
 ## 6. Sound files
 

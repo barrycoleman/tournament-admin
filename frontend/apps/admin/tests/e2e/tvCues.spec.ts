@@ -365,6 +365,19 @@ test.describe.serial("TV cues", () => {
       expect(flashes.map((f) => `${f.kind}:${f.text}`)).toEqual(["stop:MATCH STOPPED"]);
       expect(flashes[0].background).toBe(RED);
     }
+
+    // Once the banner fades, the audience TV (showing this match; the field
+    // TV shows its own field's match) keeps the clock frozen where the match
+    // was stopped, not 0:00, and the line under it says it was stopped.
+    await expect(audience.locator('[data-testid="cue-flash"][data-kind="stop"]')).toBeHidden({ timeout: 5_000 });
+    const clock = audience.getByTestId("clock");
+    await expect(audience.getByTestId("match-over")).toHaveText("Match stopped");
+    await expect(clock).toHaveText(/^0:\d\d$/);
+    const frozen = await clock.innerText();
+    expect(frozen).not.toBe("0:00");
+    await audience.waitForTimeout(1_500);
+    await expect(clock).toHaveText(frozen);
+    await saveShot(audience, testInfo, "fixed-match-tv-stopped-frozen-clock-1280x720");
   });
 
   test("a full reset during autonomous plays the power-down with a red flash, then the TV goes back to its pre-match view", async ({ request }) => {
@@ -512,6 +525,19 @@ test.describe.serial("TV cues", () => {
     }
     // The skills field TV's sound is off.
     expect(await cuesOf(fieldTv)).toEqual([]);
+
+    // Once the banner fades, the set clock stays where the timer was stopped
+    // and both TVs say Stopped, not Time's up or Run over.
+    await expect(stopped).toBeHidden({ timeout: 5_000 });
+    const setClock = skills.getByTestId("set-clock");
+    await expect(skills.getByTestId("set-over")).toHaveText("Stopped");
+    await expect(setClock).toHaveText(/^0:0[1-6]$/);
+    const frozen = await setClock.innerText();
+    await skills.waitForTimeout(1_500);
+    await expect(setClock).toHaveText(frozen);
+    await expect(fieldTv.getByTestId("run-over")).toHaveText("Stopped");
+    await saveShot(skills, testInfo, "fixed-skills-set-tv-stopped-frozen-clock-1280x720");
+    await saveShot(fieldTv, testInfo, "fixed-skills-field-tv-stopped-1280x720");
 
     await clearSeen(skills);
     await timer("reset");
