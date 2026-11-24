@@ -33,7 +33,9 @@ function followsOf(group: DisplayMeGroup, skills: boolean, timeoutDeadline: stri
   const fieldSetId = group.field_set_id;
   if (group.kind === "field") {
     if (group.field_id === null) return null;
-    return skills ? { kind: "skillsField", fieldSetId, fieldId: group.field_id } : { kind: "field", fieldId: group.field_id };
+    return skills
+      ? { kind: "skillsField", fieldSetId, fieldId: group.field_id }
+      : { kind: "field", fieldId: group.field_id, timeoutDeadline };
   }
   return skills ? { kind: "skillsSet", fieldSetId } : { kind: "fieldSet", fieldSetId, timeoutDeadline };
 }

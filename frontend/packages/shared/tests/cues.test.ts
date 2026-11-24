@@ -272,6 +272,15 @@ describe("skillsCues", () => {
     expect(skillsCues(skills("running", 1, { timerKey: "a" }), skills("ended", 0, { timerKey: "b" }))).toEqual([]);
   });
 
+  it("reads a running timer that jumps up more than a second as a reset and restart", () => {
+    expect(skillsCues(skills("running", 40), skills("running", 60))).toEqual([STOP, START]);
+    expect(skillsCues(skills("running", 40, { paused: true }), skills("running", 60))).toEqual([STOP, START]);
+    expect(skillsCues(skills("running", 40), skills("running", 42))).toEqual([STOP, START]);
+    // A rise of one second is clock jitter, never a restart.
+    expect(skillsCues(skills("running", 40), skills("running", 41))).toEqual([]);
+    expect(skillsCues(skills("running", 40), skills("running", 60, { paused: true }))).toEqual([]);
+  });
+
   it("is silent for a changed timer first seen already running (its start was missed)", () => {
     expect(skillsCues(skills("ended", 0, { timerKey: "a" }), skills("running", 60, { timerKey: "b" }))).toEqual([]);
     expect(skillsCues(skills("ready", 60, { timerKey: "a" }), skills("running", 2, { timerKey: "b" }))).toEqual([]);
@@ -287,6 +296,12 @@ describe("holdSkillsReading", () => {
     const held = skills("running", 4);
     expect(holdSkillsReading(held, skills("running", 5))).toBe(held);
     expect(skillsCues(holdSkillsReading(held, skills("running", 5)), skills("running", 4))).toEqual([]);
+  });
+
+  it("does not hold a rise of more than a second, so a restart cues", () => {
+    const restarted = skills("running", 60);
+    expect(holdSkillsReading(skills("running", 40), restarted)).toBe(restarted);
+    expect(holdSkillsReading(skills("running", 4), skills("running", 6))?.whole).toBe(6);
   });
 
   it("takes the new reading otherwise", () => {

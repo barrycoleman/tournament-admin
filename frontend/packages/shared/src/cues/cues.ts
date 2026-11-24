@@ -139,6 +139,8 @@ export function skillsCues(prev: SkillsReading | null, next: SkillsReading | nul
   if (next.phase === "ended") return wasLive ? [ending(next.endedEarly)] : [];
   if (next.phase === "ready") return wasLive ? [STOP] : [];
   if (next.paused) return [];
+  // Reset and started again between two reads: the TV never saw it ready.
+  if (wasLive && next.whole > before.whole + MAX_JITTER_SECONDS) return [STOP, START];
 
   const cues: Cue[] = wasLive ? [] : [START];
   cues.push(...crossings(before.whole, wasLive, next.whole, sectionThresholds([], null)));
@@ -160,7 +162,11 @@ export function holdMatchReading(held: MatchReading | null, next: MatchReading |
   return jitter ? held : next;
 }
 
-/** The same rule for a running skills timer. */
+/** The most a running skills timer's whole seconds may rise between reads
+ * and still be clock jitter; a bigger rise is a reset and restart. */
+const MAX_JITTER_SECONDS = 1;
+
+/** The same rule for a running skills timer, for a rise of at most a second. */
 export function holdSkillsReading(held: SkillsReading | null, next: SkillsReading | null): SkillsReading | null {
   if (held === null || next === null) return next;
   const jitter =
@@ -169,7 +175,8 @@ export function holdSkillsReading(held: SkillsReading | null, next: SkillsReadin
     next.phase === "running" &&
     !held.paused &&
     !next.paused &&
-    next.whole > held.whole;
+    next.whole > held.whole &&
+    next.whole <= held.whole + MAX_JITTER_SECONDS;
   return jitter ? held : next;
 }
 

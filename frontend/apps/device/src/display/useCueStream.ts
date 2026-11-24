@@ -27,7 +27,7 @@ const READ_MS = 100;
 /** The timer a TV follows for its cues. */
 export type Follows =
   | { kind: "fieldSet"; fieldSetId: number; timeoutDeadline: string | null }
-  | { kind: "field"; fieldId: number }
+  | { kind: "field"; fieldId: number; timeoutDeadline: string | null }
   | { kind: "skillsSet"; fieldSetId: number }
   | { kind: "skillsField"; fieldSetId: number; fieldId: number };
 
@@ -93,7 +93,8 @@ interface FollowedReading {
 }
 
 /** Calls `onCues` with the cues of the timer a TV follows: its field set's
- * match clock (and time-out), its field's match, or a skills timer. */
+ * match clock, its field's match (each with the field set's time-out), or a
+ * skills timer. */
 export function useFollowedCues(sessionId: number, follows: Follows, onCues: (cues: Cue[]) => void): void {
   const now = useServerNow(READ_MS);
   const fields = useFields(sessionId);
@@ -117,7 +118,7 @@ export function useFollowedCues(sessionId: number, follows: Follows, onCues: (cu
   }
   const skills = useSkillsReading(timer, timerKey);
 
-  const deadline = follows.kind === "fieldSet" ? follows.timeoutDeadline : null;
+  const deadline = follows.kind === "fieldSet" || follows.kind === "field" ? follows.timeoutDeadline : null;
   const timeout = deadline === null ? null : (Date.parse(deadline) - now) / 1000;
   const reading: FollowedReading = { key: followsKey(follows), match, skills, timeout };
 

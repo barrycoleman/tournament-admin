@@ -105,6 +105,20 @@ describe("TV sounds", () => {
     expect(played()).not.toContain("buzzer:v1");
   });
 
+  it("dings on a field TV when its field set's time-out runs out", async () => {
+    serveDisplay({
+      ...baseRoutes(),
+      ...soundRoutes(),
+      "/api/sounds": SOUND_LIST,
+      "/api/displays/me": tvMe(fieldGroup({ field_set: { queued_match_id: null, timeout_deadline: iso(1_500) } })),
+    });
+    renderDisplay();
+    await enableSound();
+    expect(played()).not.toContain("moment:v1");
+    await tick(2_000);
+    await waitFor(() => expect(played()).toContain("moment:v1"));
+  });
+
   it("plays the buzzer when a skills set's timer runs out", async () => {
     const skillsSet = { id: 20, session_id: 1, name: "Skills Row", division_id: null, purpose: "skills" };
     const timer = {
