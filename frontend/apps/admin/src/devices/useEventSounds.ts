@@ -58,16 +58,19 @@ export async function soundSeconds(file: Blob): Promise<number> {
   }
 }
 
-async function fetchAudio(slot: SoundSlot, token: string | undefined): Promise<Response> {
-  return fetch(`/api/sounds/${slot}/audio`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+async function fetchAudio(slot: SoundSlot, useDefault: boolean, token: string | undefined): Promise<Response> {
+  return fetch(`/api/sounds/${slot}/audio${useDefault ? "?default=1" : ""}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
 }
 
-/** The slot's current sound as bytes; refreshes the sign-in once on a 401. */
-export async function fetchSoundBytes(slot: SoundSlot): Promise<ArrayBuffer> {
-  let response = await fetchAudio(slot, getStoredTokens()?.accessToken);
+/** The slot's current sound (or, with `useDefault`, its shipped default) as
+ * bytes; refreshes the sign-in once on a 401. */
+export async function fetchSoundBytes(slot: SoundSlot, useDefault = false): Promise<ArrayBuffer> {
+  let response = await fetchAudio(slot, useDefault, getStoredTokens()?.accessToken);
   if (response.status === 401) {
     const tokens = await refreshTokens();
-    response = await fetchAudio(slot, tokens.accessToken);
+    response = await fetchAudio(slot, useDefault, tokens.accessToken);
   }
   if (!response.ok) throw new Error(`sound ${slot} answered ${response.status}`);
   return response.arrayBuffer();
@@ -76,10 +79,18 @@ export async function fetchSoundBytes(slot: SoundSlot): Promise<ArrayBuffer> {
 /** Plays the slot's current sound once. */
 export async function playSound(slot: SoundSlot): Promise<void> {
   const context = new AudioContext();
-  const decoded = await context.decodeAudioData(await fetchSoundBytes(slot));
-  const source = context.createBufferSource();
-  source.buffer = decoded;
-  source.connect(context.destination);
-  source.onended = () => void context.close?.();
-  source.start();
+  let playing = false;
+  try {
+    const decoded = await context.decodeAudioData(await fetchSoundBytes(slot));
+    const source = context.createBufferSource();
+    source.buffer = decoded;
+    source.connect(context.destination);
+    source.onended = () => void context.close?.();
+    source.start();
+    playing = true;
+  } finally {
+    // Once playing, the context closes when the sound ends; a failed fetch or
+    // decode closes it here so it never leaks.
+    if (!playing) void context.close?.();
+  }
 }

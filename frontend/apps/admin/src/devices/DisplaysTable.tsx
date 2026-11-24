@@ -117,15 +117,14 @@ export function DisplaysTable({
                     {online ? t("devicesDisplays.connected") : t("devicesDisplays.notConnected")}
                   </td>
                   <td>
-                    <label className="choice">
-                      <input
-                        type="checkbox"
-                        checked={device.play_sounds}
-                        disabled={setSounds.isPending}
-                        onChange={(event) => setSounds.mutate({ id: device.id, play_sounds: event.target.checked })}
-                      />{" "}
-                      {t("sounds.tvSwitch")}
-                    </label>
+                    {/* The column header says Sound; the label names the TV for screen readers. */}
+                    <input
+                      type="checkbox"
+                      aria-label={t("sounds.tvSwitchFor", { name: device.name })}
+                      checked={device.play_sounds}
+                      disabled={setSounds.isPending}
+                      onChange={(event) => setSounds.mutate({ id: device.id, play_sounds: event.target.checked })}
+                    />
                   </td>
                   <td>
                     <DeviceStatusBadge status={device.status} />

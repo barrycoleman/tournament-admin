@@ -518,7 +518,9 @@ describe("Devices & displays page: spots", () => {
   it("switches a TV's sound with its own switch", async () => {
     renderRoute();
     const row = await rowFor("Big TV");
-    fireEvent.click(within(row).getByLabelText("Sound"));
+    // The header says Sound; the switch's label names the TV, with no visible repeat.
+    fireEvent.click(within(row).getByRole("checkbox", { name: "Sound for Big TV" }));
+    expect(within(row).queryByText("Sound")).toBeNull();
     await waitFor(() =>
       expect(apiRequest).toHaveBeenCalledWith("/api/devices/7", { method: "PATCH", body: { play_sounds: true } }),
     );
@@ -528,7 +530,7 @@ describe("Devices & displays page: spots", () => {
     devices = devices.map((d) => (d.id === 7 ? { ...d, play_sounds: true } : d));
     renderRoute();
     const row = await rowFor("Big TV");
-    expect(within(row).getByLabelText("Sound")).toBeChecked();
+    expect(within(row).getByLabelText("Sound for Big TV")).toBeChecked();
   });
 
   it("refetches the sounds when a sound changes", async () => {

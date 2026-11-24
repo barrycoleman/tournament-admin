@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from tournament_server.auth import (
@@ -31,6 +33,7 @@ from tournament_server.schemas.event import (
 )
 from tournament_server.services import game_plugin as game_plugin_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/event", tags=["event"])
 
 
@@ -112,10 +115,24 @@ def read_match_format(
         game_model=match_format["game_model"],
         autonomous_seconds=match_format["autonomous_seconds"],
         driver_seconds=match_format["driver_seconds"],
-        moments=[
-            MomentRead(**moment) for moment in match_format.get("moments") or []
-        ],
+        moments=_valid_moments(match_format.get("moments") or []),
     )
+
+
+def _valid_moments(raw: Any) -> list[MomentRead]:
+    """The plugin's moments that are well formed. An uploaded plugin that
+    never passed the conformance tool can declare a broken one; it is skipped
+    (with a warning) so every TV still gets the match format."""
+    if not isinstance(raw, list):
+        logger.warning("Game plugin moments are not a list; ignoring them: %r", raw)
+        return []
+    moments: list[MomentRead] = []
+    for moment in raw:
+        try:
+            moments.append(MomentRead.model_validate(moment))
+        except ValidationError as exc:
+            logger.warning("Skipping a malformed game plugin moment %r: %s", moment, exc)
+    return moments
 
 
 @router.get("/scoresheet-schema", response_model=list[dict[str, Any]])

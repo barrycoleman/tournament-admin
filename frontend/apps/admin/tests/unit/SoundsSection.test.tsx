@@ -6,6 +6,7 @@ import { ApiError, initI18n } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
 import zhAdmin from "../../src/i18n/zh/admin.json";
 import { SoundsSection } from "../../src/devices/SoundsSection";
+import { playSound } from "../../src/devices/useEventSounds";
 
 vi.mock("@tournament-admin/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tournament-admin/shared")>();
@@ -161,5 +162,55 @@ describe("Sounds panel", () => {
       expect(screen.getByText(text)).toBeInTheDocument();
     expect(screen.getAllByText("默认")).toHaveLength(5);
     expect(within(screen.getAllByRole("listitem")[0]).getByRole("button", { name: "上传" })).toBeInTheDocument();
+  });
+});
+
+describe("playSound", () => {
+  it("closes its audio context when the sound cannot be fetched or decoded", async () => {
+    const closes: ReturnType<typeof vi.fn>[] = [];
+    vi.stubGlobal(
+      "AudioContext",
+      class {
+        close = vi.fn();
+        destination = {};
+        decodeAudioData = vi.fn(async () => {
+          throw new Error("bad audio");
+        });
+        constructor() {
+          closes.push(this.close);
+        }
+      }
+    );
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("x")));
+    await expect(playSound("beep")).rejects.toThrow("bad audio");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
+    await expect(playSound("beep")).rejects.toThrow("404");
+    expect(closes).toHaveLength(2);
+    for (const close of closes) expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the context open while the sound plays and closes it when it ends", async () => {
+    let close = vi.fn();
+    let source: { onended: null | (() => void) } = { onended: null };
+    vi.stubGlobal(
+      "AudioContext",
+      class {
+        close = vi.fn();
+        destination = {};
+        decodeAudioData = vi.fn(async () => ({ duration: 1 }));
+        createBufferSource = () => {
+          source = { connect: vi.fn(), start: vi.fn(), buffer: null, onended: null } as never;
+          return source;
+        };
+        constructor() {
+          close = this.close;
+        }
+      }
+    );
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("x")));
+    await playSound("beep");
+    expect(close).not.toHaveBeenCalled();
+    source.onended?.();
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });

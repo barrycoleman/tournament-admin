@@ -1251,6 +1251,7 @@
     "unreadable": "This file could not be read as audio.",
     "playFailed": "This sound could not be played.",
     "rights": "Only upload sounds you have the rights to use.",
-    "tvSwitch": "Sound"
+    "tvSwitch": "Sound",
+    "tvSwitchFor": "Sound for {{name}}"
   }
 }

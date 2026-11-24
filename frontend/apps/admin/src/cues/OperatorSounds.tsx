@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   SoundPlayer,
   apiRequest,
-  getStoredTokens,
   useMatchReadingFrom,
+  useRealtimeChannel,
   useServerNow,
   useSkillsReading,
   useTimerCues,
@@ -15,28 +15,13 @@ import {
   type SkillsClockState,
   type SoundSlot,
 } from "@tournament-admin/shared";
+import { SOUNDS_KEY, fetchSoundBytes, type EventSoundRow } from "../devices/useEventSounds";
 import { useOperatorSoundSetting, type OperatorSoundPage } from "./useOperatorSoundSetting";
-
-interface EventSound {
-  slot: SoundSlot;
-  replaced: boolean;
-  filename: string | null;
-  uploaded_at: string | null;
-}
 
 /** One timer an operator page follows for its cues. */
 export type OperatorStream =
   | { kind: "match"; key: string; matches: LiveMatch[]; fieldIds: readonly number[]; timeoutDeadline: string | null }
   | { kind: "skills"; key: string; timer: SkillsClockState | null };
-
-async function fetchAudio(slot: SoundSlot, useDefault: boolean): Promise<ArrayBuffer> {
-  const token = getStoredTokens()?.accessToken;
-  const response = await fetch(`/api/sounds/${slot}/audio${useDefault ? "?default=1" : ""}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!response.ok) throw new Error(`sound ${slot} answered ${response.status}`);
-  return response.arrayBuffer();
-}
 
 function Stream({
   stream,
@@ -77,7 +62,7 @@ export function OperatorSounds({ page, streams }: { page: OperatorSoundPage; str
 
 function ActiveSounds({ streams }: { streams: OperatorStream[] }) {
   const { t } = useTranslation();
-  const [player] = useState(() => new SoundPlayer(fetchAudio));
+  const [player] = useState(() => new SoundPlayer(fetchSoundBytes));
   const [blocked, setBlocked] = useState(() => player.blocked);
   useEffect(() => {
     void player.preload();
@@ -89,8 +74,16 @@ function ActiveSounds({ streams }: { streams: OperatorStream[] }) {
     queryFn: () => apiRequest<{ moments: Moment[] }>("/api/event/match-format"),
   }).data?.moments;
 
-  // An upload or restore changes a slot's row: drop that sound and fetch it again.
-  const sounds = useQuery({ queryKey: ["sounds"], queryFn: () => apiRequest<EventSound[]>("/api/sounds") }).data;
+  // An upload or restore (on any admin's computer) changes a slot's row: read
+  // the rows again, then drop that sound and fetch it again.
+  const queryClient = useQueryClient();
+  useRealtimeChannel({
+    path: "/ws/active-session",
+    onEvent: (message) => {
+      if (message.event === "sounds_changed") void queryClient.invalidateQueries({ queryKey: SOUNDS_KEY });
+    },
+  });
+  const sounds = useQuery({ queryKey: SOUNDS_KEY, queryFn: () => apiRequest<EventSoundRow[]>("/api/sounds") }).data;
   const seen = useRef<Map<SoundSlot, string> | null>(null);
   useEffect(() => {
     if (!sounds) return;

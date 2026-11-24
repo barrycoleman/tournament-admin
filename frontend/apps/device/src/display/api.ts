@@ -12,8 +12,8 @@ import {
 } from "@tournament-admin/shared";
 import { getAudio, getJson } from "../deviceApi";
 
-// Sound is switched per TV now (`device.play_sounds`), never per group.
-export interface DisplayMeGroup extends Omit<DisplayGroupState, "play_sounds"> {
+// Sound is switched per TV (`device.play_sounds`), never per group.
+export interface DisplayMeGroup extends DisplayGroupState {
   field_set: FieldSetLive | null;
 }
 export interface DisplayMe {

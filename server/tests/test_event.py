@@ -243,3 +243,37 @@ def test_match_format_is_readable_by_non_admin_roles(client):
     token = login_as(client, "front_desk")
     response = client.get("/api/event/match-format", headers=bearer(token))
     assert response.status_code == 200
+
+
+def test_match_format_skips_malformed_moments(tmp_path, caplog):
+    """An uploaded plugin that never passed the conformance tool can declare a
+    broken moment; the endpoint still answers with the good ones."""
+    import logging
+
+    with _fixture_game_client(tmp_path, "cue-game") as client:
+        client.post("/api/event", json={"name": "Regional Qualifier"})
+        client.post("/api/event/game-plugin", json={"name": "cue-game"})
+        module = client.app.state.game_plugins["cue-game"].module
+        original = module.match_format
+
+        def broken_format():
+            match_format = dict(original())
+            match_format["moments"] = [
+                {"key": "no_period", "label": "No period", "at_remaining": 5},
+                {"key": "bad_period", "label": "Bad", "period": "halftime", "at_remaining": 5},
+                "not a moment",
+                {"key": "endgame", "label": "Endgame", "period": "driver", "at_remaining": 4},
+            ]
+            return match_format
+
+        module.match_format = broken_format
+        try:
+            with caplog.at_level(logging.WARNING, logger="tournament_server.routers.event"):
+                response = client.get("/api/event/match-format")
+        finally:
+            module.match_format = original
+    assert response.status_code == 200
+    assert response.json()["moments"] == [
+        {"key": "endgame", "label": "Endgame", "period": "driver", "at_remaining": 4, "until_remaining": None},
+    ]
+    assert sum("malformed game plugin moment" in record.getMessage() for record in caplog.records) == 3

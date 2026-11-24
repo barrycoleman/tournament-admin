@@ -1248,6 +1248,7 @@
     "unreadable": "无法将此文件读取为音频。",
     "playFailed": "无法播放此声音。",
     "rights": "请只上传您有权使用的声音。",
-    "tvSwitch": "声音"
+    "tvSwitch": "声音",
+    "tvSwitchFor": "{{name}} 的声音"
   }
 }

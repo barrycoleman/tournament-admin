@@ -9,9 +9,9 @@ import { useOperatorSoundSetting } from "../../src/cues/useOperatorSoundSetting"
 
 vi.mock("@tournament-admin/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tournament-admin/shared")>();
-  return { ...actual, apiRequest: vi.fn() };
+  return { ...actual, apiRequest: vi.fn(), refreshTokens: vi.fn(), useRealtimeChannel: vi.fn() };
 });
-import { apiRequest } from "@tournament-admin/shared";
+import { apiRequest, refreshTokens, useRealtimeChannel, type RealtimeEvent } from "@tournament-admin/shared";
 
 const NOW = new Date("2026-11-07T16:00:00Z").getTime();
 const iso = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString();
@@ -175,6 +175,46 @@ describe("Operator sounds", () => {
     expect(screen.getByLabelText(SWITCH)).not.toBeChecked();
     fireEvent.click(screen.getByLabelText(SWITCH));
     expect(screen.getByLabelText(SWITCH)).toBeChecked();
+  });
+});
+
+describe("Operator sounds, live sound changes", () => {
+  it("fetches a replaced sound again when the server says the sounds changed", async () => {
+    const listeners: ((event: RealtimeEvent) => void)[] = [];
+    vi.mocked(useRealtimeChannel).mockImplementation((options) => {
+      if (options.path === "/ws/active-session" && options.onEvent) listeners.push(options.onEvent);
+      return { connected: true };
+    });
+    let rows = SLOTS.map((slot) => ({ slot, replaced: false, filename: null as string | null, uploaded_at: null as string | null }));
+    vi.mocked(apiRequest).mockImplementation(async (path: string) => {
+      if (path === "/api/sounds") return rows as never;
+      if (path === "/api/event/match-format") return { moments: [] } as never;
+      throw new Error(`unexpected ${path}`);
+    });
+    await turnOn("matchControl", []);
+    const buzzerFetches = () => vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes("/buzzer/audio")).length;
+    expect(buzzerFetches()).toBe(1);
+    expect(listeners.length).toBeGreaterThan(0);
+
+    rows = rows.map((row) => (row.slot === "buzzer" ? { ...row, replaced: true, filename: "horn.wav", uploaded_at: "x" } : row));
+    act(() => listeners.at(-1)!({ event: "sounds_changed", data: { slot: "buzzer" } } as RealtimeEvent));
+    await tick(500);
+    expect(buzzerFetches()).toBe(2);
+  });
+
+  it("refreshes the sign-in once when a sound answers 401", async () => {
+    vi.mocked(refreshTokens).mockResolvedValue({ accessToken: "fresh", refreshToken: "r" } as never);
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      const slot = /sounds\/(\w+)\/audio/.exec(String(url))![1];
+      const auth = (init?.headers as Record<string, string> | undefined)?.Authorization;
+      if (slot === "beep" && auth !== "Bearer fresh") return new Response("", { status: 401 });
+      return new Response(JSON.stringify(slot));
+    });
+    await turnOn("matchControl", []);
+    expect(refreshTokens).toHaveBeenCalledTimes(1);
+    const beepCalls = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes("/beep/audio"));
+    expect(beepCalls).toHaveLength(2);
+    expect((beepCalls[1][1]?.headers as Record<string, string>).Authorization).toBe("Bearer fresh");
   });
 });
 
