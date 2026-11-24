@@ -45,7 +45,7 @@ export async function expectFits(page: Page, testIds: string[]) {
     }
     boxes[id] = box;
   }
-  const apart = ["band-red", "band-blue", "clock", "period", "driver-change", "paused", "bottom-bar"].filter((id) => boxes[id]);
+  const apart = ["band-red", "band-blue", "clock", "period", "window-tag", "paused", "bottom-bar"].filter((id) => boxes[id]);
   for (let i = 0; i < apart.length; i += 1) {
     for (let j = i + 1; j < apart.length; j += 1) {
       expect(intersects(boxes[apart[i]], boxes[apart[j]]), `${apart[i]} overlaps ${apart[j]}`).toBe(false);

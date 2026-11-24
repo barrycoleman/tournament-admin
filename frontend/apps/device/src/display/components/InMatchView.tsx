@@ -4,10 +4,10 @@ import { useFields, useMatchFormat, useRanks, useTeamsById, type Team } from "..
 import { groupScore, scoreGroups, sideGroups, type ScoreGroup } from "../logic/sides";
 import { matchTitle } from "../matchTitle";
 import { useLiveScores } from "../useLiveScores";
-import { DriverChangeTag } from "./DriverChangeTag";
 import { FitText } from "./FitText";
 import { BottomBar, MatchFrame } from "./MatchFrame";
 import { TeamBand } from "./TeamBand";
+import { WindowTag } from "./WindowTag";
 
 const NO_TEAMS = new Map<number, Team>();
 
@@ -61,6 +61,7 @@ export function InMatchView({ match, sessionId, now }: { match: LiveMatch; sessi
     clock = <FitText className="in-match__clock" testId="clock">{formatClock(remaining)}</FitText>;
   }
 
+  const openWindow = format.data ? activeWindow(match.phase, remaining, format.data.moments ?? []) : null;
   let under = null;
   if (match.phase === "ended") {
     under = <p className="in-match__over">{t("display.matchOver")}</p>;
@@ -70,8 +71,8 @@ export function InMatchView({ match, sessionId, now }: { match: LiveMatch; sessi
         {t("display.paused")}
       </p>
     );
-  } else if (format.data && activeWindow(match.phase, remaining, format.data.moments ?? []) !== null) {
-    under = <DriverChangeTag />;
+  } else if (openWindow) {
+    under = <WindowTag label={openWindow.label} />;
   } else if (period) {
     under = (
       <p className="in-match__period" data-testid="period">

@@ -73,7 +73,12 @@
     "matchOver": "比赛结束",
     "driverNext": "即将进入手动控制",
     "paused": "已暂停",
-    "driverChange": "换手",
+    "cue": {
+      "matchOver": "比赛结束",
+      "matchStopped": "比赛中止",
+      "time": "时间到",
+      "stopped": "已中止"
+    },
     "timeout": "暂停时间",
     "fieldDone": "本场地没有更多比赛",
     "noMatchYet": "还没有比赛开始",

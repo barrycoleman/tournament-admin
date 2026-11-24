@@ -271,7 +271,7 @@ test.describe.serial("TV screens", () => {
     }
   });
 
-  test("the driver-change tag shows from 35 s down to 25 s left in the driver period", async ({ request }, testInfo) => {
+  test("the window tag shows the driver-change label from 35 s down to 25 s left in the driver period", async ({ request }, testInfo) => {
     const fieldTv = screens["Field TV"];
     const clockTv = screens["Clock TV"];
     // Autonomous runs 15 s on the server's own timer; then the driver period is started.
@@ -291,11 +291,11 @@ test.describe.serial("TV screens", () => {
     const deadline = Date.parse((await q1()).phase_deadline);
     const pageNow = await clockTv.evaluate(() => Date.now());
     await clockTv.clock.fastForward(deadline - 30_000 - pageNow);
-    const tag = clockTv.getByTestId("driver-change");
+    const tag = clockTv.getByTestId("window-tag");
     await expect(tag).toHaveText("Driver change");
     await expect(clockTv.getByTestId("period")).toHaveCount(0);
     await expect(clockTv.getByTestId("clock")).toHaveText(/^0:(2[6-9]|3[0-5])$/);
-    await expectFits(clockTv, ["band-red", "band-blue", "clock", "driver-change", "bottom-bar"]);
+    await expectFits(clockTv, ["band-red", "band-blue", "clock", "window-tag", "bottom-bar"]);
     await shot(clockTv, testInfo, "in-match-1920x1080-driver-change");
     // The other TVs, on real time, still show the period name.
     await expect(fieldTv.getByTestId("period")).toHaveText("Driver control");

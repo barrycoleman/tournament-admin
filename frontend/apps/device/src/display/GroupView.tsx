@@ -3,6 +3,7 @@ import type { ScreenSettings } from "@tournament-admin/shared";
 import { useFieldSets, type DisplayMe, type DisplayMeGroup } from "./api";
 import type { ScreenContext } from "./screenTypes";
 import { TvSounds } from "./TvSounds";
+import { CueFlash } from "./components/CueFlash";
 import type { Follows } from "./useCueStream";
 import { FieldDisplay } from "./FieldDisplay";
 import { WaitingForData } from "./components/ScreenFrame";
@@ -40,8 +41,8 @@ function followsOf(group: DisplayMeGroup, skills: boolean, timeoutDeadline: stri
   return skills ? { kind: "skillsSet", fieldSetId } : { kind: "fieldSet", fieldSetId, timeoutDeadline };
 }
 
-/** Mounts what a display's group shows, plus the cue sounds when this TV's
- * sound is on. */
+/** Mounts what a display's group shows, the cue flashes where a running
+ * timer shows, and the cue sounds when this TV's sound is on. */
 export function GroupView({ me }: { me: DisplayMe & { session_id: number; group: DisplayMeGroup } }) {
   const { group, session_id: sessionId } = me;
   const fieldSets = useFieldSets(sessionId);
@@ -50,11 +51,15 @@ export function GroupView({ me }: { me: DisplayMe & { session_id: number; group:
   // A skills set's groups show skills screens, so wait to know the set's purpose.
   if (fieldSetId !== null && !fieldSets.data) return <WaitingForData title={group.name} />;
   const skills = fieldSetId !== null && fieldSets.data?.find((fs) => fs.id === fieldSetId)?.purpose === "skills";
-  const follows = me.device.play_sounds ? followsOf(group, skills, timeoutDeadline) : null;
+  const follows = followsOf(group, skills, timeoutDeadline);
+  // Flashes show only where a running timer shows: a teamwork audience TV on
+  // its In Match screen, a field TV, or a skills TV.
+  const showsTimer = group.kind !== "audience" || skills || group.screen === "in_match";
   return (
     <>
       <GroupPicture group={group} sessionId={sessionId} skills={skills} timeoutDeadline={timeoutDeadline} />
-      {follows && <TvSounds sessionId={sessionId} follows={follows} />}
+      {follows && showsTimer && <CueFlash sessionId={sessionId} follows={follows} />}
+      {follows && me.device.play_sounds && <TvSounds sessionId={sessionId} follows={follows} />}
     </>
   );
 }

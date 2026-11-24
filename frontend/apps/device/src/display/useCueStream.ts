@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   holdMatchReading,
   holdSkillsReading,
@@ -53,8 +53,21 @@ const wholeSeconds = (seconds: number) => Math.ceil(seconds - 1e-9);
 export function useMatchReading(sessionId: number, fieldIds: readonly number[]): MatchReading | null {
   const now = useServerNow(READ_MS);
   const matches = useMatches(sessionId);
-  const match =
+  const last = useRef<{ matchId: number; phase: string } | null>(null);
+  let match =
     matches.data && fieldIds.length > 0 ? latestStartedMatchForFieldSet(matches.data, fieldIds) : null;
+  // A live match reset to not started is no longer a started match; read it
+  // once more so the reset shows as a stop.
+  const lastLive = last.current !== null && last.current.phase !== "not_started" && last.current.phase !== "ended";
+  if (lastLive && match?.id !== last.current?.matchId) {
+    const reset = matches.data?.find((m) => m.id === last.current?.matchId && m.phase === "not_started");
+    if (reset) match = reset;
+  }
+  const followedId = match?.id ?? null;
+  const followedPhase = match?.phase ?? null;
+  useEffect(() => {
+    last.current = followedId === null || followedPhase === null ? null : { matchId: followedId, phase: followedPhase };
+  }, [followedId, followedPhase]);
   const reading: MatchReading | null = match
     ? {
         matchId: match.id,

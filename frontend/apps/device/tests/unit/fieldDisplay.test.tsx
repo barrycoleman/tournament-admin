@@ -132,21 +132,30 @@ describe("field display", () => {
 
   it("swaps the period name for a Driver change tag from 35 s down to 25 s left", async () => {
     showField([match({ phase: "driver", phase_deadline: iso(30_000) })]);
-    expect(await screen.findByTestId("driver-change")).toHaveTextContent("Driver change");
+    expect(await screen.findByTestId("window-tag")).toHaveTextContent("Driver change");
+    expect(screen.queryByTestId("period")).not.toBeInTheDocument();
+  });
+
+  it("shows any window's own label from the game's moments", async () => {
+    const endgame = { key: "endgame", label: "Endgame", period: "driver", at_remaining: 20, until_remaining: 0 };
+    showField([match({ phase: "driver", phase_deadline: iso(15_000) })], {
+      extra: { "/api/event/match-format": { ...HEAD_TO_HEAD, moments: [endgame] } },
+    });
+    expect(await screen.findByTestId("window-tag")).toHaveTextContent("Endgame");
     expect(screen.queryByTestId("period")).not.toBeInTheDocument();
   });
 
   it("shows the period name outside the driver-change window", async () => {
     showField([match({ phase: "driver", phase_deadline: iso(40_000) })]);
     expect(await screen.findByTestId("period")).toHaveTextContent("Driver control");
-    expect(screen.queryByTestId("driver-change")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("window-tag")).not.toBeInTheDocument();
   });
 
   it("shows the Driver change tag for a cooperative game with a 60 s driver period", async () => {
     showField([match({ phase: "driver", phase_deadline: iso(30_000), alliances: COOP_ALLIANCES })], {
       extra: { "/api/event/match-format": COOPERATIVE },
     });
-    expect(await screen.findByTestId("driver-change")).toBeInTheDocument();
+    expect(await screen.findByTestId("window-tag")).toBeInTheDocument();
     expect(screen.getByTestId("band-red")).toHaveTextContent("101A");
     expect(screen.getByTestId("band-blue")).toHaveTextContent("104D");
   });
@@ -156,14 +165,14 @@ describe("field display", () => {
       extra: { "/api/event/match-format": { ...HEAD_TO_HEAD, moments: [] } },
     });
     expect(await screen.findByTestId("period")).toHaveTextContent("Driver control");
-    expect(screen.queryByTestId("driver-change")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("window-tag")).not.toBeInTheDocument();
   });
 
   it("shows Paused, not the Driver change tag, when paused inside the window", async () => {
     showField([match({ phase: "driver", paused: true, remaining_seconds_at_pause: 30 })]);
     expect(await screen.findByTestId("paused")).toBeInTheDocument();
     expect(screen.getByTestId("clock")).toHaveTextContent("0:30");
-    expect(screen.queryByTestId("driver-change")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("window-tag")).not.toBeInTheDocument();
     expect(screen.queryByTestId("period")).not.toBeInTheDocument();
   });
 
