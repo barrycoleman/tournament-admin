@@ -115,16 +115,25 @@
 .count-in-overlay { position: fixed; inset: 0; z-index: 20; padding: 3vh 3vw; background: var(--kiosk-bg); font-size: 100vh; font-weight: 900; line-height: 1; }
 
 /* In-match cue flashes: a frame pulsing twice round the whole screen and a
-   banner over the bottom bar. Above the screen, never taking a click; the
-   live totals sit above the banner so the scores are never covered. */
+   banner naming the moment, over the bottom bar on a match TV and over the
+   title band on a skills TV. Above the screen, never taking a click. While a
+   flash shows (and only then, so they never rise through the count-in or
+   identify overlays) the live totals sit above the banner, which keeps its
+   text clear of them; the scores are never covered. */
 .cue-flash { position: fixed; inset: 0; z-index: 25; pointer-events: none; --flash: var(--kiosk-soon); --flash-ink: var(--kiosk-ink-on-band); }
 .cue-flash--over { --flash: var(--kiosk-ink); }
 .cue-flash--stop { --flash: var(--kiosk-late); --flash-ink: #fff; }
 .cue-flash__border { position: absolute; inset: 0; box-shadow: inset 0 0 0 1vw var(--flash); opacity: 0; animation: cue-flash-pulse 1.5s ease-in-out forwards; }
 .cue-flash__banner {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 7.5vw; display: flex; align-items: center; justify-content: center;
-  padding: 0 3vw; background: var(--flash); color: var(--flash-ink); font-size: 4vw; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; overflow: hidden;
+  position: absolute; left: 0; right: 0; display: flex; align-items: center;
+  background: var(--flash); color: var(--flash-ink); font-size: 4vw; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; overflow: hidden;
 }
+/* The in-match bottom bar's box, its text kept between the two totals. */
+.cue-flash--bottom .cue-flash__banner { bottom: 0; height: 7.5vw; padding: 0 20vw; }
+/* A skills screen's padding and title row (ScreenFrame's header). */
+.cue-flash--top .cue-flash__banner { top: 0; height: 6.6vw; padding: 0 3vw; font-size: 3.6vw; }
+.cue-flash__text { justify-content: center; }
+.cue-flash__text .fit-line__inner { transform-origin: center; }
 @keyframes cue-flash-pulse {
   0% { opacity: 0; }
   18% { opacity: 1; }
@@ -135,8 +144,8 @@
 @media (prefers-reduced-motion: reduce) {
   .cue-flash__border { animation: none; opacity: 1; }
 }
-.in-match .bottom-bar__start, .in-match .bottom-bar__end { position: relative; z-index: 26; }
-.in-match .in-match-score { margin: 0 -0.8vw; padding: 0 0.8vw; border-radius: 0.6vw; background: var(--kiosk-surface); }
+.display--flashing .in-match .bottom-bar__start, .display--flashing .in-match .bottom-bar__end { position: relative; z-index: 26; }
+.display--flashing .in-match .in-match-score { margin: 0 -0.8vw; padding: 0 0.8vw; border-radius: 0.6vw; background: var(--kiosk-surface); }
 
 /* Shared by the skills TVs. */
 .clock { margin: 0; font-size: 22vw; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }

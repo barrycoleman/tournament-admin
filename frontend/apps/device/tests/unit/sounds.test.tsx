@@ -105,6 +105,25 @@ describe("TV sounds", () => {
     expect(played()).not.toContain("buzzer:v1");
   });
 
+  it("plays the power-down when a live match is reset to not started", async () => {
+    let matches = [match({ id: 1, field_id: 1, phase: "driver", phase_deadline: iso(40_000) })];
+    serveDisplay({
+      ...baseRoutes(),
+      ...soundRoutes(),
+      "/api/sounds": SOUND_LIST,
+      "/api/displays/me": tvMe(audienceGroup({ screen: "in_match" })),
+      "/api/matches?session_id=1": () => matches,
+    });
+    const { emit } = renderDisplay();
+    await enableSound();
+    await tick(300);
+    matches = [match({ id: 1, field_id: 1, phase: "not_started", phase_deadline: null })];
+    emit("match_reset", { match_id: 1 });
+    await tick(300);
+    await waitFor(() => expect(played()).toContain("stop:v1"));
+    expect(played()).not.toContain("buzzer:v1");
+  });
+
   it("dings on a field TV when its field set's time-out runs out", async () => {
     serveDisplay({
       ...baseRoutes(),

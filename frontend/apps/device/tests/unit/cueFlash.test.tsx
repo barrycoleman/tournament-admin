@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { act, screen } from "@testing-library/react";
 import i18n from "i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -53,7 +56,10 @@ describe("cue flash on a match TV", () => {
     const shown = await untilFlash();
     expect(shown).toHaveClass("cue-flash", "cue-flash--moment");
     expect(shown).toHaveAttribute("data-kind", "moment");
+    expect(shown).toHaveClass("cue-flash--bottom");
     expect(shown.querySelector(".cue-flash__banner")).toHaveTextContent("Driver change");
+    // The banner text shrinks to fit its box rather than running under the totals.
+    expect(shown.querySelector(".cue-flash__banner .fit-line.cue-flash__text")).toHaveTextContent("Driver change");
     expect(shown.querySelector(".cue-flash__border")).toBeInTheDocument();
     await tick(1_300);
     expect(flash()?.querySelector(".cue-flash__border")).toBeInTheDocument();
@@ -152,6 +158,27 @@ describe("cue flash on a match TV", () => {
     await expectNoFlashFor(5_500);
   });
 
+  it("raises the live totals above the banner only while a flash shows", async () => {
+    const { container } = showMatch(inMatchGroup(), () => [match({ id: 1, phase: "driver", phase_deadline: iso(35_600) })]);
+    expect(await screen.findByTestId("clock")).toBeInTheDocument();
+    const display = container.querySelector(".display");
+    expect(display).not.toHaveClass("display--flashing");
+    await untilFlash();
+    expect(display).toHaveClass("display--flashing");
+    await tick(2_300);
+    expect(flash()).not.toBeInTheDocument();
+    expect(display).not.toHaveClass("display--flashing");
+  });
+
+  it("scopes every raise of the totals to a showing flash in the stylesheet", () => {
+    const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../src/styles/display.css"), "utf8");
+    const rules = css.split("}").filter((rule) => /bottom-bar__(start|end)|in-match-score\s*\{/.test(rule) && /z-index/.test(rule));
+    expect(rules.length).toBeGreaterThan(0);
+    for (const rule of rules) {
+      for (const selector of rule.split("{")[0].split(",")) expect(selector.trim()).toMatch(/^\.display--flashing /);
+    }
+  });
+
   it("does not flash on an audience TV showing another screen", async () => {
     let matches = [match({ id: 1, phase: "driver", phase_deadline: iso(50_000) })];
     const { emit } = showMatch(audienceGroup({ screen: "logo" }), () => matches);
@@ -202,6 +229,9 @@ describe("cue flash on a skills TV", () => {
     const shown = await untilFlash();
     expect(shown).toHaveClass("cue-flash--over");
     expect(shown).toHaveTextContent("TIME");
+    // On a skills TV the banner covers the title band, never the run's total at the bottom.
+    expect(shown).toHaveClass("cue-flash--top");
+    expect(shown).not.toHaveClass("cue-flash--bottom");
   });
 
   it("flashes red STOPPED on a skills audience TV when the set timer is stopped early", async () => {
@@ -213,6 +243,7 @@ describe("cue flash on a skills TV", () => {
     emit("skills_run_changed", { field_set_id: 20 });
     const shown = await untilFlash();
     expect(shown).toHaveClass("cue-flash--stop");
+    expect(shown).toHaveClass("cue-flash--top");
     expect(shown).toHaveTextContent("STOPPED");
     expect(shown).not.toHaveTextContent("MATCH");
   });

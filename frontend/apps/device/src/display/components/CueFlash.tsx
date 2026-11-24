@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Cue, FlashKind } from "@tournament-admin/shared";
 import { useFollowedCues, type Follows } from "../useCueStream";
+import { FitLine } from "./FitText";
 
 /** How long the border pulses (twice) and the banner stays. */
 export const FLASH_BORDER_MS = 1_500;
@@ -16,9 +17,14 @@ interface Showing {
 
 let nextId = 1;
 
+/** Set on the display root while a flash shows, so the live totals rise
+ * above the banner only then. */
+export const FLASHING_CLASS = "display--flashing";
+
 /** The flash on a TV showing a running timer: a border pulsing round the whole
- * screen and a banner over the bottom bar naming the moment. Mounted beside
- * the screen, not in it, so a reset's red banner stays while the screen
+ * screen and a banner naming the moment, over the bottom bar on a match TV and
+ * over the title band on a skills TV (whose scores sit at the bottom). Mounted
+ * beside the screen, not in it, so a reset's red banner stays while the screen
  * changes under it. Independent of the TV's sound switch. */
 export function CueFlash({ sessionId, follows }: { sessionId: number; follows: Follows }) {
   const { t } = useTranslation();
@@ -45,6 +51,15 @@ export function CueFlash({ sessionId, follows }: { sessionId: number; follows: F
     };
   }, [id]);
 
+  const root = useRef<HTMLDivElement>(null);
+  const flashing = showing !== null;
+  useEffect(() => {
+    const display = flashing ? root.current?.closest(".display") : null;
+    if (!display) return;
+    display.classList.add(FLASHING_CLASS);
+    return () => display.classList.remove(FLASHING_CLASS);
+  }, [flashing]);
+
   if (!showing) return null;
   const skills = follows.kind === "skillsSet" || follows.kind === "skillsField";
   let text = showing.label ?? "";
@@ -53,13 +68,16 @@ export function CueFlash({ sessionId, follows }: { sessionId: number; follows: F
   return (
     <div
       key={showing.id}
-      className={`cue-flash cue-flash--${showing.kind}`}
+      ref={root}
+      className={`cue-flash cue-flash--${showing.kind} ${skills ? "cue-flash--top" : "cue-flash--bottom"}`}
       data-testid="cue-flash"
       data-kind={showing.kind}
       role="status"
     >
       {showing.border && <div className="cue-flash__border" aria-hidden="true" />}
-      <div className="cue-flash__banner">{text}</div>
+      <div className="cue-flash__banner">
+        <FitLine className="cue-flash__text">{text}</FitLine>
+      </div>
     </div>
   );
 }
