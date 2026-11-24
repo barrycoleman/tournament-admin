@@ -7,6 +7,7 @@ from tournament_server.models.device import Device
 from tournament_server.models.display import DisplayAssignment, DisplayGroup
 from tournament_server.models.division import Division
 from tournament_server.models.event import Event
+from tournament_server.models.event_sound import EventSound
 from tournament_server.models.field import Field
 from tournament_server.models.field_set import FieldSet
 from tournament_server.models.finals_bracket import FinalsBracket
@@ -41,6 +42,7 @@ __all__ = [
     "DisplayGroup",
     "Division",
     "Event",
+    "EventSound",
     "Field",
     "FieldSet",
     "FinalsBracket",

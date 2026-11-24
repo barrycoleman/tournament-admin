@@ -34,6 +34,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "tournament_server._alembic" = ["script.py.mako"]
+"tournament_server" = ["default_sounds/*.mp3", "default_sounds/CREDITS.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

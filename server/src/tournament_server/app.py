@@ -37,6 +37,7 @@ from tournament_server.routers import (
     divisions,
     drafts,
     event,
+    event_sounds,
     field_sets,
     fields,
     finals,
@@ -272,6 +273,7 @@ def create_app(
     app.include_router(teams.router)
     app.include_router(participation.router)
     app.include_router(audit_log.router)
+    app.include_router(event_sounds.router)
     app.include_router(plugins.router)
     app.include_router(plugins.scheduler_router)
     app.include_router(matches.router)

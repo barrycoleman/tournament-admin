@@ -91,6 +91,16 @@ def upgrade() -> None:
     sa.Column('key', sa.String(length=200), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('event_sounds',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('slot', sa.String(length=20), nullable=False),
+    sa.Column('filename', sa.String(length=200), nullable=False),
+    sa.Column('content_type', sa.String(length=50), nullable=False),
+    sa.Column('data', sa.LargeBinary(), nullable=False),
+    sa.Column('uploaded_at', tournament_server.db.UTCDateTime(), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('slot')
+    )
     op.create_table('divisions',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('event_id', sa.Integer(), nullable=False),
@@ -524,6 +534,7 @@ def downgrade() -> None:
     op.drop_table('sessions')
     op.drop_table('ranking_settings')
     op.drop_table('divisions')
+    op.drop_table('event_sounds')
     op.drop_table('signing_keys')
     op.drop_table('devices')
     op.drop_table('role_credentials')

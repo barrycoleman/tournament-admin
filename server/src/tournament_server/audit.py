@@ -80,6 +80,8 @@ class AuditLog(Base):
 def _to_jsonable(value: Any) -> Any:
     if isinstance(value, (dt.datetime, dt.date)):
         return value.isoformat()
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return f"<{len(value)} bytes>"
     return value
 
 
