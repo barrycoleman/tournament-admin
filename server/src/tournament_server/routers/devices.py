@@ -56,7 +56,12 @@ def to_device_read(device: Device, db: Session) -> DeviceRead:
 
 def device_snapshot(device: Device) -> dict:
     """What the audit log records about a device: never its token hash."""
-    return {"name": device.name, "role": device.role, "disabled": device.disabled_at is not None}
+    return {
+        "name": device.name,
+        "role": device.role,
+        "disabled": device.disabled_at is not None,
+        "play_sounds": device.play_sounds,
+    }
 
 
 def audit_device(db: Session, device_id: int | None, action: str, before: dict | None, after: dict | None) -> None:

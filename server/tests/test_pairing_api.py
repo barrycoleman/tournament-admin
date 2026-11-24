@@ -264,7 +264,7 @@ def test_pairing_writes_one_curated_audit_entry_without_the_token_hash(admin):
     entry = new[0]
     assert entry["table_name"] == "devices" and entry["action"] == "pair" and entry["row_pk"] == device["id"]
     assert entry["before"] is None
-    assert entry["after"] == {"name": "Audit Tab", "role": "scorer", "disabled": False}
+    assert entry["after"] == {"name": "Audit Tab", "role": "scorer", "disabled": False, "play_sounds": False}
 
 
 def test_a_deleted_devices_token_never_speaks_for_a_device_paired_after_it(admin):

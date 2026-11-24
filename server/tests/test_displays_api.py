@@ -280,3 +280,30 @@ def test_the_field_set_switch_needs_a_known_set_a_boolean_and_an_admin(client, e
     assert client.put(url, json={}).status_code == 422
     tv = paired_device(client, role="display_device")
     assert client.put(url, json={"play_sounds": True}, headers=tv["headers"]).status_code == 403
+
+
+def _audit_rows(client, device_id):
+    return [r for r in client.get("/api/audit-log").json() if r["table_name"] == "devices" and r["row_pk"] == device_id]
+
+
+def test_a_sound_toggle_is_audited_as_false_to_true(client, event):
+    tv = paired_device(client, role="display_device", name="Audited TV")
+    client.patch(f"/api/devices/{tv['id']}", json={"play_sounds": True})
+    row = next(r for r in _audit_rows(client, tv["id"]) if r["action"] == "update")
+    assert row["before"]["play_sounds"] is False and row["after"]["play_sounds"] is True
+
+
+def test_the_field_set_switch_audits_only_tvs_whose_value_changed(client, event):
+    session_id = event["session_id"]
+    audience = _audience(client)
+    changed = paired_device(client, role="display_device", name="Off TV")
+    already = paired_device(client, role="display_device", name="On TV")
+    _put(client, session_id, changed["id"], audience.id)
+    _put(client, session_id, already["id"], audience.id)
+    client.patch(f"/api/devices/{already['id']}", json={"play_sounds": True})
+    already_rows = len(_audit_rows(client, already["id"]))
+    url = f"/api/displays/field-sets/{event['field_set']['id']}/sounds"
+    assert client.put(url, json={"play_sounds": True}).status_code == 200
+    row = [r for r in _audit_rows(client, changed["id"]) if r["action"] == "update"][-1]
+    assert row["before"]["play_sounds"] is False and row["after"]["play_sounds"] is True
+    assert len(_audit_rows(client, already["id"])) == already_rows

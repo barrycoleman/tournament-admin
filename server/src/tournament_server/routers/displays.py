@@ -15,6 +15,7 @@ from tournament_server.models.display import DisplayAssignment, DisplayGroup
 from tournament_server.models.division import Division
 from tournament_server.models.field_set import FieldSet
 from tournament_server.models.session import TournamentSession
+from tournament_server.routers.devices import audit_device, device_snapshot
 from tournament_server.schemas.display import (
     AssignmentWrite,
     CopyDisplaysRequest,
@@ -312,7 +313,10 @@ def set_field_set_sounds(
         ).scalars().all()
     )
     for device in db.execute(select(Device).where(Device.id.in_(device_ids), Device.role == DISPLAY_ROLE)).scalars():
-        device.play_sounds = payload.play_sounds
+        if device.play_sounds != payload.play_sounds:
+            before = device_snapshot(device)
+            device.play_sounds = payload.play_sounds
+            audit_device(db, device.id, "update", before, device_snapshot(device))
     db.commit()
     for device_id in device_ids:
         realtime.send_to_device(
@@ -346,7 +350,11 @@ def read_me(caller: Caller = Depends(get_caller), db: Session = Depends(get_db))
                 else None
             )
             group = DisplayMeGroup(**fields, field_set=live)
-    return DisplayMe(device=DisplayDevice(id=device.id, name=device.name, play_sounds=device.play_sounds), session_id=session_id, group=group)
+    return DisplayMe(
+        device=DisplayDevice(id=device.id, name=device.name, play_sounds=device.play_sounds),
+        session_id=session_id,
+        group=group,
+    )
 
 
 @router.get("/api/displays/live-scores")
