@@ -57,6 +57,16 @@ beforeEach(() => {
 });
 
 describe("alliance selection panel", () => {
+  it("says tablets follow along only when this is the active session", async () => {
+    show(picking(selection()));
+    renderFinals();
+    expect(
+      await screen.findByText(
+        "Invite is disabled while an invite is open. Tablets follow along live only while this is the active session."
+      )
+    ).toBeInTheDocument();
+  });
+
   it("shows formed alliances, the current captain and the invitable teams with ranks", async () => {
     show(picking(selection()));
     renderFinals();

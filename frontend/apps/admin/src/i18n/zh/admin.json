@@ -546,7 +546,7 @@
         "invite": "邀请",
         "rank": "第 {{rank}} 名",
         "declinedTag": "已拒绝",
-        "tabletsHint": "有邀请未处理时无法再邀请。选择模式下的平板会实时同步。"
+        "tabletsHint": "有邀请未处理时无法再邀请。仅当本场次为当前场次时，平板才会实时同步。"
       },
       "progress": {
         "alliances": "决赛联盟",

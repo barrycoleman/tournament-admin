@@ -8,7 +8,7 @@ vi.mock("@tournament-admin/shared", async (importOriginal) => {
   return { ...actual, apiRequest: vi.fn(), useRealtimeChannel: vi.fn() };
 });
 
-import { apiRequest, useRealtimeChannel } from "@tournament-admin/shared";
+import { apiRequest, useRealtimeChannel, type RealtimeEvent } from "@tournament-admin/shared";
 
 const ALLIANCES = [
   { id: 1, seed: 1, team_ids: [1, 2], unavailable: false },
@@ -91,5 +91,19 @@ describe("finals in progress", () => {
     renderFinals();
     await screen.findByText("Finals are in progress.");
     expect(screen.queryByRole("button", { name: "Can't play" })).not.toBeInTheDocument();
+  });
+
+  it.each(["score_saved", "new_match_created"])("refetches the finals on %s", async (name) => {
+    let onEvent: ((event: RealtimeEvent) => void) | undefined;
+    vi.mocked(useRealtimeChannel).mockImplementation((options) => {
+      if (options.path === "/ws/session/1") onEvent = options.onEvent;
+      return { connected: true };
+    });
+    show(bracket({ alliances: ALLIANCES }));
+    renderFinals();
+    await screen.findByText("Finals are in progress.");
+    vi.mocked(apiRequest).mockClear();
+    onEvent!({ event: name, data: { session_id: 1 } } as RealtimeEvent);
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/finals?session_id=1"));
   });
 });

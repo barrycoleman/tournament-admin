@@ -548,7 +548,7 @@
         "invite": "Invite",
         "rank": "Rank {{rank}}",
         "declinedTag": "declined",
-        "tabletsHint": "Invite is disabled while an invite is open. Tablets in selection mode follow along live."
+        "tabletsHint": "Invite is disabled while an invite is open. Tablets follow along live only while this is the active session."
       },
       "progress": {
         "alliances": "Alliances in finals",

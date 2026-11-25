@@ -32,7 +32,9 @@ export function finalsExclusionsKey(scope: FinalsScope): (string | number | null
   return ["finalsExclusions", scope.sessionId, scope.divisionId];
 }
 
-/** Every finals and exclusion write broadcasts `finals_changed` on the session channel. */
+/** Every finals and exclusion write broadcasts `finals_changed` on the session
+ * channel; scoring a finals game (`score_saved`) and the games it starts
+ * (`new_match_created`) change the bracket too. */
 export function useFinalsLiveUpdates(sessionId: number) {
   const queryClient = useQueryClient();
   useRealtimeChannel({
@@ -41,6 +43,8 @@ export function useFinalsLiveUpdates(sessionId: number) {
       if (realtimeEvent.event === "finals_changed") {
         queryClient.invalidateQueries({ queryKey: ["finals", sessionId] });
         queryClient.invalidateQueries({ queryKey: ["finalsExclusions", sessionId] });
+      } else if (realtimeEvent.event === "score_saved" || realtimeEvent.event === "new_match_created") {
+        queryClient.invalidateQueries({ queryKey: ["finals", sessionId] });
       } else if (realtimeEvent.event === "ranking_updated") {
         queryClient.invalidateQueries({ queryKey: rankingsKeyPrefix({ kind: "session", sessionId }) });
       }
