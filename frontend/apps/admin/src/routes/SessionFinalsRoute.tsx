@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useOutletContext } from "react-router-dom";
+import { AllianceSelectionPanel } from "../finals/AllianceSelectionPanel";
+import { FinalsProgress } from "../finals/FinalsProgress";
 import { FinalsSetup } from "../finals/FinalsSetup";
-import { useFinalsBrackets, useFinalsLiveUpdates } from "../finals/useFinals";
+import { useFinalsBrackets, useFinalsLiveUpdates, useTeams, type FinalsScope } from "../finals/useFinals";
 import { useRankingGroups, type RankingGroup } from "../rankings/useRankingGroups";
-import type { SessionRead } from "../types";
+import type { FinalsBracket, SessionRead } from "../types";
 
 /**
  * The session's Finals tab. A thin switch: qualification must be finalized,
@@ -87,11 +89,30 @@ function FinalsForDivision({ session, group }: { session: SessionRead; group: Ra
   if (!brackets.data) return <p>{t("sessions.loading")}</p>;
   const current = brackets.data.find((bracket) => bracket.status !== "complete") ?? brackets.data[0];
   if (current) {
+    return <ExistingFinals scope={{ sessionId: session.id, divisionId: group.divisionId }} bracket={current} group={group} />;
+  }
+  return <FinalsSetup session={session} divisionId={group.divisionId} rankings={group.rows} />;
+}
+
+/** Finals that already exist: partner picking while alliances form, otherwise their progress. */
+function ExistingFinals({ scope, bracket, group }: { scope: FinalsScope; bracket: FinalsBracket; group: RankingGroup }) {
+  const { t } = useTranslation();
+  const teams = useTeams();
+  if (teams.isError) {
     return (
       <div className="panel">
-        <p>{t(`sessions.finals.status.${current.status}`)}</p>
+        <p className="alert alert-danger" role="alert">
+          {t("errors.generic")}
+        </p>
+        <button type="button" className="btn" onClick={() => teams.refetch()}>
+          {t("sessions.finals.retry")}
+        </button>
       </div>
     );
   }
-  return <FinalsSetup session={session} divisionId={group.divisionId} rankings={group.rows} />;
+  if (!teams.data) return <p>{t("sessions.loading")}</p>;
+  if (bracket.status === "selecting_alliances") {
+    return <AllianceSelectionPanel scope={scope} bracket={bracket} rankings={group.rows} teams={teams.data} />;
+  }
+  return <FinalsProgress scope={scope} bracket={bracket} teams={teams.data} />;
 }

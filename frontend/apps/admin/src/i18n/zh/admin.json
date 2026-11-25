@@ -525,7 +525,40 @@
       "alliancesSummary_one": "{{count}} 个联盟",
       "runsSummary_one": "{{count}} 个联盟，每个联盟一轮",
       "countTooMany_one": "最多只有 {{count}} 支队伍可以进入决赛。",
-      "retry": "重试"
+      "retry": "重试",
+      "startOver": "重新开始",
+      "startOverHeading": "重新开始决赛？",
+      "startOverBody": "这会删除决赛联盟及其比赛，并返回设置页面。已录入的决赛比赛得分将丢失。",
+      "startOverPickingBody": "这会放弃目前已选定的联盟，并返回设置页面。",
+      "picking": {
+        "alliances": "联盟",
+        "captain": "队长",
+        "partner": "伙伴",
+        "waiting": "已邀请，等待回应…",
+        "accept": "接受",
+        "decline": "拒绝",
+        "cancelInvite": "取消邀请",
+        "onBehalf": "接受或拒绝将代表 {{team}} 录入。",
+        "undo": "撤销上一步",
+        "lastDeclined": "上一步：{{team}} 拒绝了 {{captain}}",
+        "lastJoined": "上一步：{{team}} 加入了 {{captain}}",
+        "finish": "以 {{count}} 个联盟结束选择",
+        "invite": "邀请",
+        "rank": "第 {{rank}} 名",
+        "declinedTag": "已拒绝",
+        "tabletsHint": "有邀请未处理时无法再邀请。选择模式下的平板会实时同步。"
+      },
+      "progress": {
+        "alliances": "决赛联盟",
+        "seed": "种子",
+        "teams": "队伍",
+        "forfeited": "已弃权",
+        "cantPlay": "无法参赛",
+        "cantPlayHeading": "{{teams}} 无法参赛？",
+        "cantPlayBody": "整个联盟将放弃剩余的决赛比赛。除非重新开始，否则无法撤销。",
+        "cantPlayConfirm": "联盟无法参赛",
+        "openMatchControl": "打开比赛控制"
+      }
     },
     "finalsTab": "决赛"
   },

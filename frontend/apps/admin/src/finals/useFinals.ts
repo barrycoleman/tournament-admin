@@ -69,6 +69,10 @@ export function useMatchFormat() {
   });
 }
 
+export function useTeams() {
+  return useQuery({ queryKey: ["teams"], queryFn: () => apiRequest<TeamSummary[]>("/api/teams") });
+}
+
 /** Teams, field sets and fields the set-up page reads; shared keys with the other session tabs. */
 export function useFinalsSetupData(sessionId: number) {
   const teams = useQuery({ queryKey: ["teams"], queryFn: () => apiRequest<TeamSummary[]>("/api/teams") });
@@ -118,6 +122,60 @@ export function useStartFinals(scope: FinalsScope) {
     mutationFn: (body: StartFinalsBody) =>
       apiRequest<FinalsBracket>("/api/finals/start", { method: "POST", body }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: finalsKey(scope) });
+      queryClient.invalidateQueries({ queryKey: ["matches", scope.sessionId] });
+    },
+  });
+}
+
+/** The partner-picking steps; each returns the updated bracket and broadcasts `finals_changed`. */
+export function useSelectionMutations(scope: FinalsScope, bracketId: number) {
+  const queryClient = useQueryClient();
+  const base = `/api/finals/${bracketId}/selection`;
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: finalsKey(scope) });
+    queryClient.invalidateQueries({ queryKey: ["matches", scope.sessionId] });
+  };
+  const withTeam = (step: string) => ({
+    mutationFn: (teamId: number) =>
+      apiRequest<FinalsBracket>(`${base}/${step}`, { method: "POST", body: { team_id: teamId } }),
+    onSettled: refresh,
+  });
+  const noBody = (step: string) => ({
+    mutationFn: () => apiRequest<FinalsBracket>(`${base}/${step}`, { method: "POST" }),
+    onSettled: refresh,
+  });
+  return {
+    invite: useMutation(withTeam("invite")),
+    accept: useMutation(withTeam("accept")),
+    decline: useMutation(withTeam("decline")),
+    cancel: useMutation(noBody("cancel")),
+    undo: useMutation(noBody("undo")),
+    finish: useMutation(noBody("finish")),
+  };
+}
+
+/** Start over: removes the finals (and their matches) so set-up shows again. */
+export function useDeleteFinals(scope: FinalsScope, bracketId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiRequest<void>(`/api/finals/${bracketId}`, { method: "DELETE" }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: finalsKey(scope) });
+      queryClient.invalidateQueries({ queryKey: ["matches", scope.sessionId] });
+    },
+  });
+}
+
+/** "Can't play": the whole alliance forfeits its remaining games. */
+export function useMarkUnavailable(scope: FinalsScope, bracketId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (allianceId: number) =>
+      apiRequest<FinalsBracket>(`/api/finals/${bracketId}/alliances/${allianceId}/unavailable`, {
+        method: "POST",
+      }),
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: finalsKey(scope) });
       queryClient.invalidateQueries({ queryKey: ["matches", scope.sessionId] });
     },

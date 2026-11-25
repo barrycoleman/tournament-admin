@@ -527,7 +527,40 @@
         "in_progress": "Finals are in progress.",
         "complete": "Finals are complete."
       },
-      "retry": "Retry"
+      "retry": "Retry",
+      "startOver": "Start over",
+      "startOverHeading": "Start the finals over?",
+      "startOverBody": "This removes the finals alliances and their matches and returns to set-up. Scores already entered for finals matches are lost.",
+      "startOverPickingBody": "This discards the alliances chosen so far and returns to set-up.",
+      "picking": {
+        "alliances": "Alliances",
+        "captain": "Captain",
+        "partner": "Partner",
+        "waiting": "invited, waiting…",
+        "accept": "Accept",
+        "decline": "Decline",
+        "cancelInvite": "Cancel invite",
+        "onBehalf": "Accept or Decline is entered on behalf of {{team}}.",
+        "undo": "Undo last step",
+        "lastDeclined": "last: {{team}} declined {{captain}}",
+        "lastJoined": "last: {{team}} joined {{captain}}",
+        "finish": "Finish with {{count}} alliances",
+        "invite": "Invite",
+        "rank": "Rank {{rank}}",
+        "declinedTag": "declined",
+        "tabletsHint": "Invite is disabled while an invite is open. Tablets in selection mode follow along live."
+      },
+      "progress": {
+        "alliances": "Alliances in finals",
+        "seed": "Seed",
+        "teams": "Teams",
+        "forfeited": "Forfeited",
+        "cantPlay": "Can't play",
+        "cantPlayHeading": "{{teams}} can't play?",
+        "cantPlayBody": "The whole alliance forfeits its remaining finals games. This cannot be undone except by starting over.",
+        "cantPlayConfirm": "Alliance can't play",
+        "openMatchControl": "Open Match Control"
+      }
     },
     "finalsTab": "Finals"
   },
