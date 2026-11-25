@@ -46,6 +46,9 @@
     "noMoreForTeam": "No more matches",
     "onField": "On field",
     "noEliminations": "No eliminations yet",
+    "noAllianceSelection": "Alliance selection hasn't started",
+    "pendingInvite": "{{captain}} invites {{team}}…",
+    "available": "Available",
     "finalsRankings": "Finals rankings",
     "bracket": { "final": "Final", "semifinals": "Semifinals", "quarterfinals": "Quarterfinals", "round": "Round {{number}}" },
     "alliance": { "red": "Red alliance", "blue": "Blue alliance" },
@@ -106,6 +109,7 @@
       "team_schedule": "Schedule by Team",
       "checkin_status": "Check-in Status",
       "elimination_bracket": "Elimination Brackets",
+      "alliance_selection": "Alliance selection",
       "logo": "Logo"
     }
   }

@@ -1,5 +1,6 @@
 import { isScreenKey, type ScreenKey } from "@tournament-admin/shared";
 import type { ScreenModule } from "../screenTypes";
+import { allianceSelectionScreen } from "./allianceSelection";
 import { checkinStatusScreen } from "./checkinStatus";
 import { eliminationBracketScreen } from "./eliminationBracket";
 import { inMatchScreen } from "./inMatch";
@@ -27,6 +28,7 @@ const MODULES: Partial<Record<ScreenKey, ScreenModule>> = {
   team_schedule: teamScheduleScreen,
   checkin_status: checkinStatusScreen,
   elimination_bracket: eliminationBracketScreen,
+  alliance_selection: allianceSelectionScreen,
   logo: logoScreen,
 };
 

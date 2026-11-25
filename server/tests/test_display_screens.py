@@ -13,7 +13,7 @@ from tournament_server.services.display_screens import (
 def test_the_registry_holds_exactly_the_spec_screens():
     assert set(SCREENS) == {
         "match_intro", "in_match", "last_scored_match", "teamwork_rankings", "skills_rankings",
-        "upcoming_matches", "match_results", "schedule", "team_schedule", "checkin_status", "elimination_bracket", "logo",
+        "upcoming_matches", "match_results", "schedule", "team_schedule", "checkin_status", "elimination_bracket", "alliance_selection", "logo",
     }
     assert {k for k, s in SCREENS.items() if s.kinds == frozenset({"audience"})} == {
         "match_intro", "in_match", "last_scored_match",
@@ -77,3 +77,12 @@ def test_rotations_are_cleaned_entry_by_entry():
         clean_rotation([{"screen": "logo"}] * 21)
     with pytest.raises(ScreenSettingsError, match="Rotation entry 1: unknown key"):
         clean_rotation([{"screen": "logo", "colour": "red"}])
+
+
+def test_alliance_selection_screen_is_registered():
+    spec = SCREENS["alliance_selection"]
+    assert spec.kinds == SCREENS["elimination_bracket"].kinds
+    assert not spec.scrolls
+    assert clean_screen("alliance_selection", None, "audience") == {}
+    with pytest.raises(ScreenSettingsError, match="no settings"):
+        clean_screen("alliance_selection", {"x": 1}, "audience")

@@ -66,6 +66,7 @@ SCREENS: dict[str, ScreenSpec] = {
     "team_schedule": ScreenSpec(_AUDIENCE_AND_PIT, _no_settings, scrolls=True),
     "checkin_status": ScreenSpec(_AUDIENCE_AND_PIT, _no_settings, scrolls=True),
     "elimination_bracket": ScreenSpec(_AUDIENCE_AND_PIT, _no_settings),
+    "alliance_selection": ScreenSpec(_AUDIENCE_AND_PIT, _no_settings),
     "logo": ScreenSpec(_AUDIENCE_AND_PIT, _no_settings),
 }
 

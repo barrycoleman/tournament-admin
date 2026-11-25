@@ -13,6 +13,7 @@ export const SCREEN_KEYS = [
   "team_schedule",
   "checkin_status",
   "elimination_bracket",
+  "alliance_selection",
   "logo",
 ] as const;
 export type ScreenKey = (typeof SCREEN_KEYS)[number];

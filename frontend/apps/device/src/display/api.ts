@@ -108,6 +108,17 @@ export interface FinalsBracket {
   format: "single_elimination" | "score_chase";
   bracket_size: number;
   status: string;
+  alliance_selection: "captain_pick" | "seed_pairing";
+  /** Partner-picking state; present only while alliances are being selected. */
+  selection: {
+    captain_team_id: number | null;
+    invitable_team_ids: number[];
+    declined_team_ids: number[];
+    pending_team_id: number | null;
+    alliances_formed: number;
+    alliances_target: number;
+    last_step: { kind: "accept" | "decline"; captain_team_id: number; team_id: number } | null;
+  } | null;
   alliances: { id: number; seed: number; team_ids: number[]; unavailable: boolean }[];
   runs: { match_id: number; bracket_alliance_id: number | null; status: string; score: number | null }[];
   results: { bracket_alliance_id: number; score: number; rank: number }[];

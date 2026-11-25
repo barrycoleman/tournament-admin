@@ -345,3 +345,17 @@
 .finals-table thead th:nth-child(3), .finals-table thead th:nth-child(4) { width: auto; text-align: left; }
 .finals-table td.finals-table__side { text-align: left; }
 .finals-table__side .rank-table__name { font-weight: 600; }
+
+.alliance-selection { position: relative; }
+.alliance-selection__pending { position: absolute; top: 0.8vw; right: 2vw; margin: 0; padding: 0.4vw 1.2vw; border-radius: 0.5vw; background: var(--kiosk-soon); color: var(--kiosk-ink-on-band); font-size: 2vw; font-weight: 800; }
+.alliance-selection__body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 22vw; gap: 2.5vw; }
+.alliance-selection__alliances { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; justify-content: space-around; gap: 0.8vw; }
+.alliance-row { display: grid; grid-template-columns: 4vw 1fr 1fr; align-items: center; gap: 1.5vw; padding: 0.7vw 1.5vw; border-radius: 0.5vw; background: var(--kiosk-surface); font-size: 3vw; font-weight: 800; }
+.alliance-row.is-forming { box-shadow: inset 0.4vw 0 0 var(--kiosk-soon); }
+.alliance-row.is-pending .alliance-row__partner { color: var(--kiosk-soon); }
+.alliance-row__number { color: var(--kiosk-muted); }
+.alliance-selection__available-title { margin: 0 0 0.8vw; font-size: 1.3vw; text-transform: uppercase; color: var(--kiosk-muted); }
+.alliance-selection__available ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5vw; }
+.available-team { padding: 0.4vw 1vw; border-radius: 0.4vw; background: var(--kiosk-surface); font-size: 2vw; font-weight: 700; }
+.available-team.is-pending { color: var(--kiosk-soon); }
+.available-team.is-declined { text-decoration: line-through; color: var(--kiosk-muted); }

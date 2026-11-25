@@ -889,6 +889,7 @@
     "team_schedule": "按队伍赛程",
     "checkin_status": "签到状态",
     "elimination_bracket": "淘汰赛对阵",
+    "alliance_selection": "联盟选择",
     "logo": "标志"
   },
   "matchControl": {

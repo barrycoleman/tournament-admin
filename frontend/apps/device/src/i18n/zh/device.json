@@ -46,6 +46,9 @@
     "noMoreForTeam": "没有更多比赛",
     "onField": "场上",
     "noEliminations": "淘汰赛尚未开始",
+    "noAllianceSelection": "联盟选择尚未开始",
+    "pendingInvite": "{{captain}} 邀请 {{team}}…",
+    "available": "可选队伍",
     "finalsRankings": "决赛排名",
     "bracket": { "final": "决赛", "semifinals": "半决赛", "quarterfinals": "四分之一决赛", "round": "第 {{number}} 轮" },
     "alliance": { "red": "红方联盟", "blue": "蓝方联盟" },
@@ -106,6 +109,7 @@
       "team_schedule": "按队伍赛程",
       "checkin_status": "签到状态",
       "elimination_bracket": "淘汰赛对阵",
+      "alliance_selection": "联盟选择",
       "logo": "标志"
     }
   }
