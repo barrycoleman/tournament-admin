@@ -152,7 +152,8 @@
       "confirm": "确认",
       "cancel": "取消",
       "genericError": "出错了。",
-      "retry": "重试"
+      "retry": "重试",
+      "setUpFinals": "设置决赛"
     },
     "heading": "场次",
     "columnLabel": "场次名称",
@@ -445,7 +446,87 @@
       "fieldsHeading": "场地",
       "timezoneSuggested": "尚未保存：已建议使用您电脑的时区。",
       "saved": "已保存。"
-    }
+    },
+    "finals": {
+      "notFinalized": "请先在比赛页面确定资格赛结果，再生成决赛。",
+      "goToMatches": "前往比赛",
+      "noRankings": "暂无排名。决赛根据资格赛最终排名设置。",
+      "divisionLabel": "组别",
+      "noDivision": "无组别",
+      "rankingsLabel": "决赛排名",
+      "columnRank": "排名",
+      "columnTeam": "队伍",
+      "columnFinals": "决赛",
+      "columnActions": "操作",
+      "cell": {
+        "captain": "队长 {{n}}",
+        "invitable": "可被邀请",
+        "alliance": "联盟 {{n}}",
+        "twoAlliances": "联盟 {{n}} 和 {{n2}}",
+        "movedUp": "{{text}}（递补）",
+        "out": "未进入决赛",
+        "excluded": "已排除：{{reason}}"
+      },
+      "reason": {
+        "disqualified": "取消资格",
+        "left_early": "提前离开"
+      },
+      "reasonInline": {
+        "disqualified": "取消资格",
+        "left_early": "提前离开"
+      },
+      "reasonLabel": "原因",
+      "exclude": "排除…",
+      "excludeConfirm": "排除",
+      "cancel": "取消",
+      "undo": "撤销",
+      "teamCountLabel": "决赛队伍数",
+      "allTeams": "全部队伍",
+      "alliancesSummary_other": "{{count}} 个联盟",
+      "runsSummary_other": "{{count}} 个联盟，每个联盟一轮",
+      "countWholeNumber": "请输入整数队伍数。",
+      "countTooMany_other": "最多只有 {{count}} 支队伍可以进入决赛。",
+      "countOddPicking": "选择搭档需要偶数支队伍。",
+      "countTooFew": "决赛至少需要两个联盟。",
+      "pairingLegend": "联盟组成方式",
+      "pairing": {
+        "captain_pick": "选择搭档",
+        "seed_pairing": "自动配对"
+      },
+      "pairingHint": {
+        "captain_pick": "队长邀请搭档，被邀请的队伍接受或拒绝。",
+        "seed_pairing": "相邻排名配对：第 1 和第 2，第 3 和第 4，依此类推。"
+      },
+      "fieldsLegend": "场地",
+      "fieldSetLabel": "场地组",
+      "noFieldSets": "该组别没有团队赛场地。请在设置页添加。",
+      "noFieldsTicked": "请至少勾选一个场地。",
+      "gamesPerRoundLegend": "每轮场数",
+      "round": {
+        "final": "决赛",
+        "semiFinals": "半决赛",
+        "quarterFinals": "四分之一决赛",
+        "roundOf": "{{count}} 强"
+      },
+      "roundChoice": {
+        "single": "单场",
+        "best2of3": "三局两胜",
+        "best3of5": "五局三胜"
+      },
+      "startPicking": "开始选择联盟",
+      "createMatches": "生成决赛比赛",
+      "createRuns": "生成决赛轮次",
+      "genericError": "出现错误。",
+      "status": {
+        "selecting_alliances": "正在选择联盟。",
+        "in_progress": "决赛进行中。",
+        "complete": "决赛已结束。"
+      },
+      "alliancesSummary_one": "{{count}} 个联盟",
+      "runsSummary_one": "{{count}} 个联盟，每个联盟一轮",
+      "countTooMany_one": "最多只有 {{count}} 支队伍可以进入决赛。"
+    },
+    "finalsTab": "决赛"
   },
   "frontDeskCheckin": {
     "heading": "队伍签到",

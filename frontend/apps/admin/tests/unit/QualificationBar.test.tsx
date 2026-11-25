@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { initI18n, type RealtimeEvent } from "@tournament-admin/shared";
 import enAdmin from "../../src/i18n/en/admin.json";
 import { QualificationBar } from "../../src/qualification/QualificationBar";
@@ -41,7 +42,9 @@ function renderBar(session: SessionRead, blockers: QualificationPreview["blocker
   render(
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
-        <QualificationBar session={session} />
+        <MemoryRouter>
+          <QualificationBar session={session} />
+        </MemoryRouter>
       </I18nextProvider>
     </QueryClientProvider>
   );
@@ -79,6 +82,7 @@ describe("QualificationBar", () => {
   it("shows a finalized session and reopens it after confirmation", async () => {
     renderBar(FINALIZED);
     expect(screen.getByText("Qualification finalized on Oct 7, 2026, 11:00 AM. Finals can now be generated.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Set up finals" })).toHaveAttribute("href", "/sessions/1/finals");
     vi.mocked(apiRequest).mockResolvedValue({ id: 1 } as never);
     fireEvent.click(screen.getByRole("button", { name: "Reopen qualification" }));
     const dialog = screen.getByRole("alertdialog", { name: "Reopen qualification?" });
@@ -96,7 +100,9 @@ describe("QualificationBar", () => {
     render(
       <QueryClientProvider client={queryClient}>
         <I18nextProvider i18n={i18n}>
-          <QualificationBar session={OPEN} />
+          <MemoryRouter>
+            <QualificationBar session={OPEN} />
+          </MemoryRouter>
         </I18nextProvider>
       </QueryClientProvider>
     );

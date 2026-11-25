@@ -174,6 +174,8 @@ def test_match_format_reports_the_selected_game_plugin(client):
         "match_duration_seconds": 120,
         "default_cycle_time_seconds": None,
         "game_model": "head_to_head",
+        "finals_format": "single_elimination",
+        "alliance_selection": "captain_pick",
         "autonomous_seconds": 15,
         "driver_seconds": 105,
         "moments": [

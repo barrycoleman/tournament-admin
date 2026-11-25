@@ -100,6 +100,9 @@ export function SessionDetailLayout() {
         <NavLink to={`/sessions/${session.id}/rankings`} className={tabLinkClassName}>
           {t("sessions.rankingsTab")}
         </NavLink>
+        <NavLink to={`/sessions/${session.id}/finals`} className={tabLinkClassName}>
+          {t("sessions.finalsTab")}
+        </NavLink>
         <NavLink to={`/sessions/${session.id}/awards`} className={tabLinkClassName}>
           {t("sessions.awardsTab")}
         </NavLink>

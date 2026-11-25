@@ -30,6 +30,7 @@ import { MatchScoringRoute } from "./routes/MatchScoringRoute";
 import { SessionSkillsRoute } from "./routes/SessionSkillsRoute";
 import { SessionRankingsRoute } from "./routes/SessionRankingsRoute";
 import { SessionAwardsRoute } from "./routes/SessionAwardsRoute";
+import { SessionFinalsRoute } from "./routes/SessionFinalsRoute";
 import { JudgeLayout } from "./routes/JudgeLayout";
 import { JudgeAwardsRoute } from "./routes/JudgeAwardsRoute";
 import { FrontDeskCheckinRoute } from "./routes/FrontDeskCheckinRoute";
@@ -173,6 +174,7 @@ export const routes: RouteObject[] = [
           { path: "matches/:matchId/score", element: <RequiresGamePlugin><MatchScoringRoute /></RequiresGamePlugin> },
           { path: "skills", element: <RequiresGamePlugin><SessionSkillsRoute /></RequiresGamePlugin> },
           { path: "rankings", element: <RequiresGamePlugin><SessionRankingsRoute /></RequiresGamePlugin> },
+          { path: "finals", element: <RequiresGamePlugin><SessionFinalsRoute /></RequiresGamePlugin> },
           { path: "awards", element: <SessionAwardsRoute /> },
         ],
       },

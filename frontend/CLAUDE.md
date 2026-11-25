@@ -162,7 +162,7 @@ Beyond the bootstrap/auth screens above, the authenticated app
   why when `SessionRead.has_scored_matches`, and otherwise asks for the
   session's name in `ConfirmDialog`), `/sessions/new` (`SessionNewRoute`: label
   and date, timezone defaulting to the browser's, then opens the new session's
-  Setup tab) and `/sessions/:sessionId/{today,setup,checkin,schedule,matches,skills,rankings,awards}`,
+  Setup tab) and `/sessions/:sessionId/{today,setup,checkin,schedule,matches,skills,rankings,finals,awards}`,
   the session tabs, all rendered through `SessionDetailLayout`'s tab-strip
   `Outlet` context (see the session-checkin and fields-schedule-ui specs).
   The layout's header carries a "Set as active session" button, shown only
@@ -248,10 +248,23 @@ Qualification finalizing lives in `src/qualification/`: `QualificationBar`
 blocker sentences when the server says it can't yet, or "finalized on ..."
 with Reopen; `FinalizeDialog` collects per-played-count drops (pure logic in
 `finalizeDraft.ts`). The preview query key is `["qualification-preview",
-sessionId]`, kept live off `/ws/session/{id}`. The future Finals page must
-disable its generate action while `qualification_finalized_at` is null, with
-the message "Finalize qualification on the Matches page before generating
-finals." and a link to `/sessions/{id}/matches`.
+sessionId]`, kept live off `/ws/session/{id}`. Once finalized, the bar links to the Finals tab ("Set up finals").
+
+Finals live in `src/finals/` (see the 2026-11-24 finals admin UI spec).
+`SessionFinalsRoute` is a thin switch: while `qualification_finalized_at` is
+null it says "Finalize qualification on the Matches page before generating
+finals." with a link to `/sessions/{id}/matches`; otherwise it offers a
+division picker when more than one ranking group exists and shows, per
+division, the existing bracket's state or `FinalsSetup` (rankings with
+Exclude…/Undo in `FinalsRankingsTable`, settings in `FinalsSettingsPanel`).
+`finalsPreview.ts` is pure and mirrors the server's `auto_pairs`: captains
+and invitable teams for partner picking, alliance numbers and the cut line
+for automatic pairs and score-chase, plus the round names and per-round
+`wins_to_advance`. `useFinals.ts` holds every finals query and mutation
+(keys `["finals", sessionId, divisionId]` and `["finalsExclusions",
+sessionId, divisionId]`, refetched on `finals_changed` from
+`/ws/session/{id}`). The start request always sends `team_count`, never
+`bracket_size`.
 
 Rankings live in `src/rankings/`. `useRankingGroups(scope)` fetches every
 division's rankings plus `division_id = null` (a single-division event's

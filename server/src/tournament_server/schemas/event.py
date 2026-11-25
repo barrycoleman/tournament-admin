@@ -49,6 +49,10 @@ class MatchFormatRead(BaseModel):
     match_duration_seconds: int
     default_cycle_time_seconds: int | None = None
     game_model: str
+    # Fixed by the plugin: "single_elimination" or "score_chase".
+    finals_format: str
+    # The plugin's default; the admin may switch a head-to-head game's finals.
+    alliance_selection: str
     autonomous_seconds: int
     driver_seconds: int
     moments: list[MomentRead] = []

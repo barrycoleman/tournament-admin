@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { apiRequest } from "@tournament-admin/shared";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { apiErrorMessage } from "../apiErrorMessage";
@@ -47,6 +48,7 @@ export function QualificationBar({ session }: { session: SessionRead }) {
     return (
       <div className="qualification-bar">
         <p className="qualification-bar__status">{t("sessions.qualification.finalizedOn", { date })}</p>
+        <Link to={`/sessions/${session.id}/finals`}>{t("sessions.qualification.setUpFinals")}</Link>
         <button type="button" className="btn" onClick={() => setDialog("reopen")}>
           {t("sessions.qualification.reopen")}
         </button>

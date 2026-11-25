@@ -89,6 +89,10 @@ export interface MatchFormat {
   alliance_count: number;
   match_duration_seconds: number;
   default_cycle_time_seconds: number | null;
+  /** Fixed by the game plugin. */
+  finals_format?: FinalsFormat;
+  /** The plugin's default; a head-to-head game's admin may switch it. */
+  alliance_selection?: AllianceSelection;
 }
 
 export interface PlayingWindowRead {
@@ -334,4 +338,84 @@ export interface AwardNeedingAttention {
 export interface GamePluginChangePreview {
   would_reset: { skills_enabled: boolean; session_attempt_overrides: number; ranking_settings: boolean };
   awards_needing_attention: AwardNeedingAttention[];
+}
+
+export type FinalsFormat = "single_elimination" | "score_chase";
+/** Partner picking ("captain_pick") or automatic pairs ("seed_pairing"). */
+export type AllianceSelection = "captain_pick" | "seed_pairing";
+export type FinalsExclusionReason = "disqualified" | "left_early";
+
+export interface FinalsExclusion {
+  id: number;
+  session_id: number;
+  division_id: number | null;
+  team_id: number;
+  reason: FinalsExclusionReason;
+}
+
+export interface FinalsSelectionStep {
+  kind: "accept" | "decline";
+  captain_team_id: number;
+  team_id: number;
+}
+
+/** Partner picking state, present while a bracket is selecting alliances. */
+export interface FinalsSelection {
+  captain_team_id: number | null;
+  invitable_team_ids: number[];
+  declined_team_ids: number[];
+  pending_team_id: number | null;
+  alliances_formed: number;
+  alliances_target: number;
+  last_step: FinalsSelectionStep | null;
+}
+
+export interface FinalsAlliance {
+  id: number;
+  seed: number;
+  team_ids: number[];
+  unavailable: boolean;
+}
+
+export interface FinalsMatchup {
+  id: number;
+  round_number: number;
+  position: number;
+  matchup_number: number | null;
+  alliance_a_id: number | null;
+  alliance_b_id: number | null;
+  winner_alliance_id: number | null;
+}
+
+export interface FinalsRun {
+  match_id: number;
+  bracket_alliance_id: number | null;
+  status: string;
+  score: number | null;
+}
+
+export interface FinalsResult {
+  bracket_alliance_id: number;
+  score: number;
+  rank: number;
+}
+
+export type FinalsStatus = "selecting_alliances" | "in_progress" | "complete";
+
+export interface FinalsBracket {
+  id: number;
+  session_id: number;
+  division_id: number | null;
+  field_set_id: number;
+  format: FinalsFormat;
+  bracket_size: number;
+  alliance_selection: AllianceSelection;
+  field_ids: number[] | null;
+  wins_to_advance: number[];
+  status: FinalsStatus;
+  alliances: FinalsAlliance[];
+  runs: FinalsRun[];
+  results: FinalsResult[];
+  matchups: FinalsMatchup[];
+  selection: FinalsSelection | null;
 }

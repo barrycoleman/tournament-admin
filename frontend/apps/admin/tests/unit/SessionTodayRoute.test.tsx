@@ -206,7 +206,7 @@ describe("SessionDetailLayout tabs", () => {
     await screen.findByRole("heading", { name: "Saturday" });
     const nav = screen.getByRole("navigation");
     const names = within(nav).getAllByRole("link").map((l) => l.textContent);
-    expect(names).toEqual(["Today", "Setup", "Check-In", "Schedule", "Matches", "Rankings", "Awards"]);
+    expect(names).toEqual(["Today", "Setup", "Check-In", "Schedule", "Matches", "Rankings", "Finals", "Awards"]);
     expect(within(nav).getByRole("link", { name: "Today" })).toHaveClass("active");
   });
 });

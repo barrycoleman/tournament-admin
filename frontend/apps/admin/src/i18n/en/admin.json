@@ -152,7 +152,8 @@
       "confirm": "Finalize",
       "cancel": "Cancel",
       "genericError": "Something went wrong.",
-      "retry": "Retry"
+      "retry": "Retry",
+      "setUpFinals": "Set up finals"
     },
     "heading": "Sessions",
     "columnLabel": "Session name",
@@ -447,7 +448,87 @@
       "fieldsHeading": "Fields",
       "timezoneSuggested": "Not saved yet: we suggested your computer's timezone.",
       "saved": "Saved."
-    }
+    },
+    "finals": {
+      "notFinalized": "Finalize qualification on the Matches page before generating finals.",
+      "goToMatches": "Go to Matches",
+      "noRankings": "No rankings yet. Finals are set up from the final qualification rankings.",
+      "divisionLabel": "Division",
+      "noDivision": "No division",
+      "rankingsLabel": "Rankings for finals",
+      "columnRank": "Rank",
+      "columnTeam": "Team",
+      "columnFinals": "Finals",
+      "columnActions": "Actions",
+      "cell": {
+        "captain": "Captain {{n}}",
+        "invitable": "Can be invited",
+        "alliance": "Alliance {{n}}",
+        "twoAlliances": "Alliances {{n}} and {{n2}}",
+        "movedUp": "{{text}} (moved up)",
+        "out": "Not in finals",
+        "excluded": "Excluded: {{reason}}"
+      },
+      "reason": {
+        "disqualified": "Disqualified",
+        "left_early": "Left early"
+      },
+      "reasonInline": {
+        "disqualified": "disqualified",
+        "left_early": "left early"
+      },
+      "reasonLabel": "Reason",
+      "exclude": "Exclude…",
+      "excludeConfirm": "Exclude",
+      "cancel": "Cancel",
+      "undo": "Undo",
+      "teamCountLabel": "Teams in finals",
+      "allTeams": "All teams",
+      "alliancesSummary_one": "{{count}} alliance",
+      "alliancesSummary_other": "{{count}} alliances",
+      "runsSummary_one": "{{count}} alliance, one run each",
+      "runsSummary_other": "{{count}} alliances, one run each",
+      "countWholeNumber": "Enter a whole number of teams.",
+      "countTooMany_one": "Only {{count}} team can go to finals.",
+      "countTooMany_other": "Only {{count}} teams can go to finals.",
+      "countOddPicking": "Partner picking needs an even number of teams.",
+      "countTooFew": "Finals need at least two alliances.",
+      "pairingLegend": "How alliances form",
+      "pairing": {
+        "captain_pick": "Partner picking",
+        "seed_pairing": "Automatic pairs"
+      },
+      "pairingHint": {
+        "captain_pick": "Captains invite partners; invited teams accept or decline.",
+        "seed_pairing": "Neighbours pair up: 1 and 2, 3 and 4, and so on."
+      },
+      "fieldsLegend": "Fields",
+      "fieldSetLabel": "Field set",
+      "noFieldSets": "This division has no teamwork fields. Add them on the Setup tab.",
+      "noFieldsTicked": "Tick at least one field.",
+      "gamesPerRoundLegend": "Games per round",
+      "round": {
+        "final": "Final",
+        "semiFinals": "Semi-finals",
+        "quarterFinals": "Quarter-finals",
+        "roundOf": "Round of {{count}}"
+      },
+      "roundChoice": {
+        "single": "Single match",
+        "best2of3": "Best 2 of 3",
+        "best3of5": "Best 3 of 5"
+      },
+      "startPicking": "Start alliance selection",
+      "createMatches": "Create finals matches",
+      "createRuns": "Create finals runs",
+      "genericError": "Something went wrong.",
+      "status": {
+        "selecting_alliances": "Alliance selection is in progress.",
+        "in_progress": "Finals are in progress.",
+        "complete": "Finals are complete."
+      }
+    },
+    "finalsTab": "Finals"
   },
   "frontDeskCheckin": {
     "heading": "Team Check-In",

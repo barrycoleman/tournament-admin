@@ -113,6 +113,8 @@ def read_match_format(
         ),
         default_cycle_time_seconds=match_format.get("default_cycle_time_seconds"),
         game_model=match_format["game_model"],
+        finals_format=match_format["finals_format"],
+        alliance_selection=match_format["alliance_selection"],
         autonomous_seconds=match_format["autonomous_seconds"],
         driver_seconds=match_format["driver_seconds"],
         moments=_valid_moments(match_format.get("moments") or []),
