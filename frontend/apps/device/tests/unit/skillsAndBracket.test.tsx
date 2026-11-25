@@ -86,7 +86,7 @@ const ALLIANCES = [
 function bracket(overrides: Partial<FinalsBracket>): FinalsBracket {
   return {
     id: 1, session_id: 1, division_id: null, field_set_id: 10, format: "single_elimination", bracket_size: 4,
-    status: "in_progress", alliances: ALLIANCES, runs: [], results: [], matchups: [], ...overrides,
+    alliance_selection: "seed_pairing", status: "in_progress", alliances: ALLIANCES, runs: [], results: [], matchups: [], selection: null, ...overrides,
   };
 }
 
