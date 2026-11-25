@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from tournament_server.auth import require_admin, require_any_role
+from tournament_server.auth import require_admin, require_any_role, require_scorer_or_referee
 from tournament_server.deps import (
     get_db,
     get_game_plugin_for_event,
@@ -36,12 +36,14 @@ from tournament_server.schemas.finals import (
     FinalsBracketRead,
     FinalsExclusionCreate,
     FinalsExclusionRead,
-    FinalsPickRequest,
     FinalsResultRead,
     FinalsRunRead,
     FinalsStartRequest,
+    SelectionRead,
+    SelectionStepRead,
+    SelectionTeamRequest,
 )
-from tournament_server.services import qualification, team_flags
+from tournament_server.services import alliance_selection, qualification, team_flags
 from tournament_server.services.deletion import delete_finals_bracket
 from tournament_server.services.finals import (
     auto_pairs,
@@ -142,6 +144,29 @@ def _to_finals_bracket_read(
         matchups=[
             BracketMatchupRead.model_validate(m, from_attributes=True) for m in matchups
         ],
+        selection=_to_selection_read(db, bracket),
+    )
+
+
+def _to_selection_read(db: Session, bracket: FinalsBracket) -> SelectionRead | None:
+    if bracket.status != "selecting_alliances":
+        return None
+    state = alliance_selection.selection_state(db, bracket)
+    last = state.last_step
+    return SelectionRead(
+        captain_team_id=state.captain_team_id,
+        invitable_team_ids=state.invitable_team_ids,
+        declined_team_ids=state.declined_team_ids,
+        pending_team_id=state.pending_team_id,
+        alliances_formed=state.alliances_formed,
+        alliances_target=state.alliances_target,
+        last_step=(
+            SelectionStepRead(
+                kind=last.kind, captain_team_id=last.captain_team_id, team_id=last.team_id
+            )
+            if last is not None
+            else None
+        ),
     )
 
 
@@ -429,16 +454,8 @@ def start_finals(
         elif bracket.format == "single_elimination":
             generate_bracket(db, bracket)
         broadcast_new_finals_matches(request.app, db, bracket.id, existing_ids)
-    else:
-        for i, ranking in enumerate(top_teams[:alliance_count]):
-            alliance = BracketAlliance(bracket_id=bracket.id, seed=i + 1)
-            db.add(alliance)
-            db.flush()
-            db.add(
-                BracketAllianceTeam(
-                    bracket_alliance_id=alliance.id, team_id=ranking.team_id
-                )
-            )
+    # captain_pick starts with no alliances: they form one at a time through
+    # the /selection endpoints (services/alliance_selection.py).
 
     db.commit()
     db.refresh(bracket)
@@ -482,100 +499,101 @@ def get_finals(
     return _to_finals_bracket_read(bracket, db, game_plugin)
 
 
-@router.post("/{bracket_id}/pick", response_model=FinalsBracketRead)
-def pick_partner(
-    bracket_id: int,
-    payload: FinalsPickRequest,
-    request: Request,
-    db: Session = Depends(get_db),
-    _role: str = Depends(require_admin),
-) -> FinalsBracketRead:
+def _finals_match_ids(db: Session, bracket_id: int) -> set[int]:
+    return set(
+        db.execute(select(Match.id).where(Match.finals_bracket_id == bracket_id)).scalars().all()
+    )
+
+
+def _run_selection(request: Request, db: Session, bracket_id: int, action) -> FinalsBracketRead:
+    """Runs one partner-picking change, then broadcasts finals_changed (and
+    new_match_created for any games the last alliance or finishing started)."""
     bracket = db.get(FinalsBracket, bracket_id)
     if bracket is None:
         raise HTTPException(status_code=404, detail="Finals bracket not found")
-    if bracket.status != "selecting_alliances":
+    if bracket.alliance_selection != "captain_pick":
         raise HTTPException(
-            status_code=409, detail="This bracket is not currently selecting alliances"
+            status_code=409, detail="This bracket does not use partner picking."
         )
-    field_ids_for_set = db.execute(
-        select(Field.id).where(Field.field_set_id == bracket.field_set_id)
-    ).scalars().all()
-    if not field_ids_for_set:
-        raise HTTPException(
-            status_code=422, detail="This bracket's FieldSet has no fields configured"
-        )
-
-    alliances = db.execute(
-        select(BracketAlliance)
-        .where(BracketAlliance.bracket_id == bracket_id)
-        .order_by(BracketAlliance.seed)
-    ).scalars().all()
-
-    team_counts: dict[int, int] = {}
-    claimed_team_ids: set[int] = set()
-    for alliance in alliances:
-        rows = db.execute(
-            select(BracketAllianceTeam).where(
-                BracketAllianceTeam.bracket_alliance_id == alliance.id
-            )
-        ).scalars().all()
-        team_counts[alliance.id] = len(rows)
-        for row in rows:
-            claimed_team_ids.add(row.team_id)
-
-    pending = [a for a in alliances if team_counts[a.id] < 2]
-    if not pending:
-        raise HTTPException(
-            status_code=409, detail="Every alliance in this bracket already has a partner"
-        )
-    next_captain = pending[0]
-    if payload.captain_bracket_alliance_id != next_captain.id:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"It is not this alliance's turn to pick; alliance "
-                f"{next_captain.id} (seed {next_captain.seed}) picks next"
-            ),
-        )
-
-    if payload.partner_team_id in claimed_team_ids:
-        raise HTTPException(
-            status_code=409, detail="This team is already on a bracket alliance"
-        )
-    if db.get(Team, payload.partner_team_id) is None:
-        raise HTTPException(status_code=404, detail="Team not found")
-
-    db.add(
-        BracketAllianceTeam(
-            bracket_alliance_id=next_captain.id, team_id=payload.partner_team_id
-        )
-    )
-    db.commit()
-
-    remaining_pending = [
-        a
-        for a in alliances
-        if a.id != next_captain.id
-        and team_counts[a.id] < 2
-    ]
-    if not remaining_pending:
-        bracket.status = "in_progress"
-        db.commit()
-        existing_ids = {
-            m.id for m in db.execute(
-                select(Match).where(Match.finals_bracket_id == bracket.id)
-            ).scalars().all()
-        }
-        if bracket.format == "score_chase":
-            start_score_chase(db, bracket)
-        elif bracket.format == "single_elimination":
-            generate_bracket(db, bracket)
-        broadcast_new_finals_matches(request.app, db, bracket.id, existing_ids)
-
+    before = _finals_match_ids(db, bracket_id)
+    try:
+        action(db, bracket)
+    except alliance_selection.SelectionError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    broadcast_new_finals_matches(request.app, db, bracket.id, before)
     db.refresh(bracket)
     _finals_changed(request, db, bracket.session_id, bracket.id)
     game_plugin = get_game_plugin_for_event(request, db)
     return _to_finals_bracket_read(bracket, db, game_plugin)
+
+
+@router.post("/{bracket_id}/selection/invite", response_model=FinalsBracketRead)
+def selection_invite(
+    bracket_id: int,
+    payload: SelectionTeamRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_scorer_or_referee),
+) -> FinalsBracketRead:
+    return _run_selection(
+        request, db, bracket_id, lambda d, b: alliance_selection.invite(d, b, payload.team_id)
+    )
+
+
+@router.post("/{bracket_id}/selection/accept", response_model=FinalsBracketRead)
+def selection_accept(
+    bracket_id: int,
+    payload: SelectionTeamRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_scorer_or_referee),
+) -> FinalsBracketRead:
+    return _run_selection(
+        request, db, bracket_id, lambda d, b: alliance_selection.accept(d, b, payload.team_id)
+    )
+
+
+@router.post("/{bracket_id}/selection/decline", response_model=FinalsBracketRead)
+def selection_decline(
+    bracket_id: int,
+    payload: SelectionTeamRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_scorer_or_referee),
+) -> FinalsBracketRead:
+    return _run_selection(
+        request, db, bracket_id, lambda d, b: alliance_selection.decline(d, b, payload.team_id)
+    )
+
+
+@router.post("/{bracket_id}/selection/cancel", response_model=FinalsBracketRead)
+def selection_cancel(
+    bracket_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_scorer_or_referee),
+) -> FinalsBracketRead:
+    return _run_selection(request, db, bracket_id, alliance_selection.cancel)
+
+
+@router.post("/{bracket_id}/selection/undo", response_model=FinalsBracketRead)
+def selection_undo(
+    bracket_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> FinalsBracketRead:
+    return _run_selection(request, db, bracket_id, alliance_selection.undo)
+
+
+@router.post("/{bracket_id}/selection/finish", response_model=FinalsBracketRead)
+def selection_finish(
+    bracket_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> FinalsBracketRead:
+    return _run_selection(request, db, bracket_id, alliance_selection.finish_early)
 
 
 @router.post(

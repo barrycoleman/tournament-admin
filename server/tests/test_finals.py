@@ -1,3 +1,4 @@
+from finals_helpers import pick_partners
 from ranking_helpers import finalize_qualification
 
 
@@ -221,17 +222,7 @@ def test_single_elimination_bracket_never_populates_runs(client):
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": 1},
     ).json()
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    final_response = None
-    for i, alliance in enumerate(bracket["alliances"]):
-        final_response = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={
-                "captain_bracket_alliance_id": alliance["id"],
-                "partner_team_id": unclaimed[i],
-            },
-        )
+    final_response = pick_partners(client, bracket)
     bracket = final_response.json()
     assert bracket["runs"] == []
 
@@ -260,19 +251,10 @@ def test_generate_bracket_resolves_byes_and_seeds_pairs_correctly(client):
         json={"session_id": session_id, "bracket_size": 5, "wins_to_advance": 1},
     ).json()
     assert bracket["status"] == "selecting_alliances"
-    assert len(bracket["alliances"]) == 5
+    assert bracket["alliances"] == []
+    assert bracket["selection"]["alliances_target"] == 5
 
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    final_response = None
-    for i, alliance in enumerate(bracket["alliances"]):
-        final_response = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={
-                "captain_bracket_alliance_id": alliance["id"],
-                "partner_team_id": unclaimed[i],
-            },
-        )
+    final_response = pick_partners(client, bracket)
     final_body = final_response.json()
     assert final_body["status"] == "in_progress"
 
@@ -609,8 +591,10 @@ def test_get_finals_returns_current_state(cooperative_client):
     assert response.json()["status"] == "in_progress"
 
 
-def test_captain_pick_rejects_out_of_turn_pick(captain_pick_client):
-    client = captain_pick_client
+def _start_captain_pick_game_bracket(client) -> tuple[list[int], dict]:
+    """captain-pick-game (partner picking + score-chase) with 4 ranked,
+    checked-in teams and a 2-alliance bracket started; returns the team ids
+    in rank order and the started bracket."""
     client.post("/api/event", json={"name": "Regional Qualifier"})
     client.post("/api/event/game-plugin", json={"name": "captain-pick-game"})
     session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
@@ -625,244 +609,86 @@ def test_captain_pick_rejects_out_of_turn_pick(captain_pick_client):
             f"/api/sessions/{session_id}/participants",
             json={"team_id": team_id, "checked_in": True},
         )
-    match = client.post(
-        "/api/matches",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "match_number": 1,
-            "field_id": None,
-            "alliances": [
-                {"station": "red", "team_ids": [team_ids[0]]},
-                {"station": "blue", "team_ids": [team_ids[1]]},
-            ],
-        },
-    ).json()
-    red_id = next(a["id"] for a in match["alliances"] if a["station"] == "red")
-    blue_id = next(a["id"] for a in match["alliances"] if a["station"] == "blue")
-    client.post(
-        f"/api/matches/{match['id']}/alliances/{red_id}/score",
-        json={"data": {"high_balls": 10, "low_balls": 0, "auto_winner": "tie"}},
-    )
-    client.post(
-        f"/api/matches/{match['id']}/alliances/{blue_id}/score",
-        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
-    )
-
-    match2 = client.post(
-        "/api/matches",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "match_number": 2,
-            "field_id": None,
-            "alliances": [
-                {"station": "red", "team_ids": [team_ids[2]]},
-                {"station": "blue", "team_ids": [team_ids[3]]},
-            ],
-        },
-    ).json()
-    red2_id = next(a["id"] for a in match2["alliances"] if a["station"] == "red")
-    blue2_id = next(a["id"] for a in match2["alliances"] if a["station"] == "blue")
-    client.post(
-        f"/api/matches/{match2['id']}/alliances/{red2_id}/score",
-        json={"data": {"high_balls": 1, "low_balls": 0, "auto_winner": "tie"}},
-    )
-    client.post(
-        f"/api/matches/{match2['id']}/alliances/{blue2_id}/score",
-        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
-    )
+    for number, (red, blue, red_high) in enumerate(
+        ((team_ids[0], team_ids[1], 10), (team_ids[2], team_ids[3], 1)), start=1
+    ):
+        match = client.post(
+            "/api/matches",
+            json={
+                "session_id": session_id,
+                "round_type": "qualification",
+                "match_number": number,
+                "field_id": None,
+                "alliances": [
+                    {"station": "red", "team_ids": [red]},
+                    {"station": "blue", "team_ids": [blue]},
+                ],
+            },
+        ).json()
+        for alliance in match["alliances"]:
+            high = red_high if alliance["station"] == "red" else 0
+            client.post(
+                f"/api/matches/{match['id']}/alliances/{alliance['id']}/score",
+                json={"data": {"high_balls": high, "low_balls": 0, "auto_winner": "tie"}},
+            )
 
     finalize_qualification(client, session_id)
+    rows = client.get(f"/api/rankings?session_id={session_id}").json()
+    ranked = [r["team_id"] for r in sorted(rows, key=lambda r: r["rank"])]
     bracket = client.post(
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 2},
     ).json()
     assert bracket["status"] == "selecting_alliances"
-    seed_1_alliance = bracket["alliances"][0]
-    seed_2_alliance = bracket["alliances"][1]
+    assert bracket["alliances"] == []
+    return ranked, bracket
 
-    unclaimed = [t for t in team_ids if t not in seed_1_alliance["team_ids"] and t not in seed_2_alliance["team_ids"]]
 
-    response = client.post(
-        f"/api/finals/{bracket['id']}/pick",
-        json={
-            "captain_bracket_alliance_id": seed_2_alliance["id"],
-            "partner_team_id": unclaimed[0],
-        },
+def _select(client, bracket: dict, action: str, team_id: int):
+    return client.post(
+        f"/api/finals/{bracket['id']}/selection/{action}", json={"team_id": team_id}
     )
+
+
+def test_captain_pick_refuses_inviting_the_captain(captain_pick_client):
+    client = captain_pick_client
+    ranked, bracket = _start_captain_pick_game_bracket(client)
+    assert bracket["selection"]["captain_team_id"] == ranked[0]
+
+    response = _select(client, bracket, "invite", ranked[0])
+    assert response.status_code == 422
+    assert client.get(f"/api/finals/{bracket['id']}").json()["selection"]["pending_team_id"] is None
+
+
+def test_captain_pick_refuses_inviting_an_allied_team(captain_pick_client):
+    client = captain_pick_client
+    ranked, bracket = _start_captain_pick_game_bracket(client)
+    assert _select(client, bracket, "invite", ranked[1]).status_code == 200
+    assert _select(client, bracket, "accept", ranked[1]).status_code == 200
+
+    response = _select(client, bracket, "invite", ranked[1])
     assert response.status_code == 422
 
 
-def test_captain_pick_rejects_already_claimed_partner(captain_pick_client):
+def test_captain_pick_completes_bracket_once_every_alliance_has_formed(captain_pick_client):
     client = captain_pick_client
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    client.post("/api/event/game-plugin", json={"name": "captain-pick-game"})
-    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
+    ranked, bracket = _start_captain_pick_game_bracket(client)
 
-    team_ids = [
-        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
-        for i in range(4)
-    ]
-    for team_id in team_ids:
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    match = client.post(
-        "/api/matches",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "match_number": 1,
-            "field_id": None,
-            "alliances": [
-                {"station": "red", "team_ids": [team_ids[0]]},
-                {"station": "blue", "team_ids": [team_ids[1]]},
-            ],
-        },
-    ).json()
-    red_id = next(a["id"] for a in match["alliances"] if a["station"] == "red")
-    blue_id = next(a["id"] for a in match["alliances"] if a["station"] == "blue")
-    client.post(
-        f"/api/matches/{match['id']}/alliances/{red_id}/score",
-        json={"data": {"high_balls": 10, "low_balls": 0, "auto_winner": "tie"}},
-    )
-    client.post(
-        f"/api/matches/{match['id']}/alliances/{blue_id}/score",
-        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
-    )
-    match2 = client.post(
-        "/api/matches",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "match_number": 2,
-            "field_id": None,
-            "alliances": [
-                {"station": "red", "team_ids": [team_ids[2]]},
-                {"station": "blue", "team_ids": [team_ids[3]]},
-            ],
-        },
-    ).json()
-    red2_id = next(a["id"] for a in match2["alliances"] if a["station"] == "red")
-    blue2_id = next(a["id"] for a in match2["alliances"] if a["station"] == "blue")
-    client.post(
-        f"/api/matches/{match2['id']}/alliances/{red2_id}/score",
-        json={"data": {"high_balls": 1, "low_balls": 0, "auto_winner": "tie"}},
-    )
-    client.post(
-        f"/api/matches/{match2['id']}/alliances/{blue2_id}/score",
-        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
-    )
-
-    finalize_qualification(client, session_id)
-    bracket = client.post(
-        "/api/finals/start",
-        json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 2},
-    ).json()
-    seed_1_alliance = bracket["alliances"][0]
-
-    response = client.post(
-        f"/api/finals/{bracket['id']}/pick",
-        json={
-            "captain_bracket_alliance_id": seed_1_alliance["id"],
-            "partner_team_id": seed_1_alliance["team_ids"][0],
-        },
-    )
-    assert response.status_code == 409
-
-
-def test_captain_pick_completes_bracket_once_every_captain_has_picked(captain_pick_client):
-    client = captain_pick_client
-    client.post("/api/event", json={"name": "Regional Qualifier"})
-    client.post("/api/event/game-plugin", json={"name": "captain-pick-game"})
-    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
-    client.post("/api/fields", json={"session_id": session_id, "name": "Field 1"})
-
-    team_ids = [
-        client.post("/api/teams", json={"number": str(i + 1), "name": f"Team {i + 1}"}).json()["id"]
-        for i in range(4)
-    ]
-    for team_id in team_ids:
-        client.post(
-            f"/api/sessions/{session_id}/participants",
-            json={"team_id": team_id, "checked_in": True},
-        )
-    match = client.post(
-        "/api/matches",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "match_number": 1,
-            "field_id": None,
-            "alliances": [
-                {"station": "red", "team_ids": [team_ids[0]]},
-                {"station": "blue", "team_ids": [team_ids[1]]},
-            ],
-        },
-    ).json()
-    red_id = next(a["id"] for a in match["alliances"] if a["station"] == "red")
-    blue_id = next(a["id"] for a in match["alliances"] if a["station"] == "blue")
-    client.post(
-        f"/api/matches/{match['id']}/alliances/{red_id}/score",
-        json={"data": {"high_balls": 10, "low_balls": 0, "auto_winner": "tie"}},
-    )
-    client.post(
-        f"/api/matches/{match['id']}/alliances/{blue_id}/score",
-        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
-    )
-    match2 = client.post(
-        "/api/matches",
-        json={
-            "session_id": session_id,
-            "round_type": "qualification",
-            "match_number": 2,
-            "field_id": None,
-            "alliances": [
-                {"station": "red", "team_ids": [team_ids[2]]},
-                {"station": "blue", "team_ids": [team_ids[3]]},
-            ],
-        },
-    ).json()
-    red2_id = next(a["id"] for a in match2["alliances"] if a["station"] == "red")
-    blue2_id = next(a["id"] for a in match2["alliances"] if a["station"] == "blue")
-    client.post(
-        f"/api/matches/{match2['id']}/alliances/{red2_id}/score",
-        json={"data": {"high_balls": 1, "low_balls": 0, "auto_winner": "tie"}},
-    )
-    client.post(
-        f"/api/matches/{match2['id']}/alliances/{blue2_id}/score",
-        json={"data": {"high_balls": 0, "low_balls": 0, "auto_winner": "tie"}},
-    )
-
-    finalize_qualification(client, session_id)
-    bracket = client.post(
-        "/api/finals/start",
-        json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 2},
-    ).json()
-    assert bracket["status"] == "selecting_alliances"
-    seed_1 = bracket["alliances"][0]
-    seed_2 = bracket["alliances"][1]
-    unclaimed = [
-        t for t in team_ids if t not in seed_1["team_ids"] and t not in seed_2["team_ids"]
-    ]
-
-    client.post(
-        f"/api/finals/{bracket['id']}/pick",
-        json={"captain_bracket_alliance_id": seed_1["id"], "partner_team_id": unclaimed[0]},
-    )
-    response = client.post(
-        f"/api/finals/{bracket['id']}/pick",
-        json={"captain_bracket_alliance_id": seed_2["id"], "partner_team_id": unclaimed[1]},
-    )
+    assert _select(client, bracket, "invite", ranked[2]).status_code == 200
+    first = _select(client, bracket, "accept", ranked[2]).json()
+    assert first["status"] == "selecting_alliances"
+    assert first["selection"]["captain_team_id"] == ranked[1]
+    assert _select(client, bracket, "invite", ranked[3]).status_code == 200
+    response = _select(client, bracket, "accept", ranked[3])
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "in_progress"
-    # captain-pick-game declares finals_format="score_chase", so once every
-    # captain has picked this bracket's first score-chase run is created
-    # automatically for the worst seed (seed_2, per "worst to best" order).
+    assert body["selection"] is None
+    seed_2 = next(a for a in body["alliances"] if a["seed"] == 2)
+    assert set(seed_2["team_ids"]) == {ranked[1], ranked[3]}
+    # captain-pick-game declares finals_format="score_chase", so once the last
+    # alliance forms the first score-chase run is created automatically for
+    # the worst seed (seed 2, per "worst to best" order).
     assert len(body["runs"]) == 1
     assert body["runs"][0]["bracket_alliance_id"] == seed_2["id"]
 
@@ -1192,17 +1018,7 @@ def test_single_elimination_full_4_alliance_bracket_traced_end_to_end(client):
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": [1, 2]},
     ).json()
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    final_response = None
-    for i, alliance in enumerate(bracket["alliances"]):
-        final_response = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={
-                "captain_bracket_alliance_id": alliance["id"],
-                "partner_team_id": unclaimed[i],
-            },
-        )
+    final_response = pick_partners(client, bracket)
     bracket = final_response.json()
     assert bracket["status"] == "in_progress"
     assert len(bracket["matchups"]) == 3  # 2 round-1 + 1 final
@@ -1267,17 +1083,7 @@ def test_resubmitting_a_decided_matchups_game_does_not_re_decide_it(client):
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": [1, 2]},
     ).json()
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    final_response = None
-    for i, alliance in enumerate(bracket["alliances"]):
-        final_response = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={
-                "captain_bracket_alliance_id": alliance["id"],
-                "partner_team_id": unclaimed[i],
-            },
-        )
+    final_response = pick_partners(client, bracket)
     bracket = final_response.json()
 
     matches_response = client.get(f"/api/matches?session_id={session_id}")
@@ -1489,6 +1295,10 @@ def test_start_finals_captain_pick_succeeds_in_a_single_division_event(captain_p
         json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 2},
     )
     assert response.status_code == 201
+    # Partner picking starts with no alliances; they form through invites.
+    assert response.json()["status"] == "selecting_alliances"
+    assert response.json()["alliances"] == []
+    assert response.json()["selection"]["alliances_target"] == 2
 
 
 def test_unavailable_alliance_with_known_opponent_resolves_immediately(client):
@@ -1499,17 +1309,7 @@ def test_unavailable_alliance_with_known_opponent_resolves_immediately(client):
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": 1},
     ).json()
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    final_response = None
-    for i, alliance in enumerate(bracket["alliances"]):
-        final_response = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={
-                "captain_bracket_alliance_id": alliance["id"],
-                "partner_team_id": unclaimed[i],
-            },
-        )
+    final_response = pick_partners(client, bracket)
     bracket = final_response.json()
     round_1_matchup = bracket["matchups"][0]
     alliance_to_forfeit = round_1_matchup["alliance_b_id"]
@@ -1531,17 +1331,7 @@ def test_unavailable_alliance_waiting_on_earlier_round_resolves_later(client):
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 5, "wins_to_advance": 1},
     ).json()
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    final_response = None
-    for i, alliance in enumerate(bracket["alliances"]):
-        final_response = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={
-                "captain_bracket_alliance_id": alliance["id"],
-                "partner_team_id": unclaimed[i],
-            },
-        )
+    final_response = pick_partners(client, bracket)
     bracket = final_response.json()
     round_1 = [m for m in bracket["matchups"] if m["round_number"] == 1]
     bye_matchup = next(m for m in round_1 if m["winner_alliance_id"] is not None)
@@ -1620,17 +1410,7 @@ def test_unavailable_alliance_mid_series_resolves_walkover_without_extra_game(cl
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": [2, 2]},
     ).json()
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    final_response = None
-    for i, alliance in enumerate(bracket["alliances"]):
-        final_response = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={
-                "captain_bracket_alliance_id": alliance["id"],
-                "partner_team_id": unclaimed[i],
-            },
-        )
+    final_response = pick_partners(client, bracket)
     bracket = final_response.json()
     round_1_matchup = bracket["matchups"][0]  # round 1, position 0
 
@@ -1758,17 +1538,7 @@ def test_matchup_numbers_assigned_round_then_position(client):
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 8, "wins_to_advance": 1},
     ).json()
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    final_response = None
-    for i, alliance in enumerate(bracket["alliances"]):
-        final_response = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={
-                "captain_bracket_alliance_id": alliance["id"],
-                "partner_team_id": unclaimed[i],
-            },
-        )
+    final_response = pick_partners(client, bracket)
     bracket = final_response.json()
 
     round_1 = sorted(
@@ -1807,17 +1577,7 @@ def test_get_matches_degrades_gracefully_when_matchup_number_is_null(client):
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 1},
     ).json()
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    final_response = None
-    for i, alliance in enumerate(bracket["alliances"]):
-        final_response = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={
-                "captain_bracket_alliance_id": alliance["id"],
-                "partner_team_id": unclaimed[i],
-            },
-        )
+    final_response = pick_partners(client, bracket)
     assert final_response.status_code == 200
 
     from sqlalchemy import select
@@ -1868,17 +1628,7 @@ def test_single_elimination_series_match_number_restarts_per_matchup(client):
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": [2, 1]},
     ).json()
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    final_response = None
-    for i, alliance in enumerate(bracket["alliances"]):
-        final_response = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={
-                "captain_bracket_alliance_id": alliance["id"],
-                "partner_team_id": unclaimed[i],
-            },
-        )
+    final_response = pick_partners(client, bracket)
     bracket = final_response.json()
 
     matches_response = client.get(f"/api/matches?session_id={session_id}")
@@ -1928,17 +1678,7 @@ def test_single_elimination_game_label_uses_matchup_and_match_number(client):
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": 1},
     ).json()
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    final_response = None
-    for i, alliance in enumerate(bracket["alliances"]):
-        final_response = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={
-                "captain_bracket_alliance_id": alliance["id"],
-                "partner_team_id": unclaimed[i],
-            },
-        )
+    final_response = pick_partners(client, bracket)
     assert final_response.json()["status"] == "in_progress"
 
     matches = client.get(f"/api/matches?session_id={session_id}").json()
@@ -2057,7 +1797,7 @@ def test_start_and_delete_broadcast_finals_changed(cooperative_client):
         assert next_event(socket, "finals_changed")["data"] == {"session_id": session_id, "bracket_id": bracket["id"]}
 
 
-def test_pick_and_unavailable_broadcast_finals_changed(client):
+def test_selection_and_unavailable_broadcast_finals_changed(client):
     from skills_helpers import next_event
 
     session_id, team_ids = _setup_ranked_teams_for_example_game(client, 8)
@@ -2065,17 +1805,19 @@ def test_pick_and_unavailable_broadcast_finals_changed(client):
     bracket = client.post(
         "/api/finals/start", json={"session_id": session_id, "bracket_size": 4, "wins_to_advance": 1}
     ).json()
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
     expected = {"session_id": session_id, "bracket_id": bracket["id"]}
     with _session_socket(client, session_id) as socket:
-        for i, alliance in enumerate(bracket["alliances"]):
-            response = client.post(
-                f"/api/finals/{bracket['id']}/pick",
-                json={"captain_bracket_alliance_id": alliance["id"], "partner_team_id": unclaimed[i]},
-            )
-            assert response.status_code == 200, response.text
-            assert next_event(socket, "finals_changed")["data"] == expected
+        for _ in range(4):
+            selection = bracket["selection"]
+            partner = selection["invitable_team_ids"][-1]
+            for action in ("invite", "accept"):
+                response = client.post(
+                    f"/api/finals/{bracket['id']}/selection/{action}", json={"team_id": partner}
+                )
+                assert response.status_code == 200, response.text
+                assert next_event(socket, "finals_changed")["data"] == expected
+            bracket = response.json()
+        assert bracket["status"] == "in_progress"
         forfeit = response.json()["matchups"][0]["alliance_b_id"]
         assert client.post(f"/api/finals/{bracket['id']}/alliances/{forfeit}/unavailable").status_code == 200
         assert next_event(socket, "finals_changed")["data"] == expected

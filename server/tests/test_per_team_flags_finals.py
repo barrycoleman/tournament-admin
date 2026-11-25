@@ -1,3 +1,4 @@
+from finals_helpers import pick_partners
 from test_finals import (
     _rank_teams_directly_head_to_head,
     _setup_and_start_score_chase,
@@ -12,13 +13,7 @@ def _start_two_alliance_bracket(client):
         "/api/finals/start",
         json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": [1]},
     ).json()
-    claimed = {tid for alliance in bracket["alliances"] for tid in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    for i, alliance in enumerate(bracket["alliances"]):
-        bracket = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={"captain_bracket_alliance_id": alliance["id"], "partner_team_id": unclaimed[i]},
-        ).json()
+    bracket = pick_partners(client, bracket).json()
     assert bracket["status"] == "in_progress"
     return session_id, bracket
 

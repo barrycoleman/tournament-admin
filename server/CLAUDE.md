@@ -425,9 +425,35 @@ A game plugin declares `alliance_selection` (`captain_pick` or
 `score_chase`) in `match_format()`. A finals pair is always exactly 2
 teams, persistent for the whole finals stage, regardless of the game's
 qualification-stage `teams_per_alliance` — formed once via `POST
-/api/finals/start` (immediately, for `seed_pairing`) or via a sequence of
-`POST /api/finals/{id}/pick` calls in strict seed order (for
-`captain_pick`).
+/api/finals/start` (immediately, for `seed_pairing`) or through partner
+picking (for `captain_pick`, below).
+
+**Partner picking** (`services/alliance_selection.py`, spec
+`docs/superpowers/specs/2026-11-24-finals-admin-ui-design.md` §3.3). A
+`captain_pick` bracket starts `selecting_alliances` with no alliances and
+`bracket_size = team_count // 2`. Eligible teams are the session and
+division's ranked teams minus finals exclusions, in rank order. The captain
+is the highest eligible team not on an alliance; the captain may invite any
+eligible team not on an alliance that hasn't declined. One invite is open at
+a time (`FinalsBracket.pending_captain_team_id` / `pending_team_id`).
+Accepting forms the next alliance (seed = order formed); declining marks the
+team (never invitable again, but it can still captain). Each answer is a
+`FinalsPick` row (`finals_picks`: `seq`, `kind` accept|decline, captain,
+team, the accepted alliance), which is what undo walks back; a cancelled
+invite records nothing. The last alliance (or finishing early) sets
+`in_progress` and creates the games. Endpoints, all returning
+`FinalsBracketRead` (which carries `selection` while selecting) and
+broadcasting `finals_changed`: `POST /api/finals/{id}/selection/invite
+{team_id}`, `.../accept {team_id}`, `.../decline {team_id}`, `.../cancel`
+(admin, scorer or referee), `.../undo` and `.../finish` (admin; finish needs
+no captain or no invitable team left and at least two alliances, shrinks
+`bracket_size` and keeps the last rounds of `wins_to_advance`). Errors: 409
+not selecting (undo once started: "Finals have started — use Start over
+instead."), 409 "An invite is already open.", 409 "No invite is open.", 409
+when the answer names another team, 422 for a team that can't be invited, 409
+undo with nothing to undo. Every change begins with a conditional UPDATE of
+the bracket row (guarded on status and the invite state) and checks its
+rowcount, so two answers to one invite can't both succeed.
 
 `POST /api/finals/start` 409s until the session's qualification is finalized.
 
@@ -484,11 +510,8 @@ would otherwise get its first game.
 bracket is `"complete"`, matching `DELETE /api/schedule`'s existing
 cascade-delete pattern for qualification rounds.
 
-Starting a `captain_pick` bracket (either format) additionally requires
-`2 * bracket_size` teams checked into the session
-(`SessionParticipation.checked_in`) — enough for both the captains and
-the partners they'll pick — using the same eligible-team-pool query
-`routers/schedule.py`'s `generate_schedule` already builds.
+Starting any bracket requires at least `team_count` non-excluded ranked
+teams for the session and division.
 
 A `score_chase` bracket runs its `BracketAlliance` entrants one at a time,
 worst seed to best, each as a single solo `Match` (one `Alliance`
@@ -1136,7 +1159,7 @@ truth for that richer shape):
   every socket (active-session and every per-session channel, via
   `broadcast_all`), after the event's game plugin is changed or cleared.
 - `finals_changed` — `{session_id, bracket_id}` (via `broadcast_for_session`),
-  after `POST /api/finals/start`, each `POST /api/finals/{id}/pick`,
+  after `POST /api/finals/start`, each `POST /api/finals/{id}/selection/...`,
   `POST /api/finals/{id}/alliances/{alliance_id}/unavailable` and
   `DELETE /api/finals/{id}`. These can change finals results (a walkover, a
   deleted bracket) without creating a match, so `new_match_created` alone

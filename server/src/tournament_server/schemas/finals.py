@@ -58,6 +58,24 @@ class FinalsResultRead(BaseModel):
     rank: int
 
 
+class SelectionStepRead(BaseModel):
+    kind: Literal["accept", "decline"]
+    captain_team_id: int
+    team_id: int
+
+
+class SelectionRead(BaseModel):
+    """Partner picking state, present while a bracket is selecting alliances."""
+
+    captain_team_id: int | None
+    invitable_team_ids: list[int]
+    declined_team_ids: list[int]
+    pending_team_id: int | None
+    alliances_formed: int
+    alliances_target: int
+    last_step: SelectionStepRead | None
+
+
 class FinalsBracketRead(BaseModel):
     id: int
     session_id: int
@@ -73,11 +91,11 @@ class FinalsBracketRead(BaseModel):
     runs: list[FinalsRunRead]
     results: list[FinalsResultRead]
     matchups: list[BracketMatchupRead]
+    selection: SelectionRead | None = None
 
 
-class FinalsPickRequest(BaseModel):
-    captain_bracket_alliance_id: int
-    partner_team_id: int
+class SelectionTeamRequest(BaseModel):
+    team_id: int
 
 
 class FinalsExclusionCreate(BaseModel):

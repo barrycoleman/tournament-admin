@@ -331,8 +331,12 @@ def upgrade() -> None:
     sa.Column('wins_to_advance', sa.String(), nullable=False),
     sa.Column('status', sa.String(length=30), nullable=False),
     sa.Column('next_field_index', sa.Integer(), nullable=False),
+    sa.Column('pending_captain_team_id', sa.Integer(), nullable=True),
+    sa.Column('pending_team_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['division_id'], ['divisions.id'], ),
     sa.ForeignKeyConstraint(['field_set_id'], ['field_sets.id'], ),
+    sa.ForeignKeyConstraint(['pending_captain_team_id'], ['teams.id'], ),
+    sa.ForeignKeyConstraint(['pending_team_id'], ['teams.id'], ),
     sa.ForeignKeyConstraint(['session_id'], ['sessions.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -406,6 +410,21 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['bracket_alliance_id'], ['bracket_alliances.id'], ),
     sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ),
     sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('finals_picks',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('bracket_id', sa.Integer(), nullable=False),
+    sa.Column('seq', sa.Integer(), nullable=False),
+    sa.Column('kind', sa.String(length=10), nullable=False),
+    sa.Column('captain_team_id', sa.Integer(), nullable=False),
+    sa.Column('team_id', sa.Integer(), nullable=False),
+    sa.Column('bracket_alliance_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['bracket_alliance_id'], ['bracket_alliances.id'], ),
+    sa.ForeignKeyConstraint(['bracket_id'], ['finals_brackets.id'], ),
+    sa.ForeignKeyConstraint(['captain_team_id'], ['teams.id'], ),
+    sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('bracket_id', 'seq', name='uq_finals_pick_bracket_seq')
     )
     op.create_table('bracket_matchups',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -533,6 +552,7 @@ def downgrade() -> None:
     op.drop_table('matches')
     op.drop_table('finals_results')
     op.drop_table('bracket_matchups')
+    op.drop_table('finals_picks')
     op.drop_table('bracket_alliance_teams')
     op.drop_table('bracket_alliances')
     op.drop_index('ix_skills_attempts_session_team_type', table_name='skills_attempts')

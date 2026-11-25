@@ -17,6 +17,7 @@ from tournament_server.models.field import Field
 from tournament_server.models.field_set import FieldSet
 from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.finals_exclusion import FinalsExclusion
+from tournament_server.models.finals_pick import FinalsPick
 from tournament_server.models.finals_result import FinalsResult
 from tournament_server.models.match import Match
 from tournament_server.models.participation import SessionParticipation
@@ -64,6 +65,11 @@ def delete_finals_bracket(db: Session, bracket: FinalsBracket) -> None:
         select(FinalsResult).where(FinalsResult.finals_bracket_id == bracket.id)
     ).scalars().all():
         db.delete(result)
+    for pick in db.execute(
+        select(FinalsPick).where(FinalsPick.bracket_id == bracket.id)
+    ).scalars().all():
+        db.delete(pick)
+    db.flush()
     for alliance in db.execute(
         select(BracketAlliance).where(BracketAlliance.bracket_id == bracket.id)
     ).scalars().all():

@@ -22,3 +22,10 @@ class FinalsBracket(Base):
     wins_to_advance: Mapped[str] = mapped_column(String, default="[1]")
     status: Mapped[str] = mapped_column(String(30), default="selecting_alliances")
     next_field_index: Mapped[int] = mapped_column(Integer, default=0)
+    # The one open partner-picking invite, if any (both set or both null).
+    pending_captain_team_id: Mapped[int | None] = mapped_column(
+        ForeignKey("teams.id"), default=None
+    )
+    pending_team_id: Mapped[int | None] = mapped_column(
+        ForeignKey("teams.id"), default=None
+    )

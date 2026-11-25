@@ -3,6 +3,7 @@ schedule, rankings and finals carry no division id but the award slot is the
 event's one real division."""
 from __future__ import annotations
 
+from finals_helpers import pick_partners
 from ranking_helpers import finalize_qualification
 
 CHAMPION = {
@@ -86,14 +87,7 @@ def test_finals_award_resolves_for_a_bracket_started_with_no_division(client):
         "/api/finals/start", json={"session_id": session_id, "bracket_size": 2, "wins_to_advance": 1}
     ).json()
     assert bracket["division_id"] is None
-    claimed = {t for alliance in bracket["alliances"] for t in alliance["team_ids"]}
-    unclaimed = [t for t in team_ids if t not in claimed]
-    for i, alliance in enumerate(bracket["alliances"]):
-        response = client.post(
-            f"/api/finals/{bracket['id']}/pick",
-            json={"captain_bracket_alliance_id": alliance["id"], "partner_team_id": unclaimed[i]},
-        )
-        assert response.status_code == 200, response.text
+    pick_partners(client, bracket)
     game = next(
         m for m in client.get(f"/api/matches?session_id={session_id}").json() if m["round_type"] == "elimination"
     )
