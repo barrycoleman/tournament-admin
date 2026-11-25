@@ -21,6 +21,7 @@ from tournament_server.models.division import Division
 from tournament_server.models.field import Field
 from tournament_server.models.field_set import SKILLS, TEAMWORK, FieldSet
 from tournament_server.models.finals_bracket import FinalsBracket
+from tournament_server.models.finals_exclusion import FinalsExclusion
 from tournament_server.models.finals_result import FinalsResult
 from tournament_server.models.match import Match
 from tournament_server.models.participation import SessionParticipation
@@ -33,6 +34,8 @@ from tournament_server.schemas.finals import (
     BracketAllianceRead,
     BracketMatchupRead,
     FinalsBracketRead,
+    FinalsExclusionCreate,
+    FinalsExclusionRead,
     FinalsPickRequest,
     FinalsResultRead,
     FinalsRunRead,
@@ -41,6 +44,7 @@ from tournament_server.schemas.finals import (
 from tournament_server.services import qualification, team_flags
 from tournament_server.services.deletion import delete_finals_bracket
 from tournament_server.services.finals import (
+    excluded_team_ids,
     expand_wins_to_advance,
     generate_bracket,
     mark_unavailable,
@@ -138,12 +142,100 @@ def _to_finals_bracket_read(
     )
 
 
-def _finals_changed(request: Request, db: Session, session_id: int, bracket_id: int) -> None:
+def _finals_changed(request: Request, db: Session, session_id: int, bracket_id: int | None) -> None:
     """A bracket's state changed (started, picked, a walkover, deleted), which
     can change finals results without any new match being created."""
     broadcast_for_session(
         request.app, db, session_id, "finals_changed", {"session_id": session_id, "bracket_id": bracket_id}
     )
+
+
+EXCLUSIONS_LOCKED_DETAIL = (
+    "Exclusions cannot change while a finals bracket exists; delete the bracket first"
+)
+
+
+def _bracket_exists(db: Session, session_id: int, division_id: int | None) -> bool:
+    query = select(FinalsBracket.id).where(FinalsBracket.session_id == session_id)
+    if division_id is None:
+        query = query.where(FinalsBracket.division_id.is_(None))
+    else:
+        query = query.where(FinalsBracket.division_id == division_id)
+    return db.execute(query.limit(1)).first() is not None
+
+
+@router.get("/exclusions", response_model=list[FinalsExclusionRead])
+def list_exclusions(
+    session_id: int = Query(...),
+    division_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_any_role),
+) -> list[FinalsExclusion]:
+    query = select(FinalsExclusion).where(FinalsExclusion.session_id == session_id)
+    if division_id is None:
+        query = query.where(FinalsExclusion.division_id.is_(None))
+    else:
+        query = query.where(FinalsExclusion.division_id == division_id)
+    return list(db.execute(query.order_by(FinalsExclusion.id)).scalars().all())
+
+
+@router.post("/exclusions", response_model=FinalsExclusionRead, status_code=201)
+def create_exclusion(
+    payload: FinalsExclusionCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> FinalsExclusion:
+    if db.get(TournamentSession, payload.session_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if payload.division_id is not None and db.get(Division, payload.division_id) is None:
+        raise HTTPException(status_code=404, detail="Division not found")
+    if db.get(Team, payload.team_id) is None:
+        raise HTTPException(status_code=404, detail="Team not found")
+    if _bracket_exists(db, payload.session_id, payload.division_id):
+        raise HTTPException(status_code=409, detail=EXCLUSIONS_LOCKED_DETAIL)
+    query = select(FinalsExclusion).where(
+        FinalsExclusion.session_id == payload.session_id,
+        FinalsExclusion.team_id == payload.team_id,
+    )
+    if payload.division_id is None:
+        query = query.where(FinalsExclusion.division_id.is_(None))
+    else:
+        query = query.where(FinalsExclusion.division_id == payload.division_id)
+    row = db.execute(query).scalars().first()
+    if row is None:
+        row = FinalsExclusion(
+            session_id=payload.session_id,
+            division_id=payload.division_id,
+            team_id=payload.team_id,
+            reason=payload.reason,
+        )
+        db.add(row)
+    else:
+        row.reason = payload.reason
+    db.commit()
+    db.refresh(row)
+    _finals_changed(request, db, payload.session_id, None)
+    return row
+
+
+@router.delete("/exclusions/{exclusion_id}", status_code=204)
+def delete_exclusion(
+    exclusion_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_admin),
+) -> Response:
+    row = db.get(FinalsExclusion, exclusion_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Exclusion not found")
+    if _bracket_exists(db, row.session_id, row.division_id):
+        raise HTTPException(status_code=409, detail=EXCLUSIONS_LOCKED_DETAIL)
+    session_id = row.session_id
+    db.delete(row)
+    db.commit()
+    _finals_changed(request, db, session_id, None)
+    return Response(status_code=204)
 
 
 @router.post("/start", response_model=FinalsBracketRead, status_code=201)
@@ -296,7 +388,10 @@ def start_finals(
     else:
         ranking_query = ranking_query.where(Ranking.division_id == payload.division_id)
     ranking_query = ranking_query.order_by(Ranking.rank)
-    ranked = db.execute(ranking_query).scalars().all()
+    excluded = excluded_team_ids(db, payload.session_id, payload.division_id)
+    ranked = [
+        r for r in db.execute(ranking_query).scalars().all() if r.team_id not in excluded
+    ]
 
     needed = payload.bracket_size * 2 if alliance_selection == "seed_pairing" else payload.bracket_size
     if len(ranked) < needed:

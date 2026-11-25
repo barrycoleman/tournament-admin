@@ -16,7 +16,10 @@ from tournament_server.schemas.division import (
 )
 from tournament_server.schemas.team import TeamRead
 from tournament_server.services.team_assignment import assign_sole_division, balanced_assign
-from tournament_server.services.deletion import remove_division_from_awards
+from tournament_server.services.deletion import (
+    delete_division_finals_exclusions,
+    remove_division_from_awards,
+)
 from tournament_server.services import displays
 
 router = APIRouter(prefix="/api/divisions", tags=["divisions"])
@@ -83,6 +86,7 @@ def delete_division(
     for team in teams_in_division:
         team.division_id = None
     remove_division_from_awards(db, division_id)
+    delete_division_finals_exclusions(db, division_id)
     displays.clear_division_from_pit_groups(db, division_id)
     db.delete(division)
     db.flush()

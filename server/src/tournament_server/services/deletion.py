@@ -16,6 +16,7 @@ from tournament_server.models.event import Event
 from tournament_server.models.field import Field
 from tournament_server.models.field_set import FieldSet
 from tournament_server.models.finals_bracket import FinalsBracket
+from tournament_server.models.finals_exclusion import FinalsExclusion
 from tournament_server.models.finals_result import FinalsResult
 from tournament_server.models.match import Match
 from tournament_server.models.participation import SessionParticipation
@@ -133,6 +134,15 @@ def remove_division_from_awards(db: Session, division_id: int) -> None:
     db.flush()
 
 
+def delete_division_finals_exclusions(db: Session, division_id: int) -> None:
+    """Deletes the finals exclusions recorded for a division."""
+    for row in db.execute(
+        select(FinalsExclusion).where(FinalsExclusion.division_id == division_id)
+    ).scalars().all():
+        db.delete(row)
+    db.flush()
+
+
 def delete_session(db: Session, session_obj: TournamentSession) -> bool:
     """Deletes a session and everything scoped to it. Returns whether it was
     the event's active session, which is cleared if so."""
@@ -143,7 +153,7 @@ def delete_session(db: Session, session_obj: TournamentSession) -> bool:
     ).scalars().all():
         delete_finals_bracket(db, bracket)
     delete_matches(db, db.execute(select(Match).where(Match.session_id == session_id)).scalars().all())
-    for model in (ScheduleGeneration, Ranking, SessionParticipation, SessionPlayingWindow, SkillsAttempt):
+    for model in (FinalsExclusion, ScheduleGeneration, Ranking, SessionParticipation, SessionPlayingWindow, SkillsAttempt):
         for row in db.execute(select(model).where(model.session_id == session_id)).scalars().all():
             db.delete(row)
     displays.delete_session_displays(db, session_id)

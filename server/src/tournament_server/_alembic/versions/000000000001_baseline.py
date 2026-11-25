@@ -334,6 +334,18 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['session_id'], ['sessions.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('finals_exclusions',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('session_id', sa.Integer(), nullable=False),
+    sa.Column('division_id', sa.Integer(), nullable=True),
+    sa.Column('team_id', sa.Integer(), nullable=False),
+    sa.Column('reason', sa.String(length=20), nullable=False),
+    sa.ForeignKeyConstraint(['division_id'], ['divisions.id'], ),
+    sa.ForeignKeyConstraint(['session_id'], ['sessions.id'], ),
+    sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('session_id', 'division_id', 'team_id', name='uq_finals_exclusion_team')
+    )
     op.create_table('rankings',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('session_id', sa.Integer(), nullable=True),
@@ -525,6 +537,7 @@ def downgrade() -> None:
     op.drop_table('skills_attempts')
     op.drop_table('session_participation')
     op.drop_table('rankings')
+    op.drop_table('finals_exclusions')
     op.drop_table('finals_brackets')
     op.drop_table('fields')
     op.drop_table('award_winners')

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -65,3 +67,20 @@ class FinalsBracketRead(BaseModel):
 class FinalsPickRequest(BaseModel):
     captain_bracket_alliance_id: int
     partner_team_id: int
+
+
+class FinalsExclusionCreate(BaseModel):
+    session_id: int
+    division_id: int | None = None
+    team_id: int
+    reason: Literal["disqualified", "left_early"]
+
+
+class FinalsExclusionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    session_id: int
+    division_id: int | None
+    team_id: int
+    reason: str

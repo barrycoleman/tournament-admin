@@ -12,8 +12,19 @@ from tournament_server.models.field import Field
 from tournament_server.models.finals_bracket import FinalsBracket
 from tournament_server.models.finals_result import FinalsResult
 from tournament_server.models.match import Match
+from tournament_server.models.finals_exclusion import FinalsExclusion
 from tournament_server.models.score_record import ScoreRecord
 from tournament_server.services import team_flags
+
+
+def excluded_team_ids(db: Session, session_id: int, division_id: int | None) -> set[int]:
+    """Teams kept out of finals for this session and division."""
+    query = select(FinalsExclusion.team_id).where(FinalsExclusion.session_id == session_id)
+    if division_id is None:
+        query = query.where(FinalsExclusion.division_id.is_(None))
+    else:
+        query = query.where(FinalsExclusion.division_id == division_id)
+    return set(db.execute(query).scalars().all())
 
 
 def bracket_capacity(bracket_size: int) -> int:
