@@ -12,6 +12,7 @@ interface MatchInfo {
 }
 interface Bracket {
   id: number;
+  selection: { invitable_team_ids: number[] } | null;
   alliances: { id: number; seed: number; team_ids: number[] }[];
   matchups: { id: number; round_number: number; position: number; alliance_a_id: number | null; alliance_b_id: number | null }[];
 }
@@ -100,13 +101,13 @@ test.describe.serial("TV elimination bracket, single elimination", () => {
     bracket = await event.call(request, "post", "/api/finals/start", {
       session_id: event.state.session, bracket_size: 4, wins_to_advance: 1, field_set_id: event.state.fieldSet,
     });
-    // Each captain, in seed order, picks the first team not yet on an alliance.
-    const claimed = new Set(bracket.alliances.flatMap((a) => a.team_ids));
-    for (const alliance of [...bracket.alliances].sort((a, b) => a.seed - b.seed)) {
-      const partner = teams.find((id) => !claimed.has(id))!;
-      claimed.add(partner);
-      bracket = await event.call(request, "post", `/api/finals/${bracket.id}/pick`, { captain_bracket_alliance_id: alliance.id, partner_team_id: partner });
+    // Partner picking: each captain in turn invites the lowest-ranked team still free, which accepts.
+    while (bracket.selection) {
+      const partner = bracket.selection.invitable_team_ids[bracket.selection.invitable_team_ids.length - 1];
+      await event.call(request, "post", `/api/finals/${bracket.id}/selection/invite`, { team_id: partner });
+      bracket = await event.call(request, "post", `/api/finals/${bracket.id}/selection/accept`, { team_id: partner });
     }
+    expect(bracket.alliances).toHaveLength(4);
   });
 
   test.afterAll(() => event.state.server?.stop());
