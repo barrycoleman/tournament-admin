@@ -445,7 +445,7 @@ invite records nothing. The last alliance (or finishing early) sets
 `FinalsBracketRead` (which carries `selection` while selecting) and
 broadcasting `finals_changed`: `POST /api/finals/{id}/selection/invite
 {team_id}`, `.../accept {team_id}`, `.../decline {team_id}`, `.../cancel`
-(admin, scorer or referee), `.../undo` and `.../finish` (admin; finish needs
+(an admin, or a scorer or referee on a paired device, `require_paired_scoring_device` like score entry), `.../undo` and `.../finish` (admin; finish needs
 no captain or no invitable team left and at least two alliances, shrinks
 `bracket_size` and keeps the last rounds of `wins_to_advance`). Errors: 409
 not selecting (undo once started: "Finals have started — use Start over

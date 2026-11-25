@@ -3,6 +3,7 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from auth_helpers import bearer, login_as
 from device_helpers import paired_device
 from skills_helpers import next_event
 from test_finals import (
@@ -305,6 +306,24 @@ def test_tablet_can_invite_and_answer_but_not_undo(client):
     assert _act(raw, bid, "undo", headers=tablet).status_code == 403
     assert _act(raw, bid, "finish", headers=tablet).status_code == 403
     assert _act(raw, bid, "invite", R[3], headers=judge).status_code == 403
+
+
+def test_scorer_sign_in_without_a_paired_device_cannot_drive_picking(client):
+    session_id, R = _ranked(client)
+    bid = _start(client, session_id)["id"]
+    raw = TestClient(client.app)
+    unpaired = bearer(login_as(raw, "scorer"))
+    for action, team in (("invite", R[1]), ("cancel", None)):
+        refused = _act(raw, bid, action, team, headers=unpaired)
+        assert (refused.status_code, refused.json()["detail"]) == (
+            403, "Only a paired device can submit scores."
+        ), action
+    tablet = paired_device(client, "scorer", "Tablet")["headers"]
+    assert _act(raw, bid, "invite", R[1], headers=tablet).status_code == 200
+    for action in ("accept", "decline"):
+        refused = _act(raw, bid, action, R[1], headers=unpaired)
+        assert refused.status_code == 403, action
+    assert _act(client, bid, "accept", R[1]).status_code == 200  # admin needs no device
 
 
 def test_selection_broadcasts_finals_changed(client):

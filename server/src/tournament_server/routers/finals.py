@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from tournament_server.auth import require_admin, require_any_role, require_scorer_or_referee
+from tournament_server.auth import require_admin, require_any_role
 from tournament_server.deps import (
     get_db,
     get_game_plugin_for_event,
@@ -14,6 +14,7 @@ from tournament_server.deps import (
     get_session_id,
     get_the_event,
 )
+from tournament_server.device_auth import require_paired_scoring_device
 from tournament_server.models.alliance import Alliance
 from tournament_server.models.bracket_alliance import BracketAlliance, BracketAllianceTeam
 from tournament_server.models.bracket_matchup import BracketMatchup
@@ -533,7 +534,8 @@ def selection_invite(
     payload: SelectionTeamRequest,
     request: Request,
     db: Session = Depends(get_db),
-    _role: str = Depends(require_scorer_or_referee),
+    # Like score entry: an admin, or a scorer or referee on a paired device.
+    _device: str | None = Depends(require_paired_scoring_device),
 ) -> FinalsBracketRead:
     return _run_selection(
         request, db, bracket_id, lambda d, b: alliance_selection.invite(d, b, payload.team_id)
@@ -546,7 +548,8 @@ def selection_accept(
     payload: SelectionTeamRequest,
     request: Request,
     db: Session = Depends(get_db),
-    _role: str = Depends(require_scorer_or_referee),
+    # Like score entry: an admin, or a scorer or referee on a paired device.
+    _device: str | None = Depends(require_paired_scoring_device),
 ) -> FinalsBracketRead:
     return _run_selection(
         request, db, bracket_id, lambda d, b: alliance_selection.accept(d, b, payload.team_id)
@@ -559,7 +562,8 @@ def selection_decline(
     payload: SelectionTeamRequest,
     request: Request,
     db: Session = Depends(get_db),
-    _role: str = Depends(require_scorer_or_referee),
+    # Like score entry: an admin, or a scorer or referee on a paired device.
+    _device: str | None = Depends(require_paired_scoring_device),
 ) -> FinalsBracketRead:
     return _run_selection(
         request, db, bracket_id, lambda d, b: alliance_selection.decline(d, b, payload.team_id)
@@ -571,7 +575,8 @@ def selection_cancel(
     bracket_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    _role: str = Depends(require_scorer_or_referee),
+    # Like score entry: an admin, or a scorer or referee on a paired device.
+    _device: str | None = Depends(require_paired_scoring_device),
 ) -> FinalsBracketRead:
     return _run_selection(request, db, bracket_id, alliance_selection.cancel)
 
