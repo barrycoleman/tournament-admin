@@ -178,6 +178,7 @@ export const paths = {
     divisionId === null
       ? `/api/finals?session_id=${sessionId}`
       : `/api/finals?session_id=${sessionId}&division_id=${divisionId}`,
+  allFinals: (sessionId: number) => `/api/finals?session_id=${sessionId}&all_divisions=true`,
 };
 
 export function useFetchJson() {
@@ -229,6 +230,16 @@ export const useParticipants = (sessionId: number) =>
   useJson<Participant[]>(["participants", sessionId], paths.participants(sessionId));
 export const useFinals = (sessionId: number, divisionId: number | null) =>
   useJson<FinalsBracket[]>(["finals", sessionId, divisionId], paths.finals(sessionId, divisionId));
+/** Every division's finals brackets for a session, or nothing (no request)
+ * when there is no session to read. */
+export function useAllDivisionsFinals(sessionId: number | null) {
+  const fetchJson = useFetchJson();
+  return useQuery({
+    queryKey: ["finals", sessionId, "allDivisions"],
+    queryFn: () => fetchJson<FinalsBracket[]>(paths.allFinals(sessionId!)),
+    enabled: sessionId !== null,
+  });
+}
 
 export function useTeamsById(): Map<number, Team> | undefined {
   const teams = useTeams();

@@ -26,11 +26,17 @@ const free = {
 };
 const pending = { ...free, invitable_team_ids: [3], pending_team_id: 4 };
 
-function serve(finals: () => FinalsBracket[], post?: (url: string) => Response) {
+const ALL_FINALS = "/api/finals?session_id=1&all_divisions=true";
+
+function serve(
+  finals: () => FinalsBracket[],
+  post?: (url: string) => Response,
+  { activeSessionId = 1 as number | null, divisions = [] as { id: number; name: string }[] } = {}
+) {
   const posts: { url: string; body: unknown }[] = [];
   const routes: Record<string, unknown> = {
-    "/api/event": { id: 1, name: "E", active_session_id: 1, game_plugin_name: null },
-    "/api/divisions": [],
+    "/api/event": { id: 1, name: "E", active_session_id: activeSessionId, game_plugin_name: null },
+    "/api/divisions": divisions,
     "/api/teams": [team(1, "101A"), team(2, "102B"), team(3, "103C"), team(4, "104D")],
     "/api/rankings?session_id=1": [ranking(1, 1), ranking(2, 2), ranking(3, 3), ranking(4, 4)],
   };
@@ -40,7 +46,10 @@ function serve(finals: () => FinalsBracket[], post?: (url: string) => Response) 
       posts.push({ url, body: init.body ? JSON.parse(String(init.body)) : undefined });
       return post ? post(url) : new Response(JSON.stringify(finals()[0]), { status: 200 });
     }
-    if (url === "/api/finals?session_id=1") return new Response(JSON.stringify(finals()), { status: 200 });
+    // The server's default (no division_id) lists only brackets without a division.
+    if (url === ALL_FINALS) return new Response(JSON.stringify(finals()), { status: 200 });
+    if (url === "/api/finals?session_id=1")
+      return new Response(JSON.stringify(finals().filter((b) => b.division_id === null)), { status: 200 });
     if (url in routes) return new Response(JSON.stringify(routes[url]), { status: 200 });
     return new Response(JSON.stringify({ detail: "Not found" }), { status: 404 });
   });
@@ -108,8 +117,43 @@ describe("Scorer shell picking screen", () => {
     fireEvent.click(await screen.findByTestId("accept-invite"));
     expect(await screen.findByText("Someone else just answered — updated.")).toBeInTheDocument();
     await waitFor(() =>
-      expect(spy.mock.calls.filter(([u, i]) => String(u) === "/api/finals?session_id=1" && !i?.method).length).toBeGreaterThan(1)
+      expect(spy.mock.calls.filter(([u, i]) => String(u) === ALL_FINALS && !i?.method).length).toBeGreaterThan(1)
     );
+  });
+
+  it("shows the picking screen for a bracket in one division of a multi-division event", async () => {
+    const divided = { ...bracket(free), division_id: 3 };
+    serve(() => [divided], undefined, { divisions: [{ id: 3, name: "Red" }, { id: 4, name: "Blue" }] });
+    renderScorer();
+    expect(await screen.findByTestId("picking-screen")).toBeInTheDocument();
+    expect(screen.getByTestId("captain-number")).toHaveTextContent("101A");
+  });
+
+  it("asks for no finals when there is no active session", async () => {
+    const { spy } = serve(() => [bracket(free)], undefined, { activeSessionId: null });
+    renderScorer();
+    expect(await screen.findByText("Tablet 1")).toBeInTheDocument();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(spy.mock.calls.some(([u]) => String(u).startsWith("/api/finals"))).toBe(false);
+    expect(screen.queryByTestId("picking-screen")).not.toBeInTheDocument();
+  });
+
+  it("says it is waiting for the organiser when there is no captain", async () => {
+    serve(() => [bracket({ ...free, captain_team_id: null })]);
+    renderScorer();
+    expect(await screen.findByText("Waiting for the organiser…")).toBeInTheDocument();
+    expect(screen.queryByTestId("captain-number")).not.toBeInTheDocument();
+    expect(screen.queryByText("Who do you invite?")).not.toBeInTheDocument();
+  });
+
+  it("says it is waiting for the organiser when no team can be invited", async () => {
+    serve(() => [bracket({ ...free, invitable_team_ids: [], declined_team_ids: [2] })]);
+    renderScorer();
+    expect(await screen.findByText("Waiting for the organiser…")).toBeInTheDocument();
+    expect(screen.queryByText("Who do you invite?")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pick-team-102B")).not.toBeInTheDocument();
   });
 
   it("switches both ways on finals_changed", async () => {

@@ -43,6 +43,9 @@ export function PickingScreen({ bracket }: { bracket: FinalsBracket }) {
   const captain = number(selection.captain_team_id);
   const sortedDeclined = [...selection.declined_team_ids].sort((a, b) => (ranks?.get(a) ?? 1e9) - (ranks?.get(b) ?? 1e9));
   const cards = [...selection.invitable_team_ids.map((id) => ({ id, declined: false })), ...sortedDeclined.map((id) => ({ id, declined: true }))];
+  // Nothing a tablet can do until the organiser acts (no captain yet, or
+  // nobody left to invite): say so rather than show an empty grid.
+  const waiting = pending === null && (selection.captain_team_id === null || selection.invitable_team_ids.length === 0);
 
   return (
     <section className="picking" data-testid="picking-screen">
@@ -51,7 +54,11 @@ export function PickingScreen({ bracket }: { bracket: FinalsBracket }) {
           {notice}
         </p>
       )}
-      {pending === null ? (
+      {waiting ? (
+        <p className="picking__prompt" data-testid="picking-waiting">
+          {t("scorer.picking.waiting")}
+        </p>
+      ) : pending === null ? (
         <>
           <p className="picking__label">{t("scorer.picking.captain", { n: selection.alliances_formed + 1 })}</p>
           <p className="picking__captain" data-testid="captain-number">

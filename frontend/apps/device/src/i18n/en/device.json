@@ -25,7 +25,8 @@
       "cancelInvite": "Cancel invite",
       "declinedTeam": "{{number}} declined",
       "stale": "Someone else just answered — updated.",
-      "failed": "That did not go through. Try again."
+      "failed": "That did not go through. Try again.",
+      "waiting": "Waiting for the organiser…"
     }
   },
   "roles": {
