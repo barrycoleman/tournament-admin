@@ -526,7 +526,8 @@
         "selecting_alliances": "Alliance selection is in progress.",
         "in_progress": "Finals are in progress.",
         "complete": "Finals are complete."
-      }
+      },
+      "retry": "Retry"
     },
     "finalsTab": "Finals"
   },

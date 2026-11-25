@@ -80,7 +80,7 @@ export function useFinalsSetupData(sessionId: number) {
     queryKey: ["fields", sessionId],
     queryFn: () => apiRequest<FieldRead[]>(`/api/fields?session_id=${sessionId}`),
   });
-  return { teams: teams.data, fieldSets: fieldSets.data, fields: fields.data };
+  return { teams, fieldSets, fields };
 }
 
 export function useExclusionMutations(scope: FinalsScope) {

@@ -42,7 +42,10 @@ export function FinalsSetup({ session, divisionId, rankings }: FinalsSetupProps)
   const scope: FinalsScope = { sessionId: session.id, divisionId };
   const matchFormat = useMatchFormat();
   const exclusionsQuery = useFinalsExclusions(scope);
-  const { teams, fieldSets, fields } = useFinalsSetupData(session.id);
+  const setupData = useFinalsSetupData(session.id);
+  const teams = setupData.teams.data;
+  const fieldSets = setupData.fieldSets.data;
+  const fields = setupData.fields.data;
   const { exclude, undo } = useExclusionMutations(scope);
   const start = useStartFinals(scope);
 
@@ -133,6 +136,29 @@ export function FinalsSetup({ session, divisionId, rankings }: FinalsSetupProps)
   }
 
   const exclusionError = exclude.error ?? undo.error;
+
+  // The preview and the start body depend on all of these; guessing while one
+  // is missing would show a different finals from the one the server creates.
+  const required = [matchFormat, exclusionsQuery, setupData.teams, setupData.fieldSets, setupData.fields];
+  if (required.some((query) => query.isError)) {
+    return (
+      <div className="panel">
+        <p className="alert alert-danger" role="alert">
+          {t("errors.generic")}
+        </p>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => required.filter((query) => query.isError).forEach((query) => query.refetch())}
+        >
+          {t("sessions.finals.retry")}
+        </button>
+      </div>
+    );
+  }
+  if (required.some((query) => query.data === undefined)) {
+    return <p>{t("sessions.loading")}</p>;
+  }
 
   return (
     <div className="finals-setup">

@@ -244,6 +244,40 @@ describe("SessionFinalsRoute set-up", () => {
     expect(await screen.findByText("Only 5 ranked teams available, need 6")).toBeInTheDocument();
   });
 
+  it("shows an error with Retry instead of a preview when exclusions fail to load", async () => {
+    stub({ exclusions: [{ id: 40, session_id: 1, division_id: null, team_id: 1, reason: "disqualified" }] });
+    const working = vi.mocked(apiRequest).getMockImplementation()!;
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (path === "/api/finals/exclusions?session_id=1") throw new ApiError(500, "boom");
+      return working(path, options as never);
+    });
+    renderFinals(FINALIZED);
+    expect(await screen.findByText("Something went wrong.")).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /Team 1/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start alliance selection" })).not.toBeInTheDocument();
+
+    vi.mocked(apiRequest).mockImplementation(working);
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    const row1 = await screen.findByRole("row", { name: /Team 1/ });
+    expect(within(row1).getByText("Excluded: disqualified")).toBeInTheDocument();
+  });
+
+  it("shows no preview while exclusions are still loading", async () => {
+    stub();
+    const working = vi.mocked(apiRequest).getMockImplementation()!;
+    vi.mocked(apiRequest).mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (path === "/api/finals/exclusions?session_id=1") return new Promise(() => {}) as never;
+      return working(path, options as never);
+    });
+    renderFinals(FINALIZED);
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/field-sets?session_id=1"));
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/event/match-format"));
+    expect(await screen.findByText("Loading…")).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /Team 1/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Captain 1")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start alliance selection" })).not.toBeInTheDocument();
+  });
+
   it("refetches finals and exclusions on finals_changed", async () => {
     let onEvent: ((event: RealtimeEvent) => void) | undefined;
     vi.mocked(useRealtimeChannel).mockImplementation((options) => {
