@@ -95,4 +95,10 @@ describe("Alliance selection", () => {
     renderDisplay();
     expect(await screen.findByText("Alliance selection hasn't started")).toBeInTheDocument();
   });
+
+  it("shows the notice when there are no finals at all", async () => {
+    serve([]);
+    renderDisplay();
+    expect(await screen.findByText("Alliance selection hasn't started")).toBeInTheDocument();
+  });
 });

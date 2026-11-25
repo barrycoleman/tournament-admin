@@ -11,6 +11,7 @@ function AllianceSelectionScreen({ context }: ScreenProps) {
   const ranks = useRanks(context.sessionId, bracket?.division_id ?? context.divisionId);
   const title = t("display.screens.alliance_selection");
   if (bracket === undefined || !teams || !ranks) return <WaitingForData title={title} />;
+  if (bracket === null) return <ScreenNotice title={title} text={t("display.noAllianceSelection")} />;
   const selection = bracket.selection;
   // Once picking is over the list stays up; a bracket that never picked has nothing to show.
   if (bracket.alliance_selection !== "captain_pick" || (!selection && bracket.alliances.length === 0)) {
@@ -44,11 +45,13 @@ function AllianceSelectionScreen({ context }: ScreenProps) {
 
   return (
     <ScreenFrame title={title} className="alliance-selection" context={undefined}>
-      {pendingText && (
-        <p className="alliance-selection__pending" data-testid="pending-invite">
-          {pendingText}
-        </p>
-      )}
+      <div className="alliance-selection__banner">
+        {pendingText && (
+          <FitLine align="end" className="alliance-selection__pending" testId="pending-invite">
+            {pendingText}
+          </FitLine>
+        )}
+      </div>
       <div className="alliance-selection__body">
         <ol className="alliance-selection__alliances">
           {rows.map((row) => (
@@ -76,7 +79,7 @@ function AllianceSelectionScreen({ context }: ScreenProps) {
                   className={`available-team${declined ? " is-declined" : ""}${id === selection.pending_team_id ? " is-pending" : ""}`}
                   data-testid={`available-team-${number(id)}`}
                 >
-                  {`#${ranks.get(id) ?? "–"} ${number(id)}`}
+                  <FitLine>{`#${ranks.get(id) ?? "–"} ${number(id)}`}</FitLine>
                 </li>
               ))}
             </ul>
