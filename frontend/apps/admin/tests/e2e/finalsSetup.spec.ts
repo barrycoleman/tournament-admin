@@ -178,15 +178,16 @@ test.describe.serial("finals set-up, head-to-head", () => {
     await expect(finalsCell(admin, ranked[9])).toHaveText("Not in finals");
   });
 
-  test("best 2 of 3 final on the ticked field: finals start with 4 alliances and Match Control's next match is there", async () => {
+  test("best 2 of 3 final on the ticked field: finals start with 4 alliances and Match Control's next match is there", async ({ request }) => {
     const finalChoice = admin
       .locator("label.finals-settings__round")
       .filter({ has: admin.locator("span", { hasText: /^Final$/ }) })
       .locator("select");
     await finalChoice.selectOption("best2of3");
     await expect(finalChoice).toHaveValue("best2of3");
-    await admin.getByRole("checkbox", { name: "Field 2" }).uncheck();
-    await expect(admin.getByRole("checkbox", { name: "Field 1" })).toBeChecked();
+    // Untick the first field, so a schedule that ignored the ticks would land on it.
+    await admin.getByRole("checkbox", { name: "Field 1" }).uncheck();
+    await expect(admin.getByRole("checkbox", { name: "Field 2" })).toBeChecked();
     await admin.getByRole("button", { name: "Create finals matches" }).click();
 
     const progress = admin.getByRole("table", { name: "Alliances in finals" });
@@ -199,8 +200,18 @@ test.describe.serial("finals set-up, head-to-head", () => {
 
     await admin.getByRole("link", { name: "Open Match Control" }).click();
     const next = admin.getByRole("region", { name: "Next match" });
-    await expect(next).toContainText("Field 1", { timeout: 15_000 });
-    await expect(next).not.toContainText("Field 2");
+    await expect(next).toContainText("Field 2", { timeout: 15_000 });
+    await expect(next).not.toContainText("Field 1");
+
+    // Every finals match is on the ticked field, and the final is best 2 of 3.
+    const finals = ((await event.call(request, "get", `/api/matches?session_id=${event.state.session}`)) as MatchInfo[]).filter(
+      (match) => match.is_finals
+    );
+    expect(finals.length).toBeGreaterThan(0);
+    for (const match of finals) expect(match.field_id, match.label).toBe(event.state.fields["Field 2"]);
+    const brackets = (await event.call(request, "get", `/api/finals?session_id=${event.state.session}`)) as { wins_to_advance: number[] }[];
+    expect(brackets).toHaveLength(1);
+    expect(brackets[0].wins_to_advance).toEqual([1, 2]);
   });
 });
 
