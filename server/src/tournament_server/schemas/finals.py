@@ -2,15 +2,24 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class FinalsStartRequest(BaseModel):
     session_id: int
     division_id: int | None = None
-    bracket_size: int
+    bracket_size: int | None = None
+    team_count: int | None = None
+    alliance_selection: Literal["captain_pick", "seed_pairing"] | None = None
+    field_ids: list[int] | None = None
     wins_to_advance: int | list[int] | None = None
     field_set_id: int | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_size(self) -> "FinalsStartRequest":
+        if (self.bracket_size is None) == (self.team_count is None):
+            raise ValueError("give exactly one of team_count or bracket_size")
+        return self
 
 
 class BracketMatchupRead(BaseModel):
@@ -56,6 +65,8 @@ class FinalsBracketRead(BaseModel):
     field_set_id: int
     format: str
     bracket_size: int
+    alliance_selection: str
+    field_ids: list[int] | None
     wins_to_advance: list[int]
     status: str
     alliances: list[BracketAllianceRead]

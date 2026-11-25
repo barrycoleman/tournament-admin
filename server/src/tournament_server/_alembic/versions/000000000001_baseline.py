@@ -326,6 +326,8 @@ def upgrade() -> None:
     sa.Column('field_set_id', sa.Integer(), nullable=False),
     sa.Column('format', sa.String(length=20), nullable=False),
     sa.Column('bracket_size', sa.Integer(), nullable=False),
+    sa.Column('alliance_selection', sa.String(length=20), nullable=False),
+    sa.Column('field_ids', sa.String(), nullable=True),
     sa.Column('wins_to_advance', sa.String(), nullable=False),
     sa.Column('status', sa.String(length=30), nullable=False),
     sa.Column('next_field_index', sa.Integer(), nullable=False),

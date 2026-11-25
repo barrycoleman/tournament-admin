@@ -57,6 +57,20 @@ def wins_to_advance_for_round(bracket: FinalsBracket, round_number: int) -> int:
     return json.loads(bracket.wins_to_advance)[round_number - 1]
 
 
+def auto_pairs(team_ids_in_rank_order: list[int], fmt: str) -> list[tuple[int, int]]:
+    """Alliances formed automatically from teams in rank order, in seed order.
+
+    Knockout: pairs top-down and an odd count drops the lowest team.
+    Score-chase: an odd count has the second-lowest team run in two alliances,
+    so every team plays; seed 1 is the best pair either way."""
+    teams = list(team_ids_in_rank_order)
+    even = len(teams) - (len(teams) % 2)
+    pairs = [(teams[i], teams[i + 1]) for i in range(0, even, 2)]
+    if len(teams) % 2 == 1 and fmt == "score_chase":
+        pairs.append((teams[-2], teams[-1]))
+    return pairs
+
+
 def next_finals_field_id(db: Session, bracket: FinalsBracket) -> int:
     field_ids = [
         f.id
@@ -64,6 +78,9 @@ def next_finals_field_id(db: Session, bracket: FinalsBracket) -> int:
             select(Field).where(Field.field_set_id == bracket.field_set_id).order_by(Field.id)
         ).scalars().all()
     ]
+    if bracket.field_ids:
+        chosen = set(json.loads(bracket.field_ids))
+        field_ids = [f for f in field_ids if f in chosen]
     field_id = field_ids[bracket.next_field_index % len(field_ids)]
     bracket.next_field_index += 1
     db.add(bracket)

@@ -44,6 +44,7 @@ from tournament_server.schemas.finals import (
 from tournament_server.services import qualification, team_flags
 from tournament_server.services.deletion import delete_finals_bracket
 from tournament_server.services.finals import (
+    auto_pairs,
     excluded_team_ids,
     expand_wins_to_advance,
     generate_bracket,
@@ -129,6 +130,8 @@ def _to_finals_bracket_read(
         field_set_id=bracket.field_set_id,
         format=bracket.format,
         bracket_size=bracket.bracket_size,
+        alliance_selection=bracket.alliance_selection,
+        field_ids=json.loads(bracket.field_ids) if bracket.field_ids else None,
         wins_to_advance=json.loads(bracket.wins_to_advance),
         status=bracket.status,
         alliances=[_to_bracket_alliance_read(a, db) for a in alliances],
@@ -275,12 +278,27 @@ def start_finals(
     game_plugin = get_game_plugin_for_event(request, db)
     match_format = game_plugin.module.match_format()
     finals_format = match_format["finals_format"]
-    alliance_selection = match_format["alliance_selection"]
+    alliance_selection = payload.alliance_selection or match_format["alliance_selection"]
 
-    if payload.bracket_size < 2:
-        raise HTTPException(status_code=422, detail="bracket_size must be at least 2")
+    team_count = (
+        payload.team_count if payload.team_count is not None else payload.bracket_size * 2
+    )
+    if team_count < 2:
+        raise HTTPException(status_code=422, detail="team_count must be at least 2")
+    if alliance_selection == "captain_pick" and team_count % 2 == 1:
+        raise HTTPException(
+            status_code=422, detail="Partner picking needs an even number of teams."
+        )
+    if alliance_selection == "captain_pick":
+        alliance_count = team_count // 2
+    else:
+        alliance_count = len(auto_pairs(list(range(team_count)), finals_format))
+    if alliance_count < 2:
+        raise HTTPException(
+            status_code=422, detail="Finals need at least two alliances (4 teams)"
+        )
 
-    total_rounds = total_rounds_for_bracket_size(payload.bracket_size)
+    total_rounds = total_rounds_for_bracket_size(alliance_count)
     if finals_format == "single_elimination":
         if payload.wins_to_advance is None:
             raise HTTPException(
@@ -346,41 +364,12 @@ def start_finals(
             status_code=422, detail="This FieldSet has no fields configured"
         )
 
-    if alliance_selection == "captain_pick":
-        participation_query = select(SessionParticipation).where(
-            SessionParticipation.session_id == payload.session_id,
-            SessionParticipation.checked_in.is_(True),
-        )
-        checked_in_team_ids = [
-            row.team_id for row in db.execute(participation_query).scalars().all()
-        ]
-        eligible_team_query = select(Team).where(Team.id.in_(checked_in_team_ids))
-        if payload.division_id is None:
-            sole_division_id = get_sole_division_id(db, event.id)
-            if sole_division_id is not None:
-                eligible_team_query = eligible_team_query.where(
-                    Team.division_id == sole_division_id
-                )
-            else:
-                eligible_team_query = eligible_team_query.where(Team.division_id.is_(None))
-        else:
-            eligible_team_query = eligible_team_query.where(
-                Team.division_id == payload.division_id
-            )
-        eligible_team_count = len(db.execute(eligible_team_query).scalars().all())
-        needed_total_teams = payload.bracket_size * 2
-        if eligible_team_count < needed_total_teams:
+    if payload.field_ids is not None:
+        if not payload.field_ids or any(f not in set(field_ids_for_set) for f in payload.field_ids):
             raise HTTPException(
                 status_code=422,
-                detail=(
-                    f"Only {eligible_team_count} teams checked into this "
-                    f"session, need {needed_total_teams} for a captain_pick "
-                    f"bracket of size {payload.bracket_size}"
-                ),
+                detail="field_ids must be a non-empty list of fields in the chosen FieldSet",
             )
-
-    if not qualification.is_finalized(session_obj):
-        raise HTTPException(status_code=409, detail=qualification.FINALS_NEED_FINALIZE_DETAIL)
 
     ranking_query = select(Ranking).where(Ranking.session_id == payload.session_id)
     if payload.division_id is None:
@@ -393,13 +382,15 @@ def start_finals(
         r for r in db.execute(ranking_query).scalars().all() if r.team_id not in excluded
     ]
 
-    needed = payload.bracket_size * 2 if alliance_selection == "seed_pairing" else payload.bracket_size
-    if len(ranked) < needed:
+    if len(ranked) < team_count:
         raise HTTPException(
             status_code=422,
-            detail=f"Only {len(ranked)} ranked teams available, need {needed}",
+            detail=f"Only {len(ranked)} ranked teams available, need {team_count}",
         )
-    top_teams = ranked[:needed]
+    top_teams = ranked[:team_count]
+
+    if not qualification.is_finalized(session_obj):
+        raise HTTPException(status_code=409, detail=qualification.FINALS_NEED_FINALIZE_DETAIL)
 
     request.app.state.backups.snapshot_quietly("before-finals")
     bracket = FinalsBracket(
@@ -407,7 +398,11 @@ def start_finals(
         division_id=payload.division_id,
         field_set_id=field_set_id,
         format=finals_format,
-        bracket_size=payload.bracket_size,
+        bracket_size=alliance_count,
+        alliance_selection=alliance_selection,
+        field_ids=(
+            json.dumps(sorted(payload.field_ids)) if payload.field_ids is not None else None
+        ),
         wins_to_advance=json.dumps(wins_to_advance_list),
         status="selecting_alliances",
     )
@@ -415,20 +410,13 @@ def start_finals(
     db.flush()
 
     if alliance_selection == "seed_pairing":
-        for i in range(0, len(top_teams), 2):
-            alliance = BracketAlliance(bracket_id=bracket.id, seed=(i // 2) + 1)
+        pairs = auto_pairs([r.team_id for r in top_teams], finals_format)
+        for seed, pair in enumerate(pairs, start=1):
+            alliance = BracketAlliance(bracket_id=bracket.id, seed=seed)
             db.add(alliance)
             db.flush()
-            db.add(
-                BracketAllianceTeam(
-                    bracket_alliance_id=alliance.id, team_id=top_teams[i].team_id
-                )
-            )
-            db.add(
-                BracketAllianceTeam(
-                    bracket_alliance_id=alliance.id, team_id=top_teams[i + 1].team_id
-                )
-            )
+            for team_id in pair:
+                db.add(BracketAllianceTeam(bracket_alliance_id=alliance.id, team_id=team_id))
         bracket.status = "in_progress"
         db.commit()
         existing_ids = {
@@ -442,7 +430,7 @@ def start_finals(
             generate_bracket(db, bracket)
         broadcast_new_finals_matches(request.app, db, bracket.id, existing_ids)
     else:
-        for i, ranking in enumerate(top_teams):
+        for i, ranking in enumerate(top_teams[:alliance_count]):
             alliance = BracketAlliance(bracket_id=bracket.id, seed=i + 1)
             db.add(alliance)
             db.flush()
