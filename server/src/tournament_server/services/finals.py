@@ -80,7 +80,8 @@ def next_finals_field_id(db: Session, bracket: FinalsBracket) -> int:
     ]
     if bracket.field_ids:
         chosen = set(json.loads(bracket.field_ids))
-        field_ids = [f for f in field_ids if f in chosen]
+        # Fall back to the whole set if every chosen field has since been deleted.
+        field_ids = [f for f in field_ids if f in chosen] or field_ids
     field_id = field_ids[bracket.next_field_index % len(field_ids)]
     bracket.next_field_index += 1
     db.add(bracket)

@@ -65,9 +65,11 @@ def _to_bracket_alliance_read(alliance: BracketAlliance, db: Session) -> Bracket
     team_ids = [
         row.team_id
         for row in db.execute(
-            select(BracketAllianceTeam).where(
-                BracketAllianceTeam.bracket_alliance_id == alliance.id
-            )
+            select(BracketAllianceTeam)
+            .where(BracketAllianceTeam.bracket_alliance_id == alliance.id)
+            # Captain first: every client reads team_ids[0] as the captain,
+            # and the captain's row is always written first.
+            .order_by(BracketAllianceTeam.id)
         ).scalars().all()
     ]
     return BracketAllianceRead(
@@ -304,7 +306,20 @@ def start_finals(
     game_plugin = get_game_plugin_for_event(request, db)
     match_format = game_plugin.module.match_format()
     finals_format = match_format["finals_format"]
-    alliance_selection = payload.alliance_selection or match_format["alliance_selection"]
+    # Score-chase finals always use automatic pairs: a plugin's partner-picking
+    # default does not apply to them, and asking for it outright is refused.
+    if finals_format == "score_chase" and payload.alliance_selection == "captain_pick":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Score-chase finals always use automatic pairs; "
+                "partner picking is not available."
+            ),
+        )
+    if finals_format == "score_chase":
+        alliance_selection = "seed_pairing"
+    else:
+        alliance_selection = payload.alliance_selection or match_format["alliance_selection"]
 
     team_count = (
         payload.team_count if payload.team_count is not None else payload.bracket_size * 2
@@ -469,19 +484,23 @@ def list_finals(
     request: Request,
     session_id: int = Depends(get_session_id),
     division_id: int | None = Query(None),
+    all_divisions: bool = Query(False),
     db: Session = Depends(get_db),
     _role: str = Depends(require_any_role),
 ) -> list[FinalsBracketRead]:
-    """The session's finals brackets for one division (or for none), newest first."""
+    """The session's finals brackets for one division (or for none), newest
+    first; with all_divisions, every division's (division_id is then ignored)."""
     event = get_the_event(db)
     game_plugin = get_optional_game_plugin(request, event) if event is not None else None
     if game_plugin is None:
         return []
     query = select(FinalsBracket).where(FinalsBracket.session_id == session_id)
-    if division_id is None:
-        query = query.where(FinalsBracket.division_id.is_(None))
-    else:
-        query = query.where(FinalsBracket.division_id == division_id)
+    if not all_divisions:
+        query = query.where(
+            FinalsBracket.division_id.is_(None)
+            if division_id is None
+            else FinalsBracket.division_id == division_id
+        )
     brackets = db.execute(query.order_by(FinalsBracket.id.desc())).scalars().all()
     return [_to_finals_bracket_read(bracket, db, game_plugin) for bracket in brackets]
 

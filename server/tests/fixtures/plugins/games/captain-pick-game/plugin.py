@@ -12,7 +12,7 @@ def match_format() -> dict[str, Any]:
         "round_types": ["practice", "qualification", "elimination"],
         "game_model": "head_to_head",
         "alliance_selection": "captain_pick",
-        "finals_format": "score_chase",
+        "finals_format": "single_elimination",
     }
 
 

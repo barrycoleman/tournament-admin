@@ -175,3 +175,33 @@ def test_bracket_size_and_team_count_are_exclusive(cooperative_client):
     assert neither.status_code == 422
     too_few = client.post("/api/finals/start", json={"session_id": session_id, "team_count": 1})
     assert too_few.status_code == 422
+
+
+def test_score_chase_refuses_partner_picking(cooperative_client):
+    client = cooperative_client
+    session_id, team_ids = _ranked(client, 4)
+    response = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "team_count": 4, "alliance_selection": "captain_pick"},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Score-chase finals always use automatic pairs; partner picking is not available."
+    )
+
+
+def test_score_chase_ignores_a_partner_picking_plugin_default(cooperative_client):
+    client = cooperative_client
+    session_id, team_ids = _ranked(client, 4)
+    plugin = client.app.state.game_plugins["cooperative-game"]
+    original = plugin.module.match_format
+    plugin.module.match_format = lambda: {**original(), "alliance_selection": "captain_pick"}
+    try:
+        response = client.post(
+            "/api/finals/start", json={"session_id": session_id, "team_count": 4}
+        )
+    finally:
+        plugin.module.match_format = original
+    assert response.status_code == 201, response.text
+    assert response.json()["alliance_selection"] == "seed_pairing"
+    assert response.json()["status"] == "in_progress"

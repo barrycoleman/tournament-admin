@@ -1,7 +1,7 @@
 """Partner picking: invite, accept, decline, cancel, undo and finish early."""
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from auth_helpers import bearer, login_as
 from device_helpers import paired_device
@@ -387,3 +387,53 @@ def test_two_answers_from_stale_reads_cannot_both_succeed(client):
     body = client.get(f"/api/finals/{bid}").json()
     assert _alliances(body) == [{R[0], R[1]}]
     assert body["selection"]["declined_team_ids"] == []
+
+
+def test_captain_is_listed_first_whatever_order_the_database_returns(client):
+    session_id, R = _ranked(client)
+    bracket = _start(client, session_id)
+    _pair(client, bracket["id"], R[1])
+    # SQLite's reverse_unordered_selects flips the order of any read without
+    # an ORDER BY, so a captain-first list here must come from an explicit one.
+    engine = client.app.state.session_factory.kw["bind"]
+
+    def reverse(dbapi_connection, _record):
+        dbapi_connection.execute("PRAGMA reverse_unordered_selects = ON")
+
+    engine.dispose()
+    event.listen(engine, "connect", reverse)
+    try:
+        body = client.get(f"/api/finals/{bracket['id']}").json()
+    finally:
+        event.remove(engine, "connect", reverse)
+        engine.dispose()
+    assert body["alliances"][0]["team_ids"] == [R[0], R[1]]
+
+
+def test_finals_start_on_the_whole_field_set_when_every_chosen_field_was_deleted(client):
+    session_id, R = _ranked(client)
+    spare = client.post("/api/fields", json={"session_id": session_id, "name": "Spare"}).json()
+    response = client.post(
+        "/api/finals/start",
+        json={
+            "session_id": session_id,
+            "team_count": 4,
+            "wins_to_advance": 1,
+            "field_ids": [spare["id"]],
+        },
+    )
+    assert response.status_code == 201, response.text
+    bracket = response.json()
+    assert client.delete(f"/api/fields/{spare['id']}").status_code == 204
+    _pair(client, bracket["id"], R[1])
+    body = _pair(client, bracket["id"], R[3])
+    assert body["status"] == "in_progress"
+    field_1 = next(
+        f["id"]
+        for f in client.get("/api/fields", params={"session_id": session_id}).json()
+        if f["name"] == "Field 1"
+    )
+    matches = client.get("/api/matches", params={"session_id": session_id}).json()
+    finals_matches = [m for m in matches if m["is_finals"]]
+    assert finals_matches
+    assert {m["field_id"] for m in finals_matches} == {field_1}

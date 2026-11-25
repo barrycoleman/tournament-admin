@@ -592,7 +592,7 @@ def test_get_finals_returns_current_state(cooperative_client):
 
 
 def _start_captain_pick_game_bracket(client) -> tuple[list[int], dict]:
-    """captain-pick-game (partner picking + score-chase) with 4 ranked,
+    """captain-pick-game (partner picking + knockout) with 4 ranked,
     checked-in teams and a 2-alliance bracket started; returns the team ids
     in rank order and the started bracket."""
     client.post("/api/event", json={"name": "Regional Qualifier"})
@@ -686,11 +686,14 @@ def test_captain_pick_completes_bracket_once_every_alliance_has_formed(captain_p
     assert body["selection"] is None
     seed_2 = next(a for a in body["alliances"] if a["seed"] == 2)
     assert set(seed_2["team_ids"]) == {ranked[1], ranked[3]}
-    # captain-pick-game declares finals_format="score_chase", so once the last
-    # alliance forms the first score-chase run is created automatically for
-    # the worst seed (seed 2, per "worst to best" order).
-    assert len(body["runs"]) == 1
-    assert body["runs"][0]["bracket_alliance_id"] == seed_2["id"]
+    # Once the last alliance forms, the knockout bracket is generated: one
+    # final between seed 1 and seed 2.
+    seed_1 = next(a for a in body["alliances"] if a["seed"] == 1)
+    assert len(body["matchups"]) == 1
+    assert {body["matchups"][0]["alliance_a_id"], body["matchups"][0]["alliance_b_id"]} == {
+        seed_1["id"],
+        seed_2["id"],
+    }
 
 
 def test_starting_a_score_chase_bracket_creates_the_first_run_for_the_worst_seed(cooperative_client):
@@ -1821,3 +1824,42 @@ def test_selection_and_unavailable_broadcast_finals_changed(client):
         forfeit = response.json()["matchups"][0]["alliance_b_id"]
         assert client.post(f"/api/finals/{bracket['id']}/alliances/{forfeit}/unavailable").status_code == 200
         assert next_event(socket, "finals_changed")["data"] == expected
+
+
+def test_list_finals_across_every_division(cooperative_client):
+    client = cooperative_client
+    client.post("/api/event", json={"name": "Regional Qualifier"})
+    client.post("/api/event/game-plugin", json={"name": "cooperative-game"})
+    session_id = client.post("/api/sessions", json={"label": "Session 1"}).json()["id"]
+    division_red = client.post("/api/divisions", json={"name": "Red"}).json()["id"]
+    client.post("/api/divisions", json={"name": "Blue"})
+    red_field_set_id = client.post(
+        "/api/field-sets",
+        json={"session_id": session_id, "name": "Red Fields", "division_id": division_red},
+    ).json()["id"]
+    client.post(
+        "/api/fields",
+        json={"session_id": session_id, "name": "Red Field 1", "field_set_id": red_field_set_id},
+    )
+    team_ids = [
+        client.post(
+            "/api/teams",
+            json={"number": str(i + 1), "name": f"Red Team {i + 1}", "division_id": division_red},
+        ).json()["id"]
+        for i in range(4)
+    ]
+    _rank_teams_for_division(client, session_id, division_red, team_ids)
+    started = client.post(
+        "/api/finals/start",
+        json={"session_id": session_id, "division_id": division_red, "bracket_size": 2},
+    )
+    assert started.status_code == 201, started.text
+
+    unscoped = client.get("/api/finals", params={"session_id": session_id})
+    assert unscoped.json() == []
+    everywhere = client.get(
+        "/api/finals", params={"session_id": session_id, "all_divisions": "true"}
+    )
+    assert everywhere.status_code == 200
+    assert [b["id"] for b in everywhere.json()] == [started.json()["id"]]
+    assert everywhere.json()[0]["division_id"] == division_red
