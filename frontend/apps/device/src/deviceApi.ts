@@ -146,11 +146,13 @@ export function formatCode(code: string): string {
  * which `send` already reports as Unreachable). */
 export class ApiStatusError extends Error {
   status: number;
+  detail: string | null;
 
-  constructor(status: number) {
+  constructor(status: number, detail: string | null = null) {
     super(`The server answered ${status}`);
     this.name = "ApiStatusError";
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -166,4 +168,27 @@ export async function getAudio(path: string, accessToken: string): Promise<Array
   const response = await send(path, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!response.ok) throw new ApiStatusError(response.status);
   return response.arrayBuffer();
+}
+
+/** An authorized POST with an optional JSON body; a non-2xx answer throws an
+ * ApiStatusError carrying the status and the server's `detail` text. */
+export async function postJson<T>(path: string, body: unknown, accessToken: string): Promise<T> {
+  const headers: Record<string, string> = { Authorization: `Bearer ${accessToken}` };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const response = await send(path, {
+    method: "POST",
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let detail: string | null = null;
+    try {
+      const parsed = (await response.json()) as { detail?: unknown };
+      if (typeof parsed.detail === "string") detail = parsed.detail;
+    } catch {
+      // No readable detail.
+    }
+    throw new ApiStatusError(response.status, detail);
+  }
+  return readJson<T>(response);
 }

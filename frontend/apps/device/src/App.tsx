@@ -5,6 +5,7 @@ import { useDeviceSocket } from "./useDeviceSocket";
 import { PairingScreen } from "./screens/PairingScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { BlockedScreen } from "./screens/BlockedScreen";
+import { ScorerApp } from "./scorer/ScorerApp";
 import { DisplayApp } from "./display/DisplayApp";
 import { RECONNECTED, createEventBus } from "./display/events";
 
@@ -29,6 +30,11 @@ export function App() {
   // A paired Display runs the kiosk screens (display groups design).
   if (screen.kind === "home" && screen.device.role === "display_device" && session.accessToken) {
     return <DisplayApp accessToken={session.accessToken} device={screen.device} bus={bus} unreachable={unreachable} />;
+  }
+
+  // A paired scorer or referee tablet runs the scorer shell.
+  if (screen.kind === "home" && (screen.device.role === "scorer" || screen.device.role === "referee") && session.accessToken) {
+    return <ScorerApp accessToken={session.accessToken} device={screen.device} bus={bus} unreachable={unreachable} />;
   }
 
   return (

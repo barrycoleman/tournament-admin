@@ -62,3 +62,22 @@ body {
   margin: 0;
 }
 .home__name { font-size: clamp(2.5rem, 9vw, 6rem); margin: 0.25rem 0; }
+
+/* Scorer / referee tablet: partner picking */
+.picking { display: flex; flex-direction: column; align-items: center; gap: 1rem; width: 100%; padding: 1rem; box-sizing: border-box; }
+.picking__label { margin: 0; color: var(--device-muted); font-size: clamp(1.2rem, 3vw, 2rem); }
+.picking__captain { margin: 0; font-size: clamp(3rem, 12vw, 7rem); font-weight: 700; color: var(--device-accent); }
+.picking__invitee { margin: 0; font-size: clamp(5rem, 22vw, 14rem); font-weight: 700; line-height: 1; }
+.picking__prompt { margin: 0; font-size: clamp(1.5rem, 4vw, 2.5rem); }
+.picking__notice { margin: 0; padding: 0.75rem 1.25rem; border-radius: 0.5rem; background: var(--device-banner-bg, #5a4400); color: var(--device-banner-fg, #fff); font-size: 1.25rem; }
+.picking__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.75rem; width: 100%; }
+.picking__team { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 5.5rem; padding: 0.5rem; border: 2px solid var(--device-accent); border-radius: 0.75rem; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.picking__team-number { font-size: 1.75rem; font-weight: 700; }
+.picking__team-rank { font-size: 1rem; color: var(--device-muted); }
+.picking__team.is-declined { text-decoration: line-through; opacity: 0.4; border-style: dashed; cursor: not-allowed; }
+.picking__answers { display: flex; gap: 1rem; width: 100%; }
+.picking__answer { flex: 1; min-height: 12rem; border: 0; border-radius: 1rem; font: inherit; font-size: clamp(2rem, 7vw, 4rem); font-weight: 800; color: #fff; cursor: pointer; }
+.picking__answer--accept { background: #1f9d4d; }
+.picking__answer--decline { background: #d33a3a; }
+.picking__answer:disabled, .picking__team:disabled { cursor: not-allowed; }
+.picking__cancel { min-height: 3rem; padding: 0.5rem 1.5rem; background: none; border: 0; color: var(--device-muted); font: inherit; font-size: 1.1rem; text-decoration: underline; cursor: pointer; }

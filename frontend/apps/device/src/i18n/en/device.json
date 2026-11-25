@@ -15,6 +15,19 @@
     "heading": "This device is disabled.",
     "askAdmin": "Ask an admin to enable {{name}}."
   },
+  "scorer": {
+    "picking": {
+      "captain": "Alliance {{n}} · Captain",
+      "whoInvite": "Who do you invite?",
+      "invites": "{{captain}} invites",
+      "accept": "ACCEPT",
+      "decline": "DECLINE",
+      "cancelInvite": "Cancel invite",
+      "declinedTeam": "{{number}} declined",
+      "stale": "Someone else just answered — updated.",
+      "failed": "That did not go through. Try again."
+    }
+  },
   "roles": {
     "scorer": "Scorer",
     "referee": "Referee",
