@@ -135,6 +135,22 @@ test.describe.serial("TV elimination bracket, single elimination", () => {
     await expect(tv.locator(".side-panel")).toHaveCount(0);
     await shot(tv, testInfo, "bracket-single-elimination-1920x1080");
   });
+
+  test("the round names line up and each matchup sits halfway between the two that feed it", async () => {
+    const tv = event.state.tv!;
+    const headingTops = await tv.locator(".bracket__round-name").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().top));
+    expect(headingTops).toHaveLength(2);
+    expect(Math.abs(headingTops[0] - headingTops[1])).toBeLessThan(1);
+    const centre = async (id: number) => {
+      const box = (await tv.getByTestId(`matchup-${id}`).boundingBox())!;
+      return box.y + box.height / 2;
+    };
+    const semis = bracket.matchups.filter((m) => m.round_number === 1).sort((a, b) => a.position - b.position);
+    const final = bracket.matchups.find((m) => m.round_number === 2)!;
+    const [top, bottom, middle] = [await centre(semis[0].id), await centre(semis[1].id), await centre(final.id)];
+    expect(bottom - top).toBeGreaterThan(100);
+    expect(Math.abs(middle - (top + bottom) / 2)).toBeLessThan(2);
+  });
 });
 
 test.describe.serial("TV elimination bracket, score chase", () => {

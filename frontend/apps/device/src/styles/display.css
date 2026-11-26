@@ -197,8 +197,9 @@
 
 .kiosk-table .is-current { outline: 0.3vw solid var(--kiosk-soon); outline-offset: -0.3vw; }
 .kiosk-table .is-loser { opacity: 0.45; }
-.bracket__rounds { flex: 1; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2vw; }
-.bracket__round { display: flex; flex-direction: column; justify-content: space-around; gap: 1vw; }
+.bracket__rounds { flex: 1; min-height: 0; display: grid; grid-template-rows: auto 1fr; column-gap: 2vw; row-gap: 1vw; }
+.bracket__round { min-height: 0; display: flex; flex-direction: column; }
+.bracket__slot { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; justify-content: center; padding: 0.4vw 0; }
 .bracket__round-name { margin: 0; font-size: 1.3vw; text-transform: uppercase; color: var(--kiosk-muted); }
 .matchup { display: flex; flex-direction: column; border-radius: 0.5vw; overflow: hidden; background: var(--kiosk-surface); }
 .matchup__side { display: grid; grid-template-columns: 2.5vw 1fr 2.5vw; align-items: center; gap: 0.5vw; padding: 0.4vw 0.6vw; font-size: 1.6vw; font-weight: 700; }

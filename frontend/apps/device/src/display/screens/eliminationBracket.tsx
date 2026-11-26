@@ -55,21 +55,33 @@ function EliminationBracketScreen({ context }: ScreenProps) {
     );
     return (
       <ScreenFrame title={title} className="bracket">
-        <div className="bracket__rounds">
-          {rounds.map((matchups, index) => (
-            <section key={index} className="bracket__round">
-              <h2 className="bracket__round-name">{roundName(t, index + 1, roundCount)}</h2>
-              {matchups.map((matchup) => {
-                const tally = wins.get(matchup.id) ?? { a: 0, b: 0 };
-                return (
-                  <div key={matchup.id} className="matchup" data-testid={`matchup-${matchup.id}`}>
-                    <Side bracket={bracket} allianceId={matchup.alliance_a_id} teams={teams} wins={tally.a} winnerId={matchup.winner_alliance_id} testId={`side-${matchup.alliance_a_id}`} side="red" />
-                    <Side bracket={bracket} allianceId={matchup.alliance_b_id} teams={teams} wins={tally.b} winnerId={matchup.winner_alliance_id} testId={`side-${matchup.alliance_b_id}`} side="blue" />
-                  </div>
-                );
-              })}
-            </section>
+        <div className="bracket__rounds" style={{ gridTemplateColumns: `repeat(${roundCount}, 1fr)` }}>
+          {rounds.map((_, index) => (
+            <h2 key={index} className="bracket__round-name">{roundName(t, index + 1, roundCount)}</h2>
           ))}
+          {rounds.map((matchups, index) => {
+            // Every round splits the same height into equal slots, one per position, so a matchup
+            // sits exactly halfway between the two matchups that feed it.
+            const slotCount = Math.max(1, 2 ** (roundCount - index - 1), ...matchups.map((m) => m.position + 1));
+            const byPosition = new Map(matchups.map((m) => [m.position, m]));
+            return (
+              <section key={index} className="bracket__round">
+                {Array.from({ length: slotCount }, (_, position) => {
+                  const matchup = byPosition.get(position);
+                  if (!matchup) return <div key={position} className="bracket__slot" />;
+                  const tally = wins.get(matchup.id) ?? { a: 0, b: 0 };
+                  return (
+                    <div key={position} className="bracket__slot">
+                      <div className="matchup" data-testid={`matchup-${matchup.id}`}>
+                        <Side bracket={bracket} allianceId={matchup.alliance_a_id} teams={teams} wins={tally.a} winnerId={matchup.winner_alliance_id} testId={`side-${matchup.alliance_a_id}`} side="red" />
+                        <Side bracket={bracket} allianceId={matchup.alliance_b_id} teams={teams} wins={tally.b} winnerId={matchup.winner_alliance_id} testId={`side-${matchup.alliance_b_id}`} side="blue" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </section>
+            );
+          })}
         </div>
       </ScreenFrame>
     );
